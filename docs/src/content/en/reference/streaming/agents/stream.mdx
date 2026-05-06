@@ -1043,6 +1043,8 @@ const stream = await agent.stream('Hello', {
 stream.transport?.close()
 ```
 
+Responses WebSocket connections run one response at a time. Mastra rejects overlapping continuation requests that include `previous_response_id` on the same WebSocket transport. Wait for the active stream to finish before sending the next turn in the response chain.
+
 ## Related
 
 - [Generating responses](/docs/agents/overview#use-your-agent)

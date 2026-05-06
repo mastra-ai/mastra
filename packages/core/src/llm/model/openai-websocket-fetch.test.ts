@@ -87,6 +87,132 @@ describe('createOpenAIWebSocketFetch', () => {
     expect(sockets[0].options.headers).not.toHaveProperty('OpenAI-Beta');
   });
 
+  it('keeps API key headers as headers when query auth is not configured', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: 'wss://api.openai.com/v1/responses',
+      betaHeader: false,
+    });
+
+    const response = await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'api-key': 'openai-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
+    });
+
+    await response.text();
+
+    expect(sockets[0].options.headers).toMatchObject({
+      'api-key': 'openai-key',
+    });
+    expect(sockets[0].options.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('sends the OpenAI beta header by default', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: 'wss://api.openai.com/v1/responses',
+    });
+
+    const response = await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer openai-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
+    });
+
+    await response.text();
+
+    expect(sockets[0].options.headers).toMatchObject({
+      Authorization: 'Bearer openai-key',
+      'OpenAI-Beta': 'responses_websockets=2026-02-06',
+    });
+  });
+
+  it('preserves explicit Authorization headers', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: 'wss://api.openai.com/v1/responses',
+      betaHeader: false,
+    });
+
+    const response = await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer explicit-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
+    });
+
+    await response.text();
+
+    expect(sockets[0].options.headers).toMatchObject({
+      Authorization: 'Bearer explicit-key',
+    });
+  });
+
+  it('routes Responses URLs with query parameters through the WebSocket transport', async () => {
+    const httpFetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected HTTP fallback'));
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: 'wss://test-resource.openai.azure.com/openai/v1/responses',
+      apiKeyQueryParam: 'api-key',
+      betaHeader: false,
+    });
+
+    const response = await websocketFetch('https://test-resource.openai.azure.com/openai/v1/responses?api-version=v1', {
+      method: 'POST',
+      headers: {
+        'api-key': 'azure-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stream: true, model: 'gpt-5-4-deployment', input: 'hello' }),
+    });
+
+    await response.text();
+
+    expect(httpFetch).not.toHaveBeenCalled();
+    expect(sockets[0].sent[0]).toMatchObject({
+      type: 'response.create',
+      model: 'gpt-5-4-deployment',
+    });
+    httpFetch.mockRestore();
+  });
+
+  it('opens a new query-auth socket when the API key changes', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: 'wss://test-resource.openai.azure.com/openai/v1/responses',
+      apiKeyQueryParam: 'api-key',
+      betaHeader: false,
+    });
+
+    const firstResponse = await websocketFetch('https://test-resource.openai.azure.com/openai/v1/responses', {
+      method: 'POST',
+      headers: {
+        'api-key': 'first-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stream: true, model: 'gpt-5-4-deployment', input: 'hello' }),
+    });
+    await firstResponse.text();
+
+    const secondResponse = await websocketFetch('https://test-resource.openai.azure.com/openai/v1/responses', {
+      method: 'POST',
+      headers: {
+        'api-key': 'second-key',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stream: true, model: 'gpt-5-4-deployment', input: 'again' }),
+    });
+    await secondResponse.text();
+
+    expect(sockets).toHaveLength(2);
+    expect(sockets[0].readyState).toBe(3);
+    expect(sockets[1].url).toBe('wss://test-resource.openai.azure.com/openai/v1/responses?api-key=second-key');
+  });
+
   it('strips HTTP-only Responses fields before sending response.create', async () => {
     const websocketFetch = createOpenAIWebSocketFetch();
 
@@ -173,5 +299,55 @@ describe('createOpenAIWebSocketFetch', () => {
     ).rejects.toThrow('Cannot start an overlapping WebSocket Responses continuation');
 
     websocketFetch.close();
+  });
+
+  it('does not silently fall back to HTTP for any overlapping continuation', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch();
+    nextServerEvents.push({ type: 'response.output_text.delta', delta: 'still running' });
+
+    await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer openai-key' },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
+    });
+
+    await expect(
+      websocketFetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer openai-key' },
+        body: JSON.stringify({
+          stream: true,
+          store: true,
+          previous_response_id: 'resp_previous',
+          model: 'gpt-5.5',
+          input: 'continue',
+        }),
+      }),
+    ).rejects.toThrow('Cannot start an overlapping WebSocket Responses continuation');
+
+    websocketFetch.close();
+  });
+
+  it('cleans up listeners and busy state when the response stream is cancelled', async () => {
+    const websocketFetch = createOpenAIWebSocketFetch();
+    nextServerEvents.push({ type: 'response.output_text.delta', delta: 'still running' });
+
+    const response = await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer openai-key' },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
+    });
+
+    await response.body?.cancel();
+
+    const nextResponse = await websocketFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer openai-key' },
+      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'again' }),
+    });
+
+    await expect(nextResponse.text()).resolves.toContain('data: [DONE]');
+    expect(sockets[0].readyState).toBe(3);
+    expect(sockets).toHaveLength(2);
   });
 });

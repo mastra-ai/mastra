@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 
 export interface CreateOpenAIWebSocketFetchOptions {
@@ -65,7 +66,8 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     if (options?.apiKeyAsBearer || apiKeyQueryParam) {
       delete normalizedHeaders['api-key'];
     }
-    const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders);
+    const queryCredential = apiKeyQueryParam ? `${apiKeyQueryParam}:${hashCredential(apiKey)}` : '';
+    const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders, queryCredential);
 
     if (ws?.readyState === WebSocket.OPEN && connectionKey === nextConnectionKey) {
       return Promise.resolve(ws);
@@ -144,7 +146,7 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
   async function websocketFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url;
 
-    if (init?.method !== 'POST' || !url.endsWith('/responses')) {
+    if (init?.method !== 'POST' || !isResponsesUrl(url)) {
       return globalThis.fetch(input, init);
     }
 
@@ -163,9 +165,9 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     // Only fall back to HTTP when the request does not depend on the socket's
     // connection-local previous_response_id cache.
     if (busy) {
-      if (body.previous_response_id && body.store !== true) {
+      if (body.previous_response_id) {
         throw new Error(
-          'Cannot start an overlapping WebSocket Responses continuation without persisted response state. Wait for the active stream to finish or enable store: true.',
+          'Cannot start an overlapping WebSocket Responses continuation. Wait for the active stream to finish before sending previous_response_id.',
         );
       }
       return globalThis.fetch(input, init);
@@ -188,12 +190,22 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     const { stream: _stream, background: _background, ...requestBody } = body;
     const encoder = new TextEncoder();
 
+    let cleanupActiveStream: ((options?: { closeSocket?: boolean }) => void) | undefined;
     const responseStream = new ReadableStream<Uint8Array>({
       start(controller) {
+        let cleanedUp = false;
+        let abortHandler: (() => void) | undefined;
+
         function cleanup({ closeSocket = false }: { closeSocket?: boolean } = {}) {
+          if (cleanedUp) return;
+          cleanedUp = true;
           connection.off('message', onMessage);
           connection.off('error', onError);
           connection.off('close', onClose);
+          if (abortHandler) {
+            init?.signal?.removeEventListener('abort', abortHandler);
+            abortHandler = undefined;
+          }
 
           if (closeSocket && ws === connection) {
             connection.close();
@@ -202,7 +214,10 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
           }
 
           busy = false;
+          cleanupActiveStream = undefined;
         }
+
+        cleanupActiveStream = cleanup;
 
         function onMessage(data: WebSocket.RawData) {
           const text = data.toString();
@@ -245,21 +260,21 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
             controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
             return;
           }
-          signal.addEventListener(
-            'abort',
-            () => {
-              cleanup({ closeSocket: true });
-              try {
-                controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-              } catch {
-                // already closed
-              }
-            },
-            { once: true },
-          );
+          abortHandler = () => {
+            cleanup({ closeSocket: true });
+            try {
+              controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+            } catch {
+              // already closed
+            }
+          };
+          signal.addEventListener('abort', abortHandler, { once: true });
         }
 
         connection.send(JSON.stringify({ type: 'response.create', ...requestBody }));
+      },
+      cancel() {
+        cleanupActiveStream?.({ closeSocket: true });
       },
     });
 
@@ -282,6 +297,14 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
   });
 }
 
+function isResponsesUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.endsWith('/responses');
+  } catch {
+    return url.split('?')[0]?.endsWith('/responses') ?? false;
+  }
+}
+
 function getWebSocketUrl(url: string, apiKeyQueryParam: string | false, apiKey?: string): string {
   if (!apiKeyQueryParam || !apiKey) return url;
 
@@ -290,11 +313,17 @@ function getWebSocketUrl(url: string, apiKeyQueryParam: string | false, apiKey?:
   return parsedUrl.toString();
 }
 
-function buildConnectionKey(authorization: string, headers: Record<string, string>): string {
+function buildConnectionKey(authorization: string, headers: Record<string, string>, queryCredential = ''): string {
   return JSON.stringify({
     authorization,
+    queryCredential,
     headers: Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)),
   });
+}
+
+function hashCredential(value?: string): string {
+  if (!value) return '';
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function isTerminalWebSocketEvent(event: unknown): event is { type: string } {

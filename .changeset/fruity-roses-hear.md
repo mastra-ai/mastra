@@ -16,3 +16,5 @@ const stream = await agent.stream('Review this task', {
   },
 });
 ```
+
+Responses WebSocket streams now preserve transport handles through agent loops, reuse explicit API-key router connections safely, clean up cancelled streams, and reject overlapping `previous_response_id` continuations on the same connection.

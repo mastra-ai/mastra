@@ -759,7 +759,7 @@ describe('AzureOpenAIGateway', () => {
         providerId: 'azure-openai',
         apiKey: 'test-key',
         transport: 'websocket',
-        openaiWebSocket: {
+        responsesWebSocket: {
           headers: { 'x-ms-client-request-id': 'request-1' },
         },
       })) as any;
@@ -794,7 +794,7 @@ describe('AzureOpenAIGateway', () => {
         providerId: 'azure-openai',
         apiKey: 'test-key',
         transport: 'websocket',
-        openaiWebSocket: {
+        responsesWebSocket: {
           url: 'wss://proxy.example.com/openai/v1/responses',
         },
       });

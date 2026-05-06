@@ -219,6 +219,8 @@ stream.transport?.close();
 
 Set `closeOnFinish: false` when you want to keep the socket open across follow-up turns. Azure keeps one response chain in connection-local memory, so continuing from the most recent `previous_response_id` can reduce continuation latency. The connection runs one response at a time and does not multiplex parallel runs.
 
+Do not send overlapping follow-up requests with `previous_response_id` on the same WebSocket transport. Mastra rejects overlapping continuation requests because Azure only keeps one in-flight response per connection. Wait for the active stream to finish before continuing the response chain.
+
 ## Configuration Reference
 
 | Option | Type | Required | Description |

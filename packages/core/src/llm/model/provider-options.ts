@@ -26,7 +26,7 @@ export type {
 // Alias for consistency
 export type GoogleProviderOptions = GoogleGenerativeAIProviderOptions;
 export type OpenAITransport = 'auto' | 'websocket' | 'fetch';
-export type OpenAIWebSocketOptions = {
+export type ResponsesWebSocketOptions = {
   /**
    * WebSocket endpoint URL.
    * @default 'wss://api.openai.com/v1/responses'
@@ -43,6 +43,7 @@ export type OpenAIWebSocketOptions = {
    */
   closeOnFinish?: boolean;
 };
+export type OpenAIWebSocketOptions = ResponsesWebSocketOptions;
 export type OpenAIProviderOptions = OpenAIResponsesProviderOptions & {
   /**
    * Select the transport used for streaming responses.
@@ -56,7 +57,7 @@ export type OpenAIProviderOptions = OpenAIResponsesProviderOptions & {
    */
   websocket?: OpenAIWebSocketOptions;
 };
-export type AzureWebSocketOptions = Omit<OpenAIWebSocketOptions, 'url'> & {
+export type AzureWebSocketOptions = Omit<ResponsesWebSocketOptions, 'url'> & {
   /**
    * WebSocket endpoint URL.
    * @default resource-specific Azure OpenAI Responses URL

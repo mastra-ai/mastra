@@ -6,7 +6,7 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { StreamTransport } from '../../../stream/types';
-import type { OpenAITransport, OpenAIWebSocketOptions } from '../provider-options.js';
+import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
 
 export interface ProviderConfig {
   url?: string;
@@ -87,7 +87,7 @@ export abstract class MastraModelGateway {
     apiKey: string;
     headers?: Record<string, string>;
     transport?: OpenAITransport;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
 
   /**

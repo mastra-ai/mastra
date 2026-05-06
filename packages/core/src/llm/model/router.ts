@@ -3,6 +3,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import { attachModelStreamTransport } from '../../stream/types';
 import type { StreamTransport } from '../../stream/types';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
@@ -21,7 +22,7 @@ import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
-import type { OpenAITransport, OpenAIWebSocketOptions, ProviderOptions } from './provider-options.js';
+import type { OpenAITransport, ProviderOptions, ResponsesWebSocketOptions } from './provider-options.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { PROVIDER_REGISTRY } from './provider-registry.js';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
@@ -42,17 +43,25 @@ type GatewayModelCache = {
   gatewayStreamTransports: Map<string, GatewayStreamTransportHandle>;
 };
 
+function createGatewayModelCache(): GatewayModelCache {
+  return {
+    modelInstances: new Map(),
+    webSocketFetches: new Map(),
+    gatewayStreamTransports: new Map(),
+  };
+}
+
 function getOpenAITransport(
   providerOptions?: ProviderOptions,
   providerId?: string,
 ): {
   transport: OpenAITransport;
-  websocket?: OpenAIWebSocketOptions;
+  websocket?: ResponsesWebSocketOptions;
 } {
   const transportOptions = (providerId === 'azure-openai' ? providerOptions?.azure : providerOptions?.openai) as
     | {
         transport?: OpenAITransport;
-        websocket?: OpenAIWebSocketOptions;
+        websocket?: ResponsesWebSocketOptions;
       }
     | undefined;
 
@@ -118,6 +127,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
   private _supportedUrlsPromise: Promise<Record<string, RegExp[]>> | null = null;
+  private readonly instanceGatewayCache = createGatewayModelCache();
   #lastStreamTransport: StreamTransport | undefined;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGateway[]) {
@@ -283,11 +293,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     let cache = ModelRouterLanguageModel.gatewayCaches.get(this.gateway);
 
     if (!cache) {
-      cache = {
-        modelInstances: new Map(),
-        webSocketFetches: new Map(),
-        gatewayStreamTransports: new Map(),
-      };
+      cache = createGatewayModelCache();
       ModelRouterLanguageModel.gatewayCaches.set(this.gateway, cache);
     }
 
@@ -297,11 +303,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   private setStreamTransportHandle({
     resolvedTransport,
     transport,
-    openaiWebSocket,
+    responsesWebSocket,
   }: {
     resolvedTransport: OpenAITransport;
     transport?: GatewayStreamTransportHandle;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }) {
     if (resolvedTransport !== 'websocket') {
       this.#lastStreamTransport = undefined;
@@ -316,7 +322,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     this.#lastStreamTransport = {
       type: transport.type,
       close: transport.close,
-      closeOnFinish: openaiWebSocket?.closeOnFinish ?? true,
+      closeOnFinish: responsesWebSocket?.closeOnFinish ?? true,
     };
   }
 
@@ -324,18 +330,18 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     cache,
     resolvedTransport,
     key,
-    openaiWebSocket,
+    responsesWebSocket,
   }: {
     cache: GatewayModelCache;
     resolvedTransport: OpenAITransport;
     key: string;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }) {
     const wsFetch = cache.webSocketFetches.get(key);
     const gatewayTransport = cache.gatewayStreamTransports.get(key);
     const transport = wsFetch ? { type: 'openai-websocket' as const, close: () => wsFetch.close() } : gatewayTransport;
 
-    this.setStreamTransportHandle({ resolvedTransport, transport, openaiWebSocket });
+    this.setStreamTransportHandle({ resolvedTransport, transport, responsesWebSocket });
   }
 
   async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
@@ -424,18 +430,23 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       apiKey,
       headers: this.config.headers,
       transport: resolvedTransport,
-      openaiWebSocket: websocket,
+      responsesWebSocket: websocket,
       ...parsedModelId,
     });
 
     // Handle both V2 and V3 models
+    const streamTransport = this.#lastStreamTransport;
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV6Model.doStream(options as any) as unknown as Promise<StreamResult>;
+      const streamResult = (await aiSDKV6Model.doStream(options as any)) as unknown as StreamResult;
+      attachModelStreamTransport(streamResult, streamTransport);
+      return streamResult;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    return aiSDKV5Model.doStream(options);
+    const streamResult = await aiSDKV5Model.doStream(options);
+    attachModelStreamTransport(streamResult, streamTransport);
+    return streamResult;
   }
 
   private async resolveLanguageModel({
@@ -444,21 +455,22 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     apiKey,
     headers,
     transport,
-    openaiWebSocket,
+    responsesWebSocket,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
     transport?: OpenAITransport;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }): Promise<GatewayLanguageModel> {
     const resolvedTransport: OpenAITransport = transport ?? 'fetch';
     const websocketKey =
       resolvedTransport === 'websocket'
-        ? `${openaiWebSocket?.url ?? ''}:${stableHeaderKey(openaiWebSocket?.headers)}`
+        ? `${responsesWebSocket?.url ?? ''}:${stableHeaderKey(responsesWebSocket?.headers)}`
         : '';
-    const cache = this.getGatewayCache();
+    const usesExplicitApiKey = this.config.apiKey !== undefined;
+    const cache = usesExplicitApiKey ? this.instanceGatewayCache : this.getGatewayCache();
     const key = createHash('sha256')
       .update(
         JSON.stringify([
@@ -472,12 +484,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         ]),
       )
       .digest('hex');
-    // Do not derive cache keys from explicit per-router API keys. Environment
-    // and gateway-managed keys are treated as process/gateway configuration and
-    // are scoped by the gateway cache instead.
-    const canCacheModel = this.config.apiKey === undefined;
-    if (canCacheModel && cache.modelInstances.has(key)) {
-      this.setStreamTransportFromCache({ cache, resolvedTransport, key, openaiWebSocket });
+    if (cache.modelInstances.has(key)) {
+      this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
       return cache.modelInstances.get(key)!;
     }
 
@@ -490,10 +498,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         headers: this.config.headers,
         supportsStructuredOutputs: true,
       }).chatModel(modelId);
-      if (canCacheModel) {
-        cache.modelInstances.set(key, modelInstance);
-      }
-      this.setStreamTransportHandle({ resolvedTransport, openaiWebSocket });
+      cache.modelInstances.set(key, modelInstance);
+      this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
       return modelInstance;
     }
 
@@ -506,19 +512,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           apiKey,
           baseURL,
           headers,
-          openaiWebSocket,
+          responsesWebSocket,
         });
-        if (canCacheModel) {
-          cache.modelInstances.set(key, modelInstance);
-          cache.webSocketFetches.set(key, wsFetch);
-          this.setStreamTransportFromCache({ cache, resolvedTransport, key, openaiWebSocket });
-        } else {
-          this.setStreamTransportHandle({
-            resolvedTransport,
-            transport: { type: 'openai-websocket', close: () => wsFetch.close() },
-            openaiWebSocket,
-          });
-        }
+        cache.modelInstances.set(key, modelInstance);
+        cache.webSocketFetches.set(key, wsFetch);
+        this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
         return modelInstance;
       }
     }
@@ -529,16 +527,14 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       apiKey,
       headers,
       transport: resolvedTransport,
-      openaiWebSocket,
+      responsesWebSocket,
     });
     const gatewayTransport = readGatewayStreamTransport(modelInstance);
-    if (canCacheModel) {
-      cache.modelInstances.set(key, modelInstance);
-    }
-    if (canCacheModel && gatewayTransport) {
+    cache.modelInstances.set(key, modelInstance);
+    if (gatewayTransport) {
       cache.gatewayStreamTransports.set(key, gatewayTransport);
     }
-    this.setStreamTransportHandle({ resolvedTransport, transport: gatewayTransport, openaiWebSocket });
+    this.setStreamTransportHandle({ resolvedTransport, transport: gatewayTransport, responsesWebSocket });
     return modelInstance;
   }
 
@@ -547,17 +543,17 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     apiKey,
     baseURL,
     headers,
-    openaiWebSocket,
+    responsesWebSocket,
   }: {
     modelId: string;
     apiKey: string;
     baseURL?: string;
     headers?: Record<string, string>;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }): { modelInstance: GatewayLanguageModel; wsFetch: OpenAIWebSocketFetch } {
     const wsFetch = createOpenAIWebSocketFetch({
-      url: openaiWebSocket?.url,
-      headers: openaiWebSocket?.headers,
+      url: responsesWebSocket?.url,
+      headers: responsesWebSocket?.headers,
     });
 
     const modelInstance = createOpenAI({

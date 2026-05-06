@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
+import { execute } from '../../stream/aisdk/v5/execute.js';
+import { readModelStreamTransport } from '../../stream/types.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 import { MASTRA_GATEWAY_STREAM_TRANSPORT, MastraModelGateway } from './gateways/base.js';
 import type { GatewayLanguageModel, ProviderConfig } from './gateways/base.js';
@@ -28,6 +30,7 @@ vi.mock('./openai-websocket-fetch.js', async () => {
 });
 
 const { createOpenAI } = await import('@ai-sdk/openai-v6');
+const { createOpenAIWebSocketFetch } = await import('./openai-websocket-fetch.js');
 
 describe('ModelRouter - OpenAI WebSocket transport', () => {
   beforeEach(() => {
@@ -110,6 +113,39 @@ describe('ModelRouter - OpenAI WebSocket transport', () => {
     expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('reuses per-router WebSocket models when an explicit API key is configured', async () => {
+    vi.mocked(createOpenAI).mockClear();
+    vi.mocked(createOpenAIWebSocketFetch).mockClear();
+
+    const router = new ModelRouterLanguageModel({
+      id: 'openai/gpt-4o',
+      apiKey: 'explicit-openai-key',
+    });
+    const streamOptions = {
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+      providerOptions: {
+        openai: {
+          transport: 'websocket',
+          websocket: { closeOnFinish: false },
+        },
+      },
+    } as any;
+
+    const firstResult = await router.doStream(streamOptions);
+    const secondResult = await router.doStream(streamOptions);
+
+    expect(vi.mocked(createOpenAI)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createOpenAIWebSocketFetch)).toHaveBeenCalledTimes(1);
+    expect(readModelStreamTransport(firstResult)).toMatchObject({
+      type: 'openai-websocket',
+      closeOnFinish: false,
+    });
+    expect(readModelStreamTransport(secondResult)).toMatchObject({
+      type: 'openai-websocket',
+      closeOnFinish: false,
+    });
+  });
+
   it('uses HTTP fetch by default', async () => {
     const agent = new Agent({
       id: 'test-agent',
@@ -189,7 +225,7 @@ describe('ModelRouter - OpenAI WebSocket transport', () => {
       providerId: 'azure-openai',
       modelId: 'gpt-5-4-deployment',
       transport: 'websocket',
-      openaiWebSocket: { closeOnFinish: false },
+      responsesWebSocket: { closeOnFinish: false },
     });
     expect(router._getStreamTransport()).toMatchObject({
       type: 'openai-websocket',
@@ -272,5 +308,71 @@ describe('ModelRouter - OpenAI WebSocket transport', () => {
     secondRouter._getStreamTransport()?.close();
     expect(firstClose).not.toHaveBeenCalled();
     expect(secondClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves router stream transport handles through the execute stream wrapper', async () => {
+    const close = vi.fn();
+    class TestAzureGateway extends MastraModelGateway {
+      readonly id = 'azure-openai';
+      readonly name = 'azure-openai';
+
+      fetchProviders(): Promise<Record<string, ProviderConfig>> {
+        return Promise.resolve({
+          'azure-openai': {
+            name: 'Azure OpenAI',
+            models: ['gpt-5-4-deployment'],
+            apiKeyEnvVar: [],
+            gateway: 'azure-openai',
+          },
+        });
+      }
+
+      buildUrl(): undefined {
+        return undefined;
+      }
+
+      getApiKey(): Promise<string> {
+        return Promise.resolve('test-azure-key');
+      }
+
+      resolveLanguageModel(): GatewayLanguageModel {
+        const model = createMockModel({ mockText: 'response' }) as GatewayLanguageModel;
+        Object.defineProperty(model, MASTRA_GATEWAY_STREAM_TRANSPORT, {
+          configurable: true,
+          value: {
+            type: 'openai-websocket',
+            close,
+          },
+        });
+        return model;
+      }
+    }
+
+    const router = new ModelRouterLanguageModel('azure-openai/gpt-5-4-deployment', [new TestAzureGateway()]);
+    const outputStream = execute({
+      runId: 'run-1',
+      model: router,
+      inputMessages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+      providerOptions: {
+        azure: {
+          transport: 'websocket',
+          websocket: { closeOnFinish: false },
+        },
+      },
+      onResult: vi.fn(),
+      methodType: 'stream',
+    });
+
+    const reader = outputStream.getReader();
+    await reader.read();
+
+    const transport = readModelStreamTransport(outputStream);
+    expect(transport).toMatchObject({
+      type: 'openai-websocket',
+      closeOnFinish: false,
+    });
+    transport?.close();
+    expect(close).toHaveBeenCalledTimes(1);
+    await reader.cancel();
   });
 });

@@ -3,7 +3,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { createOpenAIWebSocketFetch } from '../openai-websocket-fetch.js';
-import type { OpenAITransport, OpenAIWebSocketOptions } from '../provider-options.js';
+import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
 import { MASTRA_GATEWAY_STREAM_TRANSPORT, MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 import { MASTRA_USER_AGENT } from './constants.js';
@@ -541,14 +541,14 @@ export class AzureOpenAIGateway extends MastraModelGateway {
 
   private createAzureResponsesWebSocketFetch({
     useEntraId,
-    openaiWebSocket,
+    responsesWebSocket,
   }: {
     useEntraId: boolean;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }): typeof globalThis.fetch & { close(): void } {
     const websocketFetch = createOpenAIWebSocketFetch({
-      url: openaiWebSocket?.url ?? `wss://${this.config.resourceName}.openai.azure.com/openai/v1/responses`,
-      headers: openaiWebSocket?.headers,
+      url: responsesWebSocket?.url ?? `wss://${this.config.resourceName}.openai.azure.com/openai/v1/responses`,
+      headers: responsesWebSocket?.headers,
       apiKeyQueryParam: useEntraId ? false : 'api-key',
       betaHeader: false,
     });
@@ -563,14 +563,14 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     apiKey,
     headers,
     transport,
-    openaiWebSocket,
+    responsesWebSocket,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
     transport?: OpenAITransport;
-    openaiWebSocket?: OpenAIWebSocketOptions;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }): Promise<LanguageModelV2> {
     const useResponsesAPI = this.config.useResponsesAPI ?? false;
     const apiVersion =
@@ -582,7 +582,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     const websocketFetch = useWebSocket
       ? this.createAzureResponsesWebSocketFetch({
           useEntraId,
-          openaiWebSocket,
+          responsesWebSocket,
         })
       : undefined;
     const azureConfig = {
