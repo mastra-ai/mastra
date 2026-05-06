@@ -3,6 +3,13 @@
  * This is the "brain" that makes the agent a good coding assistant.
  */
 
+export interface NestedGitTreeContext {
+  /** Path relative to the project root, with forward slashes. */
+  relativePath: string;
+  /** Short human-readable description (e.g. "branch foo"). */
+  description: string;
+}
+
 export interface PromptContext {
   projectPath: string;
   projectName: string;
@@ -14,10 +21,17 @@ export interface PromptContext {
   modelId?: string;
   activePlan?: { title: string; plan: string; approvedAt: string } | null;
   toolGuidance: string;
+  /**
+   * Other git trees found inside the project root (worktrees, submodules,
+   * vendored repos). Surfaced to the agent so it knows not to operate
+   * inside them without an explicit `request_access` call.
+   */
+  nestedGitTrees?: NestedGitTreeContext[];
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
   const commonBinaries = formatCommonBinaries(ctx.commonBinaries);
+  const nestedGitSection = formatNestedGitTrees(ctx.nestedGitTrees);
 
   return `You are Mastra Code, an interactive CLI coding agent that helps users with software engineering tasks.
 
@@ -27,7 +41,7 @@ Project: ${ctx.projectName}
 ${ctx.gitBranch ? `Git branch: ${ctx.gitBranch}` : 'Not a git repository'}
 Platform: ${ctx.platform}${commonBinaries ? `\nCommon binaries: ${commonBinaries}` : ''}
 Date: ${ctx.date}
-Current mode: ${ctx.mode}
+Current mode: ${ctx.mode}${nestedGitSection}
 
 ${ctx.toolGuidance}
 
@@ -84,6 +98,8 @@ Use \`gh pr create\`. Include a summary of what changed and a test plan. Word th
 # File Access & Sandbox
 
 By default, you can only access files within the current project directory. If you get a "Permission denied" or "Access denied" error when trying to read, write, or access files outside the project root, do NOT keep retrying. Instead, use the \`request_access\` tool to request access to the external directory.
+
+The same restriction applies to *nested* git trees — git worktrees, submodules, or vendored repos that live inside the project root each count as a separate sandbox. The system prompt's "Nested git trees" list (when present) names them. Do not read, write, or run git commands inside those subtrees without first calling \`request_access\` for the specific path. In particular, do **not** stash, drop, reset, or delete uncommitted changes inside a nested tree — those are likely live work from another session.
 
 You are an autonomous AI assistant with strong common sense reasoning capabilities. Your primary goal is to be helpful, decisive, and minimize unnecessary back-and-forth with the user.
 
@@ -146,4 +162,11 @@ function formatCommonBinaries(binaries: PromptContext['commonBinaries']): string
   if (!binaries?.length) return '';
 
   return binaries.map(binary => `${binary.name}: ${binary.path ?? 'not found'}`).join(', ');
+}
+
+function formatNestedGitTrees(trees: PromptContext['nestedGitTrees']): string {
+  if (!trees?.length) return '';
+
+  const lines = trees.map(tree => `  - ${tree.relativePath} (${tree.description})`).join('\n');
+  return `\nNested git trees inside the project (each is its own sandbox — call \`request_access\` before touching):\n${lines}`;
 }

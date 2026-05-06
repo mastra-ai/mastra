@@ -64,6 +64,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
     modelId: ctx.modelId,
     activePlan: ctx.state?.activePlan,
     toolGuidance,
+    nestedGitTrees: ctx.nestedGitTrees,
   };
 
   const base = buildBasePrompt(baseCtx);

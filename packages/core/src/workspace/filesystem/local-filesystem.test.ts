@@ -1053,6 +1053,135 @@ describe('LocalFilesystem', () => {
   });
 
   // ===========================================================================
+  // Nested git tree boundary
+  // ===========================================================================
+  describe('nested git tree boundary', () => {
+    /**
+     * Nested git trees (worktrees, submodules, vendored repos) inside basePath
+     * are walled off — file ops require an explicit `request_access` grant.
+     * basePath's own `.git` is the project itself and must not block normal ops.
+     */
+    it('should allow access to files at basePath even when basePath itself has a .git dir', async () => {
+      // Simulate: basePath is a git repo
+      await fs.mkdir(path.join(tempDir, '.git'));
+      await fs.writeFile(path.join(tempDir, 'src.ts'), 'let x = 1;');
+
+      const content = await localFs.readFile('src.ts', { encoding: 'utf-8' });
+      expect(content).toBe('let x = 1;');
+    });
+
+    it('should block reads inside a nested git directory (separate repo / submodule)', async () => {
+      // Simulate a vendored repo or submodule with a real .git directory
+      const nestedRepo = path.join(tempDir, 'vendor', 'sub');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'inside sub');
+
+      await expect(localFs.readFile('vendor/sub/file.ts')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('vendor/sub/file.ts')).rejects.toThrow(/request_access/);
+    });
+
+    it('should block writes inside a nested git directory', async () => {
+      const nestedRepo = path.join(tempDir, 'pkg', 'embedded');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+
+      await expect(localFs.writeFile('pkg/embedded/new.ts', 'nope')).rejects.toThrow(PermissionError);
+      await expect(localFs.writeFile('pkg/embedded/new.ts', 'nope')).rejects.toThrow(/request_access/);
+    });
+
+    it('should block access inside a git worktree (where .git is a file, not a dir)', async () => {
+      // git worktrees place a `.git` *file* (not a dir) containing
+      // `gitdir: <main>/.git/worktrees/<name>`. The check must catch that too.
+      const worktreeDir = path.join(tempDir, 'wt-feat');
+      await fs.mkdir(worktreeDir, { recursive: true });
+      await fs.writeFile(path.join(worktreeDir, '.git'), 'gitdir: /tmp/main/.git/worktrees/wt-feat\n');
+      await fs.writeFile(path.join(worktreeDir, 'file.ts'), 'wt content');
+
+      await expect(localFs.readFile('wt-feat/file.ts')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('wt-feat/file.ts')).rejects.toThrow(/request_access/);
+    });
+
+    it('should block access to files that do not exist yet but live inside a nested git tree', async () => {
+      const nestedRepo = path.join(tempDir, 'wt');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+
+      // The file doesn't exist — but the write would still land inside the nested tree.
+      await expect(localFs.writeFile('wt/new-file.ts', 'content')).rejects.toThrow(PermissionError);
+      await expect(localFs.writeFile('wt/new-file.ts', 'content')).rejects.toThrow(/request_access/);
+    });
+
+    it('should allow access to a nested git tree once it is added to allowedPaths', async () => {
+      const nestedRepo = path.join(tempDir, 'sub');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'sub content');
+
+      const fsWithGrant = new LocalFilesystem({
+        basePath: tempDir,
+        allowedPaths: [nestedRepo],
+      });
+
+      const content = await fsWithGrant.readFile(path.join(nestedRepo, 'file.ts'), { encoding: 'utf-8' });
+      expect(content).toBe('sub content');
+    });
+
+    it('should still allow reads in sibling directories without nested .git', async () => {
+      const nestedRepo = path.join(tempDir, 'wt');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+
+      await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'src/main.ts'), 'main');
+
+      const content = await localFs.readFile('src/main.ts', { encoding: 'utf-8' });
+      expect(content).toBe('main');
+    });
+
+    it('should not be triggered by basePath itself even when basePath is a git worktree', async () => {
+      // basePath itself can be a worktree (its `.git` is a file). That is the
+      // *current* project, not a nested one — file ops in basePath must work.
+      await fs.writeFile(path.join(tempDir, '.git'), 'gitdir: /tmp/main/.git/worktrees/cur\n');
+      await fs.writeFile(path.join(tempDir, 'file.ts'), 'cur');
+
+      const content = await localFs.readFile('file.ts', { encoding: 'utf-8' });
+      expect(content).toBe('cur');
+    });
+
+    it('should treat allowedPaths as an explicit grant that overrides nested-git checks', async () => {
+      // Even a deeply nested grant should work — request_access can grant access
+      // to a path inside a nested git tree when the user explicitly approves it.
+      const nestedRepo = path.join(tempDir, 'wt');
+      const inner = path.join(nestedRepo, 'inner');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+      await fs.mkdir(inner, { recursive: true });
+      await fs.writeFile(path.join(inner, 'deep.ts'), 'deep');
+
+      const fsWithGrant = new LocalFilesystem({
+        basePath: tempDir,
+        allowedPaths: [inner],
+      });
+
+      const content = await fsWithGrant.readFile(path.join(inner, 'deep.ts'), { encoding: 'utf-8' });
+      expect(content).toBe('deep');
+    });
+
+    it('should block deleteFile inside a nested git tree', async () => {
+      const nestedRepo = path.join(tempDir, 'sub');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'sub content');
+
+      await expect(localFs.deleteFile('sub/file.ts')).rejects.toThrow(PermissionError);
+      await expect(localFs.deleteFile('sub/file.ts')).rejects.toThrow(/request_access/);
+    });
+
+    it('should block readdir inside a nested git tree', async () => {
+      const nestedRepo = path.join(tempDir, 'sub');
+      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'sub content');
+
+      await expect(localFs.readdir('sub')).rejects.toThrow(PermissionError);
+      await expect(localFs.readdir('sub')).rejects.toThrow(/request_access/);
+    });
+  });
+
+  // ===========================================================================
   // getInstructions with custom override
   // ===========================================================================
   describe('getInstructions with custom override', () => {

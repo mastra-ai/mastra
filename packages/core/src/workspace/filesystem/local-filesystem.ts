@@ -5,7 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
-import { constants as fsConstants, realpathSync } from 'node:fs';
+import { constants as fsConstants, existsSync, realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import type { RequestContext } from '../../request-context';
@@ -248,9 +248,16 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private _isWithinAnyRoot(absolutePath: string): boolean {
-    const roots = [this._basePath, ...this._allowedPaths];
-    if (roots.some(root => this._isWithinRoot(absolutePath, root))) {
+    // Allowed paths are explicit grants (e.g. via `request_access`) and bypass
+    // the nested-git boundary check. basePath access is restricted to the
+    // current project's git tree — nested worktrees, submodules, or vendored
+    // git repos require an explicit grant.
+    if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
       return true;
+    }
+
+    if (this._isWithinRoot(absolutePath, this._basePath)) {
+      return !this._crossesNestedGitBoundary(absolutePath, this._basePath);
     }
 
     const resolvedPath = this._resolvePathForContainment(absolutePath);
@@ -258,10 +265,55 @@ export class LocalFilesystem extends MastraFilesystem {
       return false;
     }
 
-    return roots.some(root => {
-      const resolvedRoot = this._resolvePathForContainment(root);
-      return resolvedRoot ? this._isWithinRoot(resolvedPath, resolvedRoot) : false;
-    });
+    if (
+      this._allowedPaths.some(root => {
+        const resolvedRoot = this._resolvePathForContainment(root);
+        return resolvedRoot ? this._isWithinRoot(resolvedPath, resolvedRoot) : false;
+      })
+    ) {
+      return true;
+    }
+
+    const resolvedBase = this._resolvePathForContainment(this._basePath);
+    if (resolvedBase && this._isWithinRoot(resolvedPath, resolvedBase)) {
+      return !this._crossesNestedGitBoundary(resolvedPath, resolvedBase);
+    }
+
+    return false;
+  }
+
+  /**
+   * Walk ancestors from `absolutePath` toward `basePath`. Return true if any
+   * directory between `absolutePath` (inclusive) and `basePath` (exclusive)
+   * contains a `.git` entry — a marker for a separate git tree (worktree,
+   * submodule, or vendored repo). Use `request_access` to grant access.
+   *
+   * Assumes `absolutePath` is within `basePath`. The basePath's own `.git`
+   * is intentionally excluded from the check because that is the current
+   * project itself.
+   */
+  private _crossesNestedGitBoundary(absolutePath: string, basePath: string): boolean {
+    if (absolutePath === basePath) return false;
+
+    let current = absolutePath;
+    while (current !== basePath) {
+      const gitPath = nodePath.join(current, '.git');
+      try {
+        if (existsSync(gitPath)) return true;
+      } catch {
+        // Treat fs errors here as "no .git" — the file op itself will surface
+        // a more meaningful error if the directory is otherwise unreadable.
+      }
+
+      const parent = nodePath.dirname(current);
+      if (parent === current) return false;
+      current = parent;
+    }
+    return false;
+  }
+
+  private _nestedGitOperationHint(inputPath: string): string {
+    return `access (path is inside a separate git tree nested under the project root; use the request_access tool to grant access to "${inputPath}" if you really mean to operate inside it)`;
   }
 
   private toBuffer(content: FileContent): Buffer {
@@ -275,6 +327,15 @@ export class LocalFilesystem extends MastraFilesystem {
 
     if (this._contained) {
       if (!this._isWithinAnyRoot(absolutePath)) {
+        // Differentiate "outside basePath" from "inside a nested git tree" so
+        // the agent knows to call `request_access` for the latter rather than
+        // assume the path is unreachable.
+        if (
+          this._isWithinRoot(absolutePath, this._basePath) &&
+          this._crossesNestedGitBoundary(absolutePath, this._basePath)
+        ) {
+          throw new PermissionError(absolutePath, this._nestedGitOperationHint(absolutePath));
+        }
         throw new PermissionError(inputPath, this._accessOperationHint(inputPath));
       }
     }
@@ -347,39 +408,60 @@ export class LocalFilesystem extends MastraFilesystem {
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
 
+    // Allowed paths are explicit grants — bypass the nested-git check.
     if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
       return;
     }
 
-    // Resolve symlinks for the target path. If it doesn't exist,
-    // there are no symlinks to escape through — nothing to check.
+    // Resolve symlinks for the target path. If it doesn't exist there are no
+    // symlinks to escape through, but we still apply the nested-git check on
+    // the literal path so writes into a sibling worktree can't sneak in via a
+    // not-yet-created file.
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
     } catch (error: unknown) {
-      if (isEnoentError(error)) return; // path doesn't exist yet — safe
+      if (isEnoentError(error)) {
+        if (
+          this._isWithinRoot(absolutePath, this._basePath) &&
+          this._crossesNestedGitBoundary(absolutePath, this._basePath)
+        ) {
+          throw new PermissionError(absolutePath, this._nestedGitOperationHint(absolutePath));
+        }
+        return;
+      }
       throw error;
     }
 
-    // Resolve real paths for roots, skipping any that don't exist
-    const roots = [this._basePath, ...this._allowedPaths];
-    const rootReals: string[] = [];
-    for (const root of roots) {
+    // Re-check allowedPaths against the realpath-resolved target.
+    for (const root of this._allowedPaths) {
       try {
-        rootReals.push(await fs.realpath(root));
+        const rootReal = await fs.realpath(root);
+        if (targetReal === rootReal || targetReal.startsWith(rootReal + nodePath.sep)) {
+          return;
+        }
       } catch (error: unknown) {
         if (isEnoentError(error)) continue;
         throw error;
       }
     }
 
-    const isWithinRoot = rootReals.some(
-      rootReal => targetReal === rootReal || targetReal.startsWith(rootReal + nodePath.sep),
-    );
-
-    if (!isWithinRoot) {
-      throw new PermissionError(absolutePath, 'access');
+    let baseReal: string;
+    try {
+      baseReal = await fs.realpath(this._basePath);
+    } catch (error: unknown) {
+      if (isEnoentError(error)) throw new PermissionError(absolutePath, 'access');
+      throw error;
     }
+
+    if (targetReal === baseReal || targetReal.startsWith(baseReal + nodePath.sep)) {
+      if (this._crossesNestedGitBoundary(targetReal, baseReal)) {
+        throw new PermissionError(absolutePath, this._nestedGitOperationHint(absolutePath));
+      }
+      return;
+    }
+
+    throw new PermissionError(absolutePath, 'access');
   }
 
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {

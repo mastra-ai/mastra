@@ -108,4 +108,47 @@ describe('buildFullPrompt', () => {
 
     expect(prompt).toContain('Common binaries: python: not found, python3: /usr/bin/python3');
   });
+
+  it('lists nested git trees so the agent knows to use request_access before touching them', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: { permissionRules: { tools: {} } },
+      nestedGitTrees: [
+        { relativePath: 'wt-feat', description: 'branch feature-x' },
+        { relativePath: 'vendor/sub', description: 'separate git tree' },
+      ],
+    });
+
+    expect(prompt).toContain('Nested git trees inside the project');
+    expect(prompt).toContain('wt-feat (branch feature-x)');
+    expect(prompt).toContain('vendor/sub (separate git tree)');
+    expect(prompt).toContain('request_access');
+  });
+
+  it('omits the nested git trees section when none are detected', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: { permissionRules: { tools: {} } },
+    });
+
+    expect(prompt).not.toContain('Nested git trees inside the project');
+  });
 });
