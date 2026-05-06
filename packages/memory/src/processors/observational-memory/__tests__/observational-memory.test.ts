@@ -1405,6 +1405,81 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
+    it('should replace image-data tool-result blocks with attachment placeholders', () => {
+      const base64 = 'A'.repeat(2000);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Captured screenshot of the homepage.' },
+                    { type: 'image-data', data: base64, mediaType: 'image/png' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result screenshot');
+      expect(formatted).toContain('Captured screenshot of the homepage.');
+      expect(formatted).toContain('[Image #1: image/png]');
+      expect(formatted).not.toContain(base64);
+    });
+
+    it('should hoist file-data tool-result blocks under the file counter', () => {
+      const base64 = 'C'.repeat(2000);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-3',
+              toolName: 'fetchInvoice',
+              args: { id: 'inv-42' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Invoice retrieved.' },
+                    { type: 'file-data', data: base64, mediaType: 'application/pdf', filename: 'invoice-42.pdf' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result fetchInvoice');
+      expect(formatted).toContain('Invoice retrieved.');
+      expect(formatted).toContain('[File #1: invoice-42.pdf]');
+      expect(formatted).not.toContain('[Image #1');
+      expect(formatted).not.toContain(base64);
+    });
+
     // Regression test for https://github.com/mastra-ai/mastra/issues/15573
     // Anthropic rejects bodies containing lone UTF-16 surrogates with
     // `The request body is not valid JSON: no low surrogate in string`.
@@ -1497,6 +1572,231 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should hoist image-data tool-result blocks into observer input attachments', () => {
+      const base64 = 'B'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Captured.' },
+                    { type: 'image-data', data: base64, mediaType: 'image/png' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+
+      const textParts = content.filter(part => part.type === 'text');
+      const imageParts = content.filter(part => part.type === 'image');
+
+      expect(imageParts).toHaveLength(1);
+      expect(imageParts[0]).toMatchObject({
+        type: 'image',
+        image: `data:image/png;base64,${base64}`,
+        mimeType: 'image/png',
+      });
+
+      const joinedText = textParts.map(part => part.text).join('\n');
+      expect(joinedText).toContain('Tool Result screenshot');
+      expect(joinedText).toContain('[Image #1: image/png]');
+      expect(joinedText).not.toContain(base64);
+    });
+
+    it('should hoist URL and media tool-result blocks into observer input attachments', () => {
+      const imageData = 'E'.repeat(1500);
+      const fileData = 'F'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'captureAssets',
+              args: {},
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Assets captured.' },
+                    { type: 'image-url', url: 'https://example.com/chart.png', mediaType: 'image/png' },
+                    {
+                      type: 'file-url',
+                      url: 'https://example.com/report.pdf',
+                      mediaType: 'application/pdf',
+                      filename: 'report.pdf',
+                    },
+                    { type: 'media', data: imageData, mediaType: 'image/jpeg' },
+                    { type: 'media', data: fileData, mediaType: 'application/pdf' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const fileParts = content.filter(part => part.type === 'file');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts[0]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/chart.png',
+        mimeType: 'image/png',
+      });
+      expect(imageParts[1]).toMatchObject({
+        type: 'image',
+        image: `data:image/jpeg;base64,${imageData}`,
+        mimeType: 'image/jpeg',
+      });
+
+      expect(fileParts).toHaveLength(2);
+      expect(fileParts[0]).toMatchObject({
+        type: 'file',
+        data: 'https://example.com/report.pdf',
+        mimeType: 'application/pdf',
+        filename: 'report.pdf',
+      });
+      expect(fileParts[1]).toMatchObject({
+        type: 'file',
+        data: `data:application/pdf;base64,${fileData}`,
+        mimeType: 'application/pdf',
+      });
+
+      expect(joinedText).toContain('[Image #1: chart.png]');
+      expect(joinedText).toContain('[File #1: report.pdf]');
+      expect(joinedText).toContain('[Image #2: image/jpeg]');
+      expect(joinedText).toContain('[File #2: application/pdf]');
+      expect(joinedText).not.toContain(imageData);
+      expect(joinedText).not.toContain(fileData);
+    });
+
+    it('should hoist image-data without mediaType without leaking base64 into observer text', () => {
+      const base64 = 'G'.repeat(1500);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: {},
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: base64 }],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(1);
+      expect(imageParts[0]).toMatchObject({ type: 'image', image: base64 });
+      expect(joinedText).toContain('[Image #1]');
+      expect(joinedText).not.toContain(base64);
+    });
+
+    it('should share the image counter between user-attached and tool-result images', () => {
+      const toolBase64 = 'D'.repeat(1500);
+
+      const userMsg = createTestMessage('ignored', 'user');
+      userMsg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at this.' },
+          { type: 'image', image: 'https://example.com/user-photo.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const toolMsg = createTestMessage('ignored', 'assistant');
+      toolMsg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              args: { url: 'https://example.com' },
+              result: {},
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: toolBase64, mediaType: 'image/png' }],
+                },
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([userMsg, toolMsg]);
+      const content = historyMessage.content as any[];
+      const imageParts = content.filter(part => part.type === 'image');
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts[0]).toMatchObject({ image: 'https://example.com/user-photo.png' });
+      expect(imageParts[1]).toMatchObject({ image: `data:image/png;base64,${toolBase64}` });
+
+      expect(joinedText).toContain('[Image #1: user-photo.png]');
+      expect(joinedText).toContain('[Image #2: image/png]');
+      expect(joinedText).not.toMatch(/\[Image #1: image\/png\]/);
     });
 
     it('should reuse part-level date grouping without message separators', () => {

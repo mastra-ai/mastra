@@ -24,8 +24,12 @@ Real-time monitoring, suspend/resume, and step-level observability are enabled v
 Install the required packages:
 
 ```bash npm2yarn
-npm install @mastra/inngest@latest inngest @inngest/realtime
+npm install @mastra/inngest@latest inngest
 ```
+
+:::note
+Requires `inngest@^4` and Inngest Dev Server `v1.18.0` or later. Realtime is built into the SDK in v4, so `@inngest/realtime` and `realtimeMiddleware` are no longer used.
+:::
 
 ## Building an Inngest workflow
 
@@ -39,13 +43,11 @@ In development:
 
 ```ts title="src/mastra/inngest/index.ts"
 import { Inngest } from 'inngest'
-import { realtimeMiddleware } from '@inngest/realtime/middleware'
 
 export const inngest = new Inngest({
   id: 'mastra',
   baseUrl: 'http://localhost:8288',
   isDev: true,
-  middleware: [realtimeMiddleware()],
 })
 ```
 
@@ -53,11 +55,9 @@ In production:
 
 ```ts title="src/mastra/inngest/index.ts"
 import { Inngest } from 'inngest'
-import { realtimeMiddleware } from '@inngest/realtime/middleware'
 
 export const inngest = new Inngest({
   id: 'mastra',
-  middleware: [realtimeMiddleware()],
 })
 ```
 

@@ -2919,6 +2919,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'gte-large-en-v1.5',
     'kimi-k2.5',
+    'kimi-k2.6',
     'llama-4-maverick',
     'llama-guard-4-12b',
     'llama3.3-70b-instruct',
