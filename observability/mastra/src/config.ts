@@ -162,9 +162,10 @@ export interface ObservabilityRegistryConfig {
    *
    * If a config already includes a `SensitiveDataFilter` in
    * `spanOutputProcessors`, the auto-applied filter is skipped to avoid
-   * double redaction. The auto-applied filter runs first so user-provided
-   * processors operate on already-redacted data. Pre-instantiated
-   * `ObservabilityInstance` values are not modified.
+   * double redaction. The auto-applied filter runs last (after any
+   * user-provided processors) so that sensitive data introduced or
+   * surfaced by upstream processors is still redacted before export.
+   * Pre-instantiated `ObservabilityInstance` values are not modified.
    */
   sensitiveDataFilter?: boolean | SensitiveDataFilterOptions;
 }

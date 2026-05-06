@@ -170,7 +170,10 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
           const userProcessors = tracingDef.spanOutputProcessors ?? [];
           const hasFilter = userProcessors.some(p => p instanceof SensitiveDataFilter);
           const autoFilter = !hasFilter ? buildAutoSensitiveFilter() : undefined;
-          const spanOutputProcessors = autoFilter ? [autoFilter, ...userProcessors] : userProcessors;
+          // Auto-applied filter runs LAST so any sensitive data introduced by
+          // user processors (e.g. enrichment that copies headers/config into
+          // attributes) is still redacted before export.
+          const spanOutputProcessors = autoFilter ? [...userProcessors, autoFilter] : userProcessors;
           instance = new DefaultObservabilityInstance({
             ...tracingDef,
             name,

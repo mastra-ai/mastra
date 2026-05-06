@@ -786,7 +786,7 @@ describe('Observability Registry', () => {
     });
 
     describe('Sensitive Data Filter Default', () => {
-      it('should auto-prepend SensitiveDataFilter to user configs by default', () => {
+      it('should auto-append SensitiveDataFilter to user configs by default', () => {
         observability = new Observability({
           configs: {
             custom: {
@@ -797,12 +797,12 @@ describe('Observability Registry', () => {
         });
 
         const instance = observability.getInstance('custom');
-        const processors = instance?.getSpanOutputProcessors();
+        const processors = instance?.getSpanOutputProcessors() ?? [];
         expect(processors).toHaveLength(1);
-        expect(processors?.[0]).toBeInstanceOf(SensitiveDataFilter);
+        expect(processors[processors.length - 1]).toBeInstanceOf(SensitiveDataFilter);
       });
 
-      it('should auto-prepend SensitiveDataFilter to every user config', () => {
+      it('should auto-append SensitiveDataFilter to every user config', () => {
         observability = new Observability({
           configs: {
             first: {
@@ -818,14 +818,18 @@ describe('Observability Registry', () => {
           configSelector: () => 'first',
         });
 
-        const first = observability.getInstance('first');
-        const second = observability.getInstance('second');
+        const firstProcessors = observability.getInstance('first')?.getSpanOutputProcessors() ?? [];
+        const secondProcessors = observability.getInstance('second')?.getSpanOutputProcessors() ?? [];
 
-        expect(first?.getSpanOutputProcessors()[0]).toBeInstanceOf(SensitiveDataFilter);
-        expect(second?.getSpanOutputProcessors()[0]).toBeInstanceOf(SensitiveDataFilter);
+        expect(firstProcessors).toHaveLength(1);
+        expect(secondProcessors).toHaveLength(1);
+        expect(firstProcessors[firstProcessors.length - 1]).toBeInstanceOf(SensitiveDataFilter);
+        expect(secondProcessors[secondProcessors.length - 1]).toBeInstanceOf(SensitiveDataFilter);
       });
 
-      it('should prepend SensitiveDataFilter before user spanOutputProcessors', () => {
+      it('should append SensitiveDataFilter after user spanOutputProcessors so it always runs last', () => {
+        // Running last guarantees that any sensitive data introduced or surfaced
+        // by upstream user processors is still redacted before export.
         const userProcessor = {
           name: 'user-processor',
           process: (span: any) => span,
@@ -844,8 +848,8 @@ describe('Observability Registry', () => {
 
         const processors = observability.getInstance('custom')?.getSpanOutputProcessors();
         expect(processors).toHaveLength(2);
-        expect(processors?.[0]).toBeInstanceOf(SensitiveDataFilter);
-        expect(processors?.[1]).toBe(userProcessor);
+        expect(processors?.[0]).toBe(userProcessor);
+        expect(processors?.[1]).toBeInstanceOf(SensitiveDataFilter);
       });
 
       it('should use the user-supplied SensitiveDataFilter (and its options) when one is provided', () => {
