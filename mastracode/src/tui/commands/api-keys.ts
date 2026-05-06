@@ -7,14 +7,9 @@ import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SelectItem } from '@mariozechner/pi-tui';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
-import type { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { showModalOverlay } from '../overlay.js';
 import { getSelectListTheme, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
-
-interface InlineInputHandler {
-  handleInput(data: string): void;
-}
 
 interface ProviderInfo {
   provider: string;
@@ -82,7 +77,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
   }
 
   return new Promise<void>(resolve => {
-    const container = new Box(1, 1);
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', 'API Keys')), 0, 0));
     container.addChild(new Spacer(1));
 
@@ -128,10 +123,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       };
 
       list.onCancel = () => {
-        ctx.state.activeInlineQuestion = undefined;
-        container.clear();
-        container.addChild(new Text(theme.fg('dim', `${theme.fg('error', '✗')} API Keys (closed)`), 0, 0));
-        ctx.state.ui.requestRender();
+        ctx.state.ui.hideOverlay();
         resolve();
       };
 
@@ -216,13 +208,8 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
 
     updateDetail(providers[0]!.provider);
 
-    const inputShim: InlineInputHandler = { handleInput: (data: string) => selectList.handleInput(data) };
-    ctx.state.activeInlineQuestion = inputShim as unknown as AskQuestionInlineComponent;
-
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(container);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    const modal = container as Box & { handleInput: (data: string) => void };
+    modal.handleInput = (data: string) => selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, modal, { maxHeight: '75%' });
   });
 }

@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed setup, sandbox, and model-pack screens so they open as neutral settings overlays, standardized modal sizing with stable minimum-height dialogs, and kept model-pack Esc navigation inside the overlay flow.
+Fixed setup, settings, selectors, and non-chat configuration prompts so they open as neutral overlays with stable modal sizing, while keeping active chat interactions inline.
