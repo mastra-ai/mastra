@@ -23,13 +23,20 @@ import type { AgentInstructions } from './types';
  */
 export interface AgentResponseCacheOptions {
   /**
-   * Override the auto-derived cache key. When set, none of the request shape
-   * is hashed into the key — it's used verbatim. Useful when you want to share
-   * a cached response across requests that differ in irrelevant ways (e.g.
-   * formatting), or to manually invalidate a cached entry by changing the
-   * key.
+   * Override the auto-derived cache key. Accepts either:
+   *
+   * - A string: used verbatim. None of the request shape is hashed into the
+   *   key. Useful when you want to share a cached response across requests
+   *   that differ in irrelevant ways (e.g. formatting), or to manually
+   *   invalidate a cached entry by changing the key.
+   * - A function: receives the same {@link AgentResponseCacheKeyInputs}
+   *   Mastra would have hashed and returns a string (or `Promise<string>`).
+   *   Use this when you only care about a subset of the inputs (e.g. cache
+   *   only on the latest user message and the model id, ignoring history),
+   *   or when you want to reuse Mastra's hashing helpers via
+   *   {@link buildAgentResponseCacheKey}.
    */
-  key?: string;
+  key?: string | AgentResponseCacheKeyFn;
 
   /**
    * Time-to-live in seconds. Defaults to 300 (5 minutes), matching
@@ -66,6 +73,12 @@ export interface AgentResponseCacheOptions {
 }
 
 /**
+ * Function form of {@link AgentResponseCacheOptions.key}. Receives the same
+ * inputs Mastra would have hashed and returns a cache key string.
+ */
+export type AgentResponseCacheKeyFn = (inputs: AgentResponseCacheKeyInputs) => string | Promise<string>;
+
+/**
  * Resolved (per-call) response cache config — never `boolean | undefined`.
  *
  * @internal
@@ -73,7 +86,7 @@ export interface AgentResponseCacheOptions {
 export type ResolvedResponseCacheConfig = {
   enabled: boolean;
   cache?: MastraCache;
-  key?: string;
+  key?: string | AgentResponseCacheKeyFn;
   ttl?: number;
   scope?: string | null;
   bust: boolean;

@@ -95,15 +95,36 @@ export const agent = new Agent({
 
 When you don't supply `key`, Mastra derives one deterministically from inputs that change the LLM's response: `agentId`, `methodType` (`stream` vs `generate`), `scope`, model identity (`provider`, `modelId`, spec version), `modelSettings`, `providerOptions`, `toolChoice`, system prompt + instructions, tool definitions (id, description, schemas), structured output schema, input messages, and request `context`. Any change to these inputs automatically invalidates the cache.
 
+### Customize the cache key
+
+Pass `key` as a function to derive your own cache key from any subset of those inputs. The function receives the same inputs Mastra would have hashed and returns a string (or a `Promise<string>`):
+
+```typescript title="src/example.ts"
+import { buildAgentResponseCacheKey } from '@mastra/core/agent'
+
+await agent.stream(prompt, {
+  responseCache: {
+    // Cache only on the model id and the latest user message — ignore
+    // history, tools, structured output, etc.
+    key: ({ model, messages }) => `qa:${model.modelId}:${JSON.stringify(messages).slice(-200)}`,
+  },
+})
+
+// Or reuse Mastra's hashing helper while overriding individual fields:
+await agent.stream(prompt, {
+  responseCache: {
+    key: inputs => buildAgentResponseCacheKey({ ...inputs, tools: undefined }),
+  },
+})
+```
+
+If the function throws, Mastra logs a warning and falls back to the default key derivation so the call still benefits from caching.
+
 ## How cache hits work
 
 `agent.generate()` returns the cached `FullOutput` directly. `agent.stream()` returns a `MastraModelOutput` whose chunks are replayed from the cached buffer through the same pipeline, so consumers iterating `fullStream` or awaiting `text`, `usage`, and `finishReason` see the cached values.
 
 Cache writes happen after the response completes. Failed runs (errors, tripwire activations) are not cached, so the next call retries cleanly.
-
-## Comparison with provider-level caching
-
-Provider-level caching like [OpenRouter response caching](https://openrouter.ai/announcements/response-caching) lives at the API layer and is scoped to your provider account. Mastra's response cache is at the agent layer, so it works with any model, runs in your own infrastructure (latency is a few ms instead of a network round-trip), and can share entries across providers if you set the same `key`. The two are complementary.
 
 :::note
 Visit [Agent.stream() reference](/reference/streaming/agents/stream) and [Agent.generate() reference](/reference/agents/generate) for the full options.

@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryServerCache } from '../../cache';
 import type { MastraCache } from '../../cache';
 import { Mastra } from '../../mastra';
@@ -130,6 +130,63 @@ describe('Agent response cache', () => {
         responseCache: { key: sharedKey },
       });
 
+      expect(second.text).toBe('Cached response text');
+      expect(model.doGenerateCalls).toHaveLength(1);
+    });
+
+    it('per-call key function receives inputs and is used as the cache key', async () => {
+      const seenInputs: unknown[] = [];
+      const keyFn = vi.fn((inputs: unknown) => {
+        seenInputs.push(inputs);
+        return 'fn-derived-key';
+      });
+
+      await agent.generate('first', { responseCache: { key: keyFn } });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const second = await agent.generate('second different prompt', {
+        responseCache: { key: keyFn },
+      });
+
+      expect(keyFn).toHaveBeenCalledTimes(2);
+      expect(second.text).toBe('Cached response text');
+      expect(model.doGenerateCalls).toHaveLength(1);
+      // Inputs include the agentId, model, and messages so users can derive
+      // partial keys from any subset of them.
+      const firstInputs = seenInputs[0] as { agentId: string; model: { modelId?: string }; messages: unknown };
+      expect(firstInputs.agentId).toBe('response-cache-agent');
+      expect(firstInputs.model.modelId).toBeDefined();
+      expect(firstInputs.messages).toBeDefined();
+    });
+
+    it('falls back to default key derivation when key function throws', async () => {
+      await agent.generate('Hello');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(cache.sets).toBe(1);
+      const generateCallsBefore = model.doGenerateCalls.length;
+
+      const throwing = vi.fn(() => {
+        throw new Error('intentional');
+      });
+      const second = await agent.generate('Hello', { responseCache: { key: throwing } });
+
+      // Even though the key fn threw, the call still benefits from caching
+      // because we fell back to the default key, which matches the first call.
+      expect(throwing).toHaveBeenCalledOnce();
+      expect(second.text).toBe('Cached response text');
+      expect(model.doGenerateCalls).toHaveLength(generateCallsBefore);
+    });
+
+    it('async key function is awaited', async () => {
+      const keyFn = vi.fn(async () => {
+        await Promise.resolve();
+        return 'async-derived-key';
+      });
+
+      await agent.generate('first', { responseCache: { key: keyFn } });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const second = await agent.generate('second', { responseCache: { key: keyFn } });
+
+      expect(keyFn).toHaveBeenCalledTimes(2);
       expect(second.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
     });

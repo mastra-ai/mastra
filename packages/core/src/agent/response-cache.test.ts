@@ -38,6 +38,13 @@ describe('resolveResponseCacheConfig', () => {
   it('per-call bust=true is honored', () => {
     expect(resolveResponseCacheConfig(true, { bust: true })).toMatchObject({ enabled: true, bust: true });
   });
+
+  it('preserves function-form key from agent default and per-call override', () => {
+    const agentKeyFn = () => 'agent-key';
+    const perCallKeyFn = () => 'per-call-key';
+    expect(resolveResponseCacheConfig({ key: agentKeyFn }, undefined).key).toBe(agentKeyFn);
+    expect(resolveResponseCacheConfig({ key: agentKeyFn }, { key: perCallKeyFn }).key).toBe(perCallKeyFn);
+  });
 });
 
 describe('buildAgentResponseCacheKey', () => {

@@ -40,4 +40,15 @@ await agent.stream(prompt, {
 await agent.generate(prompt, { responseCache: false });
 ```
 
+`key` may also be a function that receives the same inputs Mastra would have hashed and returns a custom cache key string (or `Promise<string>`), so you can derive cache keys from any subset of those inputs (e.g. cache only on the model id and the latest user message):
+
+```ts
+await agent.stream(prompt, {
+  responseCache: {
+    key: ({ model, messages }) =>
+      `qa:${model.modelId}:${JSON.stringify(messages).slice(-200)}`,
+  },
+});
+```
+
 The auto-derived cache key includes model identity, model settings, system prompt, instructions, tools, structured output schema, and input messages, so any change automatically invalidates the cache. Cache writes happen after the response completes, and failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.

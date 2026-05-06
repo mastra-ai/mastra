@@ -101,7 +101,7 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { buildAgentResponseCacheKey, resolveResponseCacheConfig, summarizeToolsForCacheKey } from './response-cache';
-import type { AgentResponseCacheOption, CachedAgentResponse } from './response-cache';
+import type { AgentResponseCacheKeyInputs, AgentResponseCacheOption, CachedAgentResponse } from './response-cache';
 import { replayCachedAgentResponse } from './response-cache-replay';
 import { SaveQueueManager } from './save-queue';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -5104,8 +5104,13 @@ export class Agent<
       return undefined;
     }
 
-    let cacheKey = config.key;
-    if (!cacheKey) {
+    let cacheKey: string;
+    if (typeof config.key === 'string') {
+      // String key — used verbatim, request shape isn't hashed.
+      cacheKey = config.key;
+    } else {
+      // Build the inputs once — either to hash via buildAgentResponseCacheKey
+      // (default) or to hand to a user-supplied key function.
       const memoryOption = (args.mergedOptions.memory ?? undefined) as AgentMemoryOption | undefined;
       const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
 
@@ -5128,7 +5133,7 @@ export class Agent<
         // Same fallback rationale as tools.
       }
 
-      cacheKey = buildAgentResponseCacheKey({
+      const keyInputs: AgentResponseCacheKeyInputs = {
         agentId: this.id,
         methodType: args.methodType,
         scope,
@@ -5159,7 +5164,20 @@ export class Agent<
           (args.mergedOptions.structuredOutput as { schema?: unknown } | undefined)?.schema ??
           (args.mergedOptions.experimental_output as { jsonSchema?: unknown } | undefined)?.jsonSchema,
         context: args.mergedOptions.context,
-      });
+      };
+
+      if (typeof config.key === 'function') {
+        try {
+          cacheKey = await config.key(keyInputs);
+        } catch (err) {
+          this.logger.warn(
+            `[Agent:${this.name}] responseCache.key function threw — falling back to default key derivation: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          cacheKey = buildAgentResponseCacheKey(keyInputs);
+        }
+      } else {
+        cacheKey = buildAgentResponseCacheKey(keyInputs);
+      }
     }
 
     return { cache, cacheKey, ttl: config.ttl, bust: config.bust };
