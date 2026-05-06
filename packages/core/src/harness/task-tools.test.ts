@@ -33,7 +33,7 @@ function createTaskContext(
 }
 
 describe('assignTaskIds', () => {
-  it('is the shared task ID assignment contract for tools and history replay', () => {
+  it('does not reuse existing ids when duplicate content makes matching ambiguous', () => {
     const tasks = assignTaskIds(
       [
         { content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' },
@@ -47,19 +47,105 @@ describe('assignTaskIds', () => {
     );
 
     expect(tasks).toEqual([
-      { id: 'first', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' },
-      { id: 'second', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff again' },
+      { id: 'task_review_diff', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' },
+      { id: 'task_review_diff_2', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff again' },
       {
-        id: 'task_new_duplicate_id',
+        id: 'first',
         content: 'New duplicate id',
         status: 'pending',
         activeForm: 'Handling duplicate id',
       },
     ]);
   });
+
+  it('reuses an existing id when an omitted task has one unambiguous content match', () => {
+    const tasks = assignTaskIds(
+      [{ content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' }],
+      [{ id: 'review', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff' }],
+    );
+
+    expect(tasks).toEqual([
+      { id: 'review', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' },
+    ]);
+  });
+
+  it('reuses an unambiguous remaining id when explicit ids disambiguate duplicate content', () => {
+    const tasks = assignTaskIds(
+      [
+        { id: 'first', content: 'Review diff', status: 'completed', activeForm: 'Reviewing diff' },
+        { content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff again' },
+      ],
+      [
+        { id: 'first', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff' },
+        { id: 'second', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff again' },
+      ],
+    );
+
+    expect(tasks).toEqual([
+      { id: 'first', content: 'Review diff', status: 'completed', activeForm: 'Reviewing diff' },
+      { id: 'second', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff again' },
+    ]);
+  });
+
+  it('does not let omitted tasks consume ids requested explicitly later in the same write', () => {
+    const tasks = assignTaskIds(
+      [
+        { content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff' },
+        { id: 'review', content: 'Write docs', status: 'in_progress', activeForm: 'Writing docs' },
+      ],
+      [{ id: 'review', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff' }],
+    );
+
+    expect(tasks).toEqual([
+      { id: 'task_review_diff', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff' },
+      { id: 'review', content: 'Write docs', status: 'in_progress', activeForm: 'Writing docs' },
+    ]);
+  });
+
+  it('reuses remaining duplicate-content ids after later explicit ids are reserved', () => {
+    const tasks = assignTaskIds(
+      [
+        { content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff again' },
+        { id: 'first', content: 'Review diff', status: 'completed', activeForm: 'Reviewing diff' },
+      ],
+      [
+        { id: 'first', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff' },
+        { id: 'second', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff again' },
+      ],
+    );
+
+    expect(tasks).toEqual([
+      { id: 'second', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff again' },
+      { id: 'first', content: 'Review diff', status: 'completed', activeForm: 'Reviewing diff' },
+    ]);
+  });
+
+  it('caps deterministic id slugs for long generated ids', () => {
+    const [task] = assignTaskIds([
+      { content: `${'a '.repeat(40)}tail`, status: 'pending', activeForm: 'Tracking long task' },
+    ]);
+
+    expect(task!.id.startsWith('task_')).toBe(true);
+    expect(task!.id.length).toBeLessThanOrEqual('task_'.length + 48);
+  });
 });
 
 describe('taskWriteTool', () => {
+  it('rejects writes without harness context', async () => {
+    const result = await (taskWriteTool as any).execute(
+      {
+        tasks: [{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+      },
+      {},
+    );
+
+    expect(result).toEqual({
+      content: 'Unable to update task list (no harness context)',
+      tasks: [],
+      isError: true,
+    });
+  });
+
   it('assigns ids to tasks that omit them', async () => {
     const ctx = createTaskContext();
 

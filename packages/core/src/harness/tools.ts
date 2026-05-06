@@ -221,12 +221,35 @@ const taskItemSchema = taskItemInputSchema.extend({
 export type TaskItemInput = z.infer<typeof taskItemInputSchema>;
 export type TaskItem = z.infer<typeof taskItemSchema>;
 
+const TASK_ID_SLUG_MAX_LENGTH = 48;
+
+function slugifyTaskContent(content: string): string {
+  let slug = '';
+  let pendingSeparator = false;
+
+  for (const char of content.toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isAsciiLetter = code >= 97 && code <= 122;
+    const isDigit = code >= 48 && code <= 57;
+
+    if (isAsciiLetter || isDigit) {
+      if (pendingSeparator && slug.length > 0 && slug.length < TASK_ID_SLUG_MAX_LENGTH) {
+        slug += '_';
+      }
+      if (slug.length >= TASK_ID_SLUG_MAX_LENGTH) break;
+      slug += char;
+      pendingSeparator = false;
+      continue;
+    }
+
+    pendingSeparator = slug.length > 0;
+  }
+
+  return slug;
+}
+
 function createDeterministicTaskId(task: TaskItemInput, occurrence: number): string {
-  const slug = task.content
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 48);
+  const slug = slugifyTaskContent(task.content);
   const suffix = occurrence > 1 ? `_${occurrence}` : '';
   return `task_${slug || 'item'}${suffix}`;
 }
@@ -246,21 +269,32 @@ function makeUniqueTaskId(id: string, usedIds: Set<string>): string {
 export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItem[] = []): TaskItem[] {
   const usedIds = new Set<string>();
   const contentOccurrences = new Map<string, number>();
+  const omittedContentCounts = new Map<string, number>();
+  const explicitTaskIds = new Set(tasks.map(task => task.id).filter((id): id is string => Boolean(id)));
+
+  for (const task of tasks) {
+    if (!task.id) {
+      omittedContentCounts.set(task.content, (omittedContentCounts.get(task.content) ?? 0) + 1);
+    }
+  }
 
   return tasks.map(task => {
-    const previousMatch = previousTasks.find(
-      previous => previous.content === task.content && !usedIds.has(previous.id),
-    );
-    // Compatibility fallback for older task_write calls that omitted IDs:
-    // prefer exact content matches, otherwise mint a deterministic ID.
     const contentOccurrence = (contentOccurrences.get(task.content) ?? 0) + 1;
     contentOccurrences.set(task.content, contentOccurrence);
 
     const fallbackId = createDeterministicTaskId(task, contentOccurrence);
+    const previousMatches = previousTasks.filter(
+      previous => previous.content === task.content && !usedIds.has(previous.id) && !explicitTaskIds.has(previous.id),
+    );
+    // Compatibility fallback only reuses previous IDs for unambiguous exact-content
+    // matches. Duplicate omitted tasks require explicit IDs to avoid assigning the
+    // wrong historical ID to a rewritten task.
+    const canReusePreviousId = !task.id && omittedContentCounts.get(task.content) === 1 && previousMatches.length === 1;
+
     // If the model repeats an explicit ID in the same write, keep the first one
     // and mint/reuse a stable fallback for the duplicate instead of failing the whole list.
     const id = makeUniqueTaskId(
-      task.id && !usedIds.has(task.id) ? task.id : (previousMatch?.id ?? fallbackId),
+      task.id && !usedIds.has(task.id) ? task.id : canReusePreviousId ? previousMatches[0]!.id : fallbackId,
       usedIds,
     );
     usedIds.add(id);
@@ -341,7 +375,7 @@ Usage:
 - Pass the FULL task list each time this tool is called (replaces the previous list)
 - Each task has: id (stable identifier), content (imperative), status (pending, in_progress, or completed), activeForm (present continuous)
 - Keep task IDs stable across updates. If omitted, IDs are generated and returned in the tool result
-- When an ID is omitted while rewriting an existing list, matching content may reuse an existing ID
+- When an ID is omitted while rewriting an existing list, one unambiguous matching task may reuse an existing ID
 - Prefer single-task update tools when they are available
 - Mark tasks in_progress BEFORE starting work (only ONE at a time)
 - Mark tasks completed IMMEDIATELY after finishing
@@ -357,6 +391,14 @@ States:
   execute: async ({ tasks }, context) => {
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      if (!harnessCtx) {
+        return {
+          content: 'Unable to update task list (no harness context)',
+          tasks: [],
+          isError: true,
+        };
+      }
+
       const currentTasks = getCurrentTasks(harnessCtx);
       const normalizedTasks = assignTaskIds(tasks, currentTasks);
       if (hasMultipleInProgress(normalizedTasks)) {

@@ -301,7 +301,51 @@ describe('renderExistingMessages task tools', () => {
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
   });
 
-  it('reuses previous IDs in order when replaying duplicate task content', async () => {
+  it('keeps replayed task state local when harness state schema rejects tasks', async () => {
+    const messages: HarnessMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: [
+          {
+            type: 'tool_call',
+            id: 'tool-1',
+            name: 'task_write',
+            args: {
+              tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+            },
+          },
+          {
+            type: 'tool_result',
+            id: 'tool-1',
+            name: 'task_write',
+            result: { content: 'Tasks updated' },
+            isError: false,
+          },
+        ],
+      },
+    ];
+    const state = createState();
+    const updateTasks = vi.fn();
+    const setState = vi.fn().mockRejectedValue(new Error('Invalid state update'));
+    const displayState = { isRunning: false };
+    state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getDisplayState: () => displayState,
+      setState,
+    } as unknown as TUIState['harness'];
+
+    await expect(renderExistingMessages(state)).resolves.toBeUndefined();
+
+    const expectedTasks = [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }];
+    expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
+    expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
+    expect(displayState).toMatchObject({ tasks: expectedTasks, previousTasks: [] });
+  });
+
+  it('does not reuse previous IDs by order when replaying duplicate task content', async () => {
     const messages: HarnessMessage[] = [
       {
         id: 'assistant-1',
@@ -366,8 +410,8 @@ describe('renderExistingMessages task tools', () => {
     await renderExistingMessages(state);
 
     const expectedTasks = [
-      { id: 'first', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' },
-      { id: 'second', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff again' },
+      { id: 'task_review_diff', content: 'Review diff', status: 'in_progress', activeForm: 'Reviewing diff' },
+      { id: 'task_review_diff_2', content: 'Review diff', status: 'pending', activeForm: 'Reviewing diff again' },
     ];
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });

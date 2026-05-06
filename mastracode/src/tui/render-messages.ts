@@ -629,7 +629,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       ? (state.harness.getState() as { tasks?: TaskItem[] }).tasks
       : undefined;
   if (!areTasksEqual(currentTasks, previousTasksAcc)) {
-    await state.harness.setState({ tasks: previousTasksAcc });
+    try {
+      await state.harness.setState({ tasks: previousTasksAcc });
+    } catch {
+      // Custom harness state schemas may not accept TUI replayed task state.
+      // Keep the reconstructed task list local to display state in that case.
+    }
   }
   const displayState = state.harness.getDisplayState() as { tasks?: TaskItem[]; previousTasks?: TaskItem[] };
   displayState.previousTasks = displayState.tasks ? [...displayState.tasks] : [];

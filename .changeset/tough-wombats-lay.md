@@ -8,6 +8,8 @@ Tasks can now be updated or completed without replacing the full task list. This
 
 `TaskItem` now represents normalized task state and tool results with a required stable `id`. Use `TaskItemInput` for `task_write` input where the `id` may be omitted. The harness also exports `assignTaskIds` for UIs that need to replay legacy task history with the same ID assignment rules as the built-in tools.
 
+When `task_write` input omits IDs, Harness only reuses historical IDs for unambiguous content matches. If duplicate task content makes a historical match unsafe, Harness returns deterministic generated IDs instead. Explicit IDs are preserved and take precedence over compatibility reuse.
+
 Before this change, updating one task required rewriting the full task list with `task_write`.
 
 ```typescript
