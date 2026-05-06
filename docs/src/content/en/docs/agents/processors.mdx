@@ -228,7 +228,7 @@ Use the message-based hooks for conversation changes:
 - `processInputStep()`: Change messages or step configuration before each LLM call.
 - `processLLMRequest()`: Change only the outbound prompt for the current provider call.
 
-Prompt changes returned from `processLLMRequest()` as `{ prompt }` are transient. They don't persist back to `MessageList`, memory, UI history, or future provider calls. This makes the hook a good fit for provider compatibility rewrites, role/content normalization, or other model-specific prompt changes that shouldn't alter stored conversation history.
+Changes returned from `processLLMRequest()` are transient. They don't persist back to `MessageList`, memory, UI history, or future provider calls. This makes the hook a good fit for provider compatibility rewrites, role/content normalization, or other model-specific prompt changes that shouldn't alter stored conversation history.
 
 The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the shared processor context. Calling `abort()` from `processLLMRequest()` emits the normal tripwire response and stops the call.
 
