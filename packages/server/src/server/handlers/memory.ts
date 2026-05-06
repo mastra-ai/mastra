@@ -1,9 +1,9 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   threadIdPathParams,
