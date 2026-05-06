@@ -259,6 +259,36 @@ describe('createStep with Processor', () => {
       );
     });
 
+    it('should pass run and resource ids to processInputStep', async () => {
+      const seenContext: Array<{ runId?: string; resourceId?: string }> = [];
+
+      const processor: Processor = {
+        id: 'input-step-context-processor',
+        processInputStep: async ({ runId, resourceId }) => {
+          seenContext.push({ runId, resourceId });
+          return {};
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+
+      const result = await step.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: [{ id: '1', content: 'test' }],
+          messageList,
+          stepNumber: 5,
+          systemMessages: [],
+          runId: 'run-1',
+          resourceId: 'resource-1',
+        },
+      } as any);
+
+      expect(seenContext).toEqual([{ runId: 'run-1', resourceId: 'resource-1' }]);
+      expect(result).toEqual(expect.objectContaining({ runId: 'run-1', resourceId: 'resource-1' }));
+    });
+
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
       const processOutputStreamMock = async ({ part }) => {
         return { ...part, processed: true };

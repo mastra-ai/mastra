@@ -446,7 +446,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+    globalRunRegistry.set(runId, { ...registryEntry, messageList, threadId, resourceId });
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -809,6 +809,8 @@ export class DurableAgent<
     globalRunRegistry.set(preparation.runId, {
       ...preparation.registryEntry,
       messageList: preparation.messageList,
+      threadId: preparation.threadId,
+      resourceId: preparation.resourceId,
     });
 
     return {

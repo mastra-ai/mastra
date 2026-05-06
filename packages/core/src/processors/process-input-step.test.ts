@@ -188,6 +188,39 @@ describe('processInputStep', () => {
       expect(result.messageId).toBe('response-2');
     });
 
+    it('should forward run and resource ids to processInputStep processors', async () => {
+      const seenContext: Array<{ runId?: string; resourceId?: string }> = [];
+
+      const stepProcessor: Processor = {
+        id: 'context-processor',
+        processInputStep: async ({ runId, resourceId }) => {
+          seenContext.push({ runId, resourceId });
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [stepProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        runId: 'run-1',
+        resourceId: 'resource-1',
+      });
+
+      expect(seenContext).toEqual([{ runId: 'run-1', resourceId: 'resource-1' }]);
+    });
+
     it('should be callable at each step with growing message history', async () => {
       let processInputStepCallCount = 0;
       const stepNumbers: number[] = [];

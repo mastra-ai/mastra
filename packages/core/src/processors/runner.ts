@@ -1075,6 +1075,8 @@ export class ProcessorRunner {
             stepNumber,
             steps,
             systemMessages: currentSystemMessages,
+            runId: args.runId,
+            resourceId: args.resourceId,
             rotateResponseMessageId: args.rotateResponseMessageId
               ? () => {
                   const nextMessageId = args.rotateResponseMessageId!();
@@ -1122,6 +1124,8 @@ export class ProcessorRunner {
         modelSettings: stepInput.modelSettings,
         structuredOutput: stepInput.structuredOutput,
         requestContext,
+        runId: args.runId,
+        resourceId: args.resourceId,
       };
 
       // Use the current span (the step span) as the parent for processor spans

@@ -2950,6 +2950,8 @@ export class Agent<
           // OM's processInputStep doesn't use the model parameter, so this is safe.
           model: model as MastraLanguageModel,
           tools,
+          runId,
+          resourceId,
           retryCount: 0,
         });
         if (result.tools) {

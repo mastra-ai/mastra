@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import { RequestContext, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
+import { getToolGateRuntimeState, setToolGateRuntimeState, setToolGateRuntimeStateForRun } from '../../tools/tool-gate';
 import type { Tool } from '../../tools';
 import type { ProcessInputStepArgs } from '../index';
 import { ToolSearchProcessor } from './tool-search';
@@ -273,6 +274,176 @@ describe('ToolSearchProcessor', () => {
 
       expect(searchResult.message).toContain('Found');
       expect(searchResult.message).toContain('load_tool');
+    });
+  });
+
+  describe('Tool Gate policy filtering', () => {
+    it('does not disclose denied tools in dynamic search results', async () => {
+      const args = {
+        ...createMockArgs('policy-thread'),
+        runId: 'run-1',
+      };
+      const processor = new ToolSearchProcessor({
+        tools: {
+          github_create_issue: createMockTool('github_create_issue', 'Create a new issue on GitHub'),
+          github_create_pr: createMockTool('github_create_pr', 'Create a pull request on GitHub'),
+          github_search_code: createMockTool('github_search_code', 'Search code in GitHub repositories'),
+        },
+        search: { topK: 2 },
+      });
+      const evaluations: any[] = [];
+
+      setToolGateRuntimeStateForRun(args.requestContext!, 'run-1', {
+        policy: {
+          id: 'dynamic-search-policy',
+          evaluate: evaluation => {
+            evaluations.push(evaluation);
+            return evaluation.subject.boundary === 'dynamic-search' &&
+              evaluation.subject.toolName === 'github_create_issue'
+              ? { effect: 'deny', reason: 'issue creation is disabled' }
+              : { effect: 'allow', reason: 'allowed' };
+          },
+        },
+      });
+
+      const result = await processor.processInputStep(args);
+      const searchResult = await result.tools!.search_tools!.execute?.({ query: 'github' }, undefined);
+
+      expect(searchResult.results.map((tool: any) => tool.name)).toEqual(['github_create_pr', 'github_search_code']);
+      expect(evaluations[0]).toEqual(
+        expect.objectContaining({
+          args: { query: 'github' },
+          runId: 'run-1',
+          threadId: 'policy-thread',
+        }),
+      );
+      expect(getToolGateRuntimeState(args.requestContext!)?.decisions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            effect: 'deny',
+            subject: expect.objectContaining({
+              boundary: 'dynamic-search',
+              toolName: 'github_create_issue',
+              source: expect.objectContaining({ source: 'dynamic' }),
+            }),
+          }),
+        ]),
+      );
+    });
+
+    it('hides denied dynamic load requests behind not-found semantics', async () => {
+      const args = createMockArgs('policy-thread');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          allowed_tool: createMockTool('allowed_tool', 'Allowed dynamic tool'),
+          blocked_tool: createMockTool('blocked_tool', 'Blocked dynamic tool'),
+        },
+      });
+      const evaluations: any[] = [];
+
+      setToolGateRuntimeState(args.requestContext!, {
+        policy: {
+          id: 'dynamic-load-policy',
+          evaluate: evaluation => {
+            evaluations.push(evaluation);
+            return evaluation.subject.boundary === 'dynamic-load' && evaluation.subject.toolName === 'blocked_tool'
+              ? { effect: 'deny', reason: 'blocked tools cannot be loaded' }
+              : { effect: 'allow', reason: 'allowed' };
+          },
+        },
+      });
+
+      const result = await processor.processInputStep(args);
+      const loadResult = await result.tools!.load_tool!.execute?.(
+        { toolNames: ['allowed_tool', 'blocked_tool'] },
+        undefined,
+      );
+
+      expect(loadResult).toEqual(
+        expect.objectContaining({
+          success: false,
+          loaded: ['allowed_tool'],
+          notFound: ['blocked_tool'],
+        }),
+      );
+      expect(evaluations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            args: { toolName: 'blocked_tool', requestedToolNames: ['allowed_tool', 'blocked_tool'] },
+            threadId: 'policy-thread',
+          }),
+        ]),
+      );
+
+      const nextResult = await processor.processInputStep(args);
+      expect(nextResult.tools?.allowed_tool).toBeDefined();
+      expect(nextResult.tools?.blocked_tool).toBeUndefined();
+    });
+
+    it('does not suggest denied dynamic tools for single-tool load misses', async () => {
+      const args = createMockArgs('policy-thread');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          blocked_tool: createMockTool('blocked_tool', 'Blocked dynamic tool'),
+        },
+      });
+
+      setToolGateRuntimeState(args.requestContext!, {
+        policy: {
+          id: 'dynamic-load-policy',
+          evaluate: ({ subject }) =>
+            subject.boundary === 'dynamic-load' && subject.toolName === 'blocked_tool'
+              ? { effect: 'deny', reason: 'blocked tools cannot be loaded' }
+              : { effect: 'allow', reason: 'allowed' },
+        },
+      });
+
+      const result = await processor.processInputStep(args);
+      const loadResult = await result.tools!.load_tool!.execute?.({ toolName: 'blocked' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).toBe('Tool "blocked" not found. Use search_tools to find available tools.');
+    });
+
+    it('prunes already loaded dynamic tools that the current policy denies', async () => {
+      const args = createMockArgs('policy-thread');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          dynamic_tool: createMockTool('dynamic_tool', 'Previously loaded dynamic tool'),
+        },
+      });
+
+      const firstResult = await processor.processInputStep(args);
+      await firstResult.tools!.load_tool!.execute?.({ toolName: 'dynamic_tool' }, undefined);
+
+      const loadedResult = await processor.processInputStep(args);
+      expect(loadedResult.tools?.dynamic_tool).toBeDefined();
+
+      setToolGateRuntimeState(args.requestContext!, {
+        policy: {
+          id: 'dynamic-prune-policy',
+          evaluate: ({ subject }) =>
+            subject.boundary === 'dynamic-load' && subject.toolName === 'dynamic_tool'
+              ? { effect: 'deny', reason: 'dynamic tool is no longer allowed' }
+              : { effect: 'allow', reason: 'allowed' },
+        },
+      });
+
+      const prunedResult = await processor.processInputStep(args);
+
+      expect(prunedResult.tools?.dynamic_tool).toBeUndefined();
+      expect(getToolGateRuntimeState(args.requestContext!)?.decisions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            effect: 'deny',
+            subject: expect.objectContaining({
+              boundary: 'dynamic-load',
+              toolName: 'dynamic_tool',
+              source: expect.objectContaining({ source: 'dynamic', loaded: true }),
+            }),
+          }),
+        ]),
+      );
     });
   });
 

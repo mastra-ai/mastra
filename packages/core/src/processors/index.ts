@@ -161,6 +161,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /** Current agent run ID, when this processor is running inside an agent loop */
+  runId?: string;
+  /** Current resource ID, when available from the agent execution context */
+  resourceId?: string;
 
   /**
    * Current model for this step.

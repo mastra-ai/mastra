@@ -567,6 +567,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 stepNumber: inputData.output?.steps?.length || 0,
                 ...createObservabilityContext(stepTracingContext),
                 requestContext,
+                runId,
+                resourceId: _internal?.resourceId,
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,

@@ -416,6 +416,10 @@ export interface RunRegistryEntry {
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Thread ID for memory and processor context */
+  threadId?: string;
+  /** Resource ID for memory and processor context */
+  resourceId?: string;
   /** Resolved input processors (non-serializable) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Resolved output processors (non-serializable) */
