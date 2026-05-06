@@ -67,10 +67,10 @@ jobs:
 
       - name: Lint
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./explorations/**/*" --filter "!@internal/playground" lint
-      - name: Typecheck
-        run: pnpm turbo --filter ./packages/playground typecheck
       - name: Format
         run: pnpm prettier --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*'
+      - name: Typecheck
+        run: pnpm turbo --filter ./packages/playground typecheck
 
   check-bundle:
     name: Validate build outputs
