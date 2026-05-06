@@ -78,9 +78,7 @@ export function AgentBuilderMobileMenu({
           )}
           {canDelete && (
             <>
-              {(canSetVisibility || (canPublishToChannel && platformsToShow.length > 0)) && (
-                <DropdownMenu.Separator />
-              )}
+              {(canSetVisibility || (canPublishToChannel && platformsToShow.length > 0)) && <DropdownMenu.Separator />}
               <DeleteAgentMenuItem agentId={agentId as string} agentName={agentName as string} disabled={disabled} />
             </>
           )}

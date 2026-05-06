@@ -1,24 +1,48 @@
 import { AgentIcon } from '@mastra/playground-ui';
 import { LibraryIcon, StarIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useLocation } from 'react-router';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useLinkComponent } from '@/lib/framework';
 
-const links = [
-  { name: 'Agents', url: '/agent-builder/agents', icon: <AgentIcon /> },
-  { name: 'Favorites', url: '/agent-builder/favorite', icon: <StarIcon className="size-5" /> },
-  { name: 'Library', url: '/agent-builder/library', icon: <LibraryIcon className="size-5" /> },
-];
+interface MobileLink {
+  name: string;
+  url: string;
+  icon: React.ReactNode;
+}
+
+const agentsLink: MobileLink = { name: 'Agents', url: '/agent-builder/agents', icon: <AgentIcon /> };
+const favoritesLink: MobileLink = {
+  name: 'Favorites',
+  url: '/agent-builder/favorite',
+  icon: <StarIcon className="size-5" />,
+};
+const libraryLink: MobileLink = {
+  name: 'Library',
+  url: '/agent-builder/library',
+  icon: <LibraryIcon className="size-5" />,
+};
 
 export function AgentBuilderMobileBottomBar() {
   const { Link } = useLinkComponent();
   const { pathname } = useLocation();
+  const { canUseFavorites } = useBuilderAgentAccess();
+
+  const links = useMemo(() => {
+    const result: MobileLink[] = [agentsLink];
+    if (canUseFavorites) {
+      result.push(favoritesLink);
+    }
+    result.push(libraryLink);
+    return result;
+  }, [canUseFavorites]);
 
   return (
     <nav
       aria-label="Primary"
       className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border1 bg-surface1/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]"
     >
-      <ul className="grid grid-cols-3">
+      <ul className={`grid ${links.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
         {links.map(link => {
           const isActive = pathname.startsWith(link.url);
           return (

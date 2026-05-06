@@ -40,6 +40,17 @@ vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
 }));
 
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
+  }),
+}));
+
 // Stub heavy chat panels to keep this focused on the header.
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/conversation-panel', () => ({
   ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,

@@ -20,10 +20,12 @@ import {
 import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
-  const isAdmin = currentUser?.permissions?.includes('*') ?? false;
+  const { hasPermission, rbacEnabled } = usePermissions();
+  const canWriteSkills = !rbacEnabled || hasPermission('stored-skills:write');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
 
@@ -79,9 +81,11 @@ export default function AgentBuilderSkillsPage() {
             titleSlot="No skills yet"
             descriptionSlot="Create your first skill to give agents new capabilities."
             actionSlot={
-              <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
-                <PlusIcon /> New skill
-              </Button>
+              canWriteSkills ? (
+                <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+                  <PlusIcon /> New skill
+                </Button>
+              ) : undefined
             }
           />
         </div>
@@ -102,7 +106,7 @@ export default function AgentBuilderSkillsPage() {
               </PageHeader.Title>
               <PageHeader.Description>Skills you've created.</PageHeader.Description>
             </PageHeader>
-            {skills.length > 0 && (
+            {skills.length > 0 && canWriteSkills && (
               <div className="shrink-0">
                 <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
                   <PlusIcon /> New skill
@@ -123,7 +127,7 @@ export default function AgentBuilderSkillsPage() {
         onClose={() => setIsCreateDialogOpen(false)}
         onSkillCreated={() => setIsCreateDialogOpen(false)}
         currentUserId={currentUser?.id}
-        isAdmin={isAdmin}
+        isAdmin={canWriteSkills}
       />
 
       <SkillEditDialog
@@ -132,7 +136,7 @@ export default function AgentBuilderSkillsPage() {
         skill={selectedSkill ?? undefined}
         onSkillUpdated={() => setSelectedSkill(null)}
         currentUserId={currentUser?.id}
-        isAdmin={isAdmin}
+        isAdmin={canWriteSkills}
       />
     </>
   );

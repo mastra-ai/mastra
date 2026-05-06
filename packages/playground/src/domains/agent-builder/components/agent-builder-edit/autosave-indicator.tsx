@@ -11,10 +11,7 @@ interface AutosaveIndicatorProps {
 export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndicatorProps) => {
   if (status === 'saving') {
     return (
-      <span
-        className="flex items-center gap-1.5 text-ui-sm text-neutral3"
-        data-testid="agent-builder-autosave-saving"
-      >
+      <span className="flex items-center gap-1.5 text-ui-sm text-neutral3" data-testid="agent-builder-autosave-saving">
         <Spinner size="sm" />
         Saving…
       </span>
@@ -23,10 +20,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
 
   if (status === 'saved') {
     return (
-      <span
-        className="flex items-center gap-1.5 text-ui-sm text-neutral3"
-        data-testid="agent-builder-autosave-saved"
-      >
+      <span className="flex items-center gap-1.5 text-ui-sm text-neutral3" data-testid="agent-builder-autosave-saved">
         <CheckIcon className="h-3.5 w-3.5" />
         Saved
       </span>

@@ -170,12 +170,7 @@ describe('StreamChatProvider', () => {
     let send: ((message: string) => void) | null = null;
 
     render(
-      <StreamChatProvider
-        agentId="a"
-        threadId="thread-xyz"
-        initialMessages={[]}
-        extraInstructions="snapshot-text"
-      >
+      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
         <SendCapture onReady={fn => (send = fn)} />
       </StreamChatProvider>,
     );
@@ -279,12 +274,7 @@ describe('StreamChatProvider', () => {
     const captured: unknown[][] = [];
 
     render(
-      <StreamChatProvider
-        agentId="a"
-        threadId="thread-xyz"
-        initialMessages={[]}
-        extraInstructions="snapshot-text"
-      >
+      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
         <SendCapture onReady={fn => (send = fn)} />
         <MessagesCapture onMessages={m => captured.push(m)} />
       </StreamChatProvider>,

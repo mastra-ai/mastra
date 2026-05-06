@@ -101,6 +101,17 @@ vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
 }));
 
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
+  }),
+}));
+
 vi.mock('@/domains/agent-builder/components/agent-builder-edit/publish-to-channel-button', () => ({
   PublishToChannelButton: ({ agentId }: { agentId: string | undefined }) =>
     agentId ? (

@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentBuilderStarter } from '../agent-builder-starter';
 import { server } from '@/test/msw-server';
 
 const navigateMock = vi.fn();
@@ -32,8 +33,6 @@ vi.mock('@mastra/playground-ui', async () => {
 vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
   useDefaultVisibility: () => 'private',
 }));
-
-import { AgentBuilderStarter } from '../agent-builder-starter';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -183,9 +182,7 @@ describe('AgentBuilderStarter', () => {
 
   it('does not navigate when the create request fails', async () => {
     server.use(
-      http.post(`${BASE_URL}/api/stored/agents`, () =>
-        HttpResponse.json({ message: 'boom' }, { status: 500 }),
-      ),
+      http.post(`${BASE_URL}/api/stored/agents`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })),
     );
 
     const { getByTestId } = renderStarter();

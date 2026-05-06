@@ -18,6 +18,7 @@ import { useStreamRunning } from '@/domains/agent-builder/components/agent-build
 import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -149,6 +150,8 @@ const AgentBuilderAgentViewReady = ({
   // Gate publishing on the *saved* visibility — never on unsaved form state.
   const isPublishable = storedAgent?.visibility === 'public';
   const isOwner = !storedAgent?.authorId || currentUser?.id === storedAgent.authorId;
+  const { canWrite } = useBuilderAgentAccess();
+  const canModify = canWrite && isOwner;
   const threadId = currentUser?.id ? `${currentUser.id}-${id}` : id;
 
   const availableAgentTools = useAvailableAgentTools({
@@ -186,7 +189,7 @@ const AgentBuilderAgentViewReady = ({
         agentId={id}
         agentName={storedAgent?.name ?? ''}
         agent={agent}
-        isOwner={isOwner}
+        isOwner={canModify}
         isPublishable={isPublishable}
         hasBrowser={hasBrowser}
         onModeToggle={onModeToggle}

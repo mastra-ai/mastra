@@ -69,9 +69,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('does not render the skeleton during the 300ms grace period', () => {
-    const { queryByTestId } = render(
-      <MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />,
-    );
+    const { queryByTestId } = render(<MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />);
     expect(queryByTestId('msg-skeleton')).toBeNull();
 
     act(() => {
@@ -81,9 +79,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('renders the skeleton after the 300ms grace period elapses', () => {
-    const { queryByTestId } = render(
-      <MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />,
-    );
+    const { queryByTestId } = render(<MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />);
 
     act(() => {
       vi.advanceTimersByTime(300);

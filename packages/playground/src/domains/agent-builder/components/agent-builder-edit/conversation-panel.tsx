@@ -70,7 +70,8 @@ export const ConversationPanelProvider = ({
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
   const { models: filteredModels, isLoading: areLLMProvidersLoading } = useAgentBuilderAllowedModels();
-  const availableModels = features.model ? filteredModels : [];
+  const emptyModels = useMemo(() => [] as typeof filteredModels, []);
+  const availableModels = features.model ? filteredModels : emptyModels;
   const initialMessageToolsReady = toolsReady && (!features.model || !areLLMProvidersLoading);
 
   const agentBuilderTool = useAgentBuilderTool({

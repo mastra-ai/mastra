@@ -55,7 +55,8 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
       }),
     );
 
-    const snapshot = '## Current agent configuration\n- Name: "Customer Support Bot"\n- Tools (1): "Web Search" (web-search)';
+    const snapshot =
+      '## Current agent configuration\n- Name: "Customer Support Bot"\n- Tools (1): "Web Search" (web-search)';
 
     await act(async () => {
       render(

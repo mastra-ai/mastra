@@ -22,6 +22,7 @@ import { VisibilitySelect } from '@/domains/agent-builder/components/agent-build
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAutosaveAgent } from '@/domains/agent-builder/hooks/use-autosave-agent';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
@@ -41,6 +42,7 @@ type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
   useChannelConnectToast();
+  const { canWrite } = useBuilderAgentAccess();
   const features = useBuilderAgentFeatures();
   const initialUserMessage = useStarterUserMessage();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { status: 'draft' });
@@ -84,8 +86,8 @@ export default function AgentBuilderAgentEdit() {
     return <Navigate to="/agent-builder/agents" replace />;
   }
 
-  // Redirect non-owners to the view page (server blocks writes anyway)
-  if (!isOwner) {
+  // Redirect users without write permission or non-owners to the view page (server blocks writes anyway)
+  if (!canWrite || !isOwner) {
     return <Navigate to={`/agent-builder/agents/${id}/view`} replace />;
   }
 
@@ -276,9 +278,7 @@ const EditWorkspaceLayoutConnected = ({
           <VisibilitySelectConnected agentId={agentId} />
         </div>
       }
-      mobileExtra={
-        <AgentBuilderMobileMenuConnected agentId={agentId} showPublishToChannel={canPublishToChannel} />
-      }
+      mobileExtra={<AgentBuilderMobileMenuConnected agentId={agentId} showPublishToChannel={canPublishToChannel} />}
       chat={<ConversationPanelChat />}
       configure={
         <ConfigurePanelConnected

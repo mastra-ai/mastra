@@ -88,6 +88,17 @@ vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
   useAuthCapabilities: () => ({ data: { enabled: true }, isLoading: false }),
 }));
 
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
+  useBuilderAgentAccess: () => ({
+    hasAccess: true,
+    canWrite: true,
+    canExecute: true,
+    canManageSkills: true,
+    canUseFavorites: true,
+    denialReason: null,
+  }),
+}));
+
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: currentUser, isLoading: isCurrentUserLoading }),
 }));
@@ -230,18 +241,12 @@ describe('AgentBuilderAgentEdit', () => {
       fireEvent.change(getByTestId('agent-configure-name'), { target: { value: 'Renamed' } });
 
       await waitFor(() => expect(saveMock).toHaveBeenCalled());
-      expect(navigateMock).not.toHaveBeenCalledWith(
-        '/agent-builder/agents/agent-123/view',
-        expect.anything(),
-      );
+      expect(navigateMock).not.toHaveBeenCalledWith('/agent-builder/agents/agent-123/view', expect.anything());
     });
 
     it('reads the latest draft so freshly saved edits appear', () => {
       renderAt();
-      expect(useStoredAgentMock).toHaveBeenCalledWith(
-        'agent-123',
-        expect.objectContaining({ status: 'draft' }),
-      );
+      expect(useStoredAgentMock).toHaveBeenCalledWith('agent-123', expect.objectContaining({ status: 'draft' }));
     });
 
     it('autosaves edits made in the configure panel', async () => {

@@ -1,5 +1,6 @@
 import type { MastraUIMessage } from '@mastra/react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
 import { useAutoScroll } from './use-auto-scroll';
 

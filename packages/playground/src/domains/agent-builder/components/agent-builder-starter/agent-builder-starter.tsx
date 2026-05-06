@@ -3,9 +3,9 @@ import { ArrowUpIcon, GraduationCap, MessageCircleQuestion, MessagesSquare, Wren
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 const EXAMPLES = [
@@ -35,8 +35,7 @@ const EXAMPLES = [
   },
 ];
 
-const truncateName = (prompt: string): string =>
-  prompt.length <= 20 ? prompt : prompt.slice(0, 20) + '…';
+const truncateName = (prompt: string): string => (prompt.length <= 20 ? prompt : prompt.slice(0, 20) + '…');
 
 const FALLBACK_MODEL = { provider: 'google', name: 'gemini-2.5-flash' } as const;
 

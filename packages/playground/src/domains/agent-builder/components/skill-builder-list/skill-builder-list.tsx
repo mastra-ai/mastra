@@ -28,9 +28,10 @@ export type SkillBuilderListProps = {
   skills: StoredSkillResponse[];
   search?: string;
   onSkillClick?: (skill: StoredSkillResponse) => void;
+  showStars?: boolean;
 };
 
-export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderListProps) {
+export function SkillBuilderList({ skills, search, onSkillClick, showStars = true }: SkillBuilderListProps) {
   const filtered = useMemo(() => {
     const q = (search ?? '').trim().toLowerCase();
     if (!q) return skills;
@@ -88,13 +89,15 @@ export function SkillBuilderList({ skills, search, onSkillClick }: SkillBuilderL
             <div className="hidden sm:inline-flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
               <span className="hidden lg:inline-flex">Updated {formatRelativeTime(skill.updatedAt)}</span>
             </div>
-            <SkillStarButton
-              skillId={skill.id}
-              isStarred={skill.isStarred}
-              starCount={skill.starCount}
-              size="sm"
-              className="shrink-0"
-            />
+            {showStars && (
+              <SkillStarButton
+                skillId={skill.id}
+                isStarred={skill.isStarred}
+                starCount={skill.starCount}
+                size="sm"
+                className="shrink-0"
+              />
+            )}
           </>
         );
 
