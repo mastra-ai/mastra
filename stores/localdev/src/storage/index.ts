@@ -82,7 +82,7 @@ export class LocalDevStore extends MastraCompositeStore {
         url: config.dbPath ?? 'file:./mastra.db',
       });
 
-    const duckdb = new DuckDBStore({ path: config.duckdbPath });
+    const duckdb = new DuckDBStore({ path: config.duckdbPath ?? 'mastra.duckdb' });
 
     super({
       id: config.id ?? 'localdev-storage',

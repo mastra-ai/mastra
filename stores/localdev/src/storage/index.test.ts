@@ -1,5 +1,5 @@
 import { MastraCompositeStore } from '@mastra/core/storage';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LocalDevStore } from './index';
 
@@ -8,6 +8,7 @@ describe('LocalDevStore', () => {
 
   afterEach(() => {
     created.length = 0;
+    vi.restoreAllMocks();
   });
 
   const make = (...args: ConstructorParameters<typeof LocalDevStore>) => {
@@ -17,11 +18,42 @@ describe('LocalDevStore', () => {
   };
 
   it('extends MastraCompositeStore', () => {
-    const store = make();
+    const store = make({ dbPath: 'file::memory:?cache=shared', duckdbPath: ':memory:' });
     expect(store).toBeInstanceOf(MastraCompositeStore);
   });
 
-  it('uses an in-memory libsql default and a duckdb observability store with no config', () => {
+  it('passes the documented defaults to its underlying stores when called with no config', async () => {
+    const libsqlConfigs: unknown[] = [];
+    const duckdbConfigs: unknown[] = [];
+
+    const libsqlMod = await import('@mastra/libsql');
+    const duckdbMod = await import('@mastra/duckdb');
+    const RealLibSQL = libsqlMod.LibSQLStore;
+    const RealDuckDB = duckdbMod.DuckDBStore;
+
+    class SpyLibSQL extends RealLibSQL {
+      constructor(config: ConstructorParameters<typeof RealLibSQL>[0]) {
+        libsqlConfigs.push(config);
+        super({ ...config, url: 'file::memory:?cache=shared' });
+      }
+    }
+    class SpyDuckDB extends RealDuckDB {
+      constructor(config?: ConstructorParameters<typeof RealDuckDB>[0]) {
+        duckdbConfigs.push(config);
+        super({ ...config, path: ':memory:' });
+      }
+    }
+
+    vi.spyOn(libsqlMod, 'LibSQLStore').mockImplementation(SpyLibSQL as never);
+    vi.spyOn(duckdbMod, 'DuckDBStore').mockImplementation(SpyDuckDB as never);
+
+    new LocalDevStore();
+
+    expect(libsqlConfigs[0]).toEqual({ id: 'mastra-storage', url: 'file:./mastra.db' });
+    expect(duckdbConfigs[0]).toEqual({ path: 'mastra.duckdb' });
+  });
+
+  it('exposes a duckdb-backed observability store and a libsql-backed memory store', () => {
     const store = make({ dbPath: 'file::memory:?cache=shared', duckdbPath: ':memory:' });
 
     expect(store.id).toBe('localdev-storage');

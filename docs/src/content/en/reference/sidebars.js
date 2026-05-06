@@ -451,6 +451,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/dynamodb', label: 'DynamoDB Storage' },
         { type: 'doc', id: 'storage/lance', label: 'LanceDB Storage' },
         { type: 'doc', id: 'storage/libsql', label: 'libSQL Storage' },
+        { type: 'doc', id: 'storage/localdev', label: 'LocalDev Storage' },
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
