@@ -764,6 +764,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const {
         phase,
         messages,
+        modelContextMessages,
         messageList,
         stepNumber,
         systemMessages,
@@ -888,6 +889,16 @@ function createStepFromProcessor<TProcessorId extends string>(
               !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
             ) {
               output.messages = payload.messages;
+            }
+
+            if (
+              Array.isArray(payload.modelContextMessages) &&
+              !areProcessorMessageArraysEqual(
+                modelContextMessages as unknown[] | undefined,
+                payload.modelContextMessages,
+              )
+            ) {
+              output.modelContextMessages = payload.modelContextMessages;
             }
 
             if (
@@ -1026,6 +1037,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        modelContextMessages,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList:
@@ -1161,13 +1173,15 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              const processableMessages = (modelContextMessages ?? messages) as MastraDBMessage[];
+
               // Create source checker before processing to preserve message sources
-              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const idsBeforeProcessing = processableMessages.map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
               const result = await processor.processInputStep({
                 ...baseContext,
-                messages: messages as MastraDBMessage[],
+                messages: processableMessages,
                 messageList: passThrough.messageList,
                 stepNumber: stepNumber ?? 0,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
@@ -1191,12 +1205,20 @@ function createStepFromProcessor<TProcessorId extends string>(
               });
 
               if (validatedResult.messages) {
-                ProcessorRunner.applyMessagesToMessageList(
-                  validatedResult.messages,
-                  passThrough.messageList,
-                  idsBeforeProcessing,
-                  check,
-                );
+                if (modelContextMessages || validatedResult.modelContextMessages) {
+                  passThrough.modelContextMessages = validatedResult.messages;
+                } else {
+                  ProcessorRunner.applyMessagesToMessageList(
+                    validatedResult.messages,
+                    passThrough.messageList,
+                    idsBeforeProcessing,
+                    check,
+                  );
+                }
+              }
+
+              if (validatedResult.modelContextMessages) {
+                passThrough.modelContextMessages = validatedResult.modelContextMessages;
               }
 
               if (validatedResult.systemMessages) {
@@ -1205,12 +1227,20 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Preserve messages in return - passThrough doesn't include messages,
               // so we must explicitly include it to avoid losing it for subsequent steps.
-              return {
+              const output = {
                 ...passThrough,
                 messages,
                 ...validatedResult,
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
+              if (
+                passThrough.modelContextMessages &&
+                validatedResult.messages &&
+                !validatedResult.modelContextMessages
+              ) {
+                output.messages = messages;
+              }
+              return output;
             }
             return { ...passThrough, messages };
           }

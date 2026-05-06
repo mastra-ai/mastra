@@ -7,7 +7,7 @@ packages:
 
 # ToolCallFilter
 
-The `ToolCallFilter` is an **input processor** that filters out tool calls and their results from the message history before sending to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
+The `ToolCallFilter` is an **input processor** that filters out tool calls and their results before sending messages to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
 
 ## Usage example
 
@@ -101,6 +101,8 @@ By default, `ToolCallFilter` filters only the initial input before the agent loo
 `filterAfterToolSteps` counts tool-producing steps. For example, `filterAfterToolSteps: 2` keeps tool calls and results from the two most recent tool-producing steps and filters older tool calls and results. Non-tool text remains in context.
 
 Set `filterAfterToolSteps: 0` to filter all previous tool calls and results on each step.
+
+Step filtering changes only the next model prompt by returning `modelContextMessages`; it does not mutate canonical run history or remove final tool results from persistence.
 
 ```typescript
 const filter = new ToolCallFilter({

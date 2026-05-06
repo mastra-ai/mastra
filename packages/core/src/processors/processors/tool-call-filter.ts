@@ -64,9 +64,16 @@ export class ToolCallFilter implements Processor {
       return {};
     }
 
-    const { messageList } = args;
-    const messages = messageList.get.all.db();
-    return { messages: this.filterMessages(messages, this.getRecentToolStepToolCallIds(args)) };
+    const { messages } = args;
+    const filteredMessages = this.filterMessages(messages, this.getRecentToolStepToolCallIds(args));
+    if (
+      filteredMessages.length === messages.length &&
+      filteredMessages.every((message, index) => message === messages[index])
+    ) {
+      return {};
+    }
+
+    return { modelContextMessages: filteredMessages };
   }
 
   private getRecentToolStepToolCallIds(args: ProcessInputStepArgs): Set<string> {

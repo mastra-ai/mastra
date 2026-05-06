@@ -259,6 +259,41 @@ describe('createStep with Processor', () => {
       );
     });
 
+    it('should pass modelContextMessages as messages to processInputStep processors', async () => {
+      const seenMessages: unknown[][] = [];
+      const processor: Processor = {
+        id: 'input-step-context-processor',
+        processInputStep: async ({ messages }) => {
+          seenMessages.push(messages);
+          return {};
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const canonicalMessages = [{ id: 'canonical', content: 'canonical' }] as any;
+      const modelContextMessages = [{ id: 'prompt-only', content: 'prompt-only' }] as any;
+
+      const result = await step.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: canonicalMessages,
+          modelContextMessages,
+          messageList,
+          stepNumber: 5,
+          systemMessages: [],
+        },
+      } as any);
+
+      expect(seenMessages[0]).toEqual(modelContextMessages);
+      expect(result).toEqual(
+        expect.objectContaining({
+          messages: canonicalMessages,
+          modelContextMessages,
+        }),
+      );
+    });
+
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {
       const processOutputStreamMock = async ({ part }) => {
         return { ...part, processed: true };

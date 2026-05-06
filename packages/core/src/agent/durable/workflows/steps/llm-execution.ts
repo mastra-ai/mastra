@@ -89,6 +89,22 @@ const durableLLMOutputSchema = z.object({
   stepIndex: z.number().optional(),
 });
 
+function createModelContextMessageList(messageList: MessageList, messages: MastraDBMessage[]): MessageList {
+  const contextMessageList = new MessageList();
+  const sourceChecker = messageList.makeMessageSourceChecker();
+  contextMessageList.addSystem(messageList.getAllSystemMessages());
+  for (const message of messages) {
+    if (message.role === 'system') {
+      continue;
+    }
+    contextMessageList.add(
+      message,
+      sourceChecker.getSource(message) ?? (message.role === 'user' ? 'input' : 'response'),
+    );
+  }
+  return contextMessageList;
+}
+
 /**
  * Options for creating the durable LLM execution step
  */
@@ -191,6 +207,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
             let currentModelSettings = { temperature: execOptions.temperature };
+            let modelContextMessages: MastraDBMessage[] | undefined;
 
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
@@ -269,10 +286,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 ...currentModelSettings,
                 ...(processInputStepResult.modelSettings ?? {}),
               };
+              modelContextMessages = processInputStepResult.modelContextMessages;
             }
 
             // Get messages for LLM (using async llmPrompt for proper format conversion)
-            const inputMessages = (await messageList.get.all.aiV5.llmPrompt()) as LanguageModelV2Prompt;
+            const promptMessageList = modelContextMessages
+              ? createModelContextMessageList(messageList, modelContextMessages)
+              : messageList;
+            const inputMessages = (await promptMessageList.get.all.aiV5.llmPrompt()) as LanguageModelV2Prompt;
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
