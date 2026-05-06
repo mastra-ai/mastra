@@ -1624,6 +1624,151 @@ describe('Memory Handlers', () => {
       // Third message should have its own custom metadata
       expect(result.messages[2]?.content.metadata).toHaveProperty('referenceId', 'ref-123');
     });
+
+    it('should strip parts marked visibility:"llm" from the UI-facing response', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const mockResult = {
+        messages: [
+          {
+            id: 'msg-visible-only',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'shown to user' }],
+              content: 'shown to user',
+            },
+          } as MastraDBMessage,
+          {
+            id: 'msg-mixed',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'shown to user', visibility: 'all' as const },
+                { type: 'text' as const, text: 'hidden from user', visibility: 'llm' as const },
+              ],
+              content: 'shown to user\nhidden from user',
+            },
+          } as MastraDBMessage,
+          {
+            id: 'msg-llm-only',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'fully hidden', visibility: 'llm' as const }],
+              content: 'fully hidden',
+            },
+          } as MastraDBMessage,
+        ],
+        total: 3,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
+
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+
+      // Whole-message-hidden case should be dropped, mixed message keeps
+      // only the visible part, fully-visible message passes through.
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0]?.id).toBe('msg-visible-only');
+      expect(result.messages[1]?.id).toBe('msg-mixed');
+      expect(result.messages[1]?.content.parts).toHaveLength(1);
+      expect(result.messages[1]?.content.parts?.[0]).toMatchObject({
+        type: 'text',
+        text: 'shown to user',
+      });
+      // The legacy aggregated `content.content` string must reflect the
+      // filtered parts so callers reading that field don't see hidden text.
+      expect(result.messages[1]?.content.content).toBe('shown to user');
+
+      // Internal mock recall should have been called with the same args —
+      // i.e. no visibility filter is pushed down to memory.recall().
+      expect(mockMemory.recall).toHaveBeenCalledWith({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        perPage: 10,
+        page: 0,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
+      });
+    });
+
+    it('should NOT strip llm-only parts when calling memory.recall directly (agent-loop path)', async () => {
+      // The agent loop calls `memory.recall()` itself, never going through
+      // the HTTP handler. This is just a smoke-test that the underlying
+      // recall return shape is preserved untouched.
+      const mockResult = {
+        messages: [
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'visible', visibility: 'all' as const },
+                { type: 'text' as const, text: 'llm-only', visibility: 'llm' as const },
+              ],
+              content: 'visible\nllm-only',
+            },
+          } as MastraDBMessage,
+        ],
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
+
+      const direct = await mockMemory.recall({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        perPage: 10,
+        page: 0,
+      });
+
+      expect(direct.messages).toHaveLength(1);
+      // Both parts present — the LLM still sees everything.
+      expect(direct.messages[0]?.content.parts).toHaveLength(2);
+    });
   });
 
   describe('deleteMessagesHandler', () => {

@@ -83,6 +83,73 @@ interface SearchResult {
   };
 }
 
+/**
+ * Strip parts marked `visibility: 'llm'` from messages returned to the UI.
+ *
+ * Mirrors `filterMessagesByVisibility` from `@mastra/core/agent` (kept inline
+ * here so the import doesn't push the `@mastra/core` peer floor forward —
+ * once the new core export lands in a published version, this can be replaced
+ * with an import). Internal callers (the agent loop's `memory.recall()` and
+ * semantic recall) bypass the HTTP boundary, so they keep seeing all parts.
+ */
+function filterMessagesByVisibility<T extends { content: unknown }>(messages: T[]): T[] {
+  const result: T[] = [];
+
+  for (const message of messages) {
+    const content = message.content;
+    if (typeof content === 'string' || !content || typeof content !== 'object') {
+      result.push(message);
+      continue;
+    }
+
+    const parts = (content as { parts?: Array<{ visibility?: 'all' | 'llm' }> }).parts;
+    if (!Array.isArray(parts)) {
+      result.push(message);
+      continue;
+    }
+
+    const filteredParts = parts.filter(part => part?.visibility !== 'llm');
+
+    if (filteredParts.length === parts.length) {
+      result.push(message);
+      continue;
+    }
+
+    if (filteredParts.length === 0) {
+      // Drop messages that are entirely llm-only so the UI doesn't render
+      // a blank assistant turn.
+      continue;
+    }
+
+    // Recompute the legacy aggregated string `content.content` from the
+    // filtered text parts so callers reading that field don't see text that
+    // was supposed to be hidden.
+    const visibleText = filteredParts
+      .filter((part): part is { type: 'text'; text: string; visibility?: 'all' | 'llm' } => {
+        return (part as { type?: string }).type === 'text';
+      })
+      .map(part => part.text)
+      .join('\n');
+
+    const { content: _legacyContent, ...restContent } = content as {
+      content?: string;
+      [key: string]: unknown;
+    };
+    const contentStringPatch = (content as { content?: string }).content === undefined ? {} : { content: visibleText };
+
+    result.push({
+      ...message,
+      content: {
+        ...restContent,
+        parts: filteredParts,
+        ...contentStringPatch,
+      },
+    } as T);
+  }
+
+  return result;
+}
+
 function hasFGAUser(requestContext?: RequestContext): requestContext is RequestContext {
   const user = requestContext?.get('user');
   return !!user && typeof user === 'object';
@@ -1102,9 +1169,13 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
+          // Strip parts marked `visibility: 'llm'` from the UI-facing
+          // response. Internal callers (the agent loop) call `memory.recall`
+          // directly and continue to see the unfiltered messages.
+          const visibleMessages = filterMessagesByVisibility(result.messages.map(toLocalMessage));
           return {
-            messages: result.messages.map(toLocalMessage),
-            uiMessages: result.messages.map(toLocalMessage),
+            messages: visibleMessages,
+            uiMessages: visibleMessages,
           };
         }
       }
@@ -1134,7 +1205,10 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           filter,
           includeSystemReminders,
         });
-        return result;
+        // UI-facing endpoint: drop parts marked `visibility: 'llm'` so chat
+        // surfaces don't render hidden processor output. The agent loop
+        // calls `memory.recall` directly and is unaffected.
+        return { ...result, messages: filterMessagesByVisibility(result.messages) };
       }
 
       // Fallback to storage (covers stored agents whose memory can't be resolved)
@@ -1163,7 +1237,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             include,
             filter,
           });
-          return result;
+          return { ...result, messages: filterMessagesByVisibility(result.messages) };
         }
       }
 
@@ -1921,11 +1995,14 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         threadConfig: config,
         vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
       });
+      // Drop parts marked `visibility: 'llm'` from search results so the
+      // user-facing search surface mirrors what the chat UI would render.
+      const visibleMessages = filterMessagesByVisibility(result.messages);
       const accessibleMessages = accessibleThreadIds
-        ? result.messages.filter((message: MastraDBMessage) =>
+        ? visibleMessages.filter((message: MastraDBMessage) =>
             accessibleThreadIds!.has(message.threadId || searchThreadId!),
           )
-        : result.messages;
+        : visibleMessages;
 
       if (accessibleMessages.length === 0) {
         return {
@@ -1952,8 +2029,10 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         const msgThreadId = msg.threadId || searchThreadId;
         const thread = threadMap.get(msgThreadId);
 
-        // Get thread messages for context
-        const threadMessages = (await memory.recall({ threadId: msgThreadId })).messages;
+        // Get thread messages for context. Apply the same UI-facing
+        // visibility filter so hidden parts don't sneak into context
+        // snippets shown around a search hit.
+        const threadMessages = filterMessagesByVisibility((await memory.recall({ threadId: msgThreadId })).messages);
         const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
         const searchResult: SearchResult = {
