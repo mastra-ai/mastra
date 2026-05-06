@@ -6,7 +6,7 @@
  * Also includes formatToolResult helper.
  */
 
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/harness';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
@@ -337,13 +337,13 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
       // we can stream in new items immediately (including the last one).
       // Otherwise, exclude the last item to avoid jumpy partial-content matches.
       if (buffer.toolName === 'task_write' && state.taskProgress) {
-        const tasks = (partialArgs as { tasks?: TaskItem[] }).tasks;
+        const tasks = (partialArgs as { tasks?: TaskItemInput[] }).tasks;
         if (tasks && tasks.length > 0) {
           const existing = state.taskProgress.getTasks();
           const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
           if (allExistingDone) {
             // Old list is done — start fresh, stream new items immediately
-            state.taskProgress.updateTasks(tasks as TaskItem[]);
+            state.taskProgress.updateTasks(tasks);
           } else if (tasks.length > 1) {
             // Merge only completed items (exclude the last still-streaming one)
             const merged = [...existing];

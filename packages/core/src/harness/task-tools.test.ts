@@ -409,7 +409,7 @@ describe('taskCompleteTool', () => {
 });
 
 describe('taskCheckTool', () => {
-  it('includes task ids in incomplete task output', async () => {
+  it('returns structured summary fields and incomplete task ids', async () => {
     const ctx = createTaskContext([
       { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },
       { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
@@ -420,12 +420,23 @@ describe('taskCheckTool', () => {
     expect(result).toMatchObject({
       content: expect.stringContaining('investigate: Investigate issue'),
       tasks: ctx.state.tasks,
+      summary: {
+        total: 2,
+        completed: 0,
+        inProgress: 1,
+        pending: 1,
+        incomplete: 2,
+        hasTasks: true,
+        allCompleted: false,
+      },
+      incompleteTasks: ctx.state.tasks,
       isError: false,
     });
+    expect(result.content).toContain('All tasks completed: NO');
     expect(result.content).toContain('tests: Write tests');
   });
 
-  it('returns an empty task snapshot when no tasks are tracked', async () => {
+  it('returns an empty structured summary when no tasks are tracked', async () => {
     const ctx = createTaskContext();
 
     const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
@@ -433,7 +444,62 @@ describe('taskCheckTool', () => {
     expect(result).toMatchObject({
       content: expect.stringContaining('No tasks found'),
       tasks: [],
+      summary: {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        incomplete: 0,
+        hasTasks: false,
+        allCompleted: false,
+      },
+      incompleteTasks: [],
       isError: false,
+    });
+  });
+
+  it('returns allCompleted only when tracked tasks are completed', async () => {
+    const ctx = createTaskContext([
+      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
+      { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
+    ]);
+
+    const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
+
+    expect(result).toMatchObject({
+      content: expect.stringContaining('All tasks completed: YES'),
+      tasks: ctx.state.tasks,
+      summary: {
+        total: 2,
+        completed: 2,
+        inProgress: 0,
+        pending: 0,
+        incomplete: 0,
+        hasTasks: true,
+        allCompleted: true,
+      },
+      incompleteTasks: [],
+      isError: false,
+    });
+  });
+
+  it('returns structured error fields when harness context is missing', async () => {
+    const result = await (taskCheckTool as any).execute({}, {});
+
+    expect(result).toEqual({
+      content: 'Unable to access task list (no harness context)',
+      tasks: [],
+      summary: {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        incomplete: 0,
+        hasTasks: false,
+        allCompleted: false,
+      },
+      incompleteTasks: [],
+      isError: true,
     });
   });
 

@@ -292,6 +292,11 @@ function applyTaskToolResult(
       : applyTaskPatch(tasks, args, toolName === 'task_complete' ? 'completed' : undefined);
   }
 
+  if (toolName === 'task_check') {
+    const resultTasks = getTaskResultTasks(result);
+    return resultTasks ? assignTaskIds(resultTasks, tasks) : tasks;
+  }
+
   return tasks;
 }
 
@@ -303,7 +308,14 @@ function replayTaskState(messages: HarnessMessage[]): TaskItem[] {
 
     for (const content of message.content) {
       if (content.type !== 'tool_call') continue;
-      if (content.name !== 'task_write' && content.name !== 'task_update' && content.name !== 'task_complete') continue;
+      if (
+        content.name !== 'task_write' &&
+        content.name !== 'task_update' &&
+        content.name !== 'task_complete' &&
+        content.name !== 'task_check'
+      ) {
+        continue;
+      }
 
       const toolResult = message.content.find(c => c.type === 'tool_result' && c.id === content.id);
       if (toolResult?.type !== 'tool_result') continue;
@@ -513,6 +525,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               renderCompletedTasksInline(state, previousTasksAcc);
             }
             replacedWithInline = true;
+          }
+
+          if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            previousTasksAcc = applyTaskToolResult(
+              previousTasksAcc,
+              content.name,
+              content.args,
+              toolResult.result,
+              toolResult.isError,
+            );
           }
 
           // If this was submit_plan, show the plan with approval status

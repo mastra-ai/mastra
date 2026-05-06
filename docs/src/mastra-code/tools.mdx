@@ -183,6 +183,7 @@ Create or replace a structured task list for tracking progress on complex, multi
 - Each task has an `id`, `content` (imperative form), `status` (`pending`, `in_progress`, `completed`), and `activeForm` (present continuous form shown during execution).
 - Use `task_write` to create the initial task list or replace the whole list after replanning.
 - If a task omits an `id`, Mastra assigns one. The result includes the structured task list snapshot with task IDs.
+- IDs must be unique. If duplicate explicit IDs are provided, the duplicate task is returned with a generated fallback ID.
 - Only one task should be `in_progress` at a time.
 
 ### `task_update`
@@ -195,7 +196,15 @@ Mark one tracked task completed by ID. The agent uses this immediately after fin
 
 ### `task_check`
 
-Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete. The result includes the structured task list snapshot with task IDs.
+Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete. The result includes:
+
+- `content`: A readable status summary.
+- `tasks`: The structured task list snapshot with task IDs.
+- `summary`: Counts for `total`, `completed`, `inProgress`, `pending`, and `incomplete`, plus `hasTasks` and `allCompleted`.
+- `incompleteTasks`: The `in_progress` and `pending` tasks that still need work.
+- `isError`: `true` when the tool could not read harness task state.
+
+`summary.allCompleted` is `true` only when at least one tracked task exists and every tracked task is completed. If no tasks exist, `summary.hasTasks` is `false` and `summary.allCompleted` is `false`.
 
 ## Interactive tools
 

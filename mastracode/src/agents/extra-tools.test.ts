@@ -235,14 +235,13 @@ describe('createDynamicTools – denied tool filtering', () => {
 
 describe('createDynamicTools – disabledTools filtering', () => {
   it('should omit disabled built-in tools', () => {
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, [
-      'request_sandbox_access',
-      'execute_command',
-    ]);
+    const unfilteredTools = createDynamicTools()({ requestContext: makeRequestContext() });
+    expect(unfilteredTools).toHaveProperty('request_access');
+
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, ['request_access']);
 
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
-    expect(tools).not.toHaveProperty('request_sandbox_access');
-    expect(tools).not.toHaveProperty('execute_command');
+    expect(tools).not.toHaveProperty('request_access');
     // web_search is provided by the Anthropic model mock and should survive filtering
     expect(tools).toHaveProperty('web_search');
   });

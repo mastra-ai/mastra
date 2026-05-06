@@ -241,6 +241,62 @@ describe('renderExistingMessages task tools', () => {
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 
+  it('replays task_check result snapshots into the pinned task list', async () => {
+    const checkedTasks = [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }];
+    const messages: HarnessMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: [
+          {
+            type: 'tool_call',
+            id: 'tool-1',
+            name: 'task_check',
+            args: {},
+          },
+          {
+            type: 'tool_result',
+            id: 'tool-1',
+            name: 'task_check',
+            result: {
+              content: 'Task Status: [0/1 completed]',
+              tasks: checkedTasks,
+              summary: {
+                total: 1,
+                completed: 0,
+                inProgress: 0,
+                pending: 1,
+                incomplete: 1,
+                hasTasks: true,
+                allCompleted: false,
+              },
+              incompleteTasks: checkedTasks,
+              isError: false,
+            },
+            isError: false,
+          },
+        ],
+      },
+    ];
+    const state = createState();
+    const updateTasks = vi.fn();
+    const setState = vi.fn().mockResolvedValue(undefined);
+    const displayState = { isRunning: false, tasks: [], previousTasks: [] };
+    state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getDisplayState: () => displayState,
+      setState,
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(updateTasks).toHaveBeenCalledWith(checkedTasks);
+    expect(setState).toHaveBeenCalledWith({ tasks: checkedTasks });
+    expect(displayState.tasks).toEqual(checkedTasks);
+  });
+
   it('replays legacy task_write snapshots with deterministic task ids when ids are absent', async () => {
     const messages: HarnessMessage[] = [
       {

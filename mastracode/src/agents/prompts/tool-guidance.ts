@@ -161,18 +161,24 @@ ${patchToolGuidance}
   }
 
   if (canCompleteTask) {
+    const idSource = canCheckTasks
+      ? 'Use task_check if you need the current IDs before completing a task.'
+      : canWriteTasks
+        ? 'Use IDs returned by task_write.'
+        : 'Use only task IDs already visible in the current task list.';
     taskTools.push(`
 **task_complete** — Mark one tracked task completed by ID
 - Use this immediately after finishing a tracked task.
-- Provide the task ID returned by available task-list tools${canCheckTasks ? ', including task_check' : ''}.`);
+- ${idSource}`);
   }
 
   if (canCheckTasks) {
     taskTools.push(`
 **task_check** — Check completion status of tasks
 - Use this BEFORE finishing tracked work to verify all tasks are completed.
-- Returns the number of completed, in progress, and pending tasks.
-- Returns a structured task list snapshot with stable IDs.
+- Returns a readable status summary plus structured fields: tasks, summary, incompleteTasks, and isError.
+- summary includes total, completed, inProgress, pending, incomplete, hasTasks, and allCompleted.
+- Use summary.allCompleted to decide whether tracked work is complete; if summary.hasTasks is false, no task list is currently tracked.
 - If any tasks remain incomplete, continue working on them.
 - IMPORTANT: Always check task completion before ending work on a complex task.`);
   }
