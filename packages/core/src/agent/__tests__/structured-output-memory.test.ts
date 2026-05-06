@@ -874,27 +874,6 @@ describe('Structured output stream memory persistence (#14659)', () => {
     const resourceId = 'user-14659';
 
     const mockMemory = new MockMemory();
-    const savedTexts: string[] = [];
-
-    // Spy on saveMessages to capture what text is stored for assistant messages
-    const origSave = mockMemory.saveMessages.bind(mockMemory);
-    mockMemory.saveMessages = async function (args) {
-      for (const msg of args.messages) {
-        if (msg.role === 'assistant') {
-          const content = msg.content as any;
-          const text = Array.isArray(content?.parts)
-            ? content.parts
-                .filter((p: any) => p.type === 'text')
-                .map((p: any) => p.text)
-                .join('')
-            : typeof content === 'string'
-              ? content
-              : String(content);
-          savedTexts.push(text);
-        }
-      }
-      return origSave(args);
-    };
 
     const expectedObject = {
       primitiveId: 'agent1',
@@ -954,6 +933,21 @@ describe('Structured output stream memory persistence (#14659)', () => {
     });
 
     await response.consumeStream();
+
+    const { messages } = await mockMemory.recall({ threadId, resourceId });
+    const savedTexts = messages
+      .filter(msg => msg.role === 'assistant')
+      .map(msg => {
+        const content = msg.content as any;
+        return Array.isArray(content?.parts)
+          ? content.parts
+              .filter((p: any) => p.type === 'text')
+              .map((p: any) => p.text)
+              .join('')
+          : typeof content === 'string'
+            ? content
+            : String(content);
+      });
 
     // Ensure at least one assistant message was persisted so the loop below is not vacuous.
     expect(savedTexts.length).toBeGreaterThan(0);
