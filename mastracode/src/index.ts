@@ -442,6 +442,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
+  const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -487,6 +488,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   if (effectiveReflectionThreshold !== undefined) {
     globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
+  }
+  if (effectiveCavemanObservations !== undefined) {
+    globalInitialState.cavemanObservations = effectiveCavemanObservations;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

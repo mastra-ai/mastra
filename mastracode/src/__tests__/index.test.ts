@@ -45,6 +45,7 @@ function createMockSettings() {
       reflectorModelOverride: null,
       omObservationThreshold: null,
       omReflectionThreshold: null,
+      omCavemanObservations: null,
       subagentModels: {},
     },
     preferences: {
