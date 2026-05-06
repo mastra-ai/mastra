@@ -31,6 +31,7 @@ const harnessGetCurrentThreadIdMock = vi.fn();
 const harnessListThreadsMock = vi.fn();
 const harnessSetStateMock = vi.fn();
 const harnessSetThreadSettingMock = vi.fn();
+let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
   return {
@@ -93,7 +94,7 @@ vi.mock('@mastra/core/harness', () => ({
       return harnessGetCurrentThreadIdMock();
     }
     getState() {
-      return { cavemanObservations: false };
+      return harnessStateMock;
     }
     listThreads(options: unknown) {
       return harnessListThreadsMock(options);
@@ -266,6 +267,7 @@ describe('createMastraCode', () => {
     harnessSetStateMock.mockResolvedValue(undefined);
     harnessSetThreadSettingMock.mockReset();
     harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    harnessStateMock = { cavemanObservations: false };
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
@@ -312,6 +314,19 @@ describe('createMastraCode', () => {
     expect(harnessSubscribeMock).toHaveBeenCalled();
     expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
     expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+  });
+
+  it('restores an explicit false caveman observation setting at startup', async () => {
+    harnessStateMock = { cavemanObservations: true };
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {

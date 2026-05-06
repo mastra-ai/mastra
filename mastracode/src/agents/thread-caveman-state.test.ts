@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { restoreCavemanForCurrentThread } from '../thread-caveman-state.js';
+import { restoreCavemanForCurrentThread } from './thread-caveman-state.js';
 
 function createHarness({
   currentThreadId = 'thread-1',
@@ -35,6 +35,16 @@ describe('restoreCavemanForCurrentThread', () => {
     expect(harness.setThreadSetting).not.toHaveBeenCalled();
   });
 
+  it('mirrors persisted false caveman metadata into harness state for the current thread', async () => {
+    const harness = createHarness({ metadata: { cavemanObservations: false }, state: { cavemanObservations: true } });
+
+    await restoreCavemanForCurrentThread(harness as never);
+
+    expect(harness.listThreads).toHaveBeenCalledWith({ allResources: true });
+    expect(harness.setState).toHaveBeenCalledWith({ cavemanObservations: false });
+    expect(harness.setThreadSetting).not.toHaveBeenCalled();
+  });
+
   it('seeds missing thread metadata from the current harness state', async () => {
     const harness = createHarness({ metadata: {}, state: { cavemanObservations: true } });
 
@@ -42,6 +52,15 @@ describe('restoreCavemanForCurrentThread', () => {
 
     expect(harness.setState).not.toHaveBeenCalled();
     expect(harness.setThreadSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: true });
+  });
+
+  it('seeds missing thread metadata from false current harness state', async () => {
+    const harness = createHarness({ metadata: {}, state: { cavemanObservations: false } });
+
+    await restoreCavemanForCurrentThread(harness as never);
+
+    expect(harness.setState).not.toHaveBeenCalled();
+    expect(harness.setThreadSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: false });
   });
 
   it('does nothing when there is no current thread', async () => {
