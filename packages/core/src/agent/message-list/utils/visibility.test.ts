@@ -22,6 +22,14 @@ describe('isVisiblePart', () => {
   it('returns false for "llm" parts when filtering for the "all" tier', () => {
     expect(isVisiblePart({ type: 'text', text: 'hidden', visibility: 'llm' })).toBe(false);
   });
+
+  it('keeps explicit "all" parts visible at the "llm" tier', () => {
+    // The "llm" tier is a future-facing slot; explicit "all" should still be
+    // visible there because "all" is the most permissive flag.
+    expect(isVisiblePart({ type: 'text', text: 'all-text', visibility: 'all' }, 'llm')).toBe(true);
+    expect(isVisiblePart({ type: 'text', text: 'no-flag' }, 'llm')).toBe(true);
+    expect(isVisiblePart({ type: 'text', text: 'llm-text', visibility: 'llm' }, 'llm')).toBe(true);
+  });
 });
 
 describe('filterMessagesByVisibility', () => {
@@ -93,6 +101,45 @@ describe('filterMessagesByVisibility', () => {
 
     const result = filterMessagesByVisibility([stringMessage]);
     expect(result).toEqual([stringMessage]);
+  });
+
+  it('recomputes legacy content.content from visible text parts only', () => {
+    const messages = [
+      {
+        ...baseMessage([
+          { type: 'text', text: 'visible-1' },
+          { type: 'text', text: 'hidden', visibility: 'llm' },
+          { type: 'text', text: 'visible-2' },
+        ]),
+        content: {
+          format: 2 as const,
+          parts: [
+            { type: 'text' as const, text: 'visible-1' },
+            { type: 'text' as const, text: 'hidden', visibility: 'llm' as const },
+            { type: 'text' as const, text: 'visible-2' },
+          ],
+          // Legacy aggregated string still includes the hidden text.
+          content: 'visible-1\nhidden\nvisible-2',
+        },
+      },
+    ];
+
+    const [filtered] = filterMessagesByVisibility(messages as MastraDBMessage[]);
+    expect(filtered).toBeDefined();
+    expect(filtered!.content.content).toBe('visible-1\nvisible-2');
+  });
+
+  it('omits legacy content.content when input did not carry it', () => {
+    const messages = [
+      baseMessage([
+        { type: 'text', text: 'visible' },
+        { type: 'text', text: 'hidden', visibility: 'llm' },
+      ]),
+    ];
+
+    const [filtered] = filterMessagesByVisibility(messages);
+    expect(filtered).toBeDefined();
+    expect('content' in filtered!.content).toBe(false);
   });
 
   it('does not mutate the input messages or parts', () => {

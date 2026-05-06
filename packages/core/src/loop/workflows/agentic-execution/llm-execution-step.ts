@@ -249,6 +249,10 @@ async function processOutputStream<OUTPUT = undefined>({
             },
             providerMetadata: chunk.payload.providerMetadata,
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+            // Forward chunk-level visibility so a deferred result chunk marked
+            // `'llm'` can upgrade the previously-added tool part to the more
+            // restrictive visibility (merge happens inside updateToolInvocation).
+            ...(chunk.visibility && chunk.visibility !== 'all' ? { visibility: chunk.visibility } : {}),
           });
         }
         safeEnqueue(controller, chunk);

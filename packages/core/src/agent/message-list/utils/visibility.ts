@@ -13,9 +13,10 @@ export function isVisiblePart(
     // UI / "all" view: drop parts marked llm-only.
     return partVisibility !== 'llm';
   }
-  // For any future visibility tier we treat undefined as the most permissive
-  // setting and only drop parts whose flag explicitly disagrees.
-  return partVisibility === undefined || partVisibility === visibility;
+  // For any future visibility tier we treat undefined and the explicit `'all'`
+  // flag as the permissive default — only parts whose flag explicitly disagrees
+  // are dropped.
+  return partVisibility === undefined || partVisibility === 'all' || partVisibility === visibility;
 }
 
 /**
@@ -55,11 +56,22 @@ export function filterMessagesByVisibility(
       continue;
     }
 
+    // Recompute the legacy aggregated string `content.content` from the
+    // filtered text parts so callers that still read that field don't see
+    // text that was supposed to be hidden.
+    const visibleText = filteredParts
+      .filter((part): part is Extract<MastraMessagePart, { type: 'text' }> => part.type === 'text')
+      .map(part => part.text)
+      .join('\n');
+    const { content: _legacyContent, ...restContent } = message.content;
+    const contentStringPatch = message.content.content === undefined ? {} : { content: visibleText };
+
     result.push({
       ...message,
       content: {
-        ...message.content,
+        ...restContent,
         parts: filteredParts,
+        ...contentStringPatch,
       },
     });
   }

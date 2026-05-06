@@ -578,4 +578,86 @@ describe('MessageList.updateToolInvocation', () => {
       mastra: { modelOutput: true },
     });
   });
+
+  describe('visibility merge', () => {
+    it('keeps the existing part `llm` when the patch has no visibility', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'call', toolCallId: 'tc-1', toolName: 'web_search', args: {} },
+          visibility: 'llm',
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: {},
+          result: { ok: true },
+        },
+      });
+
+      const part = messageList.get.all.db()[0]!.content.parts[0] as { visibility?: 'all' | 'llm' };
+      expect(part.visibility).toBe('llm');
+    });
+
+    it('upgrades to `llm` when the deferred result patch is `llm`', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'call', toolCallId: 'tc-1', toolName: 'web_search', args: {} },
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: {},
+          result: { ok: true },
+        },
+        visibility: 'llm',
+      } as any);
+
+      const part = messageList.get.all.db()[0]!.content.parts[0] as { visibility?: 'all' | 'llm' };
+      expect(part.visibility).toBe('llm');
+    });
+
+    it('does not set a visibility flag when neither side carries one', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'call', toolCallId: 'tc-1', toolName: 'web_search', args: {} },
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: {},
+          result: { ok: true },
+        },
+      });
+
+      const part = messageList.get.all.db()[0]!.content.parts[0] as { visibility?: 'all' | 'llm' };
+      expect(part.visibility).toBeUndefined();
+    });
+  });
 });
