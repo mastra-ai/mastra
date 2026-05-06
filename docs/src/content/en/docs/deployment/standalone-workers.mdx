@@ -1,0 +1,108 @@
+---
+title: "Standalone workers | Deployment"
+description: "Run Mastra orchestration, scheduler, and background-task workers as separate processes."
+packages:
+  - "@mastra/core"
+---
+
+# Standalone workers
+
+Mastra runs workflow orchestration, scheduled triggers, and background tasks as workers. By default these workers run in the same process as your Mastra server. For larger deployments you can run them as separate processes that share storage and a `PubSub` backend with the server.
+
+This page covers how to split workers across processes.
+
+## Default behaviour
+
+When you create a `Mastra` instance with no `workers` option, Mastra registers three default workers:
+
+- `orchestration`: runs workflow steps
+- `scheduler`: fires cron and one-shot schedules
+- `backgroundTasks`: runs background tool tasks
+
+A normal `mastra dev` or `mastra start` boots the server and all three workers in one process.
+
+## Splitting workers across processes
+
+To run a worker in its own process:
+
+1. Configure a shared `PubSub` (for example `@mastra/redis-streams`) and shared storage on every process.
+1. On the server process, disable workers with the `MASTRA_WORKERS=false` environment variable.
+1. On each worker process, restrict it to a single subsystem with `MASTRA_WORKERS=<name>`.
+
+The same Mastra entry file is used for every process. Only the environment differs.
+
+### Selecting workers
+
+Set `MASTRA_WORKERS` to control which workers a process boots.
+
+| Value | Effect |
+| - | - |
+| unset | Boot all registered workers |
+| `false` | Skip all workers (server-only process) |
+| `orchestration` | Boot the orchestration worker only |
+| `scheduler` | Boot the scheduler only |
+| `backgroundTasks` | Boot the background-task worker only |
+| Comma-separated list, e.g. `scheduler,backgroundTasks` | Boot the listed workers only |
+
+Names that do not match a registered worker are ignored. If the filter matches no workers the process logs a warning and starts no workers.
+
+## Pointing the orchestrator at a remote server
+
+When the orchestration worker runs in its own process it must call back into the server to execute each workflow step. Configure the worker with these environment variables:
+
+- `MASTRA_STEP_EXECUTION_URL`: the base URL of the Mastra server, for example `https://api.example.com`
+- `MASTRA_WORKER_AUTH_TOKEN`: the bearer token the worker sends to the server
+
+The worker sends `Authorization: Bearer <token>` on every step request.
+
+## Authenticating worker requests
+
+The step-execution endpoint is a normal Mastra route with `requiresAuth: true`. It uses the same authentication contract as every other protected route. You must configure an auth provider on the server, for example with `MastraAuthConfig` or one of the bundled providers.
+
+Without an auth provider the framework's auth middleware refuses every request to a protected route. There is no separate "worker secret" mechanism: the worker's bearer token is verified by your auth provider's `authenticateToken` function, the same way you verify any other client.
+
+A minimal server-side configuration looks like:
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraAuthConfig } from '@mastra/core/server'
+
+export const mastra = new Mastra({
+  // ...storage, pubsub, workflows, agents...
+  server: {
+    experimental_auth: new MastraAuthConfig({
+      authenticateToken: async token => {
+        if (token === process.env.MASTRA_WORKER_AUTH_TOKEN) {
+          return { id: 'worker' }
+        }
+        return null
+      },
+    }),
+  },
+})
+```
+
+The orchestration worker uses the same `MASTRA_WORKER_AUTH_TOKEN` value, so its requests pass authentication.
+
+For richer setups, replace the inline check with any auth provider. See the [authentication overview](/docs/server/auth/overview) for the full set of options.
+
+## Example: server plus standalone orchestrator
+
+Server process:
+
+```bash
+MASTRA_WORKERS=false \
+PORT=4111 \
+mastra start
+```
+
+Orchestrator process:
+
+```bash
+MASTRA_WORKERS=orchestration \
+MASTRA_STEP_EXECUTION_URL=http://server:4111 \
+MASTRA_WORKER_AUTH_TOKEN=$WORKER_TOKEN \
+mastra start
+```
+
+Both processes load the same Mastra entry file and connect to the same storage and `PubSub` backend.

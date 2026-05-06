@@ -47,3 +47,10 @@ Worker review fixes:
   `schema-consistency.test.ts`.
 - Internal type cleanups (drop several `as any` casts in worker strategies
   and `BackgroundTaskWorker`).
+- `RedisStreamsPubSub.maxDeliveryAttempts` now rejects negative / NaN values
+  at construction. `0` still means "no cap" for back-compat but emits a
+  one-time warning; pass `Infinity` to disable the cap explicitly.
+- `PullTransport` accepts a logger and uses it for unhandled router-callback
+  rejections instead of `console.error`.
+- `BackgroundTaskWorker.start()` now throws if `init()` was not called,
+  matching the contract of the other workers.
