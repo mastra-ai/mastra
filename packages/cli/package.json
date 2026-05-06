@@ -69,6 +69,7 @@
     "serve-handler": "^6.1.7",
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
+    "typescript": "catalog:",
     "yocto-spinner": "^1.1.0"
   },
   "devDependencies": {
@@ -90,7 +91,6 @@
     "rollup": "^4.59.0",
     "tsup": "^8.5.1",
     "type-fest": "^5.4.4",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
