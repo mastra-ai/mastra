@@ -6,7 +6,7 @@ import { defineConfig } from 'tsup';
 const DATA_FILE_NAME = 'pricing-data.jsonl';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/features.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,

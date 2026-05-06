@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./features": {
+      "import": {
+        "types": "./dist/features.d.ts",
+        "default": "./dist/features.js"
+      },
+      "require": {
+        "types": "./dist/features.d.ts",
+        "default": "./dist/features.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
