@@ -964,6 +964,7 @@ describe('ToolCallFilter', () => {
       const result = await filter.processInputStep(mockStepArgs(messageList));
 
       expect(result.messages).toBeUndefined();
+      expect(result.modelContextMessages).toBeUndefined();
     });
 
     it('should filter tool calls from tool steps older than filterAfterToolSteps', async () => {
@@ -1035,8 +1036,8 @@ describe('ToolCallFilter', () => {
 
       const result = await filter.processInputStep(mockStepArgs(messageList, { stepNumber: 2, state }));
 
-      expect(result.messages).toBeDefined();
-      const toolParts = result.messages!.flatMap(message =>
+      expect(result.modelContextMessages).toBeDefined();
+      const toolParts = result.modelContextMessages!.flatMap(message =>
         typeof message.content === 'string'
           ? []
           : message.content.parts.filter((part: any) => part.type === 'tool-invocation'),
@@ -1097,8 +1098,8 @@ describe('ToolCallFilter', () => {
 
       const result = await filter.processInputStep(mockStepArgs(messageList));
 
-      expect(result.messages).toBeDefined();
-      const filteredMessages = result.messages!;
+      expect(result.modelContextMessages).toBeDefined();
+      const filteredMessages = result.modelContextMessages!;
       expect(filteredMessages).toHaveLength(2);
       expect(filteredMessages[0]!.id).toBe('msg-1');
 
@@ -1181,8 +1182,8 @@ describe('ToolCallFilter', () => {
 
       const result = await filter.processInputStep(mockStepArgs(messageList));
 
-      expect(result.messages).toBeDefined();
-      const filteredMessages = result.messages!;
+      expect(result.modelContextMessages).toBeDefined();
+      const filteredMessages = result.modelContextMessages!;
       expect(filteredMessages).toHaveLength(2);
 
       const assistantMsg = filteredMessages[1]!;
@@ -1234,8 +1235,7 @@ describe('ToolCallFilter', () => {
 
       const result = await filter.processInputStep(mockStepArgs(messageList));
 
-      expect(result.messages).toBeDefined();
-      expect(result.messages!).toHaveLength(2);
+      expect(result.modelContextMessages).toBeUndefined();
     });
   });
 
@@ -1406,6 +1406,7 @@ describe('ToolCallFilter', () => {
       expect(step3Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-2'))).toBe(
         true,
       );
+      expect(JSON.stringify(messageList.get.all.db())).toContain('call-weather-1');
     });
 
     it('should preserve the last two tool-call steps with filterAfterToolSteps 2', async () => {

@@ -170,7 +170,7 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 
 ### `messages` vs `messageList`
 
-- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence.
+- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` this excludes system messages. For `processInputStep`, this is usually derived from `messageList`; after an earlier step processor returns `modelContextMessages`, it is the prompt-only message context for the current step. For `processOutputResult` and `processOutputStep` this includes the latest LLM response.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
 Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
@@ -179,7 +179,9 @@ Use `messages` when you only need to read, map over, or lightly edit fields on t
 - Add, remove, or replace whole messages.
 - Convert to another format such as UI or core messages for a third-party API.
 
-`messages` is always derived from `messageList`, so mutating `messageList` is the canonical way to add, remove, or reorder messages. For in-place edits to a message's content (for example, rewriting `content.parts`), mutating `messages` directly is equivalent. If you return a new array from `messages`, Mastra reconciles it against `messageList` for the current stage.
+Except for prompt-only `modelContextMessages` during `processInputStep`, `messages` is derived from `messageList`, so mutating `messageList` is the canonical way to add, remove, or reorder messages. For in-place edits to a message's content (for example, rewriting `content.parts`), mutating `messages` directly is equivalent. If you return a new array from `messages`, Mastra reconciles it against `messageList` for the current stage.
+
+For `processInputStep`, return `modelContextMessages` when you want to change only the next model prompt. This does not mutate or persist canonical history. Later `processInputStep` processors in the same step receive those prompt-only messages as their `messages` argument.
 
 ### Persistence
 
@@ -450,6 +452,8 @@ processInputStep?<TTripwireMetadata = unknown>(
 - **`MastraDBMessage[]`** — return a transformed messages array; replaces the step's messages.
 - **`void` or `undefined`** — return nothing to leave the step unchanged.
 
+Use `modelContextMessages` instead of `messages` when the change should only affect the next model prompt. Returning both `messages` and `modelContextMessages` is an error.
+
 The object form can return any combination of these properties:
 
 <PropertiesTable
@@ -482,6 +486,13 @@ The object form can return any combination of these properties:
     name: 'messages',
     type: 'MastraDBMessage[]',
     description: 'Replace all messages. Cannot be used with messageList.',
+    isOptional: true,
+  },
+  {
+    name: 'modelContextMessages',
+    type: 'MastraDBMessage[]',
+    description:
+      'Replace the messages used for the next model prompt without mutating canonical MessageList history. Cannot be used with messages.',
     isOptional: true,
   },
   {
