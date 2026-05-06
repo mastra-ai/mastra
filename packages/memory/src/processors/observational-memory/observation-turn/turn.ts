@@ -197,13 +197,43 @@ export class ObservationTurn {
   }
 
   /**
-   * Refresh the cached record from storage. Called internally after mutations.
+   * Replace the cached record with a known-fresh state.
+   *
+   * Use this after engine writes that already return the post-write record
+   * (`om.activate`, `om.observe`, `om.buffer`) instead of refetching from storage.
+   * Only accepts records strictly newer than the current cache (compared via
+   * `updatedAt`, falling back to `generationCount`) so that a late fire-and-forget
+   * `.then` cannot clobber a fresher post-observation record.
+   *
+   * @internal
+   */
+  setRecord(record: ObservationalMemoryRecord): void {
+    if (this._record && !this.isNewerRecord(record, this._record)) {
+      return;
+    }
+    this._record = record;
+  }
+
+  /**
+   * Force refresh the cached record from storage.
+   *
+   * Prefer `setRecord(...)` with the record returned by an engine write — this
+   * exists only as an escape hatch for paths where we don't have the fresh
+   * record on hand.
+   *
    * @internal
    */
   async refreshRecord(): Promise<void> {
     this._record = await omTime('turn.refreshRecord.getOrCreateRecord', () =>
       this.om.getOrCreateRecord(this.threadId, this.resourceId),
     );
+  }
+
+  private isNewerRecord(next: ObservationalMemoryRecord, prev: ObservationalMemoryRecord): boolean {
+    const nextUpdatedAt = next.updatedAt ? new Date(next.updatedAt).getTime() : 0;
+    const prevUpdatedAt = prev.updatedAt ? new Date(prev.updatedAt).getTime() : 0;
+    if (nextUpdatedAt !== prevUpdatedAt) return nextUpdatedAt >= prevUpdatedAt;
+    return (next.generationCount ?? 0) >= (prev.generationCount ?? 0);
   }
 
   /**

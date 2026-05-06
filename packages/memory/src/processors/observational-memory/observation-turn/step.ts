@@ -88,7 +88,10 @@ export class ObservationStep {
             recordId: activation.record.id,
           }),
         );
-        await omTime('step.step0.refreshRecord', () => this.turn.refreshRecord());
+        // Use the post-activation record returned by `om.activate(...)` instead of
+        // refetching from storage — `activate` already calls `getOrCreateRecord` at
+        // the end of its lock and returns the latest state.
+        this.turn.setRecord(activation.record);
       }
 
       // Check if reflection is needed (whether or not activation happened).
@@ -134,14 +137,13 @@ export class ObservationStep {
     );
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
-    // Refresh the turn record before reusing it in getStatus on steps > 0:
-    // fire-and-forget buffering or async observation completed during the
-    // previous step may have written new buffered chunks / observation tokens
-    // that aren't reflected in the cached `turn.record`. Step 0 is already
-    // freshly refreshed by `step0.refreshRecord.postReflect` above.
-    if (this.stepNumber > 0) {
-      await omTime('step.refreshRecord.preStatus', () => this.turn.refreshRecord());
-    }
+    // No record refresh here: the turn record is kept current by `setRecord(...)`
+    // calls after each engine write that returns a fresh record (`om.activate`,
+    // `om.observe`/`runThresholdObservation`, and the fire-and-forget `om.buffer`'s
+    // `.then` handler below). That covers every mutation path the OM lifecycle
+    // can take between steps, so we don't need a `getOrCreateRecord` round-trip
+    // before each `getStatus`.
+
     // Pre-fetch cross-thread context (resource scope) via the turn's per-loop cache,
     // so both getStatus calls and the later `refreshOtherThreadsContext()` reuse the
     // same fetch. See ObservationTurn.getOrLoadOtherThreadsContext.
@@ -207,7 +209,15 @@ export class ObservationStep {
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
         })
-        .then(() => bufferTimer.stop({ ok: true }))
+        .then(result => {
+          // Keep `turn.record` in sync with the post-buffer record so the next
+          // step's `getStatus` sees the new buffered chunk / advanced cursors
+          // without a `getOrCreateRecord` round-trip. `setRecord` only accepts
+          // strictly-newer records, so a late buffer .then can't clobber a
+          // fresher post-observation record.
+          this.turn.setRecord(result.record);
+          bufferTimer.stop({ ok: true });
+        })
         .catch((err: Error) => {
           bufferTimer.stop({ ok: false });
           omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
@@ -263,7 +273,10 @@ export class ObservationStep {
             });
           }
 
-          await this.turn.refreshRecord();
+          // `runThresholdObservation` returned the post-observation record
+          // (via `om.activate`/`om.observe`, which both refetch internally and
+          // return the latest record). Use it directly instead of refetching.
+          this.turn.setRecord(obsResult.record);
           if (this.turn.record.generationCount > preObsGeneration) {
             reflected = true;
           }
