@@ -21,10 +21,7 @@ async function findThread(
  * - Otherwise, persist the current harness-state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
-async function restoreCavemanForThread(
-  harness: Harness<Record<string, unknown>>,
-  threadId: string,
-): Promise<void> {
+async function restoreCavemanForThread(harness: Harness<Record<string, unknown>>, threadId: string): Promise<void> {
   const thread = await findThread(harness, threadId);
   const persisted = thread?.metadata?.[META_KEY];
 
@@ -64,9 +61,7 @@ export function attachCavemanThreadStatePersistence(harness: Harness<Record<stri
  * Called once at TUI startup after the initial thread is selected, since the
  * subscription set up later misses the startup `thread_changed` event.
  */
-export async function restoreCavemanForCurrentThread(
-  harness: Harness<Record<string, unknown>>,
-): Promise<void> {
+export async function restoreCavemanForCurrentThread(harness: Harness<Record<string, unknown>>): Promise<void> {
   const threadId = harness.getCurrentThreadId();
   if (!threadId) return;
   await restoreCavemanForThread(harness, threadId);
