@@ -2,17 +2,6 @@ import { createAzure } from '@ai-sdk/azure';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AzureOpenAIGateway } from './azure';
 import type { AzureOpenAIGatewayConfig } from './azure';
-import { MASTRA_GATEWAY_STREAM_TRANSPORT } from './base';
-
-const { wsFetch, wsClose } = vi.hoisted(() => {
-  const wsClose = vi.fn();
-  const wsFetch = Object.assign(
-    vi.fn(async () => new Response('')),
-    { close: wsClose },
-  );
-
-  return { wsFetch, wsClose };
-});
 
 vi.mock('@ai-sdk/azure', () => ({
   createAzure: vi.fn((options: Record<string, unknown>) => {
@@ -28,12 +17,6 @@ vi.mock('@ai-sdk/azure', () => ({
   }),
 }));
 
-vi.mock('../openai-websocket-fetch.js', () => ({
-  createOpenAIWebSocketFetch: vi.fn(() => wsFetch),
-}));
-
-const { createOpenAIWebSocketFetch } = await import('../openai-websocket-fetch.js');
-
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
@@ -41,8 +24,6 @@ describe('AzureOpenAIGateway', () => {
   afterEach(() => {
     vi.clearAllMocks();
     mockFetch.mockClear();
-    wsFetch.mockClear();
-    wsClose.mockClear();
   });
 
   describe('Configuration Validation', () => {
@@ -744,112 +725,6 @@ describe('AzureOpenAIGateway', () => {
           useDeploymentBasedUrls: false,
         }),
       );
-    });
-
-    it('should use Azure Responses WebSocket fetch when requested', async () => {
-      const gateway = new AzureOpenAIGateway({
-        resourceName: 'test-resource',
-        apiKey: 'test-key',
-        useResponsesAPI: true,
-        deployments: ['gpt-5-4-deployment'],
-      });
-
-      const model = (await gateway.resolveLanguageModel({
-        modelId: 'gpt-5-4-deployment',
-        providerId: 'azure-openai',
-        apiKey: 'test-key',
-        transport: 'websocket',
-        responsesWebSocket: {
-          headers: { 'x-ms-client-request-id': 'request-1' },
-        },
-      })) as any;
-
-      expect(model.api).toBe('responses');
-      expect(createOpenAIWebSocketFetch).toHaveBeenLastCalledWith({
-        url: 'wss://test-resource.openai.azure.com/openai/v1/responses',
-        headers: { 'x-ms-client-request-id': 'request-1' },
-        apiKeyQueryParam: 'api-key',
-        betaHeader: false,
-      });
-      expect(createAzure).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          fetch: wsFetch,
-          apiVersion: 'v1',
-          useDeploymentBasedUrls: false,
-        }),
-      );
-      expect(model[MASTRA_GATEWAY_STREAM_TRANSPORT].close).toBe(wsClose);
-    });
-
-    it('should use a custom Azure Responses WebSocket URL when provided', async () => {
-      const gateway = new AzureOpenAIGateway({
-        resourceName: 'test-resource',
-        apiKey: 'test-key',
-        useResponsesAPI: true,
-        deployments: ['gpt-5-4-deployment'],
-      });
-
-      await gateway.resolveLanguageModel({
-        modelId: 'gpt-5-4-deployment',
-        providerId: 'azure-openai',
-        apiKey: 'test-key',
-        transport: 'websocket',
-        responsesWebSocket: {
-          url: 'wss://proxy.example.com/openai/v1/responses',
-        },
-      });
-
-      expect(createOpenAIWebSocketFetch).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          url: 'wss://proxy.example.com/openai/v1/responses',
-        }),
-      );
-    });
-
-    it('should route Azure Responses WebSocket Entra ID auth through the token fetch wrapper', async () => {
-      const credential = {
-        getToken: vi.fn().mockResolvedValue({
-          token: 'entra-token',
-          expiresOnTimestamp: Date.now() + 3600_000,
-        }),
-      };
-
-      const gateway = new AzureOpenAIGateway({
-        resourceName: 'test-resource',
-        authentication: {
-          type: 'entraId',
-          credential,
-        },
-        useResponsesAPI: true,
-        deployments: ['gpt-5-4-deployment'],
-      });
-
-      const model = (await gateway.resolveLanguageModel({
-        modelId: 'gpt-5-4-deployment',
-        providerId: 'azure-openai',
-        apiKey: await gateway.getApiKey('gpt-5-4-deployment'),
-        transport: 'websocket',
-      })) as any;
-
-      expect(createOpenAIWebSocketFetch).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          apiKeyQueryParam: false,
-          betaHeader: false,
-        }),
-      );
-
-      await model.options.fetch('https://test-resource.openai.azure.com/openai/v1/responses', {
-        method: 'POST',
-        headers: {
-          'api-key': '',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ stream: true, model: 'gpt-5-4-deployment', input: 'hello' }),
-      });
-
-      const fetchHeaders = wsFetch.mock.calls.at(-1)?.[1].headers as Headers;
-      expect(fetchHeaders.get('Authorization')).toBe('Bearer entra-token');
-      expect(fetchHeaders.has('api-key')).toBe(false);
     });
 
     it('should mirror Azure Responses item IDs only inside Azure Responses model calls', async () => {

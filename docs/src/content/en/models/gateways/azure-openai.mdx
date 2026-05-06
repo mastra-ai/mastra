@@ -182,45 +182,6 @@ Use `apiVersion: "v1"` for the GA `v1` route. Microsoft currently exposes previe
 
 The same API key and Microsoft Entra ID authentication modes work with the `v1` route.
 
-### Azure Responses WebSocket transport
-
-Azure OpenAI also supports WebSocket mode on the Responses API. Use it for agent or tool loops with many model-tool round trips. Keep the standard HTTP transport for single-shot requests and short conversations.
-
-WebSocket transport requires `useResponsesAPI: true`, because Azure exposes it on the `v1` Responses path. Then opt in per stream request with `providerOptions.azure.transport: "websocket"`.
-
-```typescript
-import { Agent } from "@mastra/core/agent";
-
-const agent = new Agent({
-  id: "azure-ws-agent",
-  name: "Azure WebSocket Agent",
-  instructions: "Use tools when they are useful.",
-  model: "azure-openai/my-gpt-5-4-deployment",
-});
-
-const stream = await agent.stream("Find and improve the slow function.", {
-  providerOptions: {
-    azure: {
-      transport: "websocket",
-      store: false,
-      websocket: {
-        closeOnFinish: false,
-      },
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-
-stream.transport?.close();
-```
-
-Set `closeOnFinish: false` when you want to keep the socket open across follow-up turns. Azure keeps one response chain in connection-local memory, so continuing from the most recent `previous_response_id` can reduce continuation latency. The connection runs one response at a time and does not multiplex parallel runs.
-
-Do not send overlapping follow-up requests with `previous_response_id` on the same WebSocket transport. Mastra rejects overlapping continuation requests because Azure only keeps one in-flight response per connection. Wait for the active stream to finish before continuing the response chain.
-
 ## Configuration Reference
 
 | Option | Type | Required | Description |

@@ -94,7 +94,10 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
 
   beforeEach(() => {
     // Clear cached model instances between tests
-    (ModelRouterLanguageModel as any)._clearCachesForTests();
+    // @ts-expect-error accessing private static field for test cleanup
+    ModelRouterLanguageModel.modelInstances = new Map();
+    // @ts-expect-error accessing private static field for test cleanup
+    ModelRouterLanguageModel.webSocketFetches = new Map();
 
     mockV3Model = createMockV3Model();
     gateway = new V3Gateway(mockV3Model);

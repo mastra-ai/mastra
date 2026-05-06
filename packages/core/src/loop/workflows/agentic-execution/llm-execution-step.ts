@@ -31,7 +31,7 @@ import type {
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
-import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
+import { ChunkFrom } from '../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
@@ -390,7 +390,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
-      let modelResult: ReturnType<typeof execute> | undefined;
+      let modelResult;
       let warnings: any;
       let request: any;
       let rawResponse: any;
@@ -853,7 +853,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           let transportResolver: (() => StreamTransport | undefined) | undefined;
           if (currentStep.model instanceof ModelRouterLanguageModel) {
             const routerModel = currentStep.model;
-            transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
+            transportResolver = () => routerModel._getStreamTransport();
           }
 
           try {

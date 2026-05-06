@@ -43,7 +43,7 @@ describe('ModelRouterLanguageModel - supportedUrls propagation (Issue #12152)', 
 
   beforeEach(() => {
     // Clear any cached model instances
-    (ModelRouterLanguageModel as any)._clearCachesForTests();
+    (ModelRouterLanguageModel as any).modelInstances?.clear?.();
 
     // Mock findGatewayForModel to return our mock gateway
     vi.spyOn(gatewaysModule, 'findGatewayForModel').mockReturnValue(mockGateway as any);
