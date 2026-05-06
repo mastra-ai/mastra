@@ -5,7 +5,8 @@
     "    └── agent_run: \"agent run: 'test-agent'\"",
     "        └── model_generation: \"llm: 'mock-model-id'\"",
     "            └── model_step: \"step: 0\"",
-    "                └── model_chunk: \"chunk: 'text'\""
+    "                └── model_inference: \"inference: 0\"",
+    "                    └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -30,9 +31,7 @@
           "prompt": "Hello from workflow"
         },
         "output": {
-          "response": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          }
+          "response": "Mock V2 stream response"
         }
       },
       "children": [
@@ -59,9 +58,7 @@
               "prompt": "Hello from workflow"
             },
             "output": {
-              "response": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              }
+              "response": "Mock V2 stream response"
             }
           },
           "children": [
@@ -86,9 +83,7 @@
                 },
                 "input": "Hello from workflow",
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "files": []
                 }
               },
@@ -150,9 +145,7 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 stream response",
                       "warnings": []
                     }
                   },
@@ -187,12 +180,12 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
+                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          },
-                          "environment": "test"
+                          }
                         },
                         "input": [
                           {
@@ -205,9 +198,7 @@
                           }
                         ],
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          },
+                          "text": "Mock V2 stream response",
                           "toolCalls": []
                         }
                       },
@@ -216,8 +207,8 @@
                           "span": {
                             "id": "<span-6>",
                             "traceId": "<trace-1>",
-                            "name": "chunk: 'text'",
-                            "type": "model_chunk",
+                            "name": "inference: 0",
+                            "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
@@ -225,19 +216,59 @@
                             "entityType": "agent",
                             "entityId": "test-agent",
                             "attributes": {
-                              "chunkType": "text",
-                              "sequenceNumber": 0
+                              "stepIndex": 0,
+                              "model": "mock-model-id",
+                              "provider": "mock-provider",
+                              "streaming": true,
+                              "usage": {
+                                "inputTokens": 15,
+                                "outputTokens": 25,
+                                "inputDetails": {
+                                  "text": 15
+                                },
+                                "outputDetails": {
+                                  "text": 25
+                                }
+                              },
+                              "finishReason": "stop",
+                              "completionStartTime": "<date>"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
                             "output": {
-                              "text": {
-                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                              "text": "Mock V2 stream response",
+                              "toolCalls": []
+                            }
+                          },
+                          "children": [
+                            {
+                              "span": {
+                                "id": "<span-7>",
+                                "traceId": "<trace-1>",
+                                "name": "chunk: 'text'",
+                                "type": "model_chunk",
+                                "completed": true,
+                                "isEvent": false,
+                                "isRootSpan": false,
+                                "parentId": "<span-6>",
+                                "entityType": "agent",
+                                "entityId": "test-agent",
+                                "attributes": {
+                                  "chunkType": "text",
+                                  "sequenceNumber": 0
+                                },
+                                "metadata": {
+                                  "runId": "<runId-2>",
+                                  "environment": "test"
+                                },
+                                "output": {
+                                  "text": "Mock V2 stream response"
+                                }
                               }
                             }
-                          }
+                          ]
                         }
                       ]
                     }

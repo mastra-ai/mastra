@@ -531,6 +531,7 @@ function mapLaminarSpanType(spanType: SpanType): LaminarSpanType {
   switch (spanType) {
     case SpanType.MODEL_GENERATION:
     case SpanType.MODEL_STEP:
+    case SpanType.MODEL_INFERENCE:
     case SpanType.MODEL_CHUNK:
       return 'LLM';
     case SpanType.TOOL_CALL:

@@ -1360,4 +1360,123 @@ describe('ModelSpanTracker', () => {
       expect(Array.isArray(stepSpans[0]!.input)).toBe(true);
     });
   });
+
+  describe('MODEL_INFERENCE span', () => {
+    it('creates a MODEL_INFERENCE span as a child of MODEL_STEP, with chunks parented under it', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hello' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 10 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      ];
+
+      const stream = createMockStream(chunks);
+      await consumeStream(tracker.wrapStream(stream));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+
+      expect(stepSpan).toBeDefined();
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.parentSpanId).toBe(stepSpan!.id);
+      expect(inferenceSpan!.attributes).toMatchObject({
+        stepIndex: 0,
+        model: 'gpt-test',
+        provider: 'test',
+        streaming: true,
+        finishReason: 'stop',
+      });
+
+      expect(chunkSpans.length).toBeGreaterThan(0);
+      for (const chunk of chunkSpans) {
+        expect(chunk.parentSpanId).toBe(inferenceSpan!.id);
+      }
+    });
+
+    it('duplicates usage and finishReason onto MODEL_INFERENCE and MODEL_STEP', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { promptTokens: 4, completionTokens: 6, totalTokens: 10 } },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      expect(stepSpan!.attributes).toMatchObject({ finishReason: 'stop' });
+      expect(stepSpan!.attributes.usage).toBeDefined();
+      expect(inferenceSpan!.attributes).toMatchObject({ finishReason: 'stop' });
+      expect(inferenceSpan!.attributes.usage).toBeDefined();
+    });
+
+    it('closes MODEL_INFERENCE on step-finish even when step-close is deferred (durable mode)', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.setDeferStepClose(true);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'tool-calls', warnings: [], isContinued: true },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+
+      // Inference span should already be closed even though the step is still
+      // open waiting for tool execution under it.
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes).toMatchObject({ finishReason: 'tool-calls' });
+
+      const stepSpansBefore = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpansBefore).toHaveLength(0);
+
+      modelSpan.end();
+    });
+  });
 });

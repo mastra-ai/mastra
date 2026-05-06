@@ -3,7 +3,8 @@
     "agent_run: \"agent run: 'delayed-agent'\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    └── model_step: \"step: 0\"",
-    "        └── model_chunk: \"chunk: 'text'\""
+    "        └── model_inference: \"inference: 0\"",
+    "            └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -122,12 +123,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -149,8 +150,8 @@
                   "span": {
                     "id": "<span-4>",
                     "traceId": "<trace-1>",
-                    "name": "chunk: 'text'",
-                    "type": "model_chunk",
+                    "name": "inference: 0",
+                    "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
@@ -158,17 +159,59 @@
                     "entityType": "agent",
                     "entityId": "delayed-agent",
                     "attributes": {
-                      "chunkType": "text",
-                      "sequenceNumber": 0
+                      "stepIndex": 0,
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "usage": {
+                        "inputTokens": 10,
+                        "outputTokens": 5,
+                        "inputDetails": {
+                          "text": 10
+                        },
+                        "outputDetails": {
+                          "text": 5
+                        }
+                      },
+                      "finishReason": "stop",
+                      "completionStartTime": "<date>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
                     "output": {
-                      "text": "Hello world"
+                      "text": "Hello world",
+                      "toolCalls": []
                     }
-                  }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-5>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'text'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "delayed-agent",
+                        "attributes": {
+                          "chunkType": "text",
+                          "sequenceNumber": 0
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "text": "Hello world"
+                        }
+                      }
+                    }
+                  ]
                 }
               ]
             }

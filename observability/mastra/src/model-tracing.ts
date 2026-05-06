@@ -2,10 +2,14 @@
  * Model Span Tracing
  *
  * Provides span tracking for Model generations, including:
- * - MODEL_STEP spans (one per Model API call)
- * - MODEL_CHUNK spans (individual streaming chunks within a step)
+ * - MODEL_STEP spans (one per Model API call - includes processors and tool executions)
+ * - MODEL_INFERENCE spans (the provider call itself - model latency only)
+ * - MODEL_CHUNK spans (individual streaming chunks within an inference)
  *
- * Hierarchy: MODEL_GENERATION -> MODEL_STEP -> MODEL_CHUNK
+ * Hierarchy: MODEL_GENERATION -> MODEL_STEP -> MODEL_INFERENCE -> MODEL_CHUNK
+ *
+ * Processors and tool executions remain children of MODEL_STEP (siblings of
+ * MODEL_INFERENCE), so MODEL_INFERENCE measures pure model time.
  */
 
 import { TransformStream } from 'node:stream/web';
@@ -238,6 +242,7 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
 export class ModelSpanTracker {
   #modelSpan?: Span<SpanType.MODEL_GENERATION>;
   #currentStepSpan?: Span<SpanType.MODEL_STEP>;
+  #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
@@ -347,6 +352,10 @@ export class ModelSpanTracker {
    * Start a new Model execution step.
    * This should be called at the beginning of LLM execution to capture accurate startTime.
    * The step-start chunk payload can be passed later via updateStep() if needed.
+   *
+   * Also opens a MODEL_INFERENCE child span that wraps the provider call. Chunks
+   * parent under MODEL_INFERENCE so processors/tool executions (which use the
+   * step span as their parent) remain siblings of the inference.
    */
   startStep(payload?: StepStartPayload): void {
     // Don't create duplicate step spans
@@ -368,6 +377,58 @@ export class ModelSpanTracker {
     this.#currentStepInputIsFinal = Array.isArray(payload?.inputMessages);
     // Reset chunk sequence for new step
     this.#chunkSequence = 0;
+
+    this.#startInferenceSpan(input);
+  }
+
+  /**
+   * End the current MODEL_INFERENCE span when the provider stream finishes.
+   * Fields are duplicated onto MODEL_STEP (in #endStepSpan) so existing
+   * integrations that read usage/finishReason from the step span continue
+   * to work unchanged.
+   *
+   * Safe to call multiple times - no-ops if the span is already closed.
+   */
+  #endInferenceSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>): void {
+    if (!this.#currentInferenceSpan) return;
+
+    const { usage: rawUsage, ...otherOutput } = payload.output;
+    const usage = extractUsageMetrics(rawUsage, payload.metadata?.providerMetadata);
+
+    this.#currentInferenceSpan.end({
+      output: otherOutput,
+      attributes: {
+        usage,
+        finishReason: payload.stepResult.reason,
+        warnings: payload.stepResult.warnings,
+        completionStartTime: this.#completionStartTime,
+      },
+    });
+    this.#currentInferenceSpan = undefined;
+  }
+
+  /**
+   * Open the MODEL_INFERENCE span for the current step. Chunks (including tool-call
+   * chunks emitted by the model) parent under this span so its duration reflects
+   * pure model latency.
+   */
+  #startInferenceSpan(input: StepInputPreview): void {
+    if (!this.#currentStepSpan || this.#currentInferenceSpan) {
+      return;
+    }
+
+    const generationAttrs = this.#modelSpan?.attributes;
+    this.#currentInferenceSpan = this.#currentStepSpan.createChildSpan({
+      name: `inference: ${this.#stepIndex}`,
+      type: SpanType.MODEL_INFERENCE,
+      attributes: {
+        stepIndex: this.#stepIndex,
+        model: generationAttrs?.model,
+        provider: generationAttrs?.provider,
+        streaming: generationAttrs?.streaming,
+      },
+      input,
+    });
   }
 
   /**
@@ -425,6 +486,11 @@ export class ModelSpanTracker {
       }
     }
 
+    // Inference may already be closed (closed eagerly on step-finish in defer
+    // mode so its duration reflects pure model latency, not subsequent tool
+    // execution). Close it here for the non-deferred path.
+    this.#endInferenceSpan(payload);
+
     this.#currentStepSpan.end({
       output: otherOutput,
       attributes: {
@@ -443,6 +509,15 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Returns the parent span for chunks. Chunks parent under MODEL_INFERENCE
+   * (the provider call) when available, falling back to MODEL_STEP only if
+   * startStep() was bypassed.
+   */
+  #chunkParent(): Span<SpanType.MODEL_INFERENCE> | Span<SpanType.MODEL_STEP> | undefined {
+    return this.#currentInferenceSpan ?? this.#currentStepSpan;
+  }
+
+  /**
    * Create a new chunk span (for multi-part chunks like text-start/delta/end)
    */
   #startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
@@ -455,7 +530,7 @@ export class ModelSpanTracker {
       this.startStep();
     }
 
-    this.#currentChunkSpan = this.#currentStepSpan?.createChildSpan({
+    this.#currentChunkSpan = this.#chunkParent()?.createChildSpan({
       name: `chunk: '${chunkType}'`,
       type: SpanType.MODEL_CHUNK,
       attributes: {
@@ -507,7 +582,7 @@ export class ModelSpanTracker {
       this.startStep();
     }
 
-    const span = this.#currentStepSpan?.createEventSpan({
+    const span = this.#chunkParent()?.createEventSpan({
       name: `chunk: '${chunkType}'`,
       type: SpanType.MODEL_CHUNK,
       attributes: {
@@ -662,7 +737,7 @@ export class ModelSpanTracker {
 
     // Create an event span for the approval request
     // Using createEventSpan since approvals are point-in-time events (not time ranges)
-    const span = this.#currentStepSpan?.createEventSpan({
+    const span = this.#chunkParent()?.createEventSpan({
       name: `chunk: 'tool-call-approval'`,
       type: SpanType.MODEL_CHUNK,
       attributes: {
@@ -735,8 +810,13 @@ export class ModelSpanTracker {
 
             case 'step-finish':
               if (this.#deferStepClose) {
-                // Durable mode: save payload for later, don't close the step
+                // Durable mode: save payload for later, don't close the step.
+                // Close MODEL_INFERENCE eagerly though - the provider stream is
+                // done, and any subsequent tool execution under the step should
+                // not inflate inference duration.
                 this.#pendingStepFinishPayload = chunk.payload;
+                this.#endChunkSpan();
+                this.#endInferenceSpan(chunk.payload);
               } else {
                 // Normal mode: close the step immediately
                 this.#endStepSpan(chunk.payload);

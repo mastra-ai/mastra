@@ -44,6 +44,8 @@ export enum SpanType {
   MODEL_GENERATION = 'model_generation',
   /** Single model execution step within a generation (one API call) */
   MODEL_STEP = 'model_step',
+  /** Model provider call within a step - wraps only the inference, excluding processors and tool executions */
+  MODEL_INFERENCE = 'model_inference',
   /** Individual model streaming chunk/event */
   MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
@@ -250,6 +252,44 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   isContinued?: boolean;
   /** Result warnings */
   warnings?: Record<string, any>;
+}
+
+/**
+ * Model Inference attributes - for the provider call within a MODEL_STEP.
+ *
+ * Wraps only the model's inference (HTTP roundtrip / stream lifetime),
+ * excluding input/output processors and tool executions. Use this span
+ * to measure pure model latency.
+ *
+ * Fields are intentionally duplicated from ModelStepAttributes /
+ * ModelGenerationAttributes so existing integrations that read those
+ * attributes continue to work unchanged.
+ */
+export interface ModelInferenceAttributes extends AIBaseAttributes {
+  /** Model name (e.g., 'gpt-4', 'claude-3') */
+  model?: string;
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider?: string;
+  /** Index of the parent step in the generation (0, 1, 2, ...) */
+  stepIndex?: number;
+  /** Token usage statistics */
+  usage?: UsageStats;
+  /** Reason this inference finished (stop, tool-calls, length, etc.) */
+  finishReason?: string;
+  /** Whether this was a streaming response */
+  streaming?: boolean;
+  /**
+   * When the first token/chunk of the completion was received.
+   * Used to calculate time-to-first-token (TTFT) metrics.
+   * Only applicable for streaming responses.
+   */
+  completionStartTime?: Date;
+  /** Result warnings */
+  warnings?: Record<string, any>;
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string;
+  /** Unique identifier for the response */
+  responseId?: string;
 }
 
 /**
@@ -570,6 +610,7 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
   [SpanType.MODEL_STEP]: ModelStepAttributes;
+  [SpanType.MODEL_INFERENCE]: ModelInferenceAttributes;
   [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [SpanType.TOOL_CALL]: ToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;

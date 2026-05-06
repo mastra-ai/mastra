@@ -3,14 +3,16 @@
     "agent_run: \"agent run: 'test-agent'\"",
     "├── model_generation: \"llm: 'mock-model-id'\"",
     "│   └── model_step: \"step: 0\"",
-    "│       ├── model_chunk: \"chunk: 'text'\"",
-    "│       └── model_chunk: \"chunk: 'object'\"",
+    "│       └── model_inference: \"inference: 0\"",
+    "│           ├── model_chunk: \"chunk: 'text'\"",
+    "│           └── model_chunk: \"chunk: 'object'\"",
     "└── processor_run: \"output stream processor: Structured Output\"",
     "    └── agent_run: \"agent run: 'structured-output-structurer'\"",
     "        └── model_generation: \"llm: 'mock-model-id'\"",
     "            └── model_step: \"step: 0\"",
-    "                ├── model_chunk: \"chunk: 'object'\"",
-    "                └── model_chunk: \"chunk: 'text'\""
+    "                └── model_inference: \"inference: 0\"",
+    "                    ├── model_chunk: \"chunk: 'object'\"",
+    "                    └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -136,12 +138,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -166,8 +168,8 @@
                   "span": {
                     "id": "<span-4>",
                     "traceId": "<trace-1>",
-                    "name": "chunk: 'text'",
-                    "type": "model_chunk",
+                    "name": "inference: 0",
+                    "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
@@ -175,42 +177,87 @@
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
-                      "chunkType": "text",
-                      "sequenceNumber": 0
+                      "stepIndex": 0,
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
+                      },
+                      "finishReason": "stop",
+                      "completionStartTime": "<date>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
                     "output": {
-                      "text": "Mock V2 stream response"
+                      "text": "Mock V2 stream response",
+                      "toolCalls": [],
+                      "object": {
+                        "items": "test structured output"
+                      }
                     }
-                  }
-                },
-                {
-                  "span": {
-                    "id": "<span-5>",
-                    "traceId": "<trace-1>",
-                    "name": "chunk: 'object'",
-                    "type": "model_chunk",
-                    "completed": true,
-                    "isEvent": false,
-                    "isRootSpan": false,
-                    "parentId": "<span-3>",
-                    "entityType": "agent",
-                    "entityId": "test-agent",
-                    "attributes": {
-                      "chunkType": "object",
-                      "sequenceNumber": 1
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-5>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'text'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "test-agent",
+                        "attributes": {
+                          "chunkType": "text",
+                          "sequenceNumber": 0
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "text": "Mock V2 stream response"
+                        }
+                      }
                     },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "environment": "test"
-                    },
-                    "output": {
-                      "items": "test structured output"
+                    {
+                      "span": {
+                        "id": "<span-6>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'object'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "test-agent",
+                        "attributes": {
+                          "chunkType": "object",
+                          "sequenceNumber": 1
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "items": "test structured output"
+                        }
+                      }
                     }
-                  }
+                  ]
                 }
               ]
             }
@@ -218,7 +265,7 @@
         },
         {
           "span": {
-            "id": "<span-6>",
+            "id": "<span-7>",
             "traceId": "<trace-1>",
             "name": "output stream processor: Structured Output",
             "type": "processor_run",
@@ -248,14 +295,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-7>",
+                "id": "<span-8>",
                 "traceId": "<trace-1>",
                 "name": "agent run: 'structured-output-structurer'",
                 "type": "agent_run",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-6>",
+                "parentId": "<span-7>",
                 "entityType": "agent",
                 "entityId": "structured-output-structurer",
                 "attributes": {
@@ -277,14 +324,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-8>",
+                    "id": "<span-9>",
                     "traceId": "<trace-1>",
                     "name": "llm: 'mock-model-id'",
                     "type": "model_generation",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-7>",
+                    "parentId": "<span-8>",
                     "entityType": "agent",
                     "entityId": "structured-output-structurer",
                     "attributes": {
@@ -342,14 +389,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-9>",
+                        "id": "<span-10>",
                         "traceId": "<trace-1>",
                         "name": "step: 0",
                         "type": "model_step",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-8>",
+                        "parentId": "<span-9>",
                         "entityType": "agent",
                         "entityId": "structured-output-structurer",
                         "attributes": {
@@ -370,12 +417,12 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
+                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          },
-                          "environment": "test"
+                          }
                         },
                         "input": [
                           {
@@ -398,51 +445,96 @@
                       "children": [
                         {
                           "span": {
-                            "id": "<span-10>",
-                            "traceId": "<trace-1>",
-                            "name": "chunk: 'object'",
-                            "type": "model_chunk",
-                            "completed": true,
-                            "isEvent": false,
-                            "isRootSpan": false,
-                            "parentId": "<span-9>",
-                            "entityType": "agent",
-                            "entityId": "structured-output-structurer",
-                            "attributes": {
-                              "chunkType": "object",
-                              "sequenceNumber": 0
-                            },
-                            "metadata": {
-                              "runId": "<runId-2>",
-                              "environment": "test"
-                            },
-                            "output": {}
-                          }
-                        },
-                        {
-                          "span": {
                             "id": "<span-11>",
                             "traceId": "<trace-1>",
-                            "name": "chunk: 'text'",
-                            "type": "model_chunk",
+                            "name": "inference: 0",
+                            "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-9>",
+                            "parentId": "<span-10>",
                             "entityType": "agent",
                             "entityId": "structured-output-structurer",
                             "attributes": {
-                              "chunkType": "text",
-                              "sequenceNumber": 1
+                              "stepIndex": 0,
+                              "model": "mock-model-id",
+                              "provider": "mock-provider",
+                              "streaming": true,
+                              "usage": {
+                                "inputTokens": 15,
+                                "outputTokens": 25,
+                                "inputDetails": {
+                                  "text": 15
+                                },
+                                "outputDetails": {
+                                  "text": 25
+                                }
+                              },
+                              "finishReason": "stop",
+                              "completionStartTime": "<date>"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
                             "output": {
-                              "items": "test structured output"
+                              "text": "{\"items\":\"test structured output\"}",
+                              "toolCalls": [],
+                              "object": {
+                                "items": "test structured output"
+                              }
                             }
-                          }
+                          },
+                          "children": [
+                            {
+                              "span": {
+                                "id": "<span-12>",
+                                "traceId": "<trace-1>",
+                                "name": "chunk: 'object'",
+                                "type": "model_chunk",
+                                "completed": true,
+                                "isEvent": false,
+                                "isRootSpan": false,
+                                "parentId": "<span-11>",
+                                "entityType": "agent",
+                                "entityId": "structured-output-structurer",
+                                "attributes": {
+                                  "chunkType": "object",
+                                  "sequenceNumber": 0
+                                },
+                                "metadata": {
+                                  "runId": "<runId-2>",
+                                  "environment": "test"
+                                },
+                                "output": {}
+                              }
+                            },
+                            {
+                              "span": {
+                                "id": "<span-13>",
+                                "traceId": "<trace-1>",
+                                "name": "chunk: 'text'",
+                                "type": "model_chunk",
+                                "completed": true,
+                                "isEvent": false,
+                                "isRootSpan": false,
+                                "parentId": "<span-11>",
+                                "entityType": "agent",
+                                "entityId": "structured-output-structurer",
+                                "attributes": {
+                                  "chunkType": "text",
+                                  "sequenceNumber": 1
+                                },
+                                "metadata": {
+                                  "runId": "<runId-2>",
+                                  "environment": "test"
+                                },
+                                "output": {
+                                  "items": "test structured output"
+                                }
+                              }
+                            }
+                          ]
                         }
                       ]
                     }

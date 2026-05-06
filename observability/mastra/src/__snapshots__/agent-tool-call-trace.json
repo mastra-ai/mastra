@@ -3,11 +3,13 @@
     "agent_run: \"agent run: 'test-agent'\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    ├── model_step: \"step: 0\"",
-    "    │   ├── model_chunk: \"chunk: 'tool-call'\"",
-    "    │   ├── tool_call: \"tool: 'calculator'\"",
-    "    │   └── model_chunk: \"chunk: 'tool-result'\"",
+    "    │   ├── model_inference: \"inference: 0\"",
+    "    │   │   ├── model_chunk: \"chunk: 'tool-call'\"",
+    "    │   │   └── model_chunk: \"chunk: 'tool-result'\"",
+    "    │   └── tool_call: \"tool: 'calculator'\"",
     "    └── model_step: \"step: 1\"",
-    "        └── model_chunk: \"chunk: 'text'\""
+    "        └── model_inference: \"inference: 1\"",
+    "            └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -34,9 +36,7 @@
         },
         "input": "Calculate 5 + 3",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "files": []
         }
       },
@@ -100,9 +100,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -139,12 +137,12 @@
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
                   "threadId": "test-thread-id",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -176,8 +174,8 @@
                   "span": {
                     "id": "<span-4>",
                     "traceId": "<trace-1>",
-                    "name": "chunk: 'tool-call'",
-                    "type": "model_chunk",
+                    "name": "inference: 0",
+                    "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
@@ -185,8 +183,22 @@
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
-                      "chunkType": "tool-call",
-                      "sequenceNumber": 0
+                      "stepIndex": 0,
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 10,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 10
+                        }
+                      },
+                      "finishReason": "tool-calls",
+                      "completionStartTime": "<date>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -195,19 +207,85 @@
                       "environment": "test"
                     },
                     "output": {
-                      "toolName": "calculator",
-                      "toolCallId": "call-calc-1",
-                      "toolInput": {
-                        "operation": "add",
-                        "a": 5,
-                        "b": 3
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-calc-1",
+                          "toolName": "calculator",
+                          "args": {
+                            "operation": "add",
+                            "a": 5,
+                            "b": 3
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-5>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'tool-call'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "test-agent",
+                        "attributes": {
+                          "chunkType": "tool-call",
+                          "sequenceNumber": 0
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "resourceId": "test-resource-id",
+                          "threadId": "test-thread-id",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "toolName": "calculator",
+                          "toolCallId": "call-calc-1",
+                          "toolInput": {
+                            "operation": "add",
+                            "a": 5,
+                            "b": 3
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "span": {
+                        "id": "<span-6>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'tool-result'",
+                        "type": "model_chunk",
+                        "completed": false,
+                        "isEvent": true,
+                        "isRootSpan": false,
+                        "parentId": "<span-4>",
+                        "entityType": "agent",
+                        "entityId": "test-agent",
+                        "attributes": {
+                          "chunkType": "tool-result",
+                          "sequenceNumber": 1
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "resourceId": "test-resource-id",
+                          "threadId": "test-thread-id",
+                          "environment": "test",
+                          "toolCallId": "call-calc-1",
+                          "toolName": "calculator"
+                        }
                       }
                     }
-                  }
+                  ]
                 },
                 {
                   "span": {
-                    "id": "<span-5>",
+                    "id": "<span-7>",
                     "traceId": "<trace-1>",
                     "name": "tool: 'calculator'",
                     "type": "tool_call",
@@ -237,38 +315,12 @@
                       "result": 8
                     }
                   }
-                },
-                {
-                  "span": {
-                    "id": "<span-6>",
-                    "traceId": "<trace-1>",
-                    "name": "chunk: 'tool-result'",
-                    "type": "model_chunk",
-                    "completed": false,
-                    "isEvent": true,
-                    "isRootSpan": false,
-                    "parentId": "<span-3>",
-                    "entityType": "agent",
-                    "entityId": "test-agent",
-                    "attributes": {
-                      "chunkType": "tool-result",
-                      "sequenceNumber": 1
-                    },
-                    "metadata": {
-                      "runId": "<runId-1>",
-                      "resourceId": "test-resource-id",
-                      "threadId": "test-thread-id",
-                      "toolCallId": "call-calc-1",
-                      "toolName": "calculator",
-                      "environment": "test"
-                    }
-                  }
                 }
               ]
             },
             {
               "span": {
-                "id": "<span-7>",
+                "id": "<span-8>",
                 "traceId": "<trace-1>",
                 "name": "step: 1",
                 "type": "model_step",
@@ -298,12 +350,12 @@
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
                   "threadId": "test-thread-id",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -324,28 +376,40 @@
                   }
                 ],
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "toolCalls": []
                 }
               },
               "children": [
                 {
                   "span": {
-                    "id": "<span-8>",
+                    "id": "<span-9>",
                     "traceId": "<trace-1>",
-                    "name": "chunk: 'text'",
-                    "type": "model_chunk",
+                    "name": "inference: 1",
+                    "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-7>",
+                    "parentId": "<span-8>",
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
-                      "chunkType": "text",
-                      "sequenceNumber": 0
+                      "stepIndex": 1,
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
+                      },
+                      "finishReason": "stop",
+                      "completionStartTime": "<date>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -354,11 +418,39 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      "text": "Mock V2 stream response",
+                      "toolCalls": []
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-10>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'text'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-9>",
+                        "entityType": "agent",
+                        "entityId": "test-agent",
+                        "attributes": {
+                          "chunkType": "text",
+                          "sequenceNumber": 0
+                        },
+                        "metadata": {
+                          "runId": "<runId-1>",
+                          "resourceId": "test-resource-id",
+                          "threadId": "test-thread-id",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "text": "Mock V2 stream response"
+                        }
                       }
                     }
-                  }
+                  ]
                 }
               ]
             }
