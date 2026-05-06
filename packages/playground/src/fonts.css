@@ -6,7 +6,7 @@
  */
 
 @font-face {
-  font-family: 'Geist';
+  font-family: Geist;
   src:
     local('Geist'),
     url('./assets/fonts/GeistVariableVF.woff2') format('woff2-variations');
@@ -14,8 +14,9 @@
   font-style: normal;
   font-display: swap;
 }
+
 @font-face {
-  font-family: 'GeistMono';
+  font-family: GeistMono;
   src:
     local('GeistMono'),
     url('./assets/fonts/GeistMonoVariableVF.woff2') format('woff2-variations');
@@ -23,10 +24,13 @@
   font-style: normal;
   font-display: swap;
 }
+
 @font-face {
-  font-family: 'TasaExplorer';
+  font-family: TasaExplorer;
   src:
     local('TasaExplorer'),
     url('./assets/fonts/TASAExplorerVF.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
   font-display: swap;
 }

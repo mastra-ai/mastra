@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added role-based semantic font tokens so consumers can swap fonts in one declaration. Components now reference `--font-display` (headlines, brand) and `--font-body` (UI, paragraphs) instead of type-based `--font-sans` / `--font-serif`. Existing utilities keep working through backward-compat aliases.
+Added role-based semantic font tokens so consumers can swap fonts in one declaration. Components now reference `--font-display` (headlines, brand) and `--font-body` (UI, paragraphs) instead of type-based `--font-sans` / `--font-serif`. Existing utilities keep working through backward-compat aliases (`--font-sans` → `--font-body`, `--font-serif` → `--font-display`).
 
 **Override fonts in your app**
 
@@ -14,6 +14,6 @@ Added role-based semantic font tokens so consumers can swap fonts in one declara
 }
 ```
 
-**Removed raw font-name vars** — `var(--geist-mono)`, `var(--font-inter)`, `var(--tasa-explorer)`. Code components that referenced these directly (e.g. `<CodeEditor>`, `<CodeDiff>`) now resolve through `var(--font-mono)` so a single token override propagates to every code surface.
+**Backward-compat for existing consumers** — the legacy raw font-name vars `--geist-mono`, `--font-inter`, `--tasa-explorer` continue to resolve via aliases to the semantic tokens, so any `font-family: var(--geist-mono)` keeps working without code changes. New code should reference `var(--font-mono)` directly.
 
 The package no longer ships font files — defaults are system fonts. Bring your own fonts via `@font-face` in your app and override the tokens above.

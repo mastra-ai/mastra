@@ -8,8 +8,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Font face declarations live in `./fonts.css` so consumers can import them
- * separately and so font files ship as static assets (not base64-inlined).
+ * This package ships no font files. Declare your own `@font-face` rules and
+ * override --font-display / --font-body / --font-mono in :root to apply them.
  */
 
 /* Base CSS variables - must be defined before @theme references them */
@@ -19,6 +19,15 @@
  * predictable lightness across hues. Do not convert back to hex/rgba.
  */
 :root {
+  /*
+   * Backward-compat aliases for legacy raw font-name CSS custom properties.
+   * New code should reference the semantic tokens (--font-display,
+   * --font-body, --font-mono) directly.
+   */
+  --geist-mono: var(--font-mono);
+  --font-inter: var(--font-body);
+  --tasa-explorer: var(--font-display);
+
   /* Dark theme (default) */
   --surface1: oklch(0.141 0 0);
   --surface2: oklch(0.179 0 0);
@@ -331,10 +340,11 @@ html.light {
    * this package has no font-licensing footprint. Consumers override these
    * tokens in their own CSS to apply branded fonts (e.g., Greed, Geist).
    */
-  --font-display: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-display: ui-serif, georgia, cambria, 'Times New Roman', times, serif;
   --font-body:
     system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-mono: ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+
   /* Backward-compat aliases — Tailwind utilities `font-sans` / `font-serif` keep working. */
   --font-sans: var(--font-body);
   --font-serif: var(--font-display);
