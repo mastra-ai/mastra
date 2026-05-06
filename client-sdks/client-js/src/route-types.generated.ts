@@ -75868,6 +75868,47 @@ export interface GetEditorBuilderSettings_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /editor/builder/infrastructure
+// ============================================================================
+export type GetEditorBuilderInfrastructure_Response = {
+  channels: {
+    providers: {
+      id: string;
+      name: string;
+      isConfigured: boolean;
+    }[];
+  };
+  browser: {
+    provider: string | null;
+    env: string | null;
+    registered: boolean;
+  };
+  workspaces: {
+    id: string;
+    source: string;
+    agentId?: string | undefined;
+    agentName?: string | undefined;
+    hasFilesystem: boolean;
+    hasSandbox: boolean;
+  }[];
+};
+
+export type GetEditorBuilderInfrastructure_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderInfrastructure_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorBuilderInfrastructure_Request;
+  response: GetEditorBuilderInfrastructure_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /schedules
 // ============================================================================
 export type GetSchedules_QueryParams = {
@@ -76720,6 +76761,7 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /schedules': GetSchedules_RouteContract;
   'GET /schedules/:scheduleId': GetSchedulesScheduleId_RouteContract;
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
@@ -77008,6 +77050,9 @@ export interface Client {
   };
   '/datasets/cluster-failures': {
     POST: PostDatasetsClusterFailures_RouteContract;
+  };
+  '/editor/builder/infrastructure': {
+    GET: GetEditorBuilderInfrastructure_RouteContract;
   };
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;

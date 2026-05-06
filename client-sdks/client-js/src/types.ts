@@ -2832,3 +2832,32 @@ export interface BuilderPickerResponse {
   visibleAgents: string[] | null;
   visibleWorkflows: string[] | null;
 }
+
+/**
+ * Response from GET /editor/builder/infrastructure
+ *
+ * Admin-only snapshot of the runtime state of Mastra-opinionated primitives
+ * (channels, browser, workspaces). Used by the Studio Settings page.
+ */
+export interface InfrastructureStatusResponse {
+  channels: {
+    providers: Array<{
+      id: string;
+      name: string;
+      isConfigured: boolean;
+    }>;
+  };
+  browser: {
+    provider: string | null;
+    env: string | null;
+    registered: boolean;
+  };
+  workspaces: Array<{
+    id: string;
+    source: string;
+    agentId?: string;
+    agentName?: string;
+    hasFilesystem: boolean;
+    hasSandbox: boolean;
+  }>;
+}

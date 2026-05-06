@@ -146,6 +146,7 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
+  InfrastructureStatusResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -1548,6 +1549,15 @@ export class MastraClient extends BaseResource {
    */
   public getBuilderSettings(): Promise<BuilderSettingsResponse> {
     return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves runtime infrastructure status (channels, browser, workspaces).
+   * Admin-only — requires the `*` permission.
+   * @returns Promise containing infrastructure status
+   */
+  public getInfrastructureStatus(): Promise<InfrastructureStatusResponse> {
+    return this.request('/editor/builder/infrastructure');
   }
 
   // ============================================================================

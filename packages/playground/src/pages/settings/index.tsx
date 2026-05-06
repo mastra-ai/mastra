@@ -12,6 +12,8 @@ import {
   useTheme,
 } from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
+import { InfrastructureSection } from './infrastructure-section';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 
@@ -26,6 +28,8 @@ const isTheme = (value: string): value is Theme => THEME_OPTIONS.some(option => 
 export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
   const { theme, setTheme } = useTheme();
+  const { hasPermission } = usePermissions();
+  const canViewInfrastructure = hasPermission('infrastructure:read');
 
   return (
     <PageLayout width="narrow">
@@ -66,6 +70,8 @@ export const StudioSettingsPage = () => {
         >
           <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
         </SectionCard>
+
+        {canViewInfrastructure && <InfrastructureSection />}
       </PageLayout.MainArea>
     </PageLayout>
   );

@@ -2,8 +2,12 @@ import type { Mastra } from '@mastra/core';
 
 import { builderToModelPolicy, resolvePickerVisibility } from '@mastra/core/agent-builder/ee';
 import { HTTPException } from '../http-exception';
-import { agentFeaturesSchema, builderSettingsResponseSchema } from '../schemas/editor-builder';
-import type { AgentFeatures } from '../schemas/editor-builder';
+import {
+  agentFeaturesSchema,
+  builderSettingsResponseSchema,
+  infrastructureStatusResponseSchema,
+} from '../schemas/editor-builder';
+import type { AgentFeatures, InfrastructureStatus } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
@@ -160,6 +164,83 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error getting builder settings');
+    }
+  },
+});
+
+/**
+ * GET /editor/builder/infrastructure
+ *
+ * Returns the runtime status of Mastra-opinionated primitives (channels,
+ * browser providers, workspaces). Admin-only; surfaced in Studio Settings so
+ * admins can sanity-check what's wired up to the running server.
+ */
+export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/editor/builder/infrastructure',
+  responseType: 'json',
+  responseSchema: infrastructureStatusResponseSchema,
+  summary: 'Get infrastructure status',
+  description: 'Admin-only summary of channels, browser, and workspaces wired into the running Mastra server.',
+  tags: ['Editor'],
+  requiresAuth: true,
+  requiresPermission: 'infrastructure:read',
+  handler: async ({ mastra }) => {
+    try {
+      const channelProviders = mastra.getChannelProviders() ?? {};
+      const channels: InfrastructureStatus['channels'] = {
+        providers: Object.entries(channelProviders).map(([id, provider]) => {
+          const info = provider.getInfo?.();
+          return {
+            id: info?.id ?? id,
+            name: info?.name ?? id,
+            isConfigured: info?.isConfigured ?? false,
+          };
+        }),
+      };
+
+      const editor = mastra.getEditor();
+      let browser: InfrastructureStatus['browser'] = { provider: null, env: null, registered: false };
+      if (editor) {
+        const browsers = (editor as unknown as { __browsers?: Map<string, unknown> }).__browsers;
+        let providerId: string | null = null;
+        let env: string | null = null;
+        if (typeof editor.resolveBuilder === 'function') {
+          try {
+            const builder = await editor.resolveBuilder();
+            const browserRef = builder?.getConfiguration?.()?.agent?.browser as
+              | { type?: string; config?: { provider?: string; env?: string } }
+              | undefined;
+            if (browserRef?.type === 'inline' && browserRef.config) {
+              providerId = browserRef.config.provider ?? null;
+              env = browserRef.config.env ?? null;
+            }
+          } catch {
+            // Builder not configured — leave provider/env as null.
+          }
+        }
+        browser = {
+          provider: providerId,
+          env,
+          registered: providerId ? !!browsers?.has(providerId) : false,
+        };
+      }
+
+      const registeredWorkspaces = mastra.listWorkspaces();
+      const workspaces: InfrastructureStatus['workspaces'] = Object.entries(registeredWorkspaces).map(
+        ([id, registered]) => ({
+          id,
+          source: registered.source,
+          ...(registered.agentId ? { agentId: registered.agentId } : {}),
+          ...(registered.agentName ? { agentName: registered.agentName } : {}),
+          hasFilesystem: !!registered.workspace.filesystem,
+          hasSandbox: !!registered.workspace.sandbox,
+        }),
+      );
+
+      return { channels, browser, workspaces };
+    } catch (error) {
+      return handleError(error, 'Error getting infrastructure status');
     }
   },
 });

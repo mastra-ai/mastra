@@ -176,6 +176,43 @@ export const builderSettingsResponseSchema = z.object({
   modelPolicyWarnings: z.array(z.string()).optional(),
 });
 
+/**
+ * Infrastructure status response for the admin Settings page.
+ *
+ * Reports the runtime state of Mastra-opinionated primitives (channels,
+ * browser, workspaces) so admins can sanity-check what's wired up.
+ *
+ * Returned by `GET /editor/builder/infrastructure`. Admin-only (`*`).
+ */
+export const infrastructureStatusResponseSchema = z.object({
+  channels: z.object({
+    providers: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        isConfigured: z.boolean(),
+      }),
+    ),
+  }),
+  browser: z.object({
+    provider: z.string().nullable(),
+    env: z.string().nullable(),
+    registered: z.boolean(),
+  }),
+  workspaces: z.array(
+    z.object({
+      id: z.string(),
+      source: z.string(),
+      agentId: z.string().optional(),
+      agentName: z.string().optional(),
+      hasFilesystem: z.boolean(),
+      hasSandbox: z.boolean(),
+    }),
+  ),
+});
+
+export type InfrastructureStatus = z.infer<typeof infrastructureStatusResponseSchema>;
+
 export type AgentFeatures = z.infer<typeof agentFeaturesSchema>;
 export type AgentConfiguration = z.infer<typeof agentConfigurationSchema>;
 export type BuilderSettingsResponse = z.infer<typeof builderSettingsResponseSchema>;
