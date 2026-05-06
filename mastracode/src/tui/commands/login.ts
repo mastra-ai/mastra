@@ -2,6 +2,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
+import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 async function performLogin(ctx: SlashCommandContext, providerId: string): Promise<void> {
@@ -24,11 +25,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
       resolve();
     });
 
-    ctx.state.ui.showOverlay(dialog, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, dialog, { widthPercent: 0.8, maxHeight: '60%' });
     dialog.focused = true;
 
     ctx

@@ -8,6 +8,7 @@ import type { SelectItem } from '@mariozechner/pi-tui';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
 import type { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { showModalOverlay } from '../overlay.js';
 import { getSelectListTheme, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -202,11 +203,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         },
       });
 
-      ctx.state.ui.showOverlay(dialog, {
-        width: '70%',
-        maxHeight: '50%',
-        anchor: 'center',
-      });
+      showModalOverlay(ctx.state.ui, dialog, { widthPercent: 0.7, maxHeight: '50%' });
       dialog.focused = true;
     };
 

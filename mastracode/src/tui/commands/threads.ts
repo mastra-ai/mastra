@@ -2,6 +2,7 @@ import { Spacer } from '@mariozechner/pi-tui';
 import { ThreadLockError } from '../../utils/thread-lock.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
+import { showModalOverlay } from '../overlay.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -179,11 +180,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       },
     });
 
-    state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
     selector.focused = true;
   });
 }

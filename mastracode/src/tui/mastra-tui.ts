@@ -41,6 +41,7 @@ import type { ModelItem } from './components/model-selector.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
@@ -806,11 +807,7 @@ export class MastraTUI {
         resolve();
       });
 
-      this.state.ui.showOverlay(dialog, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
+      showModalOverlay(this.state.ui, dialog, { widthPercent: 0.8, maxHeight: '60%' });
       dialog.focused = true;
 
       this.state
@@ -891,11 +888,13 @@ export class MastraTUI {
         previous,
         onComplete: async (result: OnboardingResult) => {
           this.state.activeOnboarding = undefined;
+          this.state.ui.hideOverlay();
           await this.applyOnboardingResult(result);
           resolve();
         },
         onCancel: () => {
           this.state.activeOnboarding = undefined;
+          this.state.ui.hideOverlay();
           const settings = loadSettings();
           if (!settings.onboarding.completedAt) {
             settings.onboarding.skippedAt = new Date().toISOString();
@@ -941,22 +940,15 @@ export class MastraTUI {
               },
             });
 
-            this.state.ui.showOverlay(selector, {
-              width: '80%',
-              maxHeight: '60%',
-              anchor: 'center',
-            });
+            showModalOverlay(this.state.ui, selector, { maxHeight: '75%' });
             selector.focused = true;
           });
         },
       });
 
       this.state.activeOnboarding = component;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(component);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
+      showModalOverlay(this.state.ui, component, { maxHeight: '80%' });
+      component.focused = true;
     });
   }
 
