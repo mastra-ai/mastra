@@ -88,6 +88,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-visually-hidden": "^1.2.4",
+    "@tanstack/react-virtual": "^3.13.22",
     "@uiw/codemirror-theme-dracula": "^4.25.9",
     "@uiw/react-codemirror": "^4.25.9",
     "cmdk": "^1.1.1",
