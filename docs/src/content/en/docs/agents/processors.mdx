@@ -218,21 +218,21 @@ The method receives the current `stepNumber`, `model`, `tools`, `toolChoice`, `m
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinputstep) for all available arguments and return types.
 
-### Rewrite the LLM prompt before the provider call
+### Rewrite the LLM request before the provider call
 
-Use `processLLMPrompt()` when you need to rewrite the final prompt that Mastra sends to the model. This hook runs after Mastra converts the `MessageList` into the LLM prompt format (`LanguageModelV2Prompt`) and immediately before the provider call.
+Use `processLLMRequest()` when you need to rewrite the final prompt that Mastra sends to the model. This hook runs after Mastra converts the `MessageList` into the provider-facing prompt format (`LanguageModelV2Prompt`) and immediately before the provider call.
 
 Use the message-based hooks for conversation changes:
 
 - `processInput()`: Change the conversation once before the agentic loop starts.
 - `processInputStep()`: Change messages or step configuration before each LLM call.
-- `processLLMPrompt()`: Change only the outbound prompt for the current provider call.
+- `processLLMRequest()`: Change only the outbound prompt for the current provider call.
 
-Changes returned from `processLLMPrompt()` are transient. They don't persist back to `MessageList`, memory, UI history, or future provider calls. This makes the hook a good fit for provider compatibility rewrites, role/content normalization, or other model-specific prompt changes that shouldn't alter stored conversation history.
+Changes returned from `processLLMRequest()` are transient. They don't persist back to `MessageList`, memory, UI history, or future provider calls. This makes the hook a good fit for provider compatibility rewrites, role/content normalization, or other model-specific prompt changes that shouldn't alter stored conversation history.
 
-The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the shared processor context. Calling `abort()` from `processLLMPrompt()` emits the normal tripwire response and stops the call.
+The method receives `prompt`, `model`, `stepNumber`, `steps`, `state`, and the shared processor context. Calling `abort()` from `processLLMRequest()` emits the normal tripwire response and stops the call.
 
-See the [`Processor` reference](/reference/processors/processor-interface#processllmprompt) for all available arguments and return types.
+See the [`Processor` reference](/reference/processors/processor-interface#processllmrequest) for all available arguments and return types.
 
 ### Use the `prepareStep()` callback
 
@@ -409,7 +409,7 @@ See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-proc
 
 ### `ProviderHistoryCompat`
 
-Handles provider-specific history incompatibilities when agents reuse messages across model providers. It can rewrite the outbound LLM prompt before the provider call, or recover from known provider API errors and retry.
+Handles provider-specific history incompatibilities when agents reuse messages across model providers. It can rewrite the outbound LLM request before the provider call, or recover from known provider API errors and retry.
 
 Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering.
 

@@ -965,11 +965,11 @@ export class Agent<
   }
 
   /**
-   * Resolves and returns input processors for the provider-boundary LLM prompt hook.
-   * These processors stay uncombined because processLLMPrompt runs after conversion to model prompt format.
+   * Resolves and returns input processors for the provider-boundary LLM request hook.
+   * These processors stay uncombined because processLLMRequest runs after conversion to model prompt format.
    * @internal
    */
-  private async listResolvedLLMPromptProcessors(
+  private async listResolvedLLMRequestProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
   ): Promise<InputProcessorOrWorkflow[]> {
@@ -5247,13 +5247,13 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
       }) => this.listResolvedInputProcessors(requestContext, overrides),
-      llmPromptInputProcessors: async ({
+      llmRequestInputProcessors: async ({
         requestContext,
         overrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedLLMPromptProcessors(requestContext, overrides),
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
       outputProcessors: async ({
         requestContext,
         overrides,

@@ -34,7 +34,7 @@ The seven processor methods run at different points in the agent execution lifec
 │  │             │                                           │    │
 │  │             ▼                                           │    │
 │  │  ┌─────────────────────┐                                │    │
-│  │  │  processLLMPrompt   │  ← Runs before provider call   │    │
+│  │  │  processLLMRequest   │  ← Runs before provider call   │    │
 │  │  └──────────┬──────────┘                                │    │
 │  │             │                                           │    │
 │  │             ▼                                           │    │
@@ -75,7 +75,7 @@ The seven processor methods run at different points in the agent execution lifec
 | - | - | - |
 | `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
 | `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
-| `processLLMPrompt` | After LLM prompt conversion, before the provider call | Rewrite the outbound `LanguageModelV2Prompt` for the current call without persisting changes |
+| `processLLMRequest` | After LLM request conversion, before the provider call | Rewrite the outbound `LanguageModelV2Prompt` for the current call without persisting changes |
 | `processAPIError` | When an LLM API call fails | Inspect API rejections, optionally mutate state/messages, and request a retry |
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
 | `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
@@ -110,9 +110,9 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
     | void
     | undefined
 
-  processLLMPrompt?(
-    args: ProcessLLMPromptArgs<TTripwireMetadata>,
-  ): Promise<ProcessLLMPromptResult> | ProcessLLMPromptResult
+  processLLMRequest?(
+    args: ProcessLLMRequestArgs<TTripwireMetadata>,
+  ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult
 
   processAPIError?(
     args: ProcessAPIErrorArgs<TTripwireMetadata>,
@@ -342,7 +342,7 @@ processInputStep?<TTripwireMetadata = unknown>(
 1. `processInput` (once at start)
 1. `processInputStep` from inputProcessors (at each step, before LLM call)
 1. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
-1. `processLLMPrompt` from inputProcessors (after prompt conversion, before the provider call)
+1. `processLLMRequest` from inputProcessors (after prompt conversion, before the provider call)
 1. LLM execution
 1. Tool execution (if needed)
 1. Repeat from step 2 if tools were called
@@ -555,26 +555,26 @@ System messages are **reset to their original values** at the start of each step
 
 ---
 
-### `processLLMPrompt`
+### `processLLMRequest`
 
-Processes the final LLM prompt after Mastra converts the `MessageList` into `LanguageModelV2Prompt` and before the provider call. Use this method for transient, model-aware rewrites that should affect only the current outbound request.
+Processes the final LLM request after Mastra converts the `MessageList` into `LanguageModelV2Prompt` and before the provider call. Use this method for transient, model-aware rewrites that should affect only the current outbound request.
 
 Returned prompt changes are forwarded to the model for the current call only. They are not persisted back to `MessageList`, memory, UI history, or later provider calls.
 
 ```typescript prettier:false
-processLLMPrompt?(
-  args: ProcessLLMPromptArgs,
+processLLMRequest?(
+  args: ProcessLLMRequestArgs,
 ): Promise<LanguageModelV2Prompt | undefined | void> | LanguageModelV2Prompt | undefined | void;
 ```
 
-#### `ProcessLLMPromptArgs`
+#### `ProcessLLMRequestArgs`
 
 <PropertiesTable
   content={[
   {
     name: 'prompt',
     type: 'LanguageModelV2Prompt',
-    description: 'The LLM prompt that will be sent to the provider for this call.',
+    description: 'The LLM request prompt that will be sent to the provider for this call.',
     isOptional: false,
   },
   {
@@ -645,7 +645,7 @@ processLLMPrompt?(
 
 #### Return value
 
-`processLLMPrompt` returns `LanguageModelV2Prompt | undefined | void`.
+`processLLMRequest` returns `LanguageModelV2Prompt | undefined | void`.
 
 - Return a `LanguageModelV2Prompt` to replace the outbound prompt for the current provider call.
 - Return `undefined` or `void` to forward the original prompt unchanged.

@@ -175,7 +175,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         expect(result.text).toContain('Processor was here!');
       });
 
-      it('should run processLLMPrompt through the explicit LLM prompt processor path', async () => {
+      it('should run processLLMRequest through the explicit LLM request processor path', async () => {
         if (version === 'v1') return;
 
         const processor1 = {
@@ -186,20 +186,20 @@ function inputProcessorTests(version: 'v1' | 'v2') {
             return messages;
           },
         };
-        const processLLMPrompt = vi.fn(async ({ prompt }) => {
+        const processLLMRequest = vi.fn(async ({ prompt }) => {
           return prompt.map(message =>
             message.role === 'user'
               ? {
                   ...message,
-                  content: [{ type: 'text', text: 'Prompt processor was here' }],
+                  content: [{ type: 'text', text: 'Request processor was here' }],
                 }
               : message,
           );
         });
         const processor2 = {
-          id: 'prompt-processor',
-          name: 'Prompt Processor',
-          processLLMPrompt,
+          id: 'request-processor',
+          name: 'Request Processor',
+          processLLMRequest,
         };
 
         const agentWithProcessors = new Agent({
@@ -212,8 +212,8 @@ function inputProcessorTests(version: 'v1' | 'v2') {
 
         const result = await agentWithProcessors.generate('Hello');
 
-        expect(processLLMPrompt).toHaveBeenCalledTimes(1);
-        expect(result.text).toContain('Prompt processor was here');
+        expect(processLLMRequest).toHaveBeenCalledTimes(1);
+        expect(result.text).toContain('Request processor was here');
         expect(result.text).not.toContain('Input processor was here');
       });
 

@@ -47,31 +47,31 @@ import type { CollectedChunk } from './build-messages-from-chunks';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
-function getPromptInputProcessors({
+function getRequestInputProcessors({
   inputProcessors,
-  llmPromptInputProcessors,
+  llmRequestInputProcessors,
 }: {
   inputProcessors?: InputProcessorOrWorkflow[];
-  llmPromptInputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
 }): InputProcessorOrWorkflow[] {
-  if (!llmPromptInputProcessors?.length) {
+  if (!llmRequestInputProcessors?.length) {
     return inputProcessors || [];
   }
 
   if (!inputProcessors?.length) {
-    return llmPromptInputProcessors;
+    return llmRequestInputProcessors;
   }
 
-  const promptProcessorIds = new Set(
-    llmPromptInputProcessors.filter(processor => !isProcessorWorkflow(processor)).map(processor => processor.id),
+  const requestProcessorIds = new Set(
+    llmRequestInputProcessors.filter(processor => !isProcessorWorkflow(processor)).map(processor => processor.id),
   );
   const additionalInputProcessors = inputProcessors.filter(
-    processor => !isProcessorWorkflow(processor) && !promptProcessorIds.has(processor.id),
+    processor => !isProcessorWorkflow(processor) && !requestProcessorIds.has(processor.id),
   );
 
   return additionalInputProcessors.length
-    ? [...llmPromptInputProcessors, ...additionalInputProcessors]
-    : llmPromptInputProcessors;
+    ? [...llmRequestInputProcessors, ...additionalInputProcessors]
+    : llmRequestInputProcessors;
 }
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
@@ -436,7 +436,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   structuredOutput,
   outputProcessors,
   inputProcessors,
-  llmPromptInputProcessors,
+  llmRequestInputProcessors,
   errorProcessors,
   logger,
   agentId,
@@ -814,25 +814,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
-          // Run `processLLMPrompt` for any input processors that implement it.
+          // Run `processLLMRequest` for any input processors that implement it.
           // This hook lets processors rewrite the outbound prompt transiently
           // without persisting changes back to the message list.
           {
-            const promptStepRunner = new ProcessorRunner({
-              inputProcessors: getPromptInputProcessors({ inputProcessors, llmPromptInputProcessors }),
+            const requestStepRunner = new ProcessorRunner({
+              inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
               outputProcessors: [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
               processorStates,
             });
-            const promptStepWriter: ProcessorStreamWriter | undefined = outputWriter
+            const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
               ? {
                   custom: async (data: { type: string }, options?: { messageId?: string }) =>
                     outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
                 }
               : undefined;
             try {
-              const promptStepResult = await promptStepRunner.runProcessLLMPrompt({
+              const requestStepResult = await requestStepRunner.runProcessLLMRequest({
                 prompt: inputMessages,
                 model: currentStep.model,
                 stepNumber: inputData.output?.steps?.length || 0,
@@ -840,13 +840,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 retryCount: inputData.processorRetryCount || 0,
                 requestContext,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                writer: promptStepWriter,
+                writer: requestStepWriter,
                 abortSignal: options?.abortSignal,
               });
-              inputMessages = promptStepResult.prompt;
+              inputMessages = requestStepResult.prompt;
             } catch (error) {
               if (error instanceof TripWire) {
-                logger?.warn('Streaming prompt processor tripwire triggered', {
+                logger?.warn('Streaming request processor tripwire triggered', {
                   reason: error.message,
                   processorId: error.processorId,
                   retry: error.options?.retry,
@@ -862,7 +862,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   _internal: _internal!,
                 });
               }
-              logger?.error('Error in processLLMPrompt processors:', error);
+              logger?.error('Error in processLLMRequest processors:', error);
               throw error;
             }
           }

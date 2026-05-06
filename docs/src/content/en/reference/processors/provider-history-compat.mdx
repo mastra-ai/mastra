@@ -73,8 +73,8 @@ Mastra agents don't add this processor automatically. Add it explicitly when you
     isOptional: false,
   },
   {
-    name: 'processLLMPrompt',
-    type: '(args: ProcessLLMPromptArgs) => ProcessLLMPromptResult',
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => ProcessLLMRequestResult',
     description:
       'Runs preemptive compatibility rules against the converted LanguageModelV2Prompt immediately before the provider call. Returned prompt changes are transient and are not persisted to memory or message history.',
     isOptional: false,
@@ -99,7 +99,7 @@ Mastra agents don't add this processor automatically. Add it explicitly when you
 | `cerebras-strip-reasoning-content` | Cerebras | Preemptive prompt rewrite | Removes assistant `reasoning` parts from the outbound prompt so they're not serialized as unsupported `reasoning_content` fields. |
 | `anthropic-strip-foreign-reasoning-content` | Anthropic | Preemptive prompt rewrite | Removes non-Anthropic assistant `reasoning` parts from the outbound prompt. Anthropic-native thinking history is preserved. |
 
-Preemptive rules run through `processLLMPrompt` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call.
+Preemptive rules run through `processLLMRequest` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call.
 
 Reactive rules run through `processAPIError` after a provider rejection. They can update the persisted `messageList` and request a retry.
 

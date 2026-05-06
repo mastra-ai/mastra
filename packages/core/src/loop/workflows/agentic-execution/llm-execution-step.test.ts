@@ -781,8 +781,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  it('runs processLLMPrompt before invoking the model without persisting prompt changes', async () => {
-    const processLLMPrompt = vi.fn(async ({ prompt }: any) =>
+  it('runs processLLMRequest before invoking the model without persisting prompt changes', async () => {
+    const processLLMRequest = vi.fn(async ({ prompt }: any) =>
       prompt.map((message: any) =>
         message.role === 'user'
           ? {
@@ -828,7 +828,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
           } as any,
         },
       ],
-      inputProcessors: [{ id: 'rewrite-prompt', processLLMPrompt }],
+      inputProcessors: [{ id: 'rewrite-prompt', processLLMRequest }],
       tools: {},
       streamState: {
         serialize: vi.fn(),
@@ -853,8 +853,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       }),
     );
 
-    expect(processLLMPrompt).toHaveBeenCalledOnce();
-    expect(processLLMPrompt).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 2 }));
+    expect(processLLMRequest).toHaveBeenCalledOnce();
+    expect(processLLMRequest).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 2 }));
     expect(doStream).toHaveBeenCalledOnce();
     expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual(
       expect.arrayContaining([
@@ -876,8 +876,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     );
   });
 
-  it('runs processLLMPrompt from both prompt-specific and direct input processor lists', async () => {
-    const appendToUserPrompt =
+  it('runs processLLMRequest from both request-specific and direct input processor lists', async () => {
+    const appendToUserRequestPrompt =
       (suffix: string) =>
       async ({ prompt }: any) =>
         prompt.map((message: any) => {
@@ -890,8 +890,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
             content: [{ type: 'text' as const, text: `${text} ${suffix}` }],
           };
         });
-    const llmPromptProcessor = vi.fn(appendToUserPrompt('from prompt list'));
-    const inputProcessor = vi.fn(appendToUserPrompt('from input list'));
+    const llmRequestProcessor = vi.fn(appendToUserRequestPrompt('from request list'));
+    const inputProcessor = vi.fn(appendToUserRequestPrompt('from input list'));
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([
         {
@@ -928,8 +928,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
           } as any,
         },
       ],
-      llmPromptInputProcessors: [{ id: 'llm-prompt-processor', processLLMPrompt: llmPromptProcessor }],
-      inputProcessors: [{ id: 'input-prompt-processor', processLLMPrompt: inputProcessor }],
+      llmRequestInputProcessors: [{ id: 'llm-request-processor', processLLMRequest: llmRequestProcessor }],
+      inputProcessors: [{ id: 'input-request-processor', processLLMRequest: inputProcessor }],
       tools: {},
       streamState: {
         serialize: vi.fn(),
@@ -949,13 +949,13 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
 
-    expect(llmPromptProcessor).toHaveBeenCalledOnce();
+    expect(llmRequestProcessor).toHaveBeenCalledOnce();
     expect(inputProcessor).toHaveBeenCalledOnce();
     expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'user',
-          content: [{ type: 'text', text: 'Find the latest AI agent news from prompt list from input list' }],
+          content: [{ type: 'text', text: 'Find the latest AI agent news from request list from input list' }],
         }),
       ]),
     );
@@ -1082,7 +1082,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     );
   });
 
-  it('bails with a tripwire response when processLLMPrompt aborts', async () => {
+  it('bails with a tripwire response when processLLMRequest aborts', async () => {
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([
         {
@@ -1122,7 +1122,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       inputProcessors: [
         {
           id: 'prompt-abort',
-          processLLMPrompt: vi.fn(async ({ abort }) => {
+          processLLMRequest: vi.fn(async ({ abort }) => {
             abort('Prompt aborted', { metadata: { phase: 'prompt' } });
           }),
         },

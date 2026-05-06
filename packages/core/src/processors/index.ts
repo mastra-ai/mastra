@@ -231,7 +231,7 @@ export type ProcessInputStepResult = {
 export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModel };
 
 /**
- * Arguments for processLLMPrompt method.
+ * Arguments for processLLMRequest method.
  *
  * Called *after* `MessageList` has been converted to the LLM-shaped prompt
  * (`LanguageModelV2Prompt`) and *before* the prompt is forwarded to the
@@ -240,8 +240,8 @@ export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & 
  * tool-result formats, etc. can be rewritten transiently without losing data
  * in memory, UI, or future model swaps.
  */
-export interface ProcessLLMPromptArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
-  /** The LLM prompt that will be sent to the provider on this call. Processors may return a modified copy. */
+export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
+  /** The LLM request prompt that will be sent to the provider on this call. Processors may return a modified copy. */
   prompt: LanguageModelV2Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
@@ -254,10 +254,10 @@ export interface ProcessLLMPromptArgs<TTripwireMetadata = unknown> extends Proce
 }
 
 /**
- * Result from processLLMPrompt method. Returning `undefined` (or `void`)
+ * Result from processLLMRequest method. Returning `undefined` (or `void`)
  * indicates no changes — the original prompt is forwarded as-is.
  */
-export type ProcessLLMPromptResult = LanguageModelV2Prompt | undefined | void;
+export type ProcessLLMRequestResult = LanguageModelV2Prompt | undefined | void;
 
 /**
  * Arguments for processOutputStream method
@@ -439,9 +439,9 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * Return the modified prompt to forward your version, or `undefined`/`void`
    * to pass the original prompt through unchanged.
    */
-  processLLMPrompt?(
-    args: ProcessLLMPromptArgs<TTripwireMetadata>,
-  ): Promise<ProcessLLMPromptResult> | ProcessLLMPromptResult;
+  processLLMRequest?(
+    args: ProcessLLMRequestArgs<TTripwireMetadata>,
+  ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult;
 
   /**
    * Process output after each LLM response in the agentic loop, before tool execution.
@@ -524,12 +524,12 @@ export abstract class BaseProcessor<TId extends string = string, TTripwireMetada
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
-// InputProcessor requires processInput, processInputStep, or processLLMPrompt (or any combination)
+// InputProcessor requires processInput, processInputStep, or processLLMRequest (or any combination)
 export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
       Processor<string, TTripwireMetadata>)
-  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMPrompt'> &
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMRequest'> &
       Processor<string, TTripwireMetadata>);
 
 // OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
@@ -599,7 +599,7 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
     !('processOutputStream' in obj) &&
     !('processOutputResult' in obj) &&
     !('processOutputStep' in obj) &&
-    !('processLLMPrompt' in obj) &&
+    !('processLLMRequest' in obj) &&
     !('processAPIError' in obj)
   );
 }

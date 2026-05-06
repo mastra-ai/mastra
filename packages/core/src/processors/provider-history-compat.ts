@@ -6,8 +6,8 @@ import type {
   Processor,
   ProcessAPIErrorArgs,
   ProcessAPIErrorResult,
-  ProcessLLMPromptArgs,
-  ProcessLLMPromptResult,
+  ProcessLLMRequestArgs,
+  ProcessLLMRequestResult,
 } from './index';
 
 // ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ import type {
  *   (e.g. tool-call ID format).
  *
  * - **Preemptively** via {@link CompatRule.applyToPrompt}: runs in
- *   `processLLMPrompt` after `MessageList → LanguageModelV2Prompt` conversion
+ *   `processLLMRequest` after `MessageList → LanguageModelV2Prompt` conversion
  *   and before the prompt is sent to the provider. Mutations affect only the
  *   outbound prompt; nothing is persisted to the message list. Suitable for
  *   incompatibilities that would otherwise re-trigger on every turn (e.g.
@@ -43,7 +43,7 @@ export interface CompatRule {
   /** Mutate persisted messages to resolve the incompatibility. Return `true` if changes were made. */
   fix?: (messages: MastraDBMessage[]) => boolean;
   /**
-   * Rewrite the outbound LLM prompt preemptively. Receives the resolved model
+   * Rewrite the outbound LLM request preemptively. Receives the resolved model
    * so rules can scope themselves to specific providers. Return a new prompt
    * to forward, or `undefined` to leave the prompt unchanged.
    */
@@ -269,7 +269,7 @@ function isAnthropicReasoningPart(part: { providerOptions?: unknown; providerMet
  *
  * This rule preemptively strips `reasoning` parts from assistant messages
  * in the outbound prompt when the resolved model is Cerebras. The strip
- * runs in `processLLMPrompt` so it affects only what is sent to Cerebras —
+ * runs in `processLLMRequest` so it affects only what is sent to Cerebras —
  * the persisted message list (memory, UI, observability) keeps the full
  * reasoning trace, and other providers (e.g. Z.ai's coding-plan endpoint,
  * which *requires* `reasoning_content` echoed back for its preserved-thinking
@@ -326,7 +326,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
 /**
  * Handles provider-specific history incompatibilities by applying a registry
  * of {@link CompatRule}s. Rules can rewrite the outbound prompt preemptively
- * via `processLLMPrompt`, or react to non-retryable API rejections via
+ * via `processLLMRequest`, or react to non-retryable API rejections via
  * `processAPIError`.
  *
  * Built-in rules:
@@ -338,7 +338,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   assistant messages in the outbound prompt when the resolved model is
  *   Cerebras, to avoid the `@ai-sdk/openai-compatible@>=1.0.32` regression
  *   that serializes them as `reasoning_content` (a field Cerebras's API
- *   rejects). Preemptive; runs in `processLLMPrompt` so the persisted
+ *   rejects). Preemptive; runs in `processLLMRequest` so the persisted
  *   message list keeps the reasoning trace.
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
@@ -361,7 +361,7 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     this.rules = [...DEFAULT_COMPAT_RULES, ...(opts?.additionalRules ?? [])];
   }
 
-  processLLMPrompt({ prompt, model }: ProcessLLMPromptArgs): ProcessLLMPromptResult {
+  processLLMRequest({ prompt, model }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
     let current = prompt;
     let mutated = false;
     for (const rule of this.rules) {

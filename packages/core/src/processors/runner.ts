@@ -1245,14 +1245,14 @@ export class ProcessorRunner {
   }
 
   /**
-   * Run processLLMPrompt for all processors that implement it.
+   * Run processLLMRequest for all processors that implement it.
    *
    * Called *after* `MessageList` has been converted to `LanguageModelV2Prompt`
    * and immediately *before* the prompt is forwarded to the provider.
    * Mutations are scoped to this single call — they do not affect the
    * persisted message list, memory, UI, or future model swaps.
    */
-  async runProcessLLMPrompt(args: {
+  async runProcessLLMRequest(args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
     stepNumber: number;
@@ -1268,10 +1268,10 @@ export class ProcessorRunner {
     let currentPrompt = args.prompt;
 
     for (const processorOrWorkflow of this.inputProcessors) {
-      // Workflows do not currently participate in processLLMPrompt.
+      // Workflows do not currently participate in processLLMRequest.
       if (isProcessorWorkflow(processorOrWorkflow)) continue;
       const processor = processorOrWorkflow;
-      const processMethod = processor.processLLMPrompt?.bind(processor);
+      const processMethod = processor.processLLMRequest?.bind(processor);
       if (!processMethod) continue;
 
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {

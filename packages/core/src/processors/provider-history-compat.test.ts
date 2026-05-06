@@ -10,7 +10,7 @@ import {
   ProviderHistoryCompat,
 } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
-import type { ProcessAPIErrorArgs, ProcessLLMPromptArgs } from './index';
+import type { ProcessAPIErrorArgs, ProcessLLMRequestArgs } from './index';
 
 function createUserMessage(content: string) {
   return {
@@ -341,7 +341,7 @@ describe('isMaybeCerebras', () => {
 });
 
 // ---------------------------------------------------------------------------
-// cerebrasStripReasoningContent rule + ProviderHistoryCompat.processLLMPrompt
+// cerebrasStripReasoningContent rule + ProviderHistoryCompat.processLLMRequest
 // ---------------------------------------------------------------------------
 
 function promptWithReasoning(): LanguageModelV2Prompt {
@@ -359,7 +359,7 @@ function promptWithReasoning(): LanguageModelV2Prompt {
   ];
 }
 
-function makePromptArgs(prompt: LanguageModelV2Prompt, model: unknown): ProcessLLMPromptArgs {
+function makeRequestArgs(prompt: LanguageModelV2Prompt, model: unknown): ProcessLLMRequestArgs {
   return {
     prompt,
     model: model as any,
@@ -520,15 +520,15 @@ describe('cerebrasStripReasoningContent', () => {
   });
 });
 
-describe('ProviderHistoryCompat.processLLMPrompt', () => {
+describe('ProviderHistoryCompat.processLLMRequest', () => {
   it('strips reasoning parts from the prompt on cerebras', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makePromptArgs(promptWithReasoning(), {
+    const args = makeRequestArgs(promptWithReasoning(), {
       provider: 'cerebras.chat',
       modelId: 'zai-glm-4.7',
     });
 
-    const result = await handler.processLLMPrompt(args);
+    const result = await handler.processLLMRequest(args);
 
     expect(Array.isArray(result)).toBe(true);
     const assistant = (result as LanguageModelV2Prompt).find(m => m.role === 'assistant')!;
@@ -537,12 +537,12 @@ describe('ProviderHistoryCompat.processLLMPrompt', () => {
 
   it('strips foreign reasoning parts from the prompt on Anthropic', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makePromptArgs(promptWithReasoning(), {
+    const args = makeRequestArgs(promptWithReasoning(), {
       provider: 'anthropic.messages',
       modelId: 'claude-haiku-4-5-20251001',
     });
 
-    const result = await handler.processLLMPrompt(args);
+    const result = await handler.processLLMRequest(args);
 
     expect(Array.isArray(result)).toBe(true);
     const assistant = (result as LanguageModelV2Prompt).find(m => m.role === 'assistant')!;
@@ -565,27 +565,27 @@ describe('ProviderHistoryCompat.processLLMPrompt', () => {
         ],
       },
     ];
-    const args = makePromptArgs(prompt, { provider: 'cerebras.chat', modelId: 'zai-glm-4.7' });
-    expect(await handler.processLLMPrompt(args)).toBeUndefined();
+    const args = makeRequestArgs(prompt, { provider: 'cerebras.chat', modelId: 'zai-glm-4.7' });
+    expect(await handler.processLLMRequest(args)).toBeUndefined();
   });
 
   it('returns undefined for non-cerebras models even if reasoning is present', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makePromptArgs(promptWithReasoning(), {
+    const args = makeRequestArgs(promptWithReasoning(), {
       provider: 'openai.chat',
       modelId: 'gpt-4o',
     });
-    expect(await handler.processLLMPrompt(args)).toBeUndefined();
+    expect(await handler.processLLMRequest(args)).toBeUndefined();
   });
 
   it('strips reasoning when a generic provider object has a cerebras-prefixed modelId', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makePromptArgs(promptWithReasoning(), {
+    const args = makeRequestArgs(promptWithReasoning(), {
       provider: 'openai-compatible.chat',
       modelId: 'cerebras/zai-glm-4.7',
     });
 
-    const result = await handler.processLLMPrompt(args);
+    const result = await handler.processLLMRequest(args);
 
     expect(Array.isArray(result)).toBe(true);
     const assistant = (result as LanguageModelV2Prompt).find(m => m.role === 'assistant')!;
@@ -593,7 +593,7 @@ describe('ProviderHistoryCompat.processLLMPrompt', () => {
   });
 });
 
-describe('ProcessorRunner.runProcessLLMPrompt', () => {
+describe('ProcessorRunner.runProcessLLMRequest', () => {
   it('runs ProviderHistoryCompat when explicitly configured', async () => {
     const runner = new ProcessorRunner({
       inputProcessors: [new ProviderHistoryCompat()],
@@ -602,7 +602,7 @@ describe('ProcessorRunner.runProcessLLMPrompt', () => {
       agentName: 'test-agent',
     });
 
-    const result = await runner.runProcessLLMPrompt({
+    const result = await runner.runProcessLLMRequest({
       prompt: promptWithReasoning(),
       model: { provider: 'openai-compatible.chat', modelId: 'cerebras/zai-glm-4.7' },
       stepNumber: 0,
@@ -621,7 +621,7 @@ describe('ProcessorRunner.runProcessLLMPrompt', () => {
       agentName: 'test-agent',
     });
 
-    const result = await runner.runProcessLLMPrompt({
+    const result = await runner.runProcessLLMRequest({
       prompt: promptWithReasoning(),
       model: { provider: 'anthropic.messages', modelId: 'claude-haiku-4-5-20251001' },
       stepNumber: 0,

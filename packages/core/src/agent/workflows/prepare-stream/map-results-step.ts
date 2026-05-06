@@ -196,13 +196,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
-    const effectiveLLMPromptInputProcessors = capabilities.llmPromptInputProcessors
-      ? typeof capabilities.llmPromptInputProcessors === 'function'
-        ? await capabilities.llmPromptInputProcessors({
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
             requestContext: result.requestContext!,
             overrides: options.inputProcessors,
           })
-        : options.inputProcessors || capabilities.llmPromptInputProcessors
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
       : effectiveInputProcessors;
 
     // Resolve error processors
@@ -354,7 +354,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
-      llmPromptInputProcessors: effectiveLLMPromptInputProcessors,
+      llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
       modelSettings: {
