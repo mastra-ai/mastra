@@ -254,11 +254,10 @@ const ViewWorkspaceConnected = ({
       }
       mobileExtra={
         isOwner ? (
-          <AgentBuilderMobileMenu
+          <AgentBuilderMobileMenuConnected
             agentId={agentId}
-            showPublishToChannel={isPublishable}
-            showDelete
             agentName={agentName}
+            showPublishToChannel={isPublishable}
           />
         ) : undefined
       }
@@ -290,4 +289,28 @@ const VisibilitySelectIfAuth = ({ agentId }: { agentId: string }) => {
   const { data: capabilities } = useAuthCapabilities();
   if (!capabilities?.enabled) return null;
   return <VisibilitySelect agentId={agentId} />;
+};
+
+const AgentBuilderMobileMenuConnected = ({
+  agentId,
+  agentName,
+  showPublishToChannel,
+}: {
+  agentId: string;
+  agentName: string;
+  showPublishToChannel: boolean;
+}) => {
+  const isRunning = useStreamRunning();
+  const { data: capabilities } = useAuthCapabilities();
+  const authEnabled = !!capabilities?.enabled;
+  return (
+    <AgentBuilderMobileMenu
+      agentId={agentId}
+      showSetVisibility={authEnabled}
+      showPublishToChannel={showPublishToChannel}
+      showDelete
+      agentName={agentName}
+      disabled={isRunning}
+    />
+  );
 };

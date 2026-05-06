@@ -1,23 +1,11 @@
-import {
-  Button,
-  cn,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DropdownMenu,
-  StatusBadge,
-} from '@mastra/playground-ui';
+import { Button, DropdownMenu, StatusBadge } from '@mastra/playground-ui';
 import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { DeleteAgentMenuItem } from './delete-agent-action';
 import { ChannelDialog } from './publish-channel-dialogs';
+import { useVisibilityChange } from './use-visibility-change';
 import type { Visibility } from './visibility-select';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
 import {
@@ -30,7 +18,7 @@ import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/age
 export interface AgentBuilderMobileMenuProps {
   /** Agent the publish actions apply to. */
   agentId?: string;
-  /** When true, includes the "Set visibility" item + dialog. Edit page only. */
+  /** When true, includes the Add/Remove from library item. Owner-only. */
   showSetVisibility?: boolean;
   /** When true, includes the per-channel publish items. */
   showPublishToChannel?: boolean;
@@ -50,9 +38,6 @@ export function AgentBuilderMobileMenu({
   agentName,
   disabled = false,
 }: AgentBuilderMobileMenuProps) {
-  const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const visibility = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [activeChannel, setActiveChannel] = useState<{
     platform: ChannelPlatformInfo;
     installation?: ChannelInstallationInfo;
@@ -62,12 +47,9 @@ export function AgentBuilderMobileMenu({
   const { data: platforms = [] } = useChannelPlatforms();
   const platformsToShow = canPublishToChannel ? platforms : [];
   const canDelete = showDelete && Boolean(agentId) && Boolean(agentName);
+  const canSetVisibility = showSetVisibility && Boolean(agentId);
 
-  if (!showSetVisibility && !canDelete && (!canPublishToChannel || platformsToShow.length === 0)) return null;
-
-  const setVisibility = (next: Visibility) => {
-    formMethods.setValue('visibility', next, { shouldDirty: true });
-  };
+  if (!canSetVisibility && !canDelete && (!canPublishToChannel || platformsToShow.length === 0)) return null;
 
   return (
     <div className="lg:hidden" data-testid="agent-builder-mobile-menu">
@@ -78,22 +60,10 @@ export function AgentBuilderMobileMenu({
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
-          {showSetVisibility && (
-            <DropdownMenu.Item
-              data-testid="agent-builder-mobile-menu-visibility"
-              disabled={disabled}
-              onSelect={event => {
-                event.preventDefault();
-                setDialogOpen(true);
-              }}
-            >
-              {visibility === 'public' ? <Globe /> : <LockIcon />}
-              <span>Set visibility</span>
-            </DropdownMenu.Item>
-          )}
+          {canSetVisibility && <VisibilityMenuItem agentId={agentId as string} disabled={disabled} />}
           {canPublishToChannel && platformsToShow.length > 0 && (
             <>
-              {showSetVisibility && <DropdownMenu.Separator />}
+              {canSetVisibility && <DropdownMenu.Separator />}
               <DropdownMenu.Label>Publish to…</DropdownMenu.Label>
               {platformsToShow.map(platform => (
                 <MobileMenuChannelItem
@@ -108,52 +78,14 @@ export function AgentBuilderMobileMenu({
           )}
           {canDelete && (
             <>
-              {(showSetVisibility || (canPublishToChannel && platformsToShow.length > 0)) && <DropdownMenu.Separator />}
+              {(canSetVisibility || (canPublishToChannel && platformsToShow.length > 0)) && (
+                <DropdownMenu.Separator />
+              )}
               <DeleteAgentMenuItem agentId={agentId as string} agentName={agentName as string} disabled={disabled} />
             </>
           )}
         </DropdownMenu.Content>
       </DropdownMenu>
-
-      {showSetVisibility && (
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent data-testid="agent-builder-visibility-dialog">
-            <DialogHeader>
-              <DialogTitle>Set visibility</DialogTitle>
-              <DialogDescription>Choose who can see this agent.</DialogDescription>
-            </DialogHeader>
-            <DialogBody className="grid gap-2">
-              <VisibilityRadioOption
-                value="private"
-                current={visibility}
-                onSelect={setVisibility}
-                icon={<LockIcon className="h-4 w-4" />}
-                label="Private"
-                hint="Only you can see this agent"
-                testId="agent-builder-visibility-dialog-option-private"
-              />
-              <VisibilityRadioOption
-                value="public"
-                current={visibility}
-                onSelect={setVisibility}
-                icon={<Globe className="h-4 w-4" />}
-                label="Public"
-                hint="Anyone in the workspace can see this agent"
-                testId="agent-builder-visibility-dialog-option-public"
-              />
-            </DialogBody>
-            <DialogFooter>
-              <Button
-                variant="default"
-                onClick={() => setDialogOpen(false)}
-                data-testid="agent-builder-visibility-dialog-done"
-              >
-                Done
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {activeChannel && agentId ? (
         <ChannelDialog
@@ -167,6 +99,48 @@ export function AgentBuilderMobileMenu({
         />
       ) : null}
     </div>
+  );
+}
+
+interface VisibilityMenuItemProps {
+  agentId: string;
+  disabled: boolean;
+}
+
+function VisibilityMenuItem({ agentId, disabled }: VisibilityMenuItemProps) {
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
+  const { requestChange, dialog } = useVisibilityChange(agentId);
+
+  return (
+    <>
+      {value === 'private' ? (
+        <DropdownMenu.Item
+          data-testid="agent-builder-mobile-menu-visibility-add"
+          disabled={disabled}
+          onSelect={event => {
+            event.preventDefault();
+            requestChange('public');
+          }}
+        >
+          <Globe />
+          <span>Add to library</span>
+        </DropdownMenu.Item>
+      ) : (
+        <DropdownMenu.Item
+          data-testid="agent-builder-mobile-menu-visibility-remove"
+          disabled={disabled}
+          onSelect={event => {
+            event.preventDefault();
+            requestChange('private');
+          }}
+        >
+          <LockIcon />
+          <span>Remove from library</span>
+        </DropdownMenu.Item>
+      )}
+      {dialog}
+    </>
   );
 }
 
@@ -217,38 +191,5 @@ function MobileMenuChannelItem({ platform, agentId, disabled, onSelect }: Mobile
         </StatusBadge>
       ) : null}
     </DropdownMenu.Item>
-  );
-}
-
-interface VisibilityRadioOptionProps {
-  value: Visibility;
-  current: Visibility;
-  onSelect: (value: Visibility) => void;
-  icon: ReactNode;
-  label: string;
-  hint: string;
-  testId: string;
-}
-
-function VisibilityRadioOption({ value, current, onSelect, icon, label, hint, testId }: VisibilityRadioOptionProps) {
-  const selected = current === value;
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      data-testid={testId}
-      onClick={() => onSelect(value)}
-      className={cn(
-        'flex w-full items-start gap-3 rounded-lg border px-3 py-2 text-left transition-colors',
-        selected ? 'border-accent1 bg-surface4' : 'border-border1 hover:bg-surface4',
-      )}
-    >
-      <span className="mt-0.5 text-neutral4">{icon}</span>
-      <span className="flex flex-col">
-        <span className="text-ui-md text-white">{label}</span>
-        <span className="text-ui-sm text-neutral3">{hint}</span>
-      </span>
-    </button>
   );
 }
