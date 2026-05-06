@@ -549,7 +549,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     const websocketFetch = createOpenAIWebSocketFetch({
       url: openaiWebSocket?.url ?? `wss://${this.config.resourceName}.openai.azure.com/openai/v1/responses`,
       headers: openaiWebSocket?.headers,
-      apiKeyAsBearer: !useEntraId,
+      apiKeyQueryParam: useEntraId ? false : 'api-key',
       betaHeader: false,
     });
 

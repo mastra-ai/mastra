@@ -17,6 +17,12 @@ export interface CreateOpenAIWebSocketFetchOptions {
    */
   apiKeyAsBearer?: boolean;
   /**
+   * Move an `api-key` request header into the WebSocket URL query string for
+   * providers whose WebSocket endpoint authenticates API keys through a query
+   * parameter. Entra ID and OpenAI bearer-token auth should leave this disabled.
+   */
+  apiKeyQueryParam?: string | false;
+  /**
    * Optional beta header sent when establishing the WebSocket connection.
    * @default 'responses_websockets=2026-02-06'
    */
@@ -36,6 +42,7 @@ const TERMINAL_RESPONSE_EVENTS = new Set(['response.completed', 'response.failed
 export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchOptions): OpenAIWebSocketFetch {
   const wsUrl = options?.url ?? 'wss://api.openai.com/v1/responses';
   const betaHeader = options?.betaHeader === undefined ? 'responses_websockets=2026-02-06' : options.betaHeader;
+  const apiKeyQueryParam = options?.apiKeyQueryParam ?? false;
 
   let ws: WebSocket | null = null;
   let connecting: Promise<WebSocket> | null = null;
@@ -52,9 +59,10 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     }
 
     const normalizedHeaders = { ...normalizeHeaders(options?.headers), ...headers };
+    const apiKey = normalizedHeaders['api-key'];
     delete normalizedHeaders['authorization'];
     delete normalizedHeaders['openai-beta'];
-    if (options?.apiKeyAsBearer) {
+    if (options?.apiKeyAsBearer || apiKeyQueryParam) {
       delete normalizedHeaders['api-key'];
     }
     const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders);
@@ -75,7 +83,7 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
 
     connecting = new Promise<WebSocket>((resolve, reject) => {
       let settled = false;
-      const socket = new WebSocket(wsUrl, {
+      const socket = new WebSocket(getWebSocketUrl(wsUrl, apiKeyQueryParam, apiKey), {
         headers: {
           ...normalizedHeaders,
           ...(authorization ? { Authorization: authorization } : {}),
@@ -272,6 +280,14 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
       connecting = null;
     },
   });
+}
+
+function getWebSocketUrl(url: string, apiKeyQueryParam: string | false, apiKey?: string): string {
+  if (!apiKeyQueryParam || !apiKey) return url;
+
+  const parsedUrl = new URL(url);
+  parsedUrl.searchParams.set(apiKeyQueryParam, apiKey);
+  return parsedUrl.toString();
 }
 
 function buildConnectionKey(authorization: string, headers: Record<string, string>): string {

@@ -768,7 +768,7 @@ describe('AzureOpenAIGateway', () => {
       expect(createOpenAIWebSocketFetch).toHaveBeenLastCalledWith({
         url: 'wss://test-resource.openai.azure.com/openai/v1/responses',
         headers: { 'x-ms-client-request-id': 'request-1' },
-        apiKeyAsBearer: true,
+        apiKeyQueryParam: 'api-key',
         betaHeader: false,
       });
       expect(createAzure).toHaveBeenLastCalledWith(
@@ -833,7 +833,7 @@ describe('AzureOpenAIGateway', () => {
 
       expect(createOpenAIWebSocketFetch).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          apiKeyAsBearer: false,
+          apiKeyQueryParam: false,
           betaHeader: false,
         }),
       );

@@ -55,11 +55,11 @@ describe('createOpenAIWebSocketFetch', () => {
     nextServerEvents.length = 0;
   });
 
-  it('converts Azure API key headers to bearer auth without sending OpenAI beta headers', async () => {
+  it('can move API key headers to the WebSocket URL without sending OpenAI beta headers', async () => {
     const websocketFetch = createOpenAIWebSocketFetch({
       url: 'wss://test-resource.openai.azure.com/openai/v1/responses',
       headers: { 'x-ms-client-request-id': 'request-1' },
-      apiKeyAsBearer: true,
+      apiKeyQueryParam: 'api-key',
       betaHeader: false,
     });
 
@@ -75,14 +75,14 @@ describe('createOpenAIWebSocketFetch', () => {
     await response.text();
 
     expect(sockets[0]).toMatchObject({
-      url: 'wss://test-resource.openai.azure.com/openai/v1/responses',
+      url: 'wss://test-resource.openai.azure.com/openai/v1/responses?api-key=azure-key',
       options: {
         headers: expect.objectContaining({
-          Authorization: 'Bearer azure-key',
           'x-ms-client-request-id': 'request-1',
         }),
       },
     });
+    expect(sockets[0].options.headers).not.toHaveProperty('Authorization');
     expect(sockets[0].options.headers).not.toHaveProperty('api-key');
     expect(sockets[0].options.headers).not.toHaveProperty('OpenAI-Beta');
   });
