@@ -55,7 +55,7 @@ describe('cross-process background tasks', () => {
     background = spawnFixture({
       entry: BACKGROUND_ENTRY,
       label: 'background',
-      env: { REDIS_URL, STORAGE_URL: storage.storageUrl },
+      env: { MASTRA_WORKERS: 'backgroundTasks', REDIS_URL, STORAGE_URL: storage.storageUrl },
     });
     await waitForLine(background, 'background-ready');
   }, 60_000);

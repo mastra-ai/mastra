@@ -35,7 +35,7 @@ export class InProcessStrategy implements StepExecutionStrategy {
       );
     }
 
-    const rc = new RC(Object.entries(params.requestContext ?? {}) as any);
+    const rc = new RC<unknown>(Object.entries(params.requestContext ?? {}));
 
     let abortController: AbortController | undefined;
     if (params.abortSignal) {

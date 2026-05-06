@@ -17,7 +17,9 @@ const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const storageUrl = process.env.STORAGE_URL ?? 'file::memory:';
 
 const mastra = buildMastra({ storageUrl, redisUrl });
-await mastra.startWorkers('scheduler');
+// Drive the env-based filter so we exercise that codepath in real cluster
+// fixtures rather than just unit tests.
+await mastra.startWorkers();
 
 console.info('scheduler-ready');
 

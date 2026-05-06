@@ -46,7 +46,7 @@ describe('cross-process workflow execution via Redis Streams', () => {
       entry: WORKER_ENTRY,
       label: 'worker',
       env: {
-        MASTRA_WORKERS: '',
+        MASTRA_WORKERS: 'orchestration',
         REDIS_URL,
         STORAGE_URL: storage.storageUrl,
         MASTRA_STEP_EXECUTION_URL: `${serverUrl}/api`,

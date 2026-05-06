@@ -16,7 +16,20 @@ export class PullTransport implements WorkerTransport {
 
   async start(router: EventRouter): Promise<void> {
     const workflowCb: EventCallback = (event, ack, nack) => {
-      void router.route(event, ack, nack);
+      // route() is async; surface unexpected rejections as a nack instead
+      // of an unhandledRejection. The router's own try/catch already turns
+      // expected processing errors into nack — this guard only catches
+      // synchronous-throw-becomes-rejected-promise leaks.
+      router.route(event, ack, nack).catch(err => {
+        try {
+          // Best-effort: ack/nack are optional in some PubSub backends.
+          if (typeof nack === 'function') {
+            void nack();
+          }
+        } finally {
+          console.error('[PullTransport] router.route rejected:', err);
+        }
+      });
     };
     await this.#pubsub.subscribe(TOPIC_WORKFLOWS, workflowCb, { group: this.#group });
     this.#callbacks.push({ topic: TOPIC_WORKFLOWS, cb: workflowCb });

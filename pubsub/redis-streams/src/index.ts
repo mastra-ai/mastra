@@ -39,6 +39,19 @@ export interface RedisStreamsPubSubConfig {
    * avoid double-delivery. Defaults to 60_000 ms.
    */
   reclaimIdleMs?: number;
+  /**
+   * Maximum number of times a single event will be redelivered via nack
+   * before it is dropped (acked without republish). Defaults to 5. Set to 0
+   * to disable the cap (events redeliver forever on every nack).
+   */
+  maxDeliveryAttempts?: number;
+  /**
+   * Optional logger for diagnostics. When omitted, suppressed errors
+   * (BUSYGROUP, malformed payloads, connection-close races) are swallowed
+   * silently. When provided, those paths emit `debug`/`warn` entries so
+   * operators can see what's happening without noise on the happy path.
+   */
+  logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
 }
 
 export class RedisStreamsPubSub extends PubSub {
@@ -49,7 +62,13 @@ export class RedisStreamsPubSub extends PubSub {
   #maxStreamLength: number;
   #reclaimIntervalMs: number;
   #reclaimIdleMs: number;
-  #subscriptions: Map<EventCallback, Subscription> = new Map();
+  #maxDeliveryAttempts: number;
+  #logger?: RedisStreamsPubSubConfig['logger'];
+  // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
+  // multiple topics independently. Without the topic in the key,
+  // unsubscribe(otherTopic, cb) would tear down the wrong subscription.
+  #subscriptions: Map<string, Subscription> = new Map();
+  #cbIds: WeakMap<EventCallback, string> = new WeakMap();
   #pendingPublishes: Set<Promise<unknown>> = new Set();
   #closed = false;
 
@@ -63,6 +82,17 @@ export class RedisStreamsPubSub extends PubSub {
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
     this.#reclaimIntervalMs = options.reclaimIntervalMs ?? 30_000;
     this.#reclaimIdleMs = options.reclaimIdleMs ?? 60_000;
+    this.#maxDeliveryAttempts = options.maxDeliveryAttempts ?? 5;
+    this.#logger = options.logger;
+  }
+
+  #subKey(topic: string, cb: EventCallback): string {
+    let cbId = this.#cbIds.get(cb);
+    if (!cbId) {
+      cbId = randomUUID();
+      this.#cbIds.set(cb, cbId);
+    }
+    return `${topic}::${cbId}`;
   }
 
   /** Lazily connect the shared writer client. Idempotent. */
@@ -111,7 +141,8 @@ export class RedisStreamsPubSub extends PubSub {
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     if (this.#closed) throw new Error('RedisStreamsPubSub: cannot subscribe on closed client');
-    if (this.#subscriptions.has(cb)) return; // idempotent: same callback already subscribed
+    const key = this.#subKey(topic, cb);
+    if (this.#subscriptions.has(key)) return; // idempotent: same (topic, cb) already subscribed
 
     await this.#ensureWriterConnected();
 
@@ -135,6 +166,7 @@ export class RedisStreamsPubSub extends PubSub {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (!msg.includes('BUSYGROUP')) throw err;
+      this.#logger?.debug?.('redis-streams: consumer group already exists', { topic, group });
     }
 
     // Each subscription gets a dedicated reader connection because XREADGROUP
@@ -154,7 +186,7 @@ export class RedisStreamsPubSub extends PubSub {
       loop: undefined,
       reclaimTimer: undefined,
     };
-    this.#subscriptions.set(cb, sub);
+    this.#subscriptions.set(key, sub);
     sub.loop = this.#runReadLoop(sub);
     this.#startReclaimLoop(sub);
   }
@@ -186,8 +218,12 @@ export class RedisStreamsPubSub extends PubSub {
           if (!entry) continue;
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
-      } catch {
-        // best-effort — autoclaim failure shouldn't tear down the subscription.
+      } catch (err) {
+        this.#logger?.debug?.('redis-streams: XAUTOCLAIM failed', {
+          topic: sub.topic,
+          group: sub.group,
+          err: err instanceof Error ? err.message : err,
+        });
       }
       if (sub.stopped || this.#closed) return;
       sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
@@ -196,10 +232,11 @@ export class RedisStreamsPubSub extends PubSub {
     sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
   }
 
-  async unsubscribe(_topic: string, cb: EventCallback): Promise<void> {
-    const sub = this.#subscriptions.get(cb);
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    const key = this.#subKey(topic, cb);
+    const sub = this.#subscriptions.get(key);
     if (!sub) return;
-    this.#subscriptions.delete(cb);
+    this.#subscriptions.delete(key);
     sub.stopped = true;
     if (sub.reclaimTimer) {
       clearTimeout(sub.reclaimTimer);
@@ -209,15 +246,22 @@ export class RedisStreamsPubSub extends PubSub {
     // Cancel the in-flight blocking XREADGROUP by closing the reader.
     try {
       await sub.readClient.quit();
-    } catch {
-      // ignore — best-effort
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: reader quit failed', {
+        topic: sub.topic,
+        err: err instanceof Error ? err.message : err,
+      });
     }
 
     if (sub.loop) {
       try {
         await sub.loop;
-      } catch {
-        // loop exits naturally when readClient closes
+      } catch (err) {
+        // loop exits naturally when readClient closes; surface only at debug.
+        this.#logger?.debug?.('redis-streams: read loop exited with error', {
+          topic: sub.topic,
+          err: err instanceof Error ? err.message : err,
+        });
       }
     }
 
@@ -225,8 +269,12 @@ export class RedisStreamsPubSub extends PubSub {
     if (!sub.isGrouped) {
       try {
         await this.#writeClient.xGroupDestroy(sub.streamKey, sub.group);
-      } catch {
-        // group may not exist anymore — ignore
+      } catch (err) {
+        this.#logger?.debug?.('redis-streams: xGroupDestroy failed', {
+          topic: sub.topic,
+          group: sub.group,
+          err: err instanceof Error ? err.message : err,
+        });
       }
     }
   }
@@ -245,14 +293,18 @@ export class RedisStreamsPubSub extends PubSub {
     if (this.#closed) return;
     this.#closed = true;
 
-    const callbacks = [...this.#subscriptions.keys()];
-    await Promise.all(callbacks.map(cb => this.unsubscribe('', cb)));
+    // Walk the actual subscriptions and pass the original topic through so
+    // unsubscribe's key lookup works.
+    const subs = [...this.#subscriptions.values()];
+    await Promise.all(subs.map(sub => this.unsubscribe(sub.topic, sub.cb)));
 
     if (this.#writeClient.isOpen) {
       try {
         await this.#writeClient.quit();
-      } catch {
-        // ignore
+      } catch (err) {
+        this.#logger?.debug?.('redis-streams: writer quit failed', {
+          err: err instanceof Error ? err.message : err,
+        });
       }
     }
   }
@@ -265,8 +317,13 @@ export class RedisStreamsPubSub extends PubSub {
           COUNT: 10,
           BLOCK: this.#blockMs,
         });
-      } catch {
+      } catch (err) {
         if (sub.stopped) return;
+        this.#logger?.debug?.('redis-streams: xReadGroup failed', {
+          topic: sub.topic,
+          group: sub.group,
+          err: err instanceof Error ? err.message : err,
+        });
         // Connection error or similar — pause briefly then retry.
         await new Promise(r => setTimeout(r, 100));
         continue;
@@ -291,12 +348,19 @@ export class RedisStreamsPubSub extends PubSub {
       if (typeof event.createdAt === 'string') {
         event.createdAt = new Date(event.createdAt);
       }
-    } catch {
-      // Malformed entry — ack and move on.
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: malformed payload, dropping', {
+        topic: sub.topic,
+        streamId,
+        err: err instanceof Error ? err.message : err,
+      });
       try {
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
-      } catch {
-        // ignore
+      } catch (ackErr) {
+        this.#logger?.debug?.('redis-streams: xAck after malformed payload failed', {
+          topic: sub.topic,
+          err: ackErr instanceof Error ? ackErr.message : ackErr,
+        });
       }
       return;
     }
@@ -308,29 +372,59 @@ export class RedisStreamsPubSub extends PubSub {
       try {
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
         await this.#writeClient.xDel(sub.streamKey, [streamId]);
-      } catch {
-        // ignore — best-effort cleanup
+      } catch (err) {
+        this.#logger?.debug?.('redis-streams: ack cleanup failed', {
+          topic: sub.topic,
+          err: err instanceof Error ? err.message : err,
+        });
       }
     };
     const nack = async () => {
       if (settled) return;
       settled = true;
+      const attempt = event.deliveryAttempt ?? 1;
+      // Cap redelivery to avoid an infinite poison-pill loop. When the cap
+      // is hit we drop the event (xAck without republish) and warn so an
+      // operator can find it in logs.
+      if (this.#maxDeliveryAttempts > 0 && attempt >= this.#maxDeliveryAttempts) {
+        this.#logger?.warn?.('redis-streams: dropping event after max delivery attempts', {
+          topic: sub.topic,
+          eventType: event.type,
+          eventId: event.id,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+        try {
+          await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
+          await this.#writeClient.xDel(sub.streamKey, [streamId]);
+        } catch (err) {
+          this.#logger?.debug?.('redis-streams: ack on dropped poison message failed', {
+            topic: sub.topic,
+            err: err instanceof Error ? err.message : err,
+          });
+        }
+        return;
+      }
       // Republish with incremented deliveryAttempt, then ack the original entry.
       const next: Event = {
         ...event,
-        deliveryAttempt: (event.deliveryAttempt ?? 1) + 1,
+        deliveryAttempt: attempt + 1,
       };
       try {
         await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) });
-      } catch {
-        // If republish fails we leave the message unacked; another consumer
-        // can pick it up via XAUTOCLAIM eventually. For test correctness this
-        // is acceptable.
+      } catch (err) {
+        this.#logger?.debug?.('redis-streams: nack republish failed', {
+          topic: sub.topic,
+          err: err instanceof Error ? err.message : err,
+        });
       }
       try {
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
-      } catch {
-        // ignore
+      } catch (err) {
+        this.#logger?.debug?.('redis-streams: xAck after nack failed', {
+          topic: sub.topic,
+          err: err instanceof Error ? err.message : err,
+        });
       }
     };
 

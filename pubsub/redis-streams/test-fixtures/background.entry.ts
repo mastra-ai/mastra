@@ -25,7 +25,7 @@ const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const storageUrl = process.env.STORAGE_URL ?? 'file::memory:';
 
 const mastra = buildMastra({ storageUrl, redisUrl });
-await mastra.startWorkers('backgroundTasks');
+await mastra.startWorkers();
 
 console.info('background-ready');
 

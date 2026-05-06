@@ -140,14 +140,19 @@ describe('SchedulerWorker', () => {
 });
 
 describe('BackgroundTaskWorker', () => {
-  it('initializes and can stop', async () => {
+  it('init constructs the manager but does not subscribe; start subscribes; stop tears down', async () => {
     const worker = new BackgroundTaskWorker();
     const deps = createMockDeps();
     deps._storage.getStore.mockResolvedValue({});
     deps.mastra = { getLogger: vi.fn().mockReturnValue(deps._logger) } as any;
+
     await worker.init(deps);
-    expect(worker.isRunning).toBe(true);
     expect(worker.manager).toBeDefined();
+    expect(worker.isRunning).toBe(false);
+
+    await worker.start();
+    expect(worker.isRunning).toBe(true);
+
     await worker.stop();
     expect(worker.isRunning).toBe(false);
   });

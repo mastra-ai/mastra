@@ -59,7 +59,7 @@ describe('cross-process scheduler', () => {
       entry: WORKER_ENTRY,
       label: 'orchestrator',
       env: {
-        MASTRA_WORKERS: '',
+        MASTRA_WORKERS: 'orchestration',
         REDIS_URL,
         STORAGE_URL: storage.storageUrl,
         MASTRA_STEP_EXECUTION_URL: `${serverUrl}/api`,
@@ -70,7 +70,7 @@ describe('cross-process scheduler', () => {
     scheduler = spawnFixture({
       entry: SCHEDULER_ENTRY,
       label: 'scheduler',
-      env: { REDIS_URL, STORAGE_URL: storage.storageUrl },
+      env: { MASTRA_WORKERS: 'scheduler', REDIS_URL, STORAGE_URL: storage.storageUrl },
     });
     await waitForLine(scheduler, 'scheduler-ready');
   }, 60_000);

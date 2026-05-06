@@ -46,10 +46,7 @@ export async function startWorker({
 
     const child = spawn(process.execPath, [outputFile], {
       stdio: 'inherit',
-      env: {
-        ...process.env,
-        MASTRA_WORKER_NAME: workerName,
-      },
+      env: process.env,
     });
 
     child.on('exit', code => {

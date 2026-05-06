@@ -1,6 +1,19 @@
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
+import type { Mastra } from '../../mastra';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
+
+/**
+ * Minimal shape of a tool callable usable for cross-process static
+ * background-task execution. We intentionally avoid pulling the full
+ * `ToolAction` generic into this file — only `execute` is needed.
+ */
+type StaticToolLike = {
+  execute?: (
+    args: Record<string, unknown>,
+    options: { toolCallId: string; messages: unknown[]; abortSignal?: AbortSignal },
+  ) => Promise<unknown>;
+};
 
 export interface BackgroundTaskWorkerConfig {
   globalConcurrency?: number;
@@ -42,9 +55,6 @@ export class BackgroundTaskWorker extends MastraWorker {
       this.#manager.__registerMastra(deps.mastra);
       this.#wireStaticTools(deps.mastra);
     }
-
-    await this.#manager.init(deps.pubsub);
-    this.#running = true;
   }
 
   /**
@@ -54,29 +64,32 @@ export class BackgroundTaskWorker extends MastraWorker {
    * managed background-task manager — the worker owns a separate manager
    * instance, so it has to populate its own registry.
    */
-  #wireStaticTools(mastra: NonNullable<WorkerDeps['mastra']>): void {
-    const tools = (mastra as any).listTools?.() as Record<string, any> | undefined;
+  #wireStaticTools(mastra: Mastra): void {
+    const listTools = (mastra as unknown as { listTools?: () => Record<string, StaticToolLike> }).listTools;
+    const tools = listTools?.call(mastra);
     if (!tools || !this.#manager) return;
     for (const [name, tool] of Object.entries(tools)) {
       if (!tool || typeof tool.execute !== 'function') continue;
       const execute = tool.execute.bind(tool);
       this.#manager.registerStaticExecutor(name, {
         execute: async (args, options) => {
-          return execute(
-            args as any,
-            {
-              toolCallId: '',
-              messages: [],
-              abortSignal: options?.abortSignal,
-            } as any,
-          );
+          return execute(args, {
+            toolCallId: '',
+            messages: [],
+            abortSignal: options?.abortSignal,
+          });
         },
       });
     }
   }
 
   async start(): Promise<void> {
-    // Already started during init (manager self-subscribes to PubSub)
+    if (this.#running) return;
+    if (!this.#manager || !this.deps) {
+      throw new Error('BackgroundTaskWorker: call init() before start()');
+    }
+    await this.#manager.init(this.deps.pubsub);
+    this.#running = true;
   }
 
   async stop(): Promise<void> {

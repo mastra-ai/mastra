@@ -1211,7 +1211,41 @@ const stepExecutionBodySchema = z.object({
   format: z.enum(['legacy', 'vnext']).optional(),
   perStep: z.boolean().optional(),
   validateInputs: z.boolean().optional(),
+  /**
+   * Shared secret used to authenticate the calling OrchestrationWorker
+   * against this server's configured `workerSecret`. Required when the
+   * server has a secret configured; ignored otherwise.
+   */
+  workerToken: z.string().optional(),
 });
+
+type StepExecutionBody = z.infer<typeof stepExecutionBodySchema>;
+
+interface StepExecutionHandlerArgs extends StepExecutionBody {
+  mastra: {
+    getWorkerSecret(): string | undefined;
+    getWorkflow: (id: string) => unknown;
+  };
+  workflowId: string;
+  runId: string;
+}
+
+// Reuse the InProcessStrategy across requests for a given Mastra instance.
+// The strategy is stateless beyond its mastra reference, but allocating it
+// per request triggers a dynamic import on the hot path.
+const strategyByMastra = new WeakMap<object, { executeStep: (p: unknown) => Promise<unknown> }>();
+
+async function getStepStrategy(mastra: object) {
+  let cached = strategyByMastra.get(mastra);
+  if (!cached) {
+    const { InProcessStrategy } = await import('@mastra/core/worker');
+    cached = new InProcessStrategy({ mastra: mastra as any }) as unknown as {
+      executeStep: (p: unknown) => Promise<unknown>;
+    };
+    strategyByMastra.set(mastra, cached);
+  }
+  return cached;
+}
 
 export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   method: 'POST',
@@ -1224,11 +1258,16 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
     'Internal endpoint used by standalone OrchestrationWorker instances to execute workflow steps remotely via HttpRemoteStrategy.',
   tags: ['Workflows', 'Worker'],
   requiresAuth: true,
-  handler: (async ({ mastra, workflowId, runId, ...body }: any) => {
+  handler: (async ({ mastra, workflowId, runId, ...body }: StepExecutionHandlerArgs) => {
     try {
-      const { InProcessStrategy } = await import('@mastra/core/worker');
+      const expectedSecret = mastra.getWorkerSecret?.();
+      if (expectedSecret) {
+        if (!body.workerToken || body.workerToken !== expectedSecret) {
+          throw new HTTPException(401, { message: 'Invalid or missing worker token' });
+        }
+      }
 
-      const strategy = new InProcessStrategy({ mastra });
+      const strategy = await getStepStrategy(mastra);
       const result = await strategy.executeStep({
         workflowId,
         runId,

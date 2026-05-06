@@ -1,4 +1,5 @@
 import type { Event } from '../../events/types';
+import type { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { PullTransport } from '../transport/pull-transport';
 import type { WorkerTransport } from '../transport/transport';
 import type { StepExecutionStrategy } from '../types';
@@ -26,7 +27,7 @@ export class OrchestrationWorker extends MastraWorker {
 
   #config: OrchestrationWorkerConfig;
   #transport?: WorkerTransport;
-  #processor?: any; // WorkflowEventProcessor (dynamically imported)
+  #processor?: WorkflowEventProcessor;
   #strategy?: StepExecutionStrategy;
   #running = false;
 
@@ -47,11 +48,19 @@ export class OrchestrationWorker extends MastraWorker {
     const remoteUrl = process.env.MASTRA_STEP_EXECUTION_URL;
     if (remoteUrl) {
       const { HttpRemoteStrategy } = await import('../strategies/http-remote-strategy');
+      const workerToken = process.env.MASTRA_WORKER_SECRET;
+      if (!workerToken) {
+        deps.logger?.warn?.(
+          'OrchestrationWorker: MASTRA_STEP_EXECUTION_URL is set but MASTRA_WORKER_SECRET is not. ' +
+            'Remote step execution requests will be rejected by servers that enforce a worker secret.',
+        );
+      }
       this.#strategy = new HttpRemoteStrategy({
         serverUrl: remoteUrl,
         auth: process.env.MASTRA_STEP_EXECUTION_AUTH
           ? { type: 'api-key', key: process.env.MASTRA_STEP_EXECUTION_AUTH }
           : undefined,
+        workerToken,
       });
     }
 

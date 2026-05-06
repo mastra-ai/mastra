@@ -372,4 +372,69 @@ describe('RedisStreamsPubSub', () => {
       expect(seenB[0]!.type).toBe('sticky');
     });
   });
+
+  describe('nack max-delivery cap', () => {
+    it('drops the event after maxDeliveryAttempts and stops redelivering', async () => {
+      const warns: Array<{ msg: string; meta: any }> = [];
+      const ps = new RedisStreamsPubSub({
+        url: REDIS_URL,
+        blockMs: 200,
+        maxDeliveryAttempts: 3,
+        logger: {
+          debug: () => {},
+          warn: (msg: any, meta: any) => warns.push({ msg, meta }),
+        },
+      });
+      pubsubs.push(ps);
+
+      const topic = `t-cap-${randomUUID()}`;
+      const groupName = `g-cap-${randomUUID()}`;
+      let attempts = 0;
+      const cb: EventCallback = (_event, _ack, nack) => {
+        attempts++;
+        void nack?.();
+      };
+      await ps.subscribe(topic, cb, { group: groupName });
+      await ps.publish(topic, makeEvent({ type: 'poison' }));
+
+      // 3 deliveries (initial + 2 redeliveries = attempt 1, 2, 3) then drop.
+      await waitFor(() => attempts >= 3, { timeoutMs: 5000 });
+      // Give Redis a moment in case a 4th would have been redelivered.
+      await new Promise(r => setTimeout(r, 500));
+      expect(attempts).toBe(3);
+      expect(warns.some(w => /max delivery attempts/.test(String(w.msg)))).toBe(true);
+    });
+  });
+
+  describe('unsubscribe scoping', () => {
+    it('the same callback can subscribe to two topics; unsubscribing one keeps the other', async () => {
+      const ps = createPubSub();
+      const seen: Array<{ topic: string; type: string }> = [];
+      const cb: EventCallback = (event, ack) => {
+        // mark the topic by inspecting the event type, since EventCallback
+        // does not receive the topic separately.
+        seen.push({ topic: event.type.startsWith('a-') ? 'A' : 'B', type: event.type });
+        void ack?.();
+      };
+      const topicA = `t-A-${randomUUID()}`;
+      const topicB = `t-B-${randomUUID()}`;
+      await ps.subscribe(topicA, cb);
+      await ps.subscribe(topicB, cb);
+
+      await ps.publish(topicA, makeEvent({ type: 'a-1' }));
+      await ps.publish(topicB, makeEvent({ type: 'b-1' }));
+      await waitFor(() => seen.length === 2, { timeoutMs: 5000 });
+
+      // Unsubscribe only from A.
+      await ps.unsubscribe(topicA, cb);
+
+      await ps.publish(topicA, makeEvent({ type: 'a-2' }));
+      await ps.publish(topicB, makeEvent({ type: 'b-2' }));
+      await waitFor(() => seen.some(s => s.type === 'b-2'), { timeoutMs: 5000 });
+      // Allow some grace time for any stray a-2 delivery.
+      await new Promise(r => setTimeout(r, 300));
+      expect(seen.some(s => s.type === 'a-2')).toBe(false);
+      expect(seen.some(s => s.type === 'b-2')).toBe(true);
+    });
+  });
 });

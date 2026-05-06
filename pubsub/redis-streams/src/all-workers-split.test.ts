@@ -54,7 +54,7 @@ describe('all workers split across processes', () => {
       entry: ORCH_ENTRY,
       label: 'orchestrator',
       env: {
-        MASTRA_WORKERS: '',
+        MASTRA_WORKERS: 'orchestration',
         REDIS_URL,
         STORAGE_URL: storage.storageUrl,
         MASTRA_STEP_EXECUTION_URL: `${serverUrl}/api`,
@@ -65,14 +65,14 @@ describe('all workers split across processes', () => {
     scheduler = spawnFixture({
       entry: SCHEDULER_ENTRY,
       label: 'scheduler',
-      env: { REDIS_URL, STORAGE_URL: storage.storageUrl },
+      env: { MASTRA_WORKERS: 'scheduler', REDIS_URL, STORAGE_URL: storage.storageUrl },
     });
     await waitForLine(scheduler, 'scheduler-ready');
 
     background = spawnFixture({
       entry: BACKGROUND_ENTRY,
       label: 'background',
-      env: { REDIS_URL, STORAGE_URL: storage.storageUrl },
+      env: { MASTRA_WORKERS: 'backgroundTasks', REDIS_URL, STORAGE_URL: storage.storageUrl },
     });
     await waitForLine(background, 'background-ready');
   }, 90_000);

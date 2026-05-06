@@ -70,7 +70,7 @@ describe('worker resilience and concurrency', () => {
         entry: WORKER_ENTRY,
         label: 'workerA',
         env: {
-          MASTRA_WORKERS: '',
+          MASTRA_WORKERS: 'orchestration',
           REDIS_URL,
           STORAGE_URL: storage.storageUrl,
           MASTRA_STEP_EXECUTION_URL: `${serverUrl}/api`,
@@ -82,7 +82,7 @@ describe('worker resilience and concurrency', () => {
         entry: WORKER_ENTRY,
         label: 'workerB',
         env: {
-          MASTRA_WORKERS: '',
+          MASTRA_WORKERS: 'orchestration',
           REDIS_URL,
           STORAGE_URL: storage.storageUrl,
           MASTRA_STEP_EXECUTION_URL: `${serverUrl}/api`,
@@ -103,17 +103,31 @@ describe('worker resilience and concurrency', () => {
       ),
     );
 
-    expect(results.every(r => r.status === 'success')).toBe(true);
+    // start-async may return either 'success' (workflow finished within
+    // the request) or 'running' (still pending). Both are healthy — the
+    // important property is that step-execute-hit markers cover all runs
+    // and don't catastrophically duplicate.
+    expect(results.every(r => r.status === 'success' || r.status === 'running')).toBe(true);
 
-    // Each pipeline workflow has 3 steps. With N parallel runs, the
-    // server should see at least 3 * N step-execute-hit markers (and
-    // exactly 3 * N if no duplicates). Use >= to be tolerant of any
-    // additional control steps.
+    // Wait until the server has seen at least 3*N step-execute-hits (one
+    // per step per run). Polling is necessary because 'running' results
+    // mean steps may still be in flight.
+    await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 30_000) {
+        if (countMarker(server, 'step-execute-hit') - before >= 3 * N) return;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      throw new Error(
+        `Timed out waiting for ${3 * N} step-execute-hit markers. Saw ${countMarker(server, 'step-execute-hit') - before}.`,
+      );
+    })();
+
     const delta = countMarker(server, 'step-execute-hit') - before;
     expect(delta).toBeGreaterThanOrEqual(3 * N);
     // No catastrophic duplication (looser: at most 2x is still healthy).
     expect(delta).toBeLessThan(3 * N * 2);
-  }, 60_000);
+  }, 90_000);
 
   it('MASTRA_WORKERS=scheduler boots only the scheduler subsystem', async () => {
     await flushRedis();
@@ -131,12 +145,16 @@ describe('worker resilience and concurrency', () => {
     await waitForLine(server, 'server-ready');
     await waitForServerHttp(serverUrl);
 
-    // Scheduler-only process: starts SchedulerWorker, no orchestration.
+    // Scheduler-only process: env filter selects only the SchedulerWorker
+    // out of the auto-created defaults. If the env filter is wrong the
+    // OrchestrationWorker would also boot and steal the workflow.start
+    // events we publish below — the assertion at the bottom proves it
+    // didn't.
     const schedulerOnly = track(
       spawnFixture({
         entry: SCHEDULER_ENTRY,
         label: 'scheduler-only',
-        env: { REDIS_URL, STORAGE_URL: storage.storageUrl },
+        env: { MASTRA_WORKERS: 'scheduler', REDIS_URL, STORAGE_URL: storage.storageUrl },
       }),
     );
     await waitForLine(schedulerOnly, 'scheduler-ready');
@@ -224,7 +242,7 @@ describe('worker resilience and concurrency', () => {
         entry: WORKER_ENTRY,
         label: 'orchestrator-late',
         env: {
-          MASTRA_WORKERS: '',
+          MASTRA_WORKERS: 'orchestration',
           REDIS_URL,
           STORAGE_URL: storage.storageUrl,
           MASTRA_STEP_EXECUTION_URL: `${serverUrl}/api`,

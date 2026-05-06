@@ -446,6 +446,17 @@ export interface Config<
    * - `MastraWorker[]`: Use exactly these workers
    */
   workers?: MastraWorker[] | false;
+  /**
+   * Shared secret used to authenticate calls from standalone OrchestrationWorker
+   * instances to the server's internal step-execution endpoint.
+   *
+   * When set, the server will reject any step-execution request that does not
+   * carry a matching `workerToken` field in its body. The same value must be
+   * available to the worker process via `MASTRA_WORKER_SECRET`.
+   *
+   * Falls back to `process.env.MASTRA_WORKER_SECRET` when omitted.
+   */
+  workerSecret?: string;
 }
 
 /**
@@ -539,6 +550,8 @@ export class Mastra<
   #channels?: TChannels;
   #environment?: string;
   #workers: MastraWorker[] = [];
+  #workerSecret?: string;
+  #workerFilter?: Set<string>;
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -568,6 +581,16 @@ export class Mastra<
 
   getWorker<T extends MastraWorker>(name: string): T | undefined {
     return this.#workers.find(w => w.name === name) as T | undefined;
+  }
+
+  /**
+   * Shared secret used to authenticate calls to the internal step-execution
+   * endpoint from standalone OrchestrationWorker instances. Returns
+   * `undefined` when no secret is configured (in-process / single-process
+   * deployments don't need it).
+   */
+  getWorkerSecret(): string | undefined {
+    return this.#workerSecret;
   }
 
   get backgroundTaskManager() {
@@ -883,8 +906,28 @@ export class Mastra<
     }
 
     // Initialize workers based on config.
-    // MASTRA_WORKERS=false env var overrides config (useful for deployment scripts)
-    const workersOption = process.env.MASTRA_WORKERS === 'false' ? false : config?.workers;
+    // MASTRA_WORKERS env var:
+    //   - "false": disables all event processing in this instance
+    //   - comma-separated names (e.g. "scheduler,orchestration"): only those
+    //     workers will be started by `startWorkers()` when called without an
+    //     explicit `name` argument. Construction still creates all workers so
+    //     a later explicit `startWorkers('foo')` still works.
+    const rawWorkersEnv = process.env.MASTRA_WORKERS;
+    let workersOption: MastraWorker[] | false | undefined;
+    if (rawWorkersEnv === 'false') {
+      workersOption = false;
+    } else {
+      workersOption = config?.workers;
+      if (rawWorkersEnv && rawWorkersEnv !== 'false') {
+        const names = rawWorkersEnv
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (names.length > 0) {
+          this.#workerFilter = new Set(names);
+        }
+      }
+    }
 
     if (workersOption === false) {
       // Explicitly disabled — no event processing in this instance.
@@ -905,6 +948,10 @@ export class Mastra<
         w.__registerMastra(this);
       }
     }
+
+    // Worker token shared secret for standalone OrchestrationWorker → server
+    // step-execution authentication. Config wins; env var is the fallback.
+    this.#workerSecret = config?.workerSecret ?? process.env.MASTRA_WORKER_SECRET;
 
     let logger: TLogger;
     if (config?.logger === false) {
@@ -3845,10 +3892,21 @@ export class Mastra<
       mastra: this,
     };
 
-    const targets = name ? this.#workers.filter(w => w.name === name) : this.#workers;
-
-    if (name && targets.length === 0) {
-      throw new Error(`Worker "${name}" not found. Available: ${this.#workers.map(w => w.name).join(', ')}`);
+    let targets: MastraWorker[];
+    if (name) {
+      targets = this.#workers.filter(w => w.name === name);
+      if (targets.length === 0) {
+        throw new Error(`Worker "${name}" not found. Available: ${this.#workers.map(w => w.name).join(', ')}`);
+      }
+    } else if (this.#workerFilter) {
+      targets = this.#workers.filter(w => this.#workerFilter!.has(w.name));
+      if (targets.length === 0) {
+        this.#logger?.warn?.(
+          `MASTRA_WORKERS=${[...this.#workerFilter].join(',')} did not match any registered workers (have: ${this.#workers.map(w => w.name).join(', ')})`,
+        );
+      }
+    } else {
+      targets = this.#workers;
     }
 
     for (const worker of targets) {
@@ -3896,6 +3954,22 @@ export class Mastra<
     }
 
     await this.#pubsub.flush();
+  }
+
+  /**
+   * @deprecated Use {@link Mastra.startWorkers} instead. Will be removed in a
+   * future release.
+   */
+  public async startEventEngine(name?: string): Promise<void> {
+    return this.startWorkers(name);
+  }
+
+  /**
+   * @deprecated Use {@link Mastra.stopWorkers} instead. Will be removed in a
+   * future release.
+   */
+  public async stopEventEngine(): Promise<void> {
+    return this.stopWorkers();
   }
 
   /**
