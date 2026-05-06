@@ -296,6 +296,17 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
   providerOptions?: Record<string, unknown>;
   /** Names of tools made available to the model on this inference call */
   availableTools?: string[];
+  /**
+   * How the model was instructed to choose tools: 'auto', 'none', 'required',
+   * or a specific tool selection. Distinguishes "model could have called a
+   * tool but didn't" from "model was blocked/forced".
+   */
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  /**
+   * Requested response format. Distinguishes plain text generation from
+   * structured-output (JSON / JSON schema) runs.
+   */
+  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string };
 }
 
 /**
