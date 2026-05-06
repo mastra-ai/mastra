@@ -12,6 +12,16 @@ import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 interface AnthropicMetadata {
   cacheReadInputTokens?: number;
   cacheCreationInputTokens?: number;
+  /**
+   * Non-cache input/output token counts. Anthropic's Vercel AI SDK adapter
+   * sometimes reports these on `providerMetadata.anthropic` only, with no
+   * `usage.inputTokens` / `usage.outputTokens` populated — see #16261.
+   * `extractUsageMetrics` falls back to these when the top-level usage
+   * fields are absent so Langfuse generation spans don't read 0 tokens
+   * for Anthropic-only spans.
+   */
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 interface GoogleUsageMetadata {
@@ -83,7 +93,7 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   const outputDetails: OutputTokenDetails = {};
 
   let inputTokens = usage.inputTokens;
-  const outputTokens = usage.outputTokens;
+  let outputTokens = usage.outputTokens;
 
   // ===== AI SDK aggregated format (inputTokenDetails) =====
   // In multi-step runs, providerMetadata only reflects the LAST step.
@@ -112,11 +122,25 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   }
 
   // ===== Anthropic =====
-  // Cache tokens are in providerMetadata.anthropic
-  // inputTokens does NOT include cache tokens - need to sum them
+  // Cache tokens are in providerMetadata.anthropic.
+  // inputTokens does NOT include cache tokens - need to sum them.
+  // Per #16261, the Anthropic adapter sometimes also reports the non-cache
+  // `inputTokens` / `outputTokens` here when the top-level `usage` is empty
+  // (the streaming finish-chunk shape that left Langfuse spans reading 0).
   const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
 
   if (anthropic) {
+    // Recover base tokens from providerMetadata when the top-level usage is
+    // missing them. Same fallback shape that PR #13914 introduced for cache
+    // tokens, extended to non-cache counts. We capture the recovered base
+    // so the cache-summing path below adds to it instead of to zero.
+    if (!isDefined(inputTokens) && isDefined(anthropic.inputTokens)) {
+      inputTokens = anthropic.inputTokens;
+    }
+    if (!isDefined(outputTokens) && isDefined(anthropic.outputTokens)) {
+      outputTokens = anthropic.outputTokens;
+    }
+
     const rawV3InputUsage = isV3RawUsage(usage.raw) ? usage.raw.inputTokens : undefined;
     const hasV3CachedTotals =
       rawV3InputUsage?.total !== undefined &&
@@ -136,7 +160,7 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       (isDefined(usage.cacheCreationInputTokens) && usage.cacheCreationInputTokens > 0);
 
     if (!inputAlreadyIncludesCache && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
-      inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
+      inputTokens = (inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }
 

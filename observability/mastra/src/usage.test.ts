@@ -522,4 +522,108 @@ describe('extractUsageMetrics', () => {
       expect(result.outputDetails).toEqual({ text: 50 });
     });
   });
+
+  // Regression for #16261. The Anthropic Vercel AI SDK adapter sometimes
+  // reports `inputTokens` / `outputTokens` only on `providerMetadata.anthropic`,
+  // not on the top-level `usage` object — which left Langfuse's
+  // generation-span usage reading 0 for all Anthropic spans. PR #13914
+  // established the providerMetadata fallback for cache tokens; this group
+  // pins the same fallback for the non-cache input/output counts.
+  describe('Anthropic non-cache token fallback (#16261)', () => {
+    it('falls back to providerMetadata.anthropic.inputTokens when usage.inputTokens is undefined', () => {
+      const usage = { outputTokens: 50 } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: { inputTokens: 100 } as Record<string, number>,
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(100);
+      expect(result.outputTokens).toBe(50);
+      expect(result.inputDetails?.text).toBe(100);
+    });
+
+    it('falls back to providerMetadata.anthropic.outputTokens when usage.outputTokens is undefined', () => {
+      const usage = { inputTokens: 100 } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: { outputTokens: 50 } as Record<string, number>,
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(100);
+      expect(result.outputTokens).toBe(50);
+      expect(result.outputDetails?.text).toBe(50);
+    });
+
+    it('falls back when both usage tokens are missing — the canonical #16261 shape', () => {
+      // The exact shape from the issue: AI SDK Anthropic finish chunk for a
+      // streaming call where token counts only land on providerMetadata.
+      const usage = {} as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          inputTokens: 1234,
+          outputTokens: 567,
+        } as Record<string, number>,
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(1234);
+      expect(result.outputTokens).toBe(567);
+      expect(result.inputDetails?.text).toBe(1234);
+      expect(result.outputDetails?.text).toBe(567);
+    });
+
+    it('still combines the recovered base input with anthropic cache tokens', () => {
+      // Same fallback, but also exercises the existing cache-summing path
+      // so we confirm the two recoveries compose: base from providerMetadata,
+      // plus cache tokens from providerMetadata.
+      const usage = {} as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadInputTokens: 800,
+          cacheCreationInputTokens: 200,
+        } as Record<string, number>,
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(1100); // 100 + 800 + 200
+      expect(result.outputTokens).toBe(50);
+      expect(result.inputDetails?.text).toBe(100);
+      expect(result.inputDetails?.cacheRead).toBe(800);
+      expect(result.inputDetails?.cacheWrite).toBe(200);
+    });
+
+    it('prefers usage.inputTokens / outputTokens over providerMetadata when both are present (no regression)', () => {
+      const usage: LanguageModelUsage = { inputTokens: 999, outputTokens: 888 };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: { inputTokens: 1, outputTokens: 1 } as Record<string, number>,
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(999);
+      expect(result.outputTokens).toBe(888);
+    });
+
+    it('does not invent tokens when neither usage nor providerMetadata has them', () => {
+      const usage = { outputTokens: 0 } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = { anthropic: {} as Record<string, number> };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBeUndefined();
+      expect(result.outputTokens).toBe(0);
+    });
+  });
 });
