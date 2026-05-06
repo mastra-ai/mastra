@@ -195,6 +195,46 @@ describe('AIV5Adapter.fromModelMessage — recover args from previousMessages on
     expect(part.toolInvocation.result).toEqual({ ok: true });
   });
 
+  it('recovers args from a prior message that only carries the call on toolInvocations (legacy/restored shape)', () => {
+    // Some persisted/restored DB rows only have the call on the flat
+    // toolInvocations array, with no matching part in content.parts. The
+    // helper must still find them — see CodeRabbit comment on PR #16284.
+    const legacyPrior: MastraDBMessage = {
+      id: 'msg-legacy',
+      role: 'assistant',
+      createdAt: new Date('2026-01-01T11:00:00Z'),
+      content: {
+        format: 2,
+        parts: [],
+        toolInvocations: [
+          {
+            toolCallId: 'tc-legacy',
+            toolName: 'lookup',
+            args: { id: 99 },
+            state: 'call',
+          },
+        ],
+      },
+    };
+
+    const result = AIV5Adapter.fromModelMessage(
+      buildStandaloneToolResult({
+        toolCallId: 'tc-legacy',
+        toolName: 'lookup',
+        output: { name: 'foo' },
+      }),
+      undefined,
+      { memoryInfo: null, previousMessages: [legacyPrior] },
+    );
+
+    const part = result.content.parts.find(
+      p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === 'tc-legacy',
+    ) as { type: 'tool-invocation'; toolInvocation: { args: unknown; result: unknown } };
+
+    expect(part.toolInvocation.args).toEqual({ id: 99 });
+    expect(part.toolInvocation.result).toEqual({ name: 'foo' });
+  });
+
   it('prefers the most recent prior tool-call when multiple messages share the same toolCallId', () => {
     const old = buildPriorToolCallMessage({
       toolCallId: 'tc-5',

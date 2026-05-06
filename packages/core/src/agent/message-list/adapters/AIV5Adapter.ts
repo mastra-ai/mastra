@@ -58,6 +58,12 @@ function getToolName(type: string | { type: string }): string {
   return sanitizeToolName(type);
 }
 
+/**
+ * Merge a Mastra-tracked `createdAt` timestamp into an AIV5 ProviderMetadata
+ * object under the `mastra` namespace, preserving any existing fields. Used
+ * when round-tripping parts back to AIV5 so the original part timestamp
+ * survives the conversion.
+ */
 function mergeMastraCreatedAt(metadata: AIV5Type.ProviderMetadata | undefined, createdAt?: number) {
   if (createdAt == null) {
     return metadata;
@@ -72,6 +78,11 @@ function mergeMastraCreatedAt(metadata: AIV5Type.ProviderMetadata | undefined, c
   } satisfies AIV5Type.ProviderMetadata;
 }
 
+/**
+ * Read the Mastra-tracked `createdAt` timestamp (if any) out of an AIV5
+ * ProviderMetadata object. Returns `undefined` when the field is absent or
+ * not numeric so callers can fall back to defaults safely.
+ */
 function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): number | undefined {
   const value = providerMetadata?.mastra;
   if (!value || typeof value !== 'object') {
@@ -649,10 +660,13 @@ export class AIV5Adapter {
    * scanning the supplied messages from newest to oldest so the most recent
    * call wins.
    *
-   * Used by `fromModelMessage` to recover args for stand-alone `tool-result`
-   * parts (the `agent.resumeStream(...)` shape from #16017). Returns
-   * `undefined` when no matching prior call is found, in which case callers
-   * should fall back to `args: {}`.
+   * Inspects both `content.parts` and `content.toolInvocations` so legacy /
+   * restored DB messages — which sometimes carry the call only in the flat
+   * `toolInvocations` array — are still recoverable. Used by
+   * `fromModelMessage` to recover args for stand-alone `tool-result` parts
+   * (the `agent.resumeStream(...)` shape from #16017). Returns `undefined`
+   * when no matching prior call is found, in which case callers should fall
+   * back to `args: {}`.
    */
   private static findPriorToolCallArgs(
     toolCallId: string,
@@ -662,9 +676,8 @@ export class AIV5Adapter {
 
     for (let i = previousMessages.length - 1; i >= 0; i--) {
       const msg = previousMessages[i];
-      if (!msg?.content?.parts) continue;
 
-      for (const part of msg.content.parts) {
+      for (const part of msg?.content?.parts ?? []) {
         if (
           part.type === 'tool-invocation' &&
           'toolInvocation' in part &&
@@ -675,6 +688,17 @@ export class AIV5Adapter {
           return {
             args: part.toolInvocation.args as Record<string, unknown>,
             toolName: part.toolInvocation.toolName,
+          };
+        }
+      }
+
+      // Fallback: legacy / restored messages may only have args on the flat
+      // toolInvocations array (no matching part). Don't lose them.
+      for (const ti of msg?.content?.toolInvocations ?? []) {
+        if (ti.toolCallId === toolCallId && ti.args && typeof ti.args === 'object' && !Array.isArray(ti.args)) {
+          return {
+            args: ti.args as Record<string, unknown>,
+            toolName: ti.toolName,
           };
         }
       }
