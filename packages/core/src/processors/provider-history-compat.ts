@@ -94,12 +94,14 @@ function buildToolIdMap(messages: MastraDBMessage[]): Map<string, string> {
   const idMap = new Map<string, string>();
 
   for (const msg of messages) {
-    if (!msg.content?.parts) continue;
-    for (const part of msg.content.parts) {
-      if (part.type === 'tool-invocation') {
-        const id = part.toolInvocation.toolCallId;
-        if (id && !VALID_TOOL_ID_PATTERN.test(id) && !idMap.has(id)) {
-          idMap.set(id, sanitizeToolId(id));
+    const parts = msg.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if (part.type === 'tool-invocation') {
+          const id = part.toolInvocation.toolCallId;
+          if (id && !VALID_TOOL_ID_PATTERN.test(id) && !idMap.has(id)) {
+            idMap.set(id, sanitizeToolId(id));
+          }
         }
       }
     }

@@ -264,6 +264,43 @@ describe('ProviderHistoryCompat', () => {
     expect(assistantMsg!.content.toolInvocations![0]!.toolCallId).toBe('call_legacy_id');
   });
 
+  it('should sanitize IDs in legacy-only toolInvocations without parts', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('hello')], 'input');
+
+    const msgWithLegacy = {
+      id: `msg-legacy-only`,
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        toolInvocations: [
+          {
+            toolCallId: 'call:legacy.only',
+            toolName: 'myTool',
+            args: {},
+            state: 'result' as const,
+            result: 'ok',
+          },
+        ],
+      },
+      createdAt: new Date(),
+    };
+    messageList.add([msgWithLegacy as any], 'response');
+
+    const args = makeArgs({
+      messageList,
+      messages: messageList.get.all.db(),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    const messages = messageList.get.all.db();
+    const assistantMsg = messages.find(m => m.role === 'assistant' && m.content.toolInvocations?.length);
+    expect(result).toEqual({ retry: true });
+    expect(assistantMsg!.content.toolInvocations![0]!.toolCallId).toBe('call_legacy_only');
+  });
+
   it('should not modify messages when there are no invalid IDs', async () => {
     const handler = new ProviderHistoryCompat();
     const messageList = new MessageList({ threadId: 'test-thread' });
