@@ -1,0 +1,32 @@
+/*
+ * Local Mastra Studio fonts. Bundled into the public `mastra` CLI build.
+ * Geist + GeistMono are SIL OFL — safe to redistribute. TasaExplorer is
+ * the legacy Studio display font, preserved here to match prior CLI
+ * releases. Branded Greed (Mastra Cloud) lives in the platform repo only.
+ */
+
+@font-face {
+  font-family: 'Geist';
+  src:
+    local('Geist'),
+    url('./assets/fonts/GeistVariableVF.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'GeistMono';
+  src:
+    local('GeistMono'),
+    url('./assets/fonts/GeistMonoVariableVF.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'TasaExplorer';
+  src:
+    local('TasaExplorer'),
+    url('./assets/fonts/TASAExplorerVF.woff2') format('woff2-variations');
+  font-display: swap;
+}

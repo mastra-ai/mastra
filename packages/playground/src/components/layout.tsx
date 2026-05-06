@@ -24,7 +24,7 @@ function MobileNavbar() {
       <MainSidebar.MobileTrigger />
       <span className="flex items-center gap-2">
         <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-        <span className="font-serif text-sm whitespace-nowrap">Mastra Studio</span>
+        <span className="font-display text-sm whitespace-nowrap">Mastra Studio</span>
       </span>
     </header>
   );

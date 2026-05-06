@@ -22,6 +22,7 @@ const libConfig: UserConfig = {
     ...(baseConfig.plugins ?? []),
     dts({
       insertTypesEntry: true,
+      exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
     }),
     libInjectCss(),
     nodeExternals(),
