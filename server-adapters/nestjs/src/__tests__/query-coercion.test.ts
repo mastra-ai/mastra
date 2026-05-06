@@ -22,7 +22,13 @@ function buildController(): MastraController {
 }
 
 function parseQueryParams(controller: MastraController, query: Record<string, unknown>): Record<string, unknown> {
-  return (controller as any).parseQueryParams(query);
+  // Runtime guard so a future rename of the private method surfaces as a loud
+  // error instead of silently making every assertion compare against undefined.
+  const fn = (controller as unknown as { parseQueryParams?: unknown }).parseQueryParams;
+  if (typeof fn !== 'function') {
+    throw new Error('MastraController.parseQueryParams is not a function — was it renamed?');
+  }
+  return (fn as (q: Record<string, unknown>) => Record<string, unknown>).call(controller, query);
 }
 
 describe('NestJS adapter — query params are not pre-schema-coerced (#16114)', () => {
@@ -80,5 +86,13 @@ describe('NestJS adapter — query params are not pre-schema-coerced (#16114)', 
     // normalizeQueryParams collapses single-element arrays to a string, so
     // a real multi-value comes through as an array of strings.
     expect(parseQueryParams(controller, { tag: ['a', 'b'] })).toEqual({ tag: ['a', 'b'] });
+  });
+
+  it('collapses a single-element array to a scalar string (normalizeQueryParams contract)', () => {
+    const controller = buildController();
+    // Pins the contract referenced above — if normalizeQueryParams ever stops
+    // collapsing single-element arrays, every adapter consumer's schema
+    // assumption breaks silently. Catch it here.
+    expect(parseQueryParams(controller, { tag: ['only'] })).toEqual({ tag: 'only' });
   });
 });
