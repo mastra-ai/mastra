@@ -23,6 +23,8 @@ async function findThread(
  */
 async function restoreCavemanForThread(harness: Harness<Record<string, unknown>>, threadId: string): Promise<void> {
   const thread = await findThread(harness, threadId);
+  if (harness.getCurrentThreadId() !== threadId) return;
+
   const persisted = thread?.metadata?.[META_KEY];
 
   if (typeof persisted === 'boolean') {

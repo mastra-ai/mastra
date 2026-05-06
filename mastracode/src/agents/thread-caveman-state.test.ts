@@ -6,15 +6,24 @@ function createHarness({
   currentThreadId = 'thread-1',
   metadata,
   state = {},
+  onListThreads,
 }: {
   currentThreadId?: string | undefined;
   metadata?: Record<string, unknown>;
   state?: Record<string, unknown>;
+  onListThreads?: () => void;
 }) {
+  let activeThreadId: string | undefined = currentThreadId;
   const harness = {
-    getCurrentThreadId: vi.fn(() => currentThreadId),
+    getCurrentThreadId: vi.fn(() => activeThreadId),
     getState: vi.fn(() => state),
-    listThreads: vi.fn(async () => [{ id: 'thread-1', metadata }]),
+    listThreads: vi.fn(async () => {
+      onListThreads?.();
+      return [{ id: 'thread-1', metadata }];
+    }),
+    switchCurrentThread: (threadId: string | undefined) => {
+      activeThreadId = threadId;
+    },
     setState: vi.fn(async (nextState: Record<string, unknown>) => {
       Object.assign(state, nextState);
     }),
@@ -69,6 +78,32 @@ describe('restoreCavemanForCurrentThread', () => {
     await restoreCavemanForCurrentThread(harness as never);
 
     expect(harness.listThreads).not.toHaveBeenCalled();
+    expect(harness.setState).not.toHaveBeenCalled();
+    expect(harness.setThreadSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not apply stale persisted metadata after the current thread changes', async () => {
+    const harness = createHarness({
+      metadata: { cavemanObservations: true },
+      state: { cavemanObservations: false },
+      onListThreads: () => harness.switchCurrentThread('thread-2'),
+    });
+
+    await restoreCavemanForCurrentThread(harness as never);
+
+    expect(harness.setState).not.toHaveBeenCalled();
+    expect(harness.setThreadSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not seed stale metadata after the current thread changes', async () => {
+    const harness = createHarness({
+      metadata: {},
+      state: { cavemanObservations: true },
+      onListThreads: () => harness.switchCurrentThread('thread-2'),
+    });
+
+    await restoreCavemanForCurrentThread(harness as never);
+
     expect(harness.setState).not.toHaveBeenCalled();
     expect(harness.setThreadSetting).not.toHaveBeenCalled();
   });
