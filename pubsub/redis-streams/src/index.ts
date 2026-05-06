@@ -418,7 +418,10 @@ export class RedisStreamsPubSub extends PubSub {
         }
         return;
       }
-      // Republish with incremented deliveryAttempt, then ack the original entry.
+      // Republish with incremented deliveryAttempt FIRST, then ack the
+      // original entry. If the republish fails we deliberately leave the
+      // original message pending so XAUTOCLAIM (or another consumer) can
+      // pick it up on a future tick — acking first would silently drop it.
       const next: Event = {
         ...event,
         deliveryAttempt: attempt + 1,
@@ -426,10 +429,15 @@ export class RedisStreamsPubSub extends PubSub {
       try {
         await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) });
       } catch (err) {
-        this.#logger?.debug?.('redis-streams: nack republish failed', {
+        this.#logger?.warn?.('redis-streams: nack republish failed; leaving original pending for reclaim', {
           topic: sub.topic,
+          eventId: event.id,
           err: err instanceof Error ? err.message : err,
         });
+        // Allow this entry to be redelivered: reset settled so the next
+        // delivery attempt (via XAUTOCLAIM) can ack/nack it again.
+        settled = false;
+        return;
       }
       try {
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
