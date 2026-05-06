@@ -272,7 +272,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 : undefined;
               const processedMessageList = await runner.runOutputProcessors(
                 outputMessageList,
-                {} as any,
+                createObservabilityContext((params as any).tracingContext),
                 requestContext ?? new RequestContext(),
                 0,
                 outputProcessorWriter,
@@ -293,7 +293,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 .map(part => part.text)
                 .join('');
 
-              if (processedText) {
+              if (processedText !== undefined) {
                 finalText = processedText;
               }
             } catch (error) {
