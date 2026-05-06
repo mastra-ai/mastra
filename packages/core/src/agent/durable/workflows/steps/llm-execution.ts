@@ -5,9 +5,15 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { ProcessorRunner } from '../../../../processors/runner';
+import type { RequestContext } from '../../../../request-context';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import {
+  createToolGateSubjectForTool,
+  evaluateToolGateForRequest,
+  getToolGateRuntimeState,
+} from '../../../../tools/tool-gate';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { MessageList } from '../../../message-list';
@@ -18,6 +24,62 @@ import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+
+function getDurableSpecificToolChoiceName(toolChoice: ToolChoice<ToolSet> | undefined): string | undefined {
+  if (!toolChoice || typeof toolChoice === 'string') return undefined;
+  return 'toolName' in toolChoice ? String(toolChoice.toolName) : undefined;
+}
+
+async function applyDurableToolGateToModelInput({
+  requestContext,
+  runId,
+  threadId,
+  resourceId,
+  tools,
+  toolChoice,
+}: {
+  requestContext: RequestContext;
+  runId: string;
+  threadId?: string;
+  resourceId?: string;
+  tools: ToolSet;
+  toolChoice?: ToolChoice<ToolSet>;
+}): Promise<{ tools: ToolSet; toolChoice?: ToolChoice<ToolSet> }> {
+  const entries = Object.entries(tools);
+  if (entries.length === 0) return { tools, toolChoice };
+
+  const deniedToolNames = new Set<string>();
+  for (const [toolName, tool] of entries) {
+    const decision = await evaluateToolGateForRequest({
+      requestContext,
+      subject: createToolGateSubjectForTool({
+        boundary: 'model-input',
+        toolName,
+        tool,
+      }),
+      runId,
+      threadId,
+      resourceId,
+    });
+
+    if (decision?.effect === 'deny') {
+      deniedToolNames.add(toolName);
+    }
+  }
+
+  if (deniedToolNames.size === 0) return { tools, toolChoice };
+
+  const nextTools = Object.fromEntries(entries.filter(([toolName]) => !deniedToolNames.has(toolName))) as ToolSet;
+  const chosenToolName = getDurableSpecificToolChoiceName(toolChoice);
+  const hasVisibleTools = Object.keys(nextTools).length > 0;
+  const nextToolChoice = !hasVisibleTools
+    ? undefined
+    : chosenToolName && deniedToolNames.has(chosenToolName)
+      ? ('auto' as ToolChoice<ToolSet>)
+      : toolChoice;
+
+  return { tools: nextTools, toolChoice: nextToolChoice };
+}
 
 /**
  * Input schema for the durable LLM execution step
@@ -186,6 +248,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             let currentMessageId = messageId;
 
+            const registryEntry = globalRunRegistry.get(runId);
+            const executionAbortSignal = (registryEntry as any)?.abortSignal ?? abortSignal;
+            const requestContextForRun = registryEntry?.requestContext ?? requestContext;
+
             // 5. Prepare tools - cast through unknown as CoreTool and ToolSet are structurally compatible at runtime
             let currentModel = model;
             let currentTools = tools as unknown as ToolSet;
@@ -195,7 +261,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
             // and passed through each iteration. This ensures all steps are children of the same span.
-            const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+            const observability = mastra?.observability?.getSelectedInstance({ requestContext: requestContextForRun });
 
             // modelSpanData is passed through from the workflow input (created in create-inngest-agent.ts)
             const inputModelSpanData = (inputData as any).modelSpanData as
@@ -223,8 +289,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 : undefined;
 
-            const registryEntry = globalRunRegistry.get(runId);
-            const executionAbortSignal = (registryEntry as any)?.abortSignal ?? abortSignal;
             if (registryEntry?.inputProcessors?.length) {
               const inputStepWriter = pubsub
                 ? {
@@ -246,7 +310,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 stepNumber: stepIndex,
                 steps: (inputData as any).accumulatedSteps ?? [],
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                requestContext,
+                requestContext: requestContextForRun,
                 runId,
                 resourceId: (registryEntry as any)?.resourceId,
                 model: currentModel,
@@ -271,6 +335,36 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 ...currentModelSettings,
                 ...(processInputStepResult.modelSettings ?? {}),
               };
+            }
+
+            const durableToolGatePolicyId = typedInput.state.toolGate?.policyId;
+            const toolGatePolicy = requestContextForRun
+              ? getToolGateRuntimeState(requestContextForRun, { runId })?.policy
+              : undefined;
+            const isToolGatePolicyValidForRun =
+              toolGatePolicy && durableToolGatePolicyId && toolGatePolicy.id === durableToolGatePolicyId;
+
+            if (requestContextForRun && isToolGatePolicyValidForRun) {
+              const gated = await applyDurableToolGateToModelInput({
+                requestContext: requestContextForRun,
+                runId,
+                threadId: typedInput.state.threadId,
+                resourceId: typedInput.state.resourceId,
+                tools: currentTools,
+                toolChoice: currentToolChoice,
+              });
+              currentTools = gated.tools;
+              currentToolChoice = gated.toolChoice;
+            } else if (durableToolGatePolicyId) {
+              logger?.warn?.('[DurableAgent] Tool Gate policy unavailable during durable LLM step; clearing tools', {
+                runId,
+                threadId: typedInput.state.threadId,
+                resourceId: typedInput.state.resourceId,
+                expectedPolicyId: durableToolGatePolicyId,
+                actualPolicyId: toolGatePolicy?.id,
+              });
+              currentTools = {};
+              currentToolChoice = undefined;
             }
 
             // Get messages for LLM (using async llmPrompt for proper format conversion)
@@ -338,7 +432,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               options: {
                 runId,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                requestContext,
+                requestContext: requestContextForRun,
               },
             });
 
@@ -567,13 +661,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 });
                 const currentMessageList = new MessageList();
                 currentMessageList.deserialize(typedInput.messageListState);
+                const requestContextForRun = registryEntry.requestContext ?? requestContext;
                 const { retry } = await runner.runProcessAPIError({
                   error: lastError,
                   messages: currentMessageList.get.all.db(),
                   messageList: currentMessageList,
                   stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: [],
-                  requestContext,
+                  requestContext: requestContextForRun,
                 });
                 if (retry) {
                   logger?.debug?.(`processAPIError requested retry for model ${modelId}`, { runId });

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RequestContext } from '../../../../request-context';
+import { setToolGateRuntimeStateForRun } from '../../../../tools/tool-gate';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
@@ -24,7 +26,7 @@ vi.mock('../../stream-adapter', () => ({
 const { createBackgroundTask } = await import('../../../../background-tasks/create');
 const { resolveBackgroundConfig } = await import('../../../../background-tasks/resolve-config');
 const { emitChunkEvent } = await import('../../stream-adapter');
-const { resolveTool: _resolveTool } = await import('../../utils/resolve-runtime');
+const { resolveTool: _resolveTool, toolRequiresApproval } = await import('../../utils/resolve-runtime');
 
 const RUN_ID = 'run-bg-1';
 const AGENT_ID = 'agent-1';
@@ -93,14 +95,24 @@ function setupRegistry(overrides: Record<string, any> = {}) {
   return { messageList, saveQueueManager, bgManager, entry };
 }
 
-function executeStep(pubsub: any, initData: any, input?: any, resumeData?: any) {
+function copySerializableRequestContext(requestContext: RequestContext) {
+  return new RequestContext(Array.from(requestContext.entries()));
+}
+
+function executeStep(
+  pubsub: any,
+  initData: any,
+  input?: any,
+  resumeData?: any,
+  overrides: { requestContext?: RequestContext; suspend?: ReturnType<typeof vi.fn> } = {},
+) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: input ?? baseInput(),
     mastra: { getLogger: () => undefined },
-    suspend: vi.fn(),
+    suspend: overrides.suspend ?? vi.fn(),
     resumeData,
-    requestContext: new Map(),
+    requestContext: overrides.requestContext ?? new RequestContext(),
     getInitData: () => initData,
     [PUBSUB_SYMBOL]: pubsub,
   });
@@ -112,10 +124,326 @@ afterEach(() => {
 });
 
 describe('durable tool-call background task dispatch', () => {
+  it('rejects a durable tool call denied by Tool Gate before execution', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const { entry } = setupRegistry({ requestContext });
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy: {
+        id: 'deny-durable-tool',
+        evaluate: async ({ subject }) => ({
+          effect: subject.boundary === 'tool-call' ? 'deny' : 'allow',
+          reason: 'blocked in durable run',
+        }),
+      },
+    });
+
+    const result = await executeStep(
+      pubsub,
+      makeInitData({
+        state: {
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          toolGate: { policyId: 'deny-durable-tool' },
+        },
+      }),
+      undefined,
+      undefined,
+      { requestContext },
+    );
+
+    expect(result.error).toMatchObject({
+      name: 'ToolNotFoundError',
+      message: expect.stringContaining('blocked by runtime tool policy'),
+    });
+    expect(entry.tools[TOOL_NAME].execute).not.toHaveBeenCalled();
+    expect(vi.mocked(emitChunkEvent)).toHaveBeenCalledWith(
+      pubsub,
+      RUN_ID,
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: TOOL_CALL_ID,
+          toolName: TOOL_NAME,
+        }),
+      }),
+    );
+  });
+
+  it('rejects durable tool calls when serialized Tool Gate state has no runtime policy', async () => {
+    const pubsub = mockPubsub();
+    const { entry } = setupRegistry();
+
+    const result = await executeStep(
+      pubsub,
+      makeInitData({
+        state: {
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          toolGate: { policyId: 'missing-runtime-policy' },
+        },
+      }),
+    );
+
+    expect(result.error).toMatchObject({
+      name: 'ToolNotFoundError',
+      message: expect.stringContaining('missing-runtime-policy'),
+    });
+    expect(entry.tools[TOOL_NAME].execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects durable tool calls when serialized Tool Gate policy does not match runtime policy', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const { entry } = setupRegistry({ requestContext });
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy: {
+        id: 'wrong-runtime-policy',
+        evaluate: async () => ({ effect: 'allow', reason: 'wrong policy allows everything' }),
+      },
+    });
+
+    const result = await executeStep(
+      pubsub,
+      makeInitData({
+        state: {
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          toolGate: { policyId: 'original-runtime-policy' },
+        },
+      }),
+      undefined,
+      undefined,
+      { requestContext },
+    );
+
+    expect(result.error).toMatchObject({
+      name: 'ToolNotFoundError',
+      message: expect.stringContaining('original-runtime-policy'),
+    });
+    expect(result.error.message).toContain('wrong-runtime-policy');
+    expect(entry.tools[TOOL_NAME].execute).not.toHaveBeenCalled();
+  });
+
+  it('does not apply an ambient Tool Gate policy when durable state has no policy id', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const { entry } = setupRegistry({ requestContext, backgroundTaskManager: undefined });
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy: {
+        id: 'ambient-policy',
+        evaluate: async () => ({ effect: 'deny', reason: 'ambient policy should not apply' }),
+      },
+    });
+
+    const result = await executeStep(pubsub, makeInitData(), undefined, undefined, { requestContext });
+
+    expect(result.result).toEqual({ summary: 'done' });
+    expect(entry.tools[TOOL_NAME].execute).toHaveBeenCalledOnce();
+  });
+
+  it('uses the registry request context instead of a transient step context for Tool Gate policy', async () => {
+    const pubsub = mockPubsub();
+    const registryRequestContext = new RequestContext();
+    const { entry } = setupRegistry({ requestContext: registryRequestContext, backgroundTaskManager: undefined });
+    setToolGateRuntimeStateForRun(registryRequestContext, RUN_ID, {
+      policy: {
+        id: 'allow-durable-tool',
+        evaluate: async () => ({ effect: 'allow', reason: 'registry policy allows the tool' }),
+      },
+    });
+
+    const result = await executeStep(
+      pubsub,
+      makeInitData({
+        state: {
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          toolGate: { policyId: 'allow-durable-tool' },
+        },
+      }),
+      undefined,
+      undefined,
+      { requestContext: new RequestContext() },
+    );
+
+    expect(result.result).toEqual({ summary: 'done' });
+    expect(entry.tools[TOOL_NAME].execute).toHaveBeenCalledOnce();
+  });
+
+  it('escalates durable approval when Tool Gate requires approval', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const suspend = vi.fn();
+    const { entry } = setupRegistry({ requestContext });
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy: {
+        id: 'approve-durable-tool',
+        evaluate: async ({ subject }) => ({
+          effect: subject.boundary === 'tool-call' ? 'requireApproval' : 'allow',
+          reason: 'approval required in durable run',
+        }),
+      },
+    });
+
+    await executeStep(
+      pubsub,
+      makeInitData({
+        state: {
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          toolGate: { policyId: 'approve-durable-tool' },
+        },
+      }),
+      undefined,
+      undefined,
+      { requestContext, suspend },
+    );
+
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'approval',
+        toolCallId: TOOL_CALL_ID,
+        toolName: TOOL_NAME,
+      }),
+      { resumeLabel: TOOL_CALL_ID },
+    );
+    expect(entry.tools[TOOL_NAME].execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects approval-required durable tool calls when resume data does not approve them', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const { entry } = setupRegistry({ requestContext });
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy: {
+        id: 'approve-durable-tool',
+        evaluate: async ({ subject }) => ({
+          effect: subject.boundary === 'tool-call' ? 'requireApproval' : 'allow',
+          reason: 'approval required in durable run',
+        }),
+      },
+    });
+
+    const result = await executeStep(
+      pubsub,
+      makeInitData({
+        state: {
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          toolGate: { policyId: 'approve-durable-tool' },
+        },
+      }),
+      undefined,
+      {},
+      { requestContext },
+    );
+
+    expect(result).toMatchObject({
+      result: 'Tool call approval was not provided by the user',
+      denied: true,
+      deniedReason: 'Tool call approval was not provided by the user',
+    });
+    expect(entry.tools[TOOL_NAME].execute).not.toHaveBeenCalled();
+  });
+
+  it('allows an approved durable tool call to resume later with tool-specific resume data', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const { entry } = setupRegistry({ requestContext, backgroundTaskManager: undefined });
+    entry.tools[TOOL_NAME].execute.mockImplementation(async (_args: any, context: any) => ({
+      resumeData: context.resumeData,
+    }));
+    const policy = {
+      id: 'approve-durable-tool',
+      evaluate: async ({ subject }: any) => ({
+        effect: subject.boundary === 'tool-call' ? 'requireApproval' : 'allow',
+        reason: 'approval required in durable run',
+      }),
+    } as const;
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy,
+    });
+
+    const initData = makeInitData({
+      state: {
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        toolGate: { policyId: 'approve-durable-tool' },
+      },
+    });
+
+    await executeStep(pubsub, initData, undefined, { approved: true }, { requestContext });
+
+    const replayRequestContext = copySerializableRequestContext(requestContext);
+    setToolGateRuntimeStateForRun(replayRequestContext, RUN_ID, { policy });
+
+    const result = await executeStep(
+      pubsub,
+      initData,
+      undefined,
+      { continue: true },
+      { requestContext: replayRequestContext },
+    );
+
+    expect(result.result).toEqual({ resumeData: { continue: true } });
+    expect(entry.tools[TOOL_NAME].execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not re-suspend a replayed durable tool call that was already approved', async () => {
+    const pubsub = mockPubsub();
+    const requestContext = new RequestContext();
+    const suspend = vi.fn();
+    const { entry } = setupRegistry({ requestContext, backgroundTaskManager: undefined });
+    const policy = {
+      id: 'approve-durable-tool',
+      evaluate: async ({ subject }: any) => ({
+        effect: subject.boundary === 'tool-call' ? 'requireApproval' : 'allow',
+        reason: 'approval required in durable run',
+      }),
+    } as const;
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, { policy });
+
+    const initData = makeInitData({
+      state: {
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        toolGate: { policyId: 'approve-durable-tool' },
+      },
+    });
+
+    await executeStep(pubsub, initData, undefined, { approved: true }, { requestContext });
+
+    const replayRequestContext = copySerializableRequestContext(requestContext);
+    setToolGateRuntimeStateForRun(replayRequestContext, RUN_ID, { policy });
+
+    const result = await executeStep(pubsub, initData, undefined, undefined, {
+      requestContext: replayRequestContext,
+      suspend,
+    });
+
+    expect(result.result).toEqual({ summary: 'done' });
+    expect(suspend).not.toHaveBeenCalled();
+    expect(entry.tools[TOOL_NAME].execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes approval resume data through for in-execution tool approval resumes', async () => {
+    const pubsub = mockPubsub();
+    const { entry } = setupRegistry({ backgroundTaskManager: undefined });
+    entry.tools[TOOL_NAME].execute.mockImplementation(async (_args: any, context: any) => ({
+      resumeData: context.resumeData,
+    }));
+
+    const result = await executeStep(pubsub, makeInitData(), undefined, { approved: true });
+
+    expect(result.result).toEqual({ resumeData: { approved: true } });
+  });
+
   it('emits denied tool-result chunk via PubSub when approval resume is declined', async () => {
     const pubsub = mockPubsub();
     setupRegistry();
     const initData = makeInitData();
+    vi.mocked(toolRequiresApproval).mockResolvedValueOnce(true);
 
     const result = await executeStep(pubsub, initData, undefined, { approved: false });
 

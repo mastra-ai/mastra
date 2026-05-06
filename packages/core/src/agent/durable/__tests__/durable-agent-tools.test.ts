@@ -114,6 +114,14 @@ function _createToolCallThenTextModel(toolName: string, args: Record<string, unk
   });
 }
 
+async function drain(stream: ReadableStream<any>): Promise<any[]> {
+  const chunks: any[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
 // ============================================================================
 // Tool Registration Tests
 // ============================================================================
@@ -316,6 +324,94 @@ describe('DurableAgent tool execution through workflow', () => {
     // Tools with execute should be in registry
     const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.greet).toBeDefined();
+  });
+
+  it('serializes Tool Gate state during durable preparation', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'tool-gate-prepare-agent',
+      name: 'Tool Gate Prepare Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
+      toolGatePolicy: {
+        id: 'durable-prepare-policy',
+        evaluate: async () => ({ effect: 'allow', reason: 'allowed' }),
+      },
+    });
+
+    expect(result.workflowInput.state.toolGate).toMatchObject({
+      policyId: 'durable-prepare-policy',
+    });
+  });
+
+  it('hides Tool Gate denied tools from durable model calls', async () => {
+    let modelToolNames: string[] = [];
+    const mockModel = new MockLanguageModelV2({
+      doStream: async (options: any) => {
+        modelToolNames = Array.isArray(options.tools)
+          ? options.tools.map((tool: any) => tool.name)
+          : Object.keys(options.tools ?? {});
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+
+    const publicTool = createTool({
+      id: 'public',
+      description: 'Allowed tool',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async ({ input }) => input,
+    });
+    const secretTool = createTool({
+      id: 'secret',
+      description: 'Denied tool',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async ({ input }) => input,
+    });
+
+    const baseAgent = new Agent({
+      id: 'tool-gate-model-agent',
+      name: 'Tool Gate Model Agent',
+      instructions: 'Use tools',
+      model: mockModel as LanguageModelV2,
+      tools: { public: publicTool, secret: secretTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.stream('Test', {
+      toolGatePolicy: {
+        id: 'durable-model-policy',
+        evaluate: async ({ subject }) => ({
+          effect: subject.boundary === 'model-input' && subject.toolName === 'secret' ? 'deny' : 'allow',
+          reason: 'durable model input policy',
+        }),
+      },
+    });
+
+    await drain(result.fullStream as ReadableStream<any>);
+    result.cleanup();
+
+    expect(modelToolNames).toContain('public');
+    expect(modelToolNames).not.toContain('secret');
   });
 
   it('should handle tool with async execution', async () => {

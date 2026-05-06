@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { MemoryConfig } from '../../../memory/types';
+import type { ToolGateSerializableState } from '../../../tools/tool-gate';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
@@ -143,6 +144,7 @@ export function serializeDurableState(params: {
   threadExists?: boolean;
   savePerStep?: boolean;
   observationalMemory?: boolean;
+  toolGate?: ToolGateSerializableState;
 }): SerializableDurableState {
   return {
     memoryConfig: params.memoryConfig,
@@ -151,6 +153,7 @@ export function serializeDurableState(params: {
     threadExists: params.threadExists,
     savePerStep: params.savePerStep,
     observationalMemory: params.observationalMemory,
+    toolGate: params.toolGate,
   };
 }
 

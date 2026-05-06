@@ -8,6 +8,11 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import {
+  getToolGateRuntimeState,
+  serializeToolGateRuntimeState,
+  setToolGateRuntimeStateForRun,
+} from '../../tools/tool-gate';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
@@ -135,6 +140,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
   if (mergedVersions) {
     requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+  }
+
+  if (execOptions?.toolGatePolicy) {
+    setToolGateRuntimeStateForRun(requestContext, runId, {
+      policy: execOptions.toolGatePolicy,
+    });
   }
 
   // 4. Resolve thread/memory context
@@ -341,6 +352,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       threadExists,
       savePerStep,
       observationalMemory,
+      toolGate: serializeToolGateRuntimeState(getToolGateRuntimeState(requestContext, { runId })),
     },
     messageId,
   });

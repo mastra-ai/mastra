@@ -38,6 +38,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request Context containing dynamic configuration and state */
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /** Experimental runtime policy for model-visible tools and server-side tool calls. */
+  toolGatePolicy?: AgentExecutionOptions<OUTPUT>['toolGatePolicy'];
   /** Maximum number of steps to run */
   maxSteps?: number;
   /** Additional tool sets that can be used for this execution */

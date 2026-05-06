@@ -18,6 +18,7 @@ import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
+import type { ToolGateSerializableState } from '../../tools/tool-gate';
 import type { Workspace } from '../../workspace';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
@@ -114,6 +115,8 @@ export interface SerializableDurableState {
   savePerStep?: boolean;
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
+  /** Serializable Tool Gate snapshot for durable resume/debug parity */
+  toolGate?: ToolGateSerializableState;
 }
 
 /**

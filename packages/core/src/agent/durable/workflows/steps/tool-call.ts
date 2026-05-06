@@ -6,7 +6,13 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
+import type { RequestContext } from '../../../../request-context';
 import { ChunkFrom } from '../../../../stream/types';
+import {
+  createToolGateSubjectForTool,
+  evaluateToolGateForRequest,
+  getToolGateRuntimeState,
+} from '../../../../tools/tool-gate';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
@@ -15,9 +21,18 @@ import type { SaveQueueManager } from '../../../save-queue';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
-import type { DurableToolCallInput, SerializableDurableOptions, AgentSuspendedEventData } from '../../types';
+import type {
+  DurableToolCallInput,
+  SerializableDurableOptions,
+  SerializableDurableState,
+  AgentSuspendedEventData,
+} from '../../types';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
+
+const DURABLE_TOOL_CALL_APPROVALS_CONTEXT_KEY = 'mastra__durableToolCallApprovals';
+
+type DurableToolCallApprovalState = Record<string, string[]>;
 
 /**
  * Input schema for the durable tool call step.
@@ -97,6 +112,49 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+function isApprovalResumeData(resumeData: unknown): resumeData is { approved: boolean } {
+  return typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData;
+}
+
+function getDurableToolCallApprovalState(
+  requestContext: RequestContext | undefined,
+): DurableToolCallApprovalState | undefined {
+  const value = requestContext?.get(DURABLE_TOOL_CALL_APPROVALS_CONTEXT_KEY);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value as DurableToolCallApprovalState;
+}
+
+function durableToolCallWasApproved(
+  requestContext: RequestContext | undefined,
+  runId: string,
+  toolCallId: string,
+): boolean {
+  const state = getDurableToolCallApprovalState(requestContext);
+  const approvedToolCalls = state?.[runId];
+
+  return Array.isArray(approvedToolCalls) && approvedToolCalls.includes(toolCallId);
+}
+
+function markDurableToolCallApproved(
+  requestContext: RequestContext | undefined,
+  runId: string,
+  toolCallId: string,
+): void {
+  if (!requestContext) return;
+
+  const approvalState = getDurableToolCallApprovalState(requestContext) ?? {};
+  const approvedToolCalls = Array.isArray(approvalState[runId]) ? approvalState[runId] : [];
+  if (approvedToolCalls.includes(toolCallId)) return;
+
+  requestContext.set(DURABLE_TOOL_CALL_APPROVALS_CONTEXT_KEY, {
+    ...approvalState,
+    [runId]: [...approvedToolCalls, toolCallId],
+  });
+}
+
 /**
  * Create a durable tool call step.
  *
@@ -132,12 +190,7 @@ export function createDurableToolCallStep() {
         runId: string;
         agentId: string;
         options: SerializableDurableOptions;
-        state: {
-          threadId?: string;
-          resourceId?: string;
-          memoryConfig?: MemoryConfig;
-          threadExists?: boolean;
-        };
+        state: SerializableDurableState;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -182,6 +235,7 @@ export function createDurableToolCallStep() {
       const saveQueueManager = registryEntry?.saveQueueManager;
       const memory = registryEntry?.memory;
       const workspace = registryEntry?.workspace;
+      const requestContextForRun = registryEntry?.requestContext ?? requestContext;
       let threadExists = state?.threadExists ?? false;
 
       // Reconstruct MessageList from workflow state if available
@@ -209,60 +263,130 @@ export function createDurableToolCallStep() {
           },
         });
 
-      // 2. Check if tool requires approval
-      const requiresApproval = await toolRequiresApproval(tool, agentOptions.requireToolApproval, args);
+      const durableToolGatePolicyId = state?.toolGate?.policyId;
+      const toolGateRuntimePolicy = requestContextForRun
+        ? getToolGateRuntimeState(requestContextForRun, { runId })?.policy
+        : undefined;
+      const isToolGatePolicyValidForRun =
+        toolGateRuntimePolicy && durableToolGatePolicyId && toolGateRuntimePolicy.id === durableToolGatePolicyId;
+      const toolGateDecision =
+        requestContextForRun && isToolGatePolicyValidForRun
+          ? await evaluateToolGateForRequest({
+              requestContext: requestContextForRun,
+              subject: createToolGateSubjectForTool({
+                boundary: 'tool-call',
+                toolName,
+                tool,
+              }),
+              args,
+              runId,
+              threadId: state?.threadId,
+              resourceId: state?.resourceId,
+              toolCallId,
+            })
+          : undefined;
 
-      if (requiresApproval && !resumeData) {
-        const resumeSchema = JSON.stringify({
-          type: 'object',
-          properties: {
-            approved: { type: 'boolean' },
-          },
-          required: ['approved'],
-        });
-
-        // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
+      if (!isToolGatePolicyValidForRun && durableToolGatePolicyId) {
+        const actualPolicy = toolGateRuntimePolicy ? ` Found "${toolGateRuntimePolicy.id}" instead.` : '';
+        const error = {
+          name: 'ToolNotFoundError',
+          message: `Tool "${toolName}" is blocked because runtime tool policy "${durableToolGatePolicyId}" is unavailable for this durable run.${actualPolicy}`,
+        };
         if (pubsub) {
           await emitChunkEvent(pubsub, runId, {
-            type: 'tool-call-approval',
+            type: 'tool-error',
             runId,
             from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, resumeSchema },
+            payload: { toolCallId, toolName, args, error },
           });
         }
-
-        // Emit suspended event for the stream adapter
-        if (pubsub) {
-          await emitSuspendedEvent(pubsub, runId, {
-            toolCallId,
-            toolName,
-            args,
-            type: 'approval',
-            resumeSchema,
-          });
-        }
-
-        // Flush messages before suspension
-        await doFlush();
-
-        // Suspend and wait for approval
-        return suspend(
-          {
-            type: 'approval',
-            toolCallId,
-            toolName,
-            args,
-          },
-          {
-            resumeLabel: toolCallId,
-          },
-        );
+        return {
+          ...typedInput,
+          error,
+        };
       }
 
-      // Check if resuming from approval
-      if (resumeData && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData) {
-        if (!(resumeData as { approved: boolean }).approved) {
-          const deniedReason = 'Tool call was not approved by the user';
+      if (toolGateDecision?.effect === 'deny') {
+        const reason = toolGateDecision.message || toolGateDecision.reason;
+        const error = {
+          name: 'ToolNotFoundError',
+          message: `Tool "${toolName}" is blocked by runtime tool policy.${reason ? ` ${reason}` : ''}`,
+        };
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId, toolName, args, error },
+          });
+        }
+        return {
+          ...typedInput,
+          error,
+        };
+      }
+
+      // 2. Check if tool requires approval
+      const requiresApproval =
+        (await toolRequiresApproval(tool, agentOptions.requireToolApproval, args)) ||
+        toolGateDecision?.effect === 'requireApproval';
+      const hadApprovalBeforeResume = durableToolCallWasApproved(requestContextForRun, runId, toolCallId);
+
+      if (requiresApproval) {
+        if (!hadApprovalBeforeResume && !resumeData) {
+          const resumeSchema = JSON.stringify({
+            type: 'object',
+            properties: {
+              approved: { type: 'boolean' },
+            },
+            required: ['approved'],
+          });
+
+          // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
+          if (pubsub) {
+            await emitChunkEvent(pubsub, runId, {
+              type: 'tool-call-approval',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, resumeSchema },
+            });
+          }
+
+          // Emit suspended event for the stream adapter
+          if (pubsub) {
+            await emitSuspendedEvent(pubsub, runId, {
+              toolCallId,
+              toolName,
+              args,
+              type: 'approval',
+              resumeSchema,
+            });
+          }
+
+          // Flush messages before suspension
+          await doFlush();
+
+          // Suspend and wait for approval
+          return suspend(
+            {
+              type: 'approval',
+              toolCallId,
+              toolName,
+              args,
+            },
+            {
+              resumeLabel: toolCallId,
+            },
+          );
+        }
+
+        if (isApprovalResumeData(resumeData) && resumeData.approved === true) {
+          markDurableToolCallApproved(requestContextForRun, runId, toolCallId);
+        } else if (!hadApprovalBeforeResume) {
+          const deniedReason =
+            isApprovalResumeData(resumeData) && resumeData.approved === false
+              ? 'Tool call was not approved by the user'
+              : 'Tool call approval was not provided by the user';
           if (pubsub) {
             try {
               await emitChunkEvent(pubsub, runId, {
@@ -286,8 +410,13 @@ export function createDurableToolCallStep() {
 
       // Check if resuming from in-execution suspension
       // Pass resumeData through to the tool so it can continue from where it left off
+      const shouldPassApprovalResumeToTool =
+        isApprovalResumeData(resumeData) && (!requiresApproval || hadApprovalBeforeResume);
       const isResumingFromSuspension =
-        resumeData && typeof resumeData === 'object' && resumeData !== null && !('approved' in resumeData);
+        resumeData &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        (!isApprovalResumeData(resumeData) || shouldPassApprovalResumeToTool);
 
       // 3. Check for background task execution
       const bgManager = registryEntry?.backgroundTaskManager;
@@ -339,7 +468,7 @@ export function createDurableToolCallStep() {
                       toolCallId,
                       messages: [],
                       workspace,
-                      requestContext,
+                      requestContext: requestContextForRun,
                       abortSignal: taskContext?.abortSignal,
                     });
                   },
@@ -535,7 +664,7 @@ export function createDurableToolCallStep() {
           toolCallId,
           messages: [],
           workspace,
-          requestContext,
+          requestContext: requestContextForRun,
           resumeData: isResumingFromSuspension ? resumeData : undefined,
 
           // In-execution suspend callback — allows tools to suspend mid-execution
