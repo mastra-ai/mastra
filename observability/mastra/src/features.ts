@@ -10,20 +10,7 @@
  * Pair these checks with `coreFeatures` from `@mastra/core/features` so a
  * consumer only opts in when BOTH packages support the feature.
  *
- * @example Happy-path usage (when you control the version floor)
- * ```ts
- * import { observabilityFeatures } from "@mastra/observability/features"
- * import { coreFeatures } from "@mastra/core/features"
- *
- * if (
- *   observabilityFeatures.has('model-inference-span') &&
- *   coreFeatures.has('model-inference-span')
- * ) {
- *   // safe to assume MODEL_INFERENCE spans are emitted
- * }
- * ```
- *
- * @example Old-version-safe usage (recommended for shipped exporters)
+ * @example Old-version-safe usage
  *
  * Static imports of this module hard-fail at module load when paired with
  * an `@mastra/observability` that predates the `./features` subpath:
