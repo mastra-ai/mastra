@@ -7,15 +7,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   toast,
 } from '@mastra/playground-ui';
 import { Globe, LockIcon } from 'lucide-react';
-import type { ComponentProps } from 'react';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
@@ -25,37 +19,30 @@ export type Visibility = 'private' | 'public';
 
 export interface VisibilitySelectProps {
   agentId: string;
-  variant?: ComponentProps<typeof SelectTrigger>['variant'];
 }
 
 const COPY: Record<Visibility, { title: string; description: string; toast: string }> = {
   public: {
-    title: 'Make this agent public?',
+    title: 'Add this agent to your library?',
     description:
-      'This agent will be added to your organization library. Anyone in your organization will be able to discover, view, and chat with it.',
-    toast: 'Agent is now public',
+      'Adding this agent to the library means your teammates will be able to discover, view, and chat with it.',
+    toast: 'Agent added to the library',
   },
   private: {
-    title: 'Make this agent private?',
+    title: 'Remove this agent from your library?',
     description:
-      'This agent will be removed from your organization library. You will be the only person able to see, edit, or chat with it.',
-    toast: 'Agent is now private',
+      'Removing this agent from the library means your teammates will no longer be able to discover, view, or chat with it. You will be the only person with access.',
+    toast: 'Agent removed from the library',
   },
 };
 
-export function VisibilitySelect({ agentId, variant = 'ghost' }: VisibilitySelectProps) {
+export function VisibilitySelect({ agentId }: VisibilitySelectProps) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
 
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
   const [pending, setPending] = useState<Visibility | null>(null);
   const isOpen = pending !== null;
-
-  const handleValueChange = (next: string) => {
-    const nextVisibility = next as Visibility;
-    if (nextVisibility === value) return;
-    setPending(nextVisibility);
-  };
 
   const handleCancel = () => {
     setPending(null);
@@ -79,30 +66,27 @@ export function VisibilitySelect({ agentId, variant = 'ghost' }: VisibilitySelec
 
   return (
     <>
-      <Select value={value} onValueChange={handleValueChange}>
-        <SelectTrigger
+      {value === 'private' ? (
+        <Button
           size="sm"
-          variant={variant}
-          aria-label="Visibility"
-          data-testid="agent-builder-visibility-trigger"
+          variant="default"
+          onClick={() => setPending('public')}
+          data-testid="agent-builder-visibility-add"
         >
-          <SelectValue placeholder="Visibility" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="private">
-            <span className="flex items-center gap-2">
-              <LockIcon className="h-3.5 w-3.5" />
-              Private
-            </span>
-          </SelectItem>
-          <SelectItem value="public">
-            <span className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5" />
-              Public
-            </span>
-          </SelectItem>
-        </SelectContent>
-      </Select>
+          <Globe className="h-3.5 w-3.5" />
+          Add to library
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setPending('private')}
+          data-testid="agent-builder-visibility-remove"
+        >
+          <LockIcon className="h-3.5 w-3.5" />
+          Remove from library
+        </Button>
+      )}
 
       <Dialog open={isOpen} onOpenChange={open => !open && handleCancel()}>
         <DialogContent data-testid="agent-builder-visibility-confirm-dialog">

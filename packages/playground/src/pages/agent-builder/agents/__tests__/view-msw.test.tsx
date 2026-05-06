@@ -159,10 +159,11 @@ describe('AgentBuilderAgentView MSW integration', () => {
     await screen.findByTestId('agent-builder-agent-chat-empty-state');
     expect(screen.queryByTestId('agent-builder-mode-toggle')).toBeNull();
     expect(screen.queryByTestId('agent-builder-publish-channel')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-visibility-trigger')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-visibility-add')).toBeNull();
+    expect(screen.queryByTestId('agent-builder-visibility-remove')).toBeNull();
   });
 
-  it('shows the visibility trigger for the owner', async () => {
+  it('shows the Remove from library button for the owner of a public agent', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
@@ -173,7 +174,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
 
     renderPage();
 
-    expect(await screen.findByTestId('agent-builder-visibility-trigger')).toBeTruthy();
+    expect(await screen.findByTestId('agent-builder-visibility-remove')).toBeTruthy();
   });
 
   it('shows Chat and Configuration tabs for the owner via real stored-agent data', async () => {

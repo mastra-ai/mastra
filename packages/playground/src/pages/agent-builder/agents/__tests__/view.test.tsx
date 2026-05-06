@@ -173,10 +173,10 @@ describe('AgentBuilderAgentView', () => {
     expect(queryByTestId('agent-builder-publish-channel')).toBeNull();
   });
 
-  it('shows the current visibility', () => {
+  it('shows the Remove from library button when the agent is public', () => {
     const { getByTestId } = renderAt();
-    const trigger = getByTestId('agent-builder-visibility-trigger');
-    expect(trigger.textContent).toContain('Public');
+    const button = getByTestId('agent-builder-visibility-remove');
+    expect(button.textContent).toContain('Remove from library');
   });
 
   it('navigates to the edit page when the mode-toggle is clicked', () => {

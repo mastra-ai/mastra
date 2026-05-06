@@ -164,19 +164,19 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
     useStreamRunningMock.mockReturnValue(false);
   });
 
-  it('keeps the visibility trigger enabled while a stream is running', async () => {
+  it('keeps the Add to library button enabled while a stream is running', async () => {
     useStreamRunningMock.mockReturnValue(true);
     server.use(...baseHandlers());
 
     renderPage();
 
-    const trigger = await screen.findByTestId('agent-builder-visibility-trigger');
-    expect(trigger.hasAttribute('disabled')).toBe(false);
-    expect(trigger.getAttribute('data-disabled')).toBeNull();
-    expect(trigger.textContent).toContain('Private');
+    const addButton = await screen.findByTestId('agent-builder-visibility-add');
+    expect(addButton.hasAttribute('disabled')).toBe(false);
+    expect(addButton.getAttribute('data-disabled')).toBeNull();
+    expect(addButton.textContent).toContain('Add to library');
   });
 
-  it('confirming a visibility change issues PATCH /api/stored/agents/:id with the new value', async () => {
+  it('confirming Add to library issues PATCH /api/stored/agents/:id with visibility=public', async () => {
     let capturedBody: any = null;
     server.use(
       ...baseHandlers(),
@@ -188,12 +188,8 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
 
     renderPage();
 
-    const trigger = await screen.findByTestId('agent-builder-visibility-trigger');
-    fireEvent.click(trigger);
-    fireEvent.keyDown(trigger, { key: 'Enter' });
-
-    const publicOption = await screen.findByRole('option', { name: 'Public' });
-    fireEvent.click(publicOption);
+    const addButton = await screen.findByTestId('agent-builder-visibility-add');
+    fireEvent.click(addButton);
 
     await act(async () => {
       fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));

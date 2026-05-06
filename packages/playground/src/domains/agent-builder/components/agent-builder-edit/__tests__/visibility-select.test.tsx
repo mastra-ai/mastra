@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { VisibilitySelect } from '../visibility-select';
 import { server } from '@/test/msw-server';
@@ -44,62 +44,34 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
   );
 };
 
-const installRadixDomShims = () => {
-  if (!Element.prototype.scrollIntoView) {
-    Element.prototype.scrollIntoView = () => {};
-  }
-  if (!Element.prototype.hasPointerCapture) {
-    Element.prototype.hasPointerCapture = () => false;
-  }
-  if (!Element.prototype.releasePointerCapture) {
-    Element.prototype.releasePointerCapture = () => {};
-  }
-  if (typeof globalThis.ResizeObserver === 'undefined') {
-    class StubResizeObserver {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-    (globalThis as unknown as { ResizeObserver: typeof StubResizeObserver }).ResizeObserver = StubResizeObserver;
-  }
-};
-
-const openTrigger = async () => {
-  const trigger = await screen.findByTestId('agent-builder-visibility-trigger');
-  fireEvent.click(trigger);
-  fireEvent.keyDown(trigger, { key: 'Enter' });
-  return trigger;
-};
-
-const selectOption = async (optionName: 'Public' | 'Private') => {
-  await openTrigger();
-  const option = await screen.findByRole('option', { name: optionName });
-  fireEvent.click(option);
-};
-
 describe('VisibilitySelect', () => {
-  beforeAll(() => {
-    installRadixDomShims();
-  });
-
   afterEach(() => {
     cleanup();
   });
 
-  it('renders the saved value as Private and is not disabled', () => {
+  it('renders the Add to library button when the saved value is private', () => {
     render(
       <FormHarness>
         <VisibilitySelect agentId={AGENT_ID} />
       </FormHarness>,
     );
 
-    const trigger = screen.getByTestId('agent-builder-visibility-trigger');
-    expect(trigger.textContent).toContain('Private');
-    expect(trigger.hasAttribute('disabled')).toBe(false);
-    expect(trigger.getAttribute('data-disabled')).toBeNull();
+    expect(screen.getByTestId('agent-builder-visibility-add')).toBeTruthy();
+    expect(screen.queryByTestId('agent-builder-visibility-remove')).toBeNull();
   });
 
-  it('opens the confirm dialog with public copy when Public is picked, without issuing a request', async () => {
+  it('renders the Remove from library button when the saved value is public', () => {
+    render(
+      <FormHarness defaultVisibility="public">
+        <VisibilitySelect agentId={AGENT_ID} />
+      </FormHarness>,
+    );
+
+    expect(screen.getByTestId('agent-builder-visibility-remove')).toBeTruthy();
+    expect(screen.queryByTestId('agent-builder-visibility-add')).toBeNull();
+  });
+
+  it('opens the confirm dialog with add-to-library copy when Add is clicked, without issuing a request', async () => {
     let patchCalled = false;
     server.use(
       http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
@@ -114,17 +86,16 @@ describe('VisibilitySelect', () => {
       </FormHarness>,
     );
 
-    await selectOption('Public');
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
 
     const dialog = await screen.findByTestId('agent-builder-visibility-confirm-dialog');
-    expect(dialog.textContent).toContain('Make this agent public?');
-    expect(dialog.textContent).toContain('added to your organization library');
-    expect(dialog.textContent).toContain('Anyone in your organization');
+    expect(dialog.textContent).toContain('Add this agent to your library?');
+    expect(dialog.textContent).toContain('teammates will be able to discover');
     expect(patchCalled).toBe(false);
     expect(screen.getByTestId('form-visibility').textContent).toBe('private');
   });
 
-  it('cancel restores the saved value, leaves the form clean, and issues no request', async () => {
+  it('cancel leaves the saved value, leaves the form clean, and issues no request', async () => {
     let patchCalled = false;
     server.use(
       http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
@@ -139,7 +110,7 @@ describe('VisibilitySelect', () => {
       </FormHarness>,
     );
 
-    await selectOption('Public');
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
     fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-cancel'));
 
     await waitFor(() => {
@@ -147,12 +118,12 @@ describe('VisibilitySelect', () => {
     });
 
     expect(patchCalled).toBe(false);
-    expect(screen.getByTestId('agent-builder-visibility-trigger').textContent).toContain('Private');
+    expect(screen.getByTestId('agent-builder-visibility-add')).toBeTruthy();
     expect(screen.getByTestId('form-visibility').textContent).toBe('private');
     expect(screen.getByTestId('form-dirty').textContent).toBe('false');
   });
 
-  it('confirm issues PATCH with the new visibility, updates the trigger, and keeps the form clean', async () => {
+  it('confirm issues PATCH with the new visibility, swaps the button to Remove, and keeps the form clean', async () => {
     let capturedBody: any = null;
     server.use(
       http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, async ({ request }) => {
@@ -167,7 +138,7 @@ describe('VisibilitySelect', () => {
       </FormHarness>,
     );
 
-    await selectOption('Public');
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
     await act(async () => {
       fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
     });
@@ -178,12 +149,12 @@ describe('VisibilitySelect', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();
     });
-    expect(screen.getByTestId('agent-builder-visibility-trigger').textContent).toContain('Public');
+    expect(screen.getByTestId('agent-builder-visibility-remove')).toBeTruthy();
     expect(screen.getByTestId('form-visibility').textContent).toBe('public');
     expect(screen.getByTestId('form-dirty').textContent).toBe('false');
   });
 
-  it('shows the private copy when starting from public and selecting Private', async () => {
+  it('shows the remove-from-library copy when starting from public and clicking Remove', async () => {
     server.use(
       http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () =>
         HttpResponse.json({ id: AGENT_ID, visibility: 'private' }),
@@ -196,12 +167,12 @@ describe('VisibilitySelect', () => {
       </FormHarness>,
     );
 
-    await selectOption('Private');
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-remove'));
 
     const dialog = await screen.findByTestId('agent-builder-visibility-confirm-dialog');
-    expect(dialog.textContent).toContain('Make this agent private?');
-    expect(dialog.textContent).toContain('removed from your organization library');
-    expect(dialog.textContent).toContain('only person');
+    expect(dialog.textContent).toContain('Remove this agent from your library?');
+    expect(dialog.textContent).toContain('teammates will no longer be able to');
+    expect(dialog.textContent).toContain('only person with access');
   });
 
   it('reverts to the saved value when the PATCH fails', async () => {
@@ -217,7 +188,7 @@ describe('VisibilitySelect', () => {
       </FormHarness>,
     );
 
-    await selectOption('Public');
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
     await act(async () => {
       fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
     });
@@ -225,7 +196,7 @@ describe('VisibilitySelect', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();
     });
-    expect(screen.getByTestId('agent-builder-visibility-trigger').textContent).toContain('Private');
+    expect(screen.getByTestId('agent-builder-visibility-add')).toBeTruthy();
     expect(screen.getByTestId('form-visibility').textContent).toBe('private');
     expect(screen.getByTestId('form-dirty').textContent).toBe('false');
   });

@@ -299,7 +299,7 @@ const EditWorkspaceLayoutConnected = ({
 const VisibilitySelectConnected = ({ agentId }: { agentId: string }) => {
   const { data: capabilities } = useAuthCapabilities();
   if (!capabilities?.enabled) return null;
-  return <VisibilitySelect agentId={agentId} variant="ghost" />;
+  return <VisibilitySelect agentId={agentId} />;
 };
 
 const AgentBuilderMobileMenuConnected = ({
