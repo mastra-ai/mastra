@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
+import { config } from 'dotenv';
 import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
@@ -96,21 +97,17 @@ export function parseEnvFile(content: string): Record<string, string> {
   return vars;
 }
 
-export async function loadDeployEnvFromDotenv(projectDir: string): Promise<void> {
-  const KEYS = ['MASTRA_PROJECT_ID', 'MASTRA_ORG_ID'] as const;
-  for (const file of ['.env', '.env.local', '.env.production']) {
-    try {
-      const content = await readFile(join(projectDir, file), 'utf-8');
-      const vars = parseEnvFile(content);
-      for (const key of KEYS) {
-        if (!process.env[key] && vars[key]) {
-          process.env[key] = vars[key];
-        }
-      }
-    } catch {
-      // missing/unreadable — skip
-    }
-  }
+/**
+ * Loads MASTRA_PROJECT_ID and MASTRA_ORG_ID from the project's .env files
+ * into process.env so deploys auto-link to the project that `mastra observe`
+ * provisioned. Uses dotenv with override: false (the default), so any
+ * existing process.env value (e.g. from CI) always wins.
+ */
+export function loadDeployEnvFromDotenv(projectDir: string): void {
+  config({
+    path: [join(projectDir, '.env'), join(projectDir, '.env.local'), join(projectDir, '.env.production')],
+    quiet: true,
+  });
 }
 
 async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
@@ -366,7 +363,7 @@ export async function deployAction(
   const targetDir = resolve(dir || process.cwd());
   // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
   // auto-link to the project that `mastra observe` provisioned.
-  await loadDeployEnvFromDotenv(targetDir);
+  loadDeployEnvFromDotenv(targetDir);
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   if (isHeadless && (!process.env.MASTRA_ORG_ID || !process.env.MASTRA_PROJECT_ID)) {
     throw new Error('MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set');
