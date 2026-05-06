@@ -883,11 +883,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   (chunk.payload as { response?: LLMStepResult<OUTPUT>['response'] }).response = response;
                 } else if (!self.#options.isLLMExecutionStep) {
                   const finishOutput = chunk.payload.output as { steps?: LLMStepResult<OUTPUT>[]; text?: string };
-                  const finalText = finishOutput.text ?? self.#bufferedText.join('');
                   if (finishOutput.steps?.length) {
                     self.#bufferedSteps = finishOutput.steps;
                   }
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+                  const finalText = finishOutput.text ?? lastStep?.text ?? self.#bufferedText.join('');
 
                   self.#bufferedText = [finalText];
                   if (lastStep) {
