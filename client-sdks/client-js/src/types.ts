@@ -2663,7 +2663,14 @@ export interface DeletePromptBlockVersionResponse {
   message: string;
 }
 
-export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+export type BackgroundTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -2685,6 +2692,7 @@ export interface BackgroundTaskResponse {
   retryCount: number;
   maxRetries: number;
   timeoutMs: number;
+  suspendData?: unknown;
 }
 
 export interface ListBackgroundTasksParams {
@@ -2693,6 +2701,8 @@ export interface ListBackgroundTasksParams {
   runId?: string;
   threadId?: string;
   resourceId?: string;
+  toolName?: string;
+  toolCallId?: string;
   fromDate?: Date;
   toDate?: Date;
   dateFilterBy?: BackgroundTaskDateColumn;

@@ -3,10 +3,19 @@ import type {
   BackgroundTaskResultPayload,
   BackgroundTaskStartedPayload,
   BackgroundTaskProgressPayload,
+  BackgroundTaskSuspendedPayload,
+  BackgroundTaskResumedPayload,
   AgentChunkType,
 } from '../stream/types';
 
-export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+export type BackgroundTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export interface BackgroundTask {
   id: string;
@@ -30,6 +39,11 @@ export interface BackgroundTask {
   // Timing
   createdAt: Date;
   startedAt?: Date;
+  /**
+   * When the task was last suspended (i.e. the tool called `suspend()`).
+   * Cleared on resume.
+   */
+  suspendedAt?: Date;
   completedAt?: Date;
 
   // Retry
@@ -38,6 +52,13 @@ export interface BackgroundTask {
 
   // Timeout
   timeoutMs: number;
+
+  /**
+   * Last value passed to `suspend()` while the task was running. Set when
+   * `status === 'suspended'`; cleared on resume. Surfaced on lifecycle events
+   * so consumers don't have to read the workflow snapshot directly.
+   */
+  suspendData?: unknown;
 }
 
 export type BackgroundTaskOutputChunk = Extract<AgentChunkType, { type: 'tool-output' }>;
@@ -71,9 +92,10 @@ export interface TaskPayload {
 /**
  * Filter for querying and managing tasks.
  */
-export type TaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
+export type TaskDateColumn = 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt';
 
 export interface TaskFilter {
+  toolCallId?: string;
   status?: BackgroundTaskStatus | BackgroundTaskStatus[];
   agentId?: string;
   threadId?: string;
@@ -127,6 +149,17 @@ export interface CleanupConfig {
 export interface BackgroundTaskManagerConfig {
   /** Whether background tasks are enabled. Default: false */
   enabled: boolean;
+  /**
+   * Which execution engine drives background tasks.
+   * - 'workflow' (default): dispatch + execute run inside a one-per-task
+   *   evented workflow registered on Mastra. Pubsub event topics, lifecycle
+   *   event shapes, concurrency gates, and the `stream()` contract are all
+   *   identical to the legacy path.
+   * - 'legacy': the original in-manager dispatch + executor + retry loop on
+   *   the `background-tasks` pubsub topic. Retained as an opt-out while the
+   *   workflow engine bakes in.
+   */
+  engine?: 'legacy' | 'workflow';
   /** Global concurrency limit across all agents. Default: 10 */
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */
@@ -243,6 +276,16 @@ export interface BackgroundTaskProgressChunk {
   payload: BackgroundTaskProgressPayload;
 }
 
+export interface BackgroundTaskSuspendedChunk {
+  type: 'background-task-suspended';
+  payload: BackgroundTaskSuspendedPayload;
+}
+
+export interface BackgroundTaskResumedChunk {
+  type: 'background-task-resumed';
+  payload: BackgroundTaskResumedPayload;
+}
+
 export type BackgroundTaskResultChunk = BackgroundTaskCompletedChunk | BackgroundTaskFailedChunk;
 
 // --- Tool executor ---
@@ -262,6 +305,23 @@ export interface ToolExecutor {
        * Each call produces a `background-task-progress` chunk on the SSE stream.
        */
       onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
+      /**
+       * Pause the task. Persists `status: 'suspended'` + `suspendData`,
+       * publishes a `task.suspended` lifecycle event, and signals the workflow
+       * runtime so the run snapshot is preserved. The tool should return
+       * shortly after `await suspend(data)` — its return value is discarded
+       * on the suspend path.
+       *
+       * Only available when the manager is configured with `engine: 'workflow'`.
+       * Resume the task with `manager.resume(taskId, resumeData)`.
+       */
+      suspend?: (data?: unknown) => Promise<void>;
+      /**
+       * Set when the task was resumed via `manager.resume(taskId, resumeData)` —
+       * carries whatever was passed as the second arg. Undefined on the initial
+       * execution.
+       */
+      resumeData?: unknown;
     },
   ): Promise<unknown>;
 }
@@ -296,6 +356,7 @@ export type ToolExecutionInjector = (params: {
   threadId?: string;
   resourceId?: string;
   startedAt: Date;
+  suspendedAt?: Date;
 }) => void | Promise<void>;
 
 // --- Per-task context ---
@@ -341,6 +402,15 @@ export interface EnqueueResult {
 
 // --- Background task handle ---
 
+export interface CheckIfSuspendedPayload {
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  threadId?: string;
+  resourceId?: string;
+  toolName: string;
+}
+
 /**
  * A handle returned by `createBackgroundTask()`.
  * Encapsulates a single background task with its per-stream hooks.
@@ -350,6 +420,10 @@ export interface BackgroundTaskHandle {
   readonly task: BackgroundTask;
   /** Dispatch the task for background execution. Returns the enqueue result. */
   dispatch(): Promise<EnqueueResult>;
+  /** Check if the task is suspended */
+  checkIfSuspended(args: CheckIfSuspendedPayload): Promise<boolean>;
+  /** Resume the task */
+  resume(resumeData?: unknown): Promise<BackgroundTask>;
   /** Cancel this task */
   cancel(): Promise<void>;
   /** Wait for this task to complete */

@@ -39,11 +39,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: row.run_id ?? '',
     result: parseJson(row.result),
     error: parseJson(row.error),
+    suspendData: parseJson(row.suspend_data),
     retryCount: Number(row.retry_count ?? 0),
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
     createdAt: new Date(row.createdAt),
     startedAt: row.startedAt ? new Date(row.startedAt) : undefined,
+    suspendedAt: row.suspendedAt ? new Date(row.suspendedAt) : undefined,
     completedAt: row.completedAt ? new Date(row.completedAt) : undefined,
   };
 }
@@ -61,6 +63,11 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_BACKGROUND_TASKS, schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS] });
+    await this.#db.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_data', 'suspendedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -83,11 +90,13 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
           args: serializeJson(task.args),
           result: serializeJson(task.result),
           error: serializeJson(task.error),
+          suspend_data: serializeJson(task.suspendData),
           retry_count: task.retryCount,
           max_retries: task.maxRetries,
           timeout_ms: task.timeoutMs,
           createdAt: task.createdAt.toISOString(),
           startedAt: task.startedAt?.toISOString() ?? '1970-01-01T00:00:00.000Z',
+          suspendedAt: task.suspendedAt?.toISOString() ?? '1970-01-01T00:00:00.000Z',
           completedAt: task.completedAt?.toISOString() ?? '1970-01-01T00:00:00.000Z',
         },
       ],
@@ -103,8 +112,10 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     if ('status' in update) merged.status = update.status!;
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
+    if ('suspendData' in update) merged.suspendData = update.suspendData;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
+    if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
 
     // ClickHouse ReplacingMergeTree — insert replaces by primary key
@@ -147,15 +158,21 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
       conditions.push(`tool_name = {var_tool:String}`);
       params.var_tool = filter.toolName;
     }
+    if (filter.toolCallId) {
+      conditions.push(`tool_call_id = {var_tool_call:String}`);
+      params.var_tool_call = filter.toolCallId;
+    }
 
     // Push date range filtering into SQL so total count and LIMIT/OFFSET
     // agree with the in-memory Date objects `rowToTask` returns.
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? 'startedAt'
-        : filter.dateFilterBy === 'completedAt'
-          ? 'completedAt'
-          : 'createdAt';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.dateFilterBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= parseDateTimeBestEffort({var_from_date:String})`);
       params.var_from_date = filter.fromDate.toISOString();
@@ -178,7 +195,13 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     const total = Number(countRows[0]?.count ?? 0);
 
     const orderCol =
-      filter.orderBy === 'startedAt' ? 'startedAt' : filter.orderBy === 'completedAt' ? 'completedAt' : 'createdAt';
+      filter.orderBy === 'startedAt'
+        ? 'startedAt'
+        : filter.orderBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.orderBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     const direction = filter.orderDirection === 'desc' ? 'DESC' : 'ASC';
     let sql = `SELECT * FROM ${TABLE_BACKGROUND_TASKS} FINAL ${where} ORDER BY ${orderCol} ${direction}`;
     if (filter.perPage != null) {

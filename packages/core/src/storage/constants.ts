@@ -555,11 +555,13 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     args: { type: 'jsonb', nullable: false },
     result: { type: 'jsonb', nullable: true },
     error: { type: 'jsonb', nullable: true },
+    suspend_data: { type: 'jsonb', nullable: true },
     retry_count: { type: 'integer', nullable: false },
     max_retries: { type: 'integer', nullable: false },
     timeout_ms: { type: 'integer', nullable: false },
     createdAt: { type: 'timestamp', nullable: false },
     startedAt: { type: 'timestamp', nullable: true },
+    suspendedAt: { type: 'timestamp', nullable: true },
     completedAt: { type: 'timestamp', nullable: true },
   },
 };

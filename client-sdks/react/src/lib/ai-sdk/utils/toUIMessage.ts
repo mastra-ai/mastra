@@ -735,33 +735,54 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
-    case 'tool-call-suspended': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+    case 'tool-call-suspended':
+    case 'background-task-suspended': {
+      const isBgTaskEvent = chunk.type === 'background-task-suspended';
+
+      const location = locateToolPart(result, chunk.payload.toolCallId, isBgTaskEvent);
+      if (!location) return result;
+      const { messageIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
 
       // Find and update the corresponding tool call
 
-      const lastSuspendedTools = lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.suspendedTools : {};
+      const lastSuspendedTools =
+        targetMessage.metadata?.mode === 'stream' ? targetMessage.metadata?.suspendedTools : {};
 
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          metadata: {
-            ...lastMessage.metadata,
-            mode: 'stream',
+      const suspendPayload =
+        chunk.type === 'background-task-suspended' ? chunk.payload.suspendData : chunk.payload.suspendPayload;
+
+      const nextMessage = {
+        ...targetMessage,
+        metadata: mergeBgTaskMetadata(
+          targetMessage.metadata,
+          'stream',
+          {
+            resetRunningCount: isBgTaskEvent,
+            perTaskEntry: isBgTaskEvent
+              ? {
+                  toolCallId: chunk.payload.toolCallId,
+                  suspendedAt: chunk.payload.suspendedAt,
+                  taskId: chunk.payload.taskId,
+                }
+              : undefined,
+          },
+          {
             suspendedTools: {
               ...lastSuspendedTools,
               [chunk.payload.toolName]: {
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
-                suspendPayload: chunk.payload.suspendPayload,
+                suspendPayload,
               },
             },
-          },
-        },
-      ];
+          } as MastraUIMessageMetadata,
+        ),
+      };
+
+      return [...result.slice(0, messageIndex), nextMessage, ...result.slice(messageIndex + 1)];
     }
 
     case 'finish': {
@@ -1050,9 +1071,11 @@ const mergeBgTaskMetadata = (
       toolCallId: string;
       startedAt?: Date;
       completedAt?: Date;
+      suspendedAt?: Date;
       taskId: string;
     };
   },
+  otherMetadata?: MastraUIMessageMetadata,
 ): MastraUIMessageMetadata => {
   const existingAny = (existing ?? {}) as Record<string, unknown>;
   const existingBgTasks = (existingAny.backgroundTasks ?? {}) as Record<
@@ -1062,18 +1085,20 @@ const mergeBgTaskMetadata = (
 
   const nextBgTasks = { ...existingBgTasks };
   if (args.perTaskEntry) {
-    const { toolCallId, startedAt, completedAt, taskId } = args.perTaskEntry;
+    const { toolCallId, startedAt, completedAt, taskId, suspendedAt } = args.perTaskEntry;
     const prev = existingBgTasks[toolCallId] ?? { taskId };
     nextBgTasks[toolCallId] = {
       ...prev,
       taskId,
       ...(startedAt !== undefined ? { startedAt } : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(suspendedAt !== undefined ? { suspendedAt } : {}),
     };
   }
 
   return {
     ...existingAny,
+    ...(otherMetadata ?? {}),
     mode,
     ...(args.resetRunningCount ? { runningBackgroundTasksCount: undefined } : {}),
     backgroundTasks: nextBgTasks,
