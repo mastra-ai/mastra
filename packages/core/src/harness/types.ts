@@ -350,7 +350,8 @@ export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
 /**
  * Permission rules for controlling tool approval behavior.
- * Per-tool overrides take precedence over category policies.
+ * Explicit deny rules take precedence over yolo and session grants. Otherwise,
+ * per-tool rules take precedence over category rules.
  */
 export interface PermissionRules {
   categories: Partial<Record<ToolCategory, PermissionPolicy>>;

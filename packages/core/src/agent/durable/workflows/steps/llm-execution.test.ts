@@ -202,6 +202,76 @@ describe('durable LLM Tool Gate enforcement', () => {
     expect(modelToolChoice).toEqual({ type: 'auto' });
   });
 
+  it('hides provider-executed tools that require local approval', async () => {
+    let modelToolNames: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async (options: any) => {
+        modelToolNames = Array.isArray(options.tools)
+          ? options.tools.map((tool: any) => tool.name)
+          : Object.keys(options.tools ?? {});
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+
+    const requestContext = new RequestContext();
+    setToolGateRuntimeStateForRun(requestContext, RUN_ID, {
+      policy: {
+        id: 'runtime-policy',
+        evaluate: async ({ subject }) =>
+          subject.toolName === 'webSearch'
+            ? { effect: 'requireApproval', reason: 'provider approval is local only' }
+            : { effect: 'allow', reason: 'allowed' },
+      },
+    });
+
+    const messageList = new MessageList();
+    messageList.add('Use a tool', 'input');
+    globalRunRegistry.set(RUN_ID, {
+      tools: {
+        localTool: { description: 'Allowed local tool' },
+        webSearch: {
+          type: 'provider-defined',
+          id: 'openai.web_search',
+          name: 'web_search',
+        },
+      },
+      model: model as any,
+      requestContext,
+    } as any);
+
+    const step = createDurableLLMExecutionStep();
+
+    await (step as any).execute({
+      inputData: {
+        runId: RUN_ID,
+        agentId: 'agent-1',
+        agentName: 'Agent 1',
+        messageListState: messageList.serialize(),
+        toolsMetadata: [],
+        modelConfig: {
+          provider: 'mock',
+          modelId: 'mock-model-id',
+        },
+        options: {},
+        state: {
+          toolGate: { policyId: 'runtime-policy' },
+        },
+        messageId: 'message-1',
+      },
+      mastra: { getLogger: () => undefined },
+      requestContext,
+    });
+
+    expect(modelToolNames).toEqual(['localTool']);
+  });
+
   it('does not adopt an ambient Tool Gate policy when durable state has no policy id', async () => {
     let modelToolNames: string[] = [];
     const model = new MockLanguageModelV2({

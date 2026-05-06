@@ -191,14 +191,16 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(result.isError).toBe(false);
   });
 
-  it('passes maxSteps, abortSignal, and requireToolApproval alongside requestContext', async () => {
+  it('passes maxSteps, abortSignal, approval options, and requestContext', async () => {
     const abortController = new AbortController();
+    const toolGatePolicy = { id: 'harness:test:tool-permissions', evaluate: vi.fn() };
     mockStream.mockResolvedValue(createMockStreamResponse('done'));
 
     const tool = createSubagentTool({
       subagents,
       resolveModel,
       fallbackModelId: 'test-model',
+      getToolGatePolicy: () => toolGatePolicy,
     });
 
     const requestContext = new RequestContext();
@@ -220,6 +222,7 @@ describe('createSubagentTool requestContext forwarding', () => {
       stopWhen: undefined,
       abortSignal: abortController.signal,
       requireToolApproval: false,
+      toolGatePolicy,
     });
     // Subagent gets a copy of the request context (not the original)
     expect(streamOpts.requestContext).toBeInstanceOf(RequestContext);

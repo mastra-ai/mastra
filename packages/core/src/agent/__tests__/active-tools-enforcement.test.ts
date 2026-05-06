@@ -293,6 +293,60 @@ describe('activeTools enforcement at execution time', () => {
     ]);
   });
 
+  it('hides provider-executed tools that require local approval before calling the model', async () => {
+    const seenModelTools: string[][] = [];
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async ({ tools }: any) => {
+        seenModelTools.push(Array.isArray(tools) ? tools.map(tool => tool.name) : Object.keys(tools ?? {}));
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Done.',
+          content: [{ type: 'text' as const, text: 'Done.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      tools: {
+        localTool: createTool({
+          id: 'localTool',
+          description: 'A local tool',
+          inputSchema: z.object({ value: z.string() }),
+          execute: vi.fn(),
+        }),
+        webSearch: {
+          type: 'provider-defined',
+          id: 'openai.web_search',
+          name: 'web_search',
+          args: { search_context_size: 'low' },
+        } as any,
+      },
+    });
+
+    await agent.generate('Hello', {
+      maxSteps: 1,
+      toolGatePolicy: {
+        id: 'provider-approval-policy',
+        evaluate: ({ subject }) =>
+          subject.toolName === 'webSearch'
+            ? { effect: 'requireApproval', reason: 'provider approval is local only' }
+            : { effect: 'allow', reason: 'tool is allowed' },
+      },
+    });
+
+    expect(seenModelTools[0]).toContain('localTool');
+    expect(seenModelTools[0]).not.toContain('webSearch');
+  });
+
   it('does not reuse a call-site tool gate policy on later calls with the same requestContext', async () => {
     const requestContext = new RequestContext();
     const seenModelTools: string[][] = [];

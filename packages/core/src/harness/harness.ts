@@ -10,6 +10,7 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import type { ToolGatePolicy } from '../tools/tool-gate';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
@@ -1367,29 +1368,94 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Resolve whether a tool call should be auto-approved, denied, or asked.
-   * Resolution chain: yolo → per-tool policy → session tool grant →
-   * session category grant → category policy → "ask"
+   * Resolve whether a tool should be allowed, denied, or require approval.
+   * Explicit denies beat yolo and session grants. Otherwise, tool-specific
+   * rules beat category rules. Yolo skips approval, but it does not make denied
+   * tools available.
    */
-  private resolveToolApproval(toolName: string): PermissionPolicy {
+  private resolveToolApproval(toolName: string, aliases: string[] = []): PermissionPolicy {
     const state = this.state as Record<string, unknown>;
-    if (state.yolo === true) return 'allow';
-
     const rules = this.getPermissionRules();
+    const toolNames = [toolName, ...aliases.filter(alias => alias && alias !== toolName)];
 
-    const toolPolicy = rules.tools[toolName];
-    if (toolPolicy) return toolPolicy;
+    const toolPolicies = toolNames
+      .map(name => rules.tools[name])
+      .filter((policy): policy is PermissionPolicy => policy !== undefined);
+    if (toolPolicies.includes('deny')) return 'deny';
 
-    if (this.sessionGrantedTools.has(toolName)) return 'allow';
+    const categories = [
+      ...new Set(toolNames.map(name => this.getToolCategory({ toolName: name })).filter(category => category !== null)),
+    ] as ToolCategory[];
 
-    const category = this.getToolCategory({ toolName });
-    if (category) {
+    const categoryPolicies = categories
+      .map(category => rules.categories[category])
+      .filter((policy): policy is PermissionPolicy => policy !== undefined);
+    if (categoryPolicies.includes('deny')) return 'deny';
+
+    if (state.yolo === true) return 'allow';
+    if (toolPolicies.includes('ask')) return 'ask';
+    if (toolPolicies.includes('allow')) return 'allow';
+
+    if (toolNames.some(name => this.sessionGrantedTools.has(name))) return 'allow';
+
+    for (const category of categories) {
       if (this.sessionGrantedCategories.has(category)) return 'allow';
-      const categoryPolicy = rules.categories[category];
-      if (categoryPolicy) return categoryPolicy;
     }
 
+    if (categoryPolicies.includes('ask')) return 'ask';
+    if (categoryPolicies.includes('allow')) return 'allow';
+
     return 'ask';
+  }
+
+  private buildToolGatePolicy(): ToolGatePolicy {
+    return {
+      id: `harness:${this.id}:tool-permissions`,
+      description: 'Harness permission rules enforced by the core tool gate.',
+      evaluate: ({ subject }) => {
+        const policy = this.resolveToolApproval(subject.toolName, subject.toolId ? [subject.toolId] : []);
+        const category =
+          this.getToolCategory({ toolName: subject.toolName }) ??
+          (subject.toolId ? this.getToolCategory({ toolName: subject.toolId }) : null);
+
+        if (policy === 'deny') {
+          return {
+            effect: 'deny',
+            reason: 'Harness permission policy denied this tool.',
+            ruleId: category ? `harness-category:${category}` : `harness-tool:${subject.toolName}`,
+            metadata: {
+              harnessId: this.id,
+              modeId: this.currentModeId,
+              category,
+            },
+          };
+        }
+
+        if (policy === 'ask') {
+          return {
+            effect: 'requireApproval',
+            reason: 'Harness permission policy requires approval for this tool.',
+            ruleId: category ? `harness-category:${category}` : `harness-tool:${subject.toolName}`,
+            metadata: {
+              harnessId: this.id,
+              modeId: this.currentModeId,
+              category,
+            },
+          };
+        }
+
+        return {
+          effect: 'allow',
+          reason: 'Harness permission policy allowed this tool.',
+          ruleId: category ? `harness-category:${category}` : `harness-tool:${subject.toolName}`,
+          metadata: {
+            harnessId: this.id,
+            modeId: this.currentModeId,
+            category,
+          },
+        };
+      },
+    };
   }
 
   // ===========================================================================
@@ -1427,8 +1493,6 @@ export class Harness<TState = {}> {
     try {
       const requestContext = await this.buildRequestContext(requestContextInput);
 
-      const isYolo = (this.state as Record<string, unknown>).yolo === true;
-
       const streamOptions: Record<string, unknown> = {
         memory: { thread: this.currentThreadId, resource: this.resourceId },
         abortSignal: this.abortController.signal,
@@ -1439,7 +1503,8 @@ export class Harness<TState = {}> {
         // Doesn't do anything when OM is enabled though, OM does its own saving per step
         // actually disable for now, it still breaks OM somehow! TODO fix it
         savePerStep: false,
-        requireToolApproval: !isYolo,
+        requireToolApproval: false,
+        toolGatePolicy: this.buildToolGatePolicy(),
         modelSettings: { temperature: 1 },
         ...(tracingContext && { tracingContext }),
         ...(tracingOptions && { tracingOptions }),
@@ -2580,11 +2645,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
-      requireToolApproval: !isYolo,
+      requireToolApproval: false,
+      toolGatePolicy: this.buildToolGatePolicy(),
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -2611,11 +2676,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
-      requireToolApproval: !isYolo,
+      requireToolApproval: false,
+      toolGatePolicy: this.buildToolGatePolicy(),
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -2643,11 +2708,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.resumeStream(resumeData, {
       runId: this.pendingSuspensionRunId,
       toolCallId: this.pendingSuspensionToolCallId ?? undefined,
-      requireToolApproval: !isYolo,
+      requireToolApproval: false,
+      toolGatePolicy: this.buildToolGatePolicy(),
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -3258,6 +3323,7 @@ export class Harness<TState = {}> {
         // Recursive forking is blocked at runtime instead: see the patched
         // `subagent` execute that the forked tool path installs in `tools.ts`.
         getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
+        getToolGatePolicy: () => this.buildToolGatePolicy(),
       });
     }
 

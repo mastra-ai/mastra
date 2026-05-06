@@ -124,19 +124,20 @@ async function applyToolGateToModelInput<TOOLS extends ToolSet>({
   for (const [toolName, tool] of toolEntries) {
     if (activeToolNames && !activeToolNames.includes(toolName)) continue;
 
+    const subject = createToolGateSubjectForTool({
+      boundary: 'model-input',
+      toolName,
+      tool,
+    });
     const decision = await evaluateToolGateForRequest({
       requestContext,
-      subject: createToolGateSubjectForTool({
-        boundary: 'model-input',
-        toolName,
-        tool,
-      }),
+      subject,
       runId,
       threadId,
       resourceId,
     });
 
-    if (decision?.effect === 'deny') {
+    if (decision?.effect === 'deny' || (decision?.effect === 'requireApproval' && subject.source.source === 'provider')) {
       deniedToolNames.add(toolName);
     }
   }

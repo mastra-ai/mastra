@@ -372,13 +372,13 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
-  it('should skip approval when needsApprovalFn returns false', async () => {
+  it('should skip approval when needsApprovalFn returns false and no other approval source requires it', async () => {
     const needsApprovalFn = vi.fn().mockReturnValue(false);
     const toolResult = { deleted: true };
     const tools = {
       'ctx-tool': {
         execute: vi.fn().mockResolvedValue(toolResult),
-        requireApproval: true,
+        requireApproval: false,
         needsApprovalFn,
       },
     };
@@ -399,6 +399,66 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
       result: toolResult,
       ...makeInputData(),
     });
+  });
+
+  it('does not let needsApprovalFn downgrade tool-owned approval', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: true,
+        needsApprovalFn,
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'tool-owned-approval-run-id',
+      streamState,
+    });
+
+    const executePromise = toolCallStep.execute(makeExecuteParams());
+
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
+    expect(suspend).toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('does not let needsApprovalFn downgrade global approval', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: false,
+        needsApprovalFn,
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'global-approval-run-id',
+      streamState,
+    });
+
+    const executePromise = toolCallStep.execute(makeExecuteParams({ requestContext }));
+
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
+    expect(suspend).toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 });
 
@@ -605,6 +665,47 @@ describe('createToolCallStep provider-executed tools', () => {
     });
 
     expect(result).toEqual(inputData);
+    expect(suspend).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider-executed tools that require local Tool Gate approval', async () => {
+    const requestContext = new RequestContext();
+    setToolGateRuntimeState(requestContext, {
+      policy: {
+        id: 'approval-policy',
+        evaluate: () => ({ effect: 'requireApproval', reason: 'provider approval is local only' }),
+      },
+    });
+    const tools = {
+      webSearch: {
+        type: 'provider-defined' as const,
+        id: 'openai.web_search',
+        name: 'web_search',
+      },
+    } as unknown as ToolSet;
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+    } as unknown as OuterLLMRun);
+
+    const inputData = {
+      toolCallId: 'call-123',
+      toolName: 'web_search',
+      args: { query: 'test' },
+      providerExecuted: true,
+    };
+
+    const result = await step.execute({
+      ...makeBaseExecuteParams(suspend, { requestContext }),
+      writer: new ToolStream({ prefix: 'tool', callId: 'call-123', name: 'web_search', runId: 'test-run' }),
+      inputData,
+    });
+
+    expect(result.error?.name).toBe('ToolNotFoundError');
+    expect(String(result.error?.message)).toContain('requires local approval');
     expect(suspend).not.toHaveBeenCalled();
   });
 

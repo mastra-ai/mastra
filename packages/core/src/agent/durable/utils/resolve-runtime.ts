@@ -245,9 +245,9 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
 /**
  * Check if a tool requires human approval.
  *
- * If the tool has a `needsApprovalFn`, it takes precedence over both the
- * global `requireToolApproval` flag and the tool-level `requireApproval` flag.
- * This matches the behavior of the non-durable agent's tool-call-step.
+ * Tool-owned approval, global approval, and `needsApprovalFn` are additive.
+ * A dynamic approval function can require approval for specific args, but it
+ * cannot lower approval already required by the tool or run options.
  */
 export async function toolRequiresApproval(
   tool: CoreTool,
@@ -256,10 +256,9 @@ export async function toolRequiresApproval(
 ): Promise<boolean> {
   let requires = !!(globalRequireApproval || (tool as any).requireApproval);
 
-  // needsApprovalFn overrides all other flags (e.g., skill tools return false)
   if ((tool as any).needsApprovalFn) {
     try {
-      requires = await (tool as any).needsApprovalFn(args ?? {});
+      requires = Boolean(await (tool as any).needsApprovalFn(args ?? {})) || requires;
     } catch {
       // On error, default to requiring approval (safe default)
       requires = true;

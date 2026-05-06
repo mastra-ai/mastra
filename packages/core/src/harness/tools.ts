@@ -5,6 +5,7 @@ import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
+import type { ToolGatePolicy } from '../tools/tool-gate';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
 import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } from './types';
@@ -812,6 +813,8 @@ export interface CreateSubagentToolOptions {
    * stability, but its runtime execute function is patched to block recursion.
    */
   getParentToolsets?: (requestContext?: RequestContext) => Promise<ToolsetsInput | undefined>;
+  /** Returns the current Harness-authored Tool Gate policy for nested subagent runs. */
+  getToolGatePolicy?: () => ToolGatePolicy | undefined;
 }
 
 /**
@@ -1079,11 +1082,13 @@ Use this tool when:
       let partialText = '';
 
       try {
+        const toolGatePolicy = opts.getToolGatePolicy?.();
         const response = await subagentToRun.stream(task, {
           maxSteps: streamMaxSteps,
           stopWhen: streamStopWhen,
           abortSignal,
           requireToolApproval: false,
+          ...(toolGatePolicy ? { toolGatePolicy } : {}),
           requestContext: subagentRequestContext,
           ...(streamMemory && { memory: streamMemory }),
           ...(forkedToolsets && { toolsets: forkedToolsets }),

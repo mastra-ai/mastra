@@ -50,19 +50,20 @@ async function applyDurableToolGateToModelInput({
 
   const deniedToolNames = new Set<string>();
   for (const [toolName, tool] of entries) {
+    const subject = createToolGateSubjectForTool({
+      boundary: 'model-input',
+      toolName,
+      tool,
+    });
     const decision = await evaluateToolGateForRequest({
       requestContext,
-      subject: createToolGateSubjectForTool({
-        boundary: 'model-input',
-        toolName,
-        tool,
-      }),
+      subject,
       runId,
       threadId,
       resourceId,
     });
 
-    if (decision?.effect === 'deny') {
+    if (decision?.effect === 'deny' || (decision?.effect === 'requireApproval' && subject.source.source === 'provider')) {
       deniedToolNames.add(toolName);
     }
   }

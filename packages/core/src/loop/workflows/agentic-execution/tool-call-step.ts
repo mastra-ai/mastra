@@ -230,9 +230,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // Provider-executed tools are handled entirely by the stream path
-      // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
-      if (inputData.providerExecuted) {
+      const toolGatePolicyActive = !!getToolGateRuntimeState(requestContext, { runId })?.policy;
+      if (inputData.providerExecuted && !toolGatePolicyActive) {
         return inputData;
       }
 
@@ -267,7 +266,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           resumeDataFromArgs = resumeDataFromInput;
         }
 
-        const toolGateDecision = getToolGateRuntimeState(requestContext, { runId })?.policy
+        const toolGateDecision = toolGatePolicyActive
           ? await evaluateToolGateForRequest({
               requestContext,
               subject: createToolGateSubjectForTool({
@@ -294,6 +293,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
         const toolGateRequiresApproval = toolGateDecision?.effect === 'requireApproval';
 
+        // Provider-executed tools are handled by the stream path, but still pass
+        // through the final Tool Gate checkpoint before they are accepted.
+        if (inputData.providerExecuted) {
+          if (toolGateRequiresApproval) {
+            return {
+              error: new ToolNotFoundError(
+                `Tool "${inputData.toolName}" requires local approval and cannot be executed by the provider.`,
+              ),
+              ...inputData,
+            };
+          }
+
+          return inputData;
+        }
+
         if (tool && 'onInputAvailable' in tool && !toolGateRequiresApproval) {
           try {
             await tool?.onInputAvailable?.({
@@ -316,7 +330,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval || toolGateRequiresApproval;
+        let toolRequiresApproval = Boolean(requireToolApproval || (tool as any).requireApproval || toolGateRequiresApproval);
         if ((tool as any).needsApprovalFn) {
           // Evaluate the function with parsed args and available context
           try {
@@ -324,7 +338,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
               workspace: _internal?.stepWorkspace,
             });
-            toolRequiresApproval = toolGateRequiresApproval || needsApprovalResult;
+            toolRequiresApproval = toolRequiresApproval || Boolean(needsApprovalResult);
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
             logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
