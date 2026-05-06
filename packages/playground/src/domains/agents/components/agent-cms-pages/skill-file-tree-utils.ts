@@ -49,3 +49,15 @@ export function extractSkillLicense(files: InMemoryFileNode[]): string | undefin
 export function isImageContent(content: string | undefined): boolean {
   return !!content && content.startsWith('data:image/');
 }
+
+export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, content: string): InMemoryFileNode[] {
+  return nodes.map(node => {
+    if (node.id === nodeId && node.type === 'file') {
+      return { ...node, content };
+    }
+    if (node.children) {
+      return { ...node, children: updateNodeContent(node.children, nodeId, content) };
+    }
+    return node;
+  });
+}
