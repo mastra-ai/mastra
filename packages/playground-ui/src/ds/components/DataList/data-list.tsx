@@ -6,6 +6,7 @@ import { DataListRoot } from './data-list-root';
 import { DataListRow } from './data-list-row';
 import { DataListRowButton } from './data-list-row-button';
 import { DataListRowLink } from './data-list-row-link';
+import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
 import { DataListTop } from './data-list-top';
@@ -26,6 +27,7 @@ export const DataList = Object.assign(DataListRoot, {
   NoMatch: DataListNoMatch,
   Subheader: DataListSubheader,
   SubHeading: DataListSubHeading,
+  Spacer: DataListSpacer,
   NextPageLoading: DataListNextPageLoading,
   Pagination: DataListPagination,
 });
