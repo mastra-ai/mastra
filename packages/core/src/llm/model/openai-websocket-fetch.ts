@@ -11,11 +11,23 @@ export interface CreateOpenAIWebSocketFetchOptions {
    * Authorization and OpenAI-Beta are managed internally.
    */
   headers?: Record<string, string>;
+  /**
+   * Convert an `api-key` request header into `Authorization: Bearer ...` for
+   * providers whose WebSocket endpoint authenticates API keys as bearer tokens.
+   */
+  apiKeyAsBearer?: boolean;
+  /**
+   * Optional beta header sent when establishing the WebSocket connection.
+   * @default 'responses_websockets=2026-02-06'
+   */
+  betaHeader?: string | false;
 }
 
 export type OpenAIWebSocketFetch = ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) & {
   close(): void;
 };
+
+const TERMINAL_RESPONSE_EVENTS = new Set(['response.completed', 'response.failed', 'response.incomplete', 'error']);
 
 /**
  * Creates a `fetch` function that routes OpenAI Responses API streaming
@@ -23,16 +35,28 @@ export type OpenAIWebSocketFetch = ((input: RequestInfo | URL, init?: RequestIni
  */
 export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchOptions): OpenAIWebSocketFetch {
   const wsUrl = options?.url ?? 'wss://api.openai.com/v1/responses';
+  const betaHeader = options?.betaHeader === undefined ? 'responses_websockets=2026-02-06' : options.betaHeader;
 
   let ws: WebSocket | null = null;
   let connecting: Promise<WebSocket> | null = null;
   let connectionKey: string | null = null;
   let busy = false;
 
-  function getConnection(authorization: string, headers: Record<string, string>): Promise<WebSocket> {
+  function getConnection(
+    authorization: string,
+    headers: Record<string, string>,
+    signal?: AbortSignal | null,
+  ): Promise<WebSocket> {
+    if (signal?.aborted) {
+      return Promise.reject(getAbortError(signal));
+    }
+
     const normalizedHeaders = { ...normalizeHeaders(options?.headers), ...headers };
     delete normalizedHeaders['authorization'];
     delete normalizedHeaders['openai-beta'];
+    if (options?.apiKeyAsBearer) {
+      delete normalizedHeaders['api-key'];
+    }
     const nextConnectionKey = buildConnectionKey(authorization, normalizedHeaders);
 
     if (ws?.readyState === WebSocket.OPEN && connectionKey === nextConnectionKey) {
@@ -50,26 +74,54 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     connectionKey = nextConnectionKey;
 
     connecting = new Promise<WebSocket>((resolve, reject) => {
+      let settled = false;
       const socket = new WebSocket(wsUrl, {
         headers: {
           ...normalizedHeaders,
-          Authorization: authorization,
-          'OpenAI-Beta': 'responses_websockets=2026-02-06',
+          ...(authorization ? { Authorization: authorization } : {}),
+          ...(betaHeader ? { 'OpenAI-Beta': betaHeader } : {}),
         },
       });
 
+      function cleanupAbortListener() {
+        signal?.removeEventListener('abort', onAbort);
+      }
+
+      function rejectConnection(err: unknown, closeSocket = true) {
+        if (settled) return;
+        settled = true;
+        connecting = null;
+        connectionKey = null;
+        cleanupAbortListener();
+        if (closeSocket) socket.close();
+        reject(err);
+      }
+
+      function onAbort() {
+        rejectConnection(getAbortError(signal));
+      }
+
+      signal?.addEventListener('abort', onAbort, { once: true });
+
       socket.on('open', () => {
+        if (signal?.aborted) {
+          rejectConnection(getAbortError(signal));
+          return;
+        }
+        settled = true;
         ws = socket;
         connecting = null;
+        cleanupAbortListener();
         resolve(socket);
       });
 
       socket.on('error', err => {
-        if (connecting) {
-          connecting = null;
-          connectionKey = null;
-          reject(err);
-        }
+        rejectConnection(err, false);
+      });
+
+      socket.on('close', () => {
+        if (settled) return;
+        rejectConnection(new Error('WebSocket closed before the connection opened'), false);
       });
 
       socket.on('close', () => {
@@ -100,25 +152,32 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
     }
 
     // Prevent concurrent streams from sharing one WebSocket transport instance.
-    // In that case, fall back to HTTP streaming for the overlapping request.
+    // Only fall back to HTTP when the request does not depend on the socket's
+    // connection-local previous_response_id cache.
     if (busy) {
+      if (body.previous_response_id && body.store !== true) {
+        throw new Error(
+          'Cannot start an overlapping WebSocket Responses continuation without persisted response state. Wait for the active stream to finish or enable store: true.',
+        );
+      }
       return globalThis.fetch(input, init);
     }
 
     const headers = normalizeHeaders(init.headers);
-    const authorization = headers['authorization'] ?? '';
+    const authorization =
+      headers['authorization'] ?? (options?.apiKeyAsBearer && headers['api-key'] ? `Bearer ${headers['api-key']}` : '');
 
     // Acquire the busy lock before awaiting to prevent races
     busy = true;
     let connection: WebSocket;
     try {
-      connection = await getConnection(authorization, headers);
+      connection = await getConnection(authorization, headers, init?.signal);
     } catch (err) {
       busy = false;
       throw err;
     }
 
-    const { stream: _stream, ...requestBody } = body;
+    const { stream: _stream, background: _background, ...requestBody } = body;
     const encoder = new TextEncoder();
 
     const responseStream = new ReadableStream<Uint8Array>({
@@ -143,9 +202,9 @@ export function createOpenAIWebSocketFetch(options?: CreateOpenAIWebSocketFetchO
 
           try {
             const event = JSON.parse(text);
-            if (event.type === 'response.completed' || event.type === 'error') {
+            if (isTerminalWebSocketEvent(event)) {
               controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              cleanup();
+              cleanup({ closeSocket: shouldReconnectAfterEvent(event) });
               controller.close();
             }
           } catch {
@@ -220,6 +279,31 @@ function buildConnectionKey(authorization: string, headers: Record<string, strin
     authorization,
     headers: Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)),
   });
+}
+
+function isTerminalWebSocketEvent(event: unknown): event is { type: string } {
+  return (
+    typeof event === 'object' &&
+    event !== null &&
+    'type' in event &&
+    typeof event.type === 'string' &&
+    TERMINAL_RESPONSE_EVENTS.has(event.type)
+  );
+}
+
+function shouldReconnectAfterEvent(event: unknown): boolean {
+  if (typeof event !== 'object' || event === null || !('error' in event)) return false;
+  const error = event.error;
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'websocket_connection_limit_reached'
+  );
+}
+
+function getAbortError(signal?: AbortSignal | null): unknown {
+  return signal?.reason ?? new DOMException('Aborted', 'AbortError');
 }
 
 function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {

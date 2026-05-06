@@ -8918,8 +8918,8 @@ export interface PostProcessorsProcessorIdExecute_RouteContract {
 export type PostV1Responses_Body = {
   /** Optional model identifier override, such as openai/gpt-5. When omitted, the agent default model is used. */
   model?: string | undefined;
-  /** Mastra agent ID for the request */
-  agent_id: string;
+  /** Mastra agent ID for the request. Required unless previous_response_id is provided. */
+  agent_id?: string | undefined;
   input:
     | string
     | {
@@ -8958,6 +8958,12 @@ export type PostV1Responses_Body = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9048,6 +9054,12 @@ export type PostV1Responses_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9170,6 +9182,12 @@ export type GetV1ResponsesResponseId_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }

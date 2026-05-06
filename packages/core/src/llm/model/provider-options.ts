@@ -56,6 +56,26 @@ export type OpenAIProviderOptions = OpenAIResponsesProviderOptions & {
    */
   websocket?: OpenAIWebSocketOptions;
 };
+export type AzureWebSocketOptions = Omit<OpenAIWebSocketOptions, 'url'> & {
+  /**
+   * WebSocket endpoint URL.
+   * @default resource-specific Azure OpenAI Responses URL
+   */
+  url?: string;
+};
+export type AzureProviderOptions = OpenAIResponsesProviderOptions & {
+  /**
+   * Select the transport used for streaming responses.
+   * - `fetch` uses HTTP streaming.
+   * - `websocket` uses the Azure OpenAI Responses WebSocket API when supported.
+   * - `auto` chooses WebSocket when supported, otherwise falls back to fetch.
+   */
+  transport?: OpenAITransport;
+  /**
+   * WebSocket-specific configuration for Azure OpenAI Responses streaming.
+   */
+  websocket?: AzureWebSocketOptions;
+};
 export type DeepSeekProviderOptions = DeepSeekChatOptions;
 
 /**
@@ -84,6 +104,7 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
   deepseek?: DeepSeekProviderOptions & Record<string, any>;
   google?: GoogleProviderOptions & Record<string, any>;
   openai?: OpenAIProviderOptions & Record<string, any>;
+  azure?: AzureProviderOptions & Record<string, any>;
   xai?: XaiProviderOptions & Record<string, any>;
 };
 

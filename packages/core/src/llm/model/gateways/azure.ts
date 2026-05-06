@@ -2,7 +2,9 @@ import { createAzure } from '@ai-sdk/azure';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
-import { MastraModelGateway } from './base.js';
+import { createOpenAIWebSocketFetch } from '../openai-websocket-fetch.js';
+import type { OpenAITransport, OpenAIWebSocketOptions } from '../provider-options.js';
+import { MASTRA_GATEWAY_STREAM_TRANSPORT, MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 import { MASTRA_USER_AGENT } from './constants.js';
 
@@ -34,6 +36,8 @@ interface CachedToken {
   expiresAt: number;
 }
 
+type AzureLanguageModelCallOptions = Parameters<LanguageModelV2['doGenerate']>[0];
+
 export interface AzureAccessToken {
   token: string;
   expiresOnTimestamp?: number;
@@ -47,6 +51,8 @@ export interface AzureOpenAIGatewayConfig {
   resourceName: string;
   apiKey?: string;
   apiVersion?: string;
+  useResponsesAPI?: boolean;
+  useDeploymentBasedUrls?: boolean;
   deployments?: string[];
   authentication?: {
     type: 'entraId';
@@ -60,6 +66,103 @@ export interface AzureOpenAIGatewayConfig {
     subscriptionId: string;
     resourceGroup: string;
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mirrorAzureProviderOptionsForOpenAI<T>(providerOptions: T): T {
+  if (!isRecord(providerOptions) || !isRecord(providerOptions.azure)) {
+    return providerOptions;
+  }
+
+  const openai = isRecord(providerOptions.openai) ? providerOptions.openai : {};
+
+  return {
+    ...providerOptions,
+    openai: {
+      ...openai,
+      ...providerOptions.azure,
+    },
+  } as T;
+}
+
+function mirrorAzureResponseProviderOptions(
+  prompt: AzureLanguageModelCallOptions['prompt'],
+): AzureLanguageModelCallOptions['prompt'] {
+  let promptModified = false;
+
+  const mirroredPrompt = prompt.map(message => {
+    const messageWithProviderOptions = message as typeof message & { providerOptions?: unknown };
+    const providerOptions = mirrorAzureProviderOptionsForOpenAI(messageWithProviderOptions.providerOptions);
+    const providerOptionsModified = providerOptions !== messageWithProviderOptions.providerOptions;
+
+    if (!Array.isArray(message.content)) {
+      if (providerOptionsModified) {
+        promptModified = true;
+        return { ...message, providerOptions } as typeof message;
+      }
+
+      return message;
+    }
+
+    let contentModified = false;
+    const content = message.content.map(part => {
+      if (!('providerOptions' in part)) {
+        return part;
+      }
+
+      const providerOptions = mirrorAzureProviderOptionsForOpenAI(part.providerOptions);
+      if (providerOptions === part.providerOptions) {
+        return part;
+      }
+
+      contentModified = true;
+      return { ...part, providerOptions };
+    }) as typeof message.content;
+
+    if (!contentModified) {
+      if (providerOptionsModified) {
+        promptModified = true;
+        return { ...message, providerOptions } as typeof message;
+      }
+
+      return message;
+    }
+
+    promptModified = true;
+    return { ...message, ...(providerOptionsModified ? { providerOptions } : {}), content };
+  });
+
+  return (promptModified ? mirroredPrompt : prompt) as AzureLanguageModelCallOptions['prompt'];
+}
+
+function withAzureResponsesInputCompatibility(model: LanguageModelV2): LanguageModelV2 {
+  return new Proxy(model, {
+    get(target, property, receiver) {
+      // Audit this wrapper when AI SDK adds new prompt-taking LanguageModelV2 methods.
+      if (property === 'doGenerate') {
+        return (options: AzureLanguageModelCallOptions) =>
+          target.doGenerate({
+            ...options,
+            providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
+            prompt: mirrorAzureResponseProviderOptions(options.prompt),
+          });
+      }
+
+      if (property === 'doStream') {
+        return (options: Parameters<LanguageModelV2['doStream']>[0]) =>
+          target.doStream({
+            ...options,
+            providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
+            prompt: mirrorAzureResponseProviderOptions(options.prompt),
+          });
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
 }
 
 export class AzureOpenAIGateway extends MastraModelGateway {
@@ -105,6 +208,37 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       console.warn(
         '[AzureOpenAIGateway] Both apiKey and Entra ID authentication provided. Using Entra ID authentication and ignoring apiKey.',
       );
+    }
+
+    if (this.config.useResponsesAPI && this.config.useDeploymentBasedUrls === true) {
+      throw new MastraError({
+        id: 'AZURE_GATEWAY_INVALID_CONFIG',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'useResponsesAPI: true cannot be combined with useDeploymentBasedUrls: true. Omit useDeploymentBasedUrls or set it to false.',
+      });
+    }
+
+    if (this.config.useResponsesAPI && this.config.apiVersion && !['v1', 'preview'].includes(this.config.apiVersion)) {
+      throw new MastraError({
+        id: 'AZURE_GATEWAY_INVALID_CONFIG',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'useResponsesAPI: true requires apiVersion: "v1" or apiVersion: "preview". Omit apiVersion to use "v1".',
+      });
+    }
+
+    if (
+      this.config.useDeploymentBasedUrls === false &&
+      this.config.apiVersion &&
+      !['v1', 'preview'].includes(this.config.apiVersion)
+    ) {
+      throw new MastraError({
+        id: 'AZURE_GATEWAY_INVALID_CONFIG',
+        domain: 'LLM',
+        category: 'UNKNOWN',
+        text: 'useDeploymentBasedUrls: false requires apiVersion: "v1" or apiVersion: "preview". Omit apiVersion to use "v1".',
+      });
     }
 
     const hasDeployments = this.config.deployments && this.config.deployments.length > 0;
@@ -391,47 +525,102 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     return token;
   }
 
-  private createEntraIdFetch(): typeof globalThis.fetch {
+  private createEntraIdFetch(innerFetch: typeof globalThis.fetch = fetch): typeof globalThis.fetch {
     return async (input, init) => {
       const token = await this.getEntraIdToken();
       const headers = new Headers(init?.headers);
       headers.delete('api-key');
       headers.set('Authorization', `Bearer ${token}`);
 
-      return fetch(input, {
+      return innerFetch(input, {
         ...init,
         headers,
       });
     };
   }
 
+  private createAzureResponsesWebSocketFetch({
+    useEntraId,
+    openaiWebSocket,
+  }: {
+    useEntraId: boolean;
+    openaiWebSocket?: OpenAIWebSocketOptions;
+  }): typeof globalThis.fetch & { close(): void } {
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: openaiWebSocket?.url ?? `wss://${this.config.resourceName}.openai.azure.com/openai/v1/responses`,
+      headers: openaiWebSocket?.headers,
+      apiKeyAsBearer: !useEntraId,
+      betaHeader: false,
+    });
+
+    return useEntraId
+      ? Object.assign(this.createEntraIdFetch(websocketFetch), { close: websocketFetch.close })
+      : websocketFetch;
+  }
+
   async resolveLanguageModel({
     modelId,
     apiKey,
     headers,
+    transport,
+    openaiWebSocket,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    transport?: OpenAITransport;
+    openaiWebSocket?: OpenAIWebSocketOptions;
   }): Promise<LanguageModelV2> {
-    const apiVersion = this.config.apiVersion || '2024-04-01-preview';
+    const useResponsesAPI = this.config.useResponsesAPI ?? false;
+    const apiVersion =
+      this.config.apiVersion ||
+      (useResponsesAPI || this.config.useDeploymentBasedUrls === false ? 'v1' : '2024-04-01-preview');
+    const useDeploymentBasedUrls = this.config.useDeploymentBasedUrls ?? (useResponsesAPI ? false : true);
     const useEntraId = this.config.authentication?.type === 'entraId';
+    const useWebSocket = useResponsesAPI && transport === 'websocket';
+    const websocketFetch = useWebSocket
+      ? this.createAzureResponsesWebSocketFetch({
+          useEntraId,
+          openaiWebSocket,
+        })
+      : undefined;
     const azureConfig = {
       resourceName: this.config.resourceName,
       apiKey: useEntraId ? '' : apiKey,
       apiVersion,
-      useDeploymentBasedUrls: true,
+      // Mastra's Azure gateway has historically used deployment-based URLs.
+      // Keep that default for compatibility; set false with apiVersion: 'v1'
+      // to use the newer Azure OpenAI v1 route.
+      useDeploymentBasedUrls,
       headers: { 'User-Agent': MASTRA_USER_AGENT, ...headers },
+      ...(websocketFetch && !useEntraId ? { fetch: websocketFetch } : {}),
     };
 
-    if (useEntraId) {
-      return createAzure({
-        ...azureConfig,
-        fetch: this.createEntraIdFetch(),
-      })(modelId);
+    const azureProvider = createAzure(
+      useEntraId
+        ? {
+            ...azureConfig,
+            fetch: websocketFetch ?? this.createEntraIdFetch(),
+          }
+        : azureConfig,
+    );
+
+    if (useResponsesAPI) {
+      const model = withAzureResponsesInputCompatibility(azureProvider.responses(modelId));
+      if (websocketFetch) {
+        Object.defineProperty(model, MASTRA_GATEWAY_STREAM_TRANSPORT, {
+          configurable: true,
+          value: {
+            type: 'openai-websocket',
+            close: websocketFetch.close,
+          },
+        });
+      }
+
+      return model;
     }
 
-    return createAzure(azureConfig)(modelId);
+    return azureProvider(modelId);
   }
 }

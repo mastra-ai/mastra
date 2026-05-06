@@ -21,7 +21,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "azure-openai/my-gpt4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+  model: "azure-openai/my-gpt-5-4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
 });
 
 // Generate a response
@@ -41,9 +41,9 @@ Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/
 Azure model IDs follow this pattern: `azure-openai/your-deployment-name`
 
 The deployment name is **specific to your Azure account** and chosen when you create a deployment in Azure Portal. Common examples:
-- `azure-openai/my-gpt4-deployment`
-- `azure-openai/production-gpt-35-turbo`
-- `azure-openai/staging-gpt-4o`
+- `azure-openai/my-gpt-5-4-deployment`
+- `azure-openai/production-gpt-5-4`
+- `azure-openai/staging-gpt-5-4-mini`
 
 ## Setup
 
@@ -51,7 +51,7 @@ Create deployments in [Azure OpenAI Studio](https://oai.azure.com/). The resourc
 
 ## Configuration
 
-Instantiate the gateway and pass it to Mastra. Three configuration modes are available.
+Instantiate the gateway and pass it to Mastra. The common configuration modes are shown below.
 
 ### Static Deployments
 
@@ -66,7 +66,7 @@ export const mastra = new Mastra({
     new AzureOpenAIGateway({
       resourceName: "my-openai-resource",
       apiKey: process.env.AZURE_API_KEY!,
-      deployments: ["gpt-4-prod", "gpt-35-turbo-dev"],
+      deployments: ["gpt-5-4-prod", "gpt-5-4-mini-dev"],
     }),
   ],
 });
@@ -118,7 +118,7 @@ export const mastra = new Mastra({
         type: "entraId",
         credential: new DefaultAzureCredential(),
       },
-      deployments: ["gpt-4-prod", "gpt-35-turbo-dev"],
+      deployments: ["gpt-5-4-prod", "gpt-5-4-mini-dev"],
     }),
   ],
 });
@@ -152,6 +152,73 @@ export const mastra = new Mastra({
 });
 ```
 
+### Azure Responses API
+
+Azure OpenAI supports the Responses API through the `v1` API path used by the AI SDK Azure provider. Set `useResponsesAPI: true` when your Azure resource and deployment support that route. The gateway then uses `apiVersion: "v1"` and `useDeploymentBasedUrls: false` by default.
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      useResponsesAPI: true,
+      deployments: ["my-gpt-5-4-deployment"],
+    }),
+  ],
+});
+```
+
+Keep `useResponsesAPI` omitted or set it to `false` for the existing Azure chat completions route. That path keeps `apiVersion: "2024-04-01-preview"` and deployment-based URLs by default for compatibility.
+
+You can still configure `apiVersion` and `useDeploymentBasedUrls` directly. For example, set `useDeploymentBasedUrls: false` to use the Azure `v1` URL shape with the chat model constructor; the gateway defaults `apiVersion` to `"v1"` for that route. Passing `apiVersion: "v1"` by itself keeps the existing deployment-based URL default for compatibility.
+
+Do not combine `useResponsesAPI: true` with `useDeploymentBasedUrls: true`; the gateway rejects that configuration because Responses API support uses the Azure `v1` route.
+
+Use `apiVersion: "v1"` for the GA `v1` route. Microsoft currently exposes preview `v1` features through feature-specific headers, such as `"aoai-evals": "preview"`, or through preview/alpha API paths. The gateway still accepts `apiVersion: "preview"` with `useDeploymentBasedUrls: false` for Azure provider configurations that require the preview query value. Date-based API versions are only for the legacy deployment-based route, so the gateway rejects them when `useResponsesAPI` is `true` or `useDeploymentBasedUrls` is `false`.
+
+The same API key and Microsoft Entra ID authentication modes work with the `v1` route.
+
+### Azure Responses WebSocket transport
+
+Azure OpenAI also supports WebSocket mode on the Responses API. Use it for agent or tool loops with many model-tool round trips. Keep the standard HTTP transport for single-shot requests and short conversations.
+
+WebSocket transport requires `useResponsesAPI: true`, because Azure exposes it on the `v1` Responses path. Then opt in per stream request with `providerOptions.azure.transport: "websocket"`.
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "azure-ws-agent",
+  name: "Azure WebSocket Agent",
+  instructions: "Use tools when they are useful.",
+  model: "azure-openai/my-gpt-5-4-deployment",
+});
+
+const stream = await agent.stream("Find and improve the slow function.", {
+  providerOptions: {
+    azure: {
+      transport: "websocket",
+      store: false,
+      websocket: {
+        closeOnFinish: false,
+      },
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+
+stream.transport?.close();
+```
+
+Set `closeOnFinish: false` when you want to keep the socket open across follow-up turns. Azure keeps one response chain in connection-local memory, so continuing from the most recent `previous_response_id` can reduce continuation latency. The connection runs one response at a time and does not multiplex parallel runs.
+
 ## Configuration Reference
 
 | Option | Type | Required | Description |
@@ -162,7 +229,9 @@ export const mastra = new Mastra({
 | `authentication.type` | `"entraId"` | Yes* | Authentication mode |
 | `authentication.credential` | `TokenCredential` | Yes* | Azure SDK-compatible credential for `entraId` authentication mode |
 | `authentication.scope` | `string` | No | Token scope (default: `https://cognitiveservices.azure.com/.default`) |
-| `apiVersion` | `string` | No | API version (default: `2024-04-01-preview`) |
+| `apiVersion` | `string` | No | API version (default: `2024-04-01-preview`, or `v1` when `useResponsesAPI` is `true` or `useDeploymentBasedUrls` is `false`) |
+| `useResponsesAPI` | `boolean` | No | Resolve deployments through the Azure OpenAI Responses API (default: `false`) |
+| `useDeploymentBasedUrls` | `boolean` | No | Use Azure deployment-based URLs (default: `true`, or `false` when `useResponsesAPI` is `true`) |
 | `deployments` | `string[]` | No | Deployment names for static mode |
 | `management` | `object` | No | Management API credentials |
 | `management.tenantId` | `string` | Yes* | Azure AD tenant ID |

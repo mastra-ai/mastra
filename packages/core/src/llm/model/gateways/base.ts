@@ -5,6 +5,8 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { StreamTransport } from '../../../stream/types';
+import type { OpenAITransport, OpenAIWebSocketOptions } from '../provider-options.js';
 
 export interface ProviderConfig {
   url?: string;
@@ -22,6 +24,14 @@ export interface ProviderConfig {
  * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
  */
 export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3;
+export type GatewayStreamTransportHandle = Pick<StreamTransport, 'type' | 'close'>;
+
+/** @internal Stream transport handle attached by gateways that own custom streaming transports. */
+export const MASTRA_GATEWAY_STREAM_TRANSPORT = Symbol.for('@mastra/core.gatewayStreamTransport');
+
+export type GatewayLanguageModelWithStreamTransport = GatewayLanguageModel & {
+  [MASTRA_GATEWAY_STREAM_TRANSPORT]?: GatewayStreamTransportHandle;
+};
 
 export abstract class MastraModelGateway {
   /**
@@ -76,6 +86,8 @@ export abstract class MastraModelGateway {
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    transport?: OpenAITransport;
+    openaiWebSocket?: OpenAIWebSocketOptions;
   }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
 
   /**

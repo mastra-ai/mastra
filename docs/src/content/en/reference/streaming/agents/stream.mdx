@@ -995,9 +995,9 @@ await agent.stream('message for agent', {
 })
 ```
 
-## OpenAI WebSocket transport
+## Responses WebSocket transport
 
-Opt into OpenAI Responses WebSocket streaming via `providerOptions.openai.transport`. This only applies to streaming calls and is currently supported for direct OpenAI models (for example, `openai/gpt-5.4`). If WebSocket streaming is unavailable, Mastra falls back to HTTP streaming. By default, Mastra closes the WebSocket when the stream finishes.
+Opt into Responses WebSocket streaming with provider options. This only applies to streaming calls and is supported for direct OpenAI models and Azure OpenAI Responses deployments. If WebSocket streaming is unavailable, Mastra falls back to HTTP streaming. By default, Mastra closes the WebSocket when the stream finishes.
 
 ```ts title="index.ts"
 const stream = await agent.stream('Hello', {
@@ -1008,6 +1008,20 @@ const stream = await agent.stream('Hello', {
         url: 'wss://api.openai.com/v1/responses',
         closeOnFinish: true, // default
       },
+    },
+  },
+})
+```
+
+For Azure OpenAI, configure the gateway with `useResponsesAPI: true`, then use `providerOptions.azure.transport`.
+
+```ts title="index.ts"
+const stream = await agent.stream('Hello', {
+  providerOptions: {
+    azure: {
+      transport: 'websocket',
+      store: false,
+      websocket: { closeOnFinish: true },
     },
   },
 })

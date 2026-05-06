@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MessageList } from '../index';
+import { CacheKeyGenerator } from '../cache';
+import { getOpenAIReasoningItemId, getResponseProviderItemIdFromPart, MessageList } from '../index';
 
 /**
  * Verifies that OpenAI reasoning parts and itemId metadata survive the
@@ -19,6 +20,32 @@ import { MessageList } from '../index';
  *   - itemIds are hex strings prefixed with rs_, msg_, or fc_
  */
 describe('OpenAI reasoning round-trip', () => {
+  it('should keep OpenAI-specific and provider-neutral itemId helpers distinct', () => {
+    const openaiPart = {
+      providerMetadata: {
+        openai: { itemId: 'rs_openai' },
+      },
+    };
+    const azurePart = {
+      providerMetadata: {
+        azure: { itemId: 'rs_azure' },
+      },
+    };
+    const azurePromptPart = {
+      providerOptions: {
+        azure: { itemId: 'rs_azure_prompt' },
+      },
+    };
+
+    expect(getOpenAIReasoningItemId(openaiPart)).toBe('rs_openai');
+    expect(getOpenAIReasoningItemId(azurePart)).toBeUndefined();
+    expect(getResponseProviderItemIdFromPart(azurePart)).toEqual({ provider: 'azure', itemId: 'rs_azure' });
+    expect(getResponseProviderItemIdFromPart(azurePromptPart)).toEqual({
+      provider: 'azure',
+      itemId: 'rs_azure_prompt',
+    });
+  });
+
   /**
    * Simple case: reasoning + text in a single message, added via 'response' source
    * (which merges into one assistant message).
@@ -208,5 +235,227 @@ describe('OpenAI reasoning round-trip', () => {
         expect(p.providerOptions?.openai).toBeDefined();
       }
     }
+  });
+
+  it('should preserve Azure OpenAI reasoning metadata in prompt()', () => {
+    const list = new MessageList();
+
+    list.add({ role: 'user', content: 'Use the tool and summarize.' }, 'input');
+    list.add(
+      {
+        id: 'msg-azure-assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: {
+                azure: {
+                  itemId: 'rs_azure_reasoning',
+                  reasoningEncryptedContent: null,
+                },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_azure_tool',
+                toolName: 'lookup',
+                args: { query: 'status' },
+                result: { status: 'ok' },
+              },
+              providerMetadata: {
+                azure: {
+                  itemId: 'fc_azure_toolcall',
+                },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(),
+        threadId: 'thread-1',
+      },
+      'response',
+    );
+
+    list.add({ role: 'user', content: 'Continue.' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
+    const assistantMessages = prompt.filter(m => m.role === 'assistant');
+    const allParts = assistantMessages.flatMap(m => (Array.isArray(m.content) ? m.content : []));
+
+    const reasoningParts = allParts.filter((p: any) => p.type === 'reasoning');
+    expect(reasoningParts).toHaveLength(1);
+    expect((reasoningParts[0] as any).providerOptions?.azure?.itemId).toBe('rs_azure_reasoning');
+    expect((reasoningParts[0] as any).providerOptions?.openai).toBeUndefined();
+
+    const toolCallParts = allParts.filter((p: any) => p.type === 'tool-call');
+    expect(toolCallParts).toHaveLength(1);
+    expect((toolCallParts[0] as any).providerOptions?.azure?.itemId).toBe('fc_azure_toolcall');
+    expect((toolCallParts[0] as any).providerOptions?.openai).toBeUndefined();
+  });
+
+  it('should distinguish empty Azure reasoning parts in AI SDK v5 cache keys', () => {
+    const first = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerMetadata: {
+          azure: {
+            itemId: 'rs_azure_first',
+          },
+        },
+      },
+    ];
+    const second = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerMetadata: {
+          azure: {
+            itemId: 'rs_azure_second',
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV5Parts(first as any)).not.toBe(CacheKeyGenerator.fromAIV5Parts(second as any));
+  });
+
+  it('should distinguish equal Azure text parts with different itemIds in cache keys', () => {
+    const uiFirst = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerMetadata: { azure: { itemId: 'msg_azure_first' } },
+      },
+    ];
+    const uiSecond = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerMetadata: { azure: { itemId: 'msg_azure_second' } },
+      },
+    ];
+    const modelFirst = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerOptions: { azure: { itemId: 'msg_azure_first' } },
+      },
+    ];
+    const modelSecond = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerOptions: { azure: { itemId: 'msg_azure_second' } },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV4Parts(uiFirst as any)).not.toBe(CacheKeyGenerator.fromAIV4Parts(uiSecond as any));
+    expect(CacheKeyGenerator.fromAIV5Parts(uiFirst as any)).not.toBe(CacheKeyGenerator.fromAIV5Parts(uiSecond as any));
+    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(modelFirst as any)).not.toBe(
+      CacheKeyGenerator.fromAIV4CoreMessageContent(modelSecond as any),
+    );
+    expect(CacheKeyGenerator.fromAIV5ModelMessageContent(modelFirst as any)).not.toBe(
+      CacheKeyGenerator.fromAIV5ModelMessageContent(modelSecond as any),
+    );
+  });
+
+  it('should distinguish empty Azure reasoning parts in AI SDK v4 CoreMessage cache keys', () => {
+    const first = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_first',
+          },
+        },
+      },
+    ];
+    const second = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_second',
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(first as any)).not.toBe(
+      CacheKeyGenerator.fromAIV4CoreMessageContent(second as any),
+    );
+  });
+
+  it('should canonicalize mirrored Azure and OpenAI itemIds in cache keys', () => {
+    const azureOnly = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_mirrored',
+          },
+        },
+      },
+    ];
+    const mirrored = [
+      {
+        type: 'reasoning',
+        text: '',
+        providerOptions: {
+          azure: {
+            itemId: 'rs_azure_mirrored',
+          },
+          openai: {
+            itemId: 'rs_azure_mirrored',
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV4CoreMessageContent(azureOnly as any)).toBe(
+      CacheKeyGenerator.fromAIV4CoreMessageContent(mirrored as any),
+    );
+  });
+
+  it('should canonicalize mirrored Azure and OpenAI text itemIds in cache keys', () => {
+    const azureOnly = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerOptions: {
+          azure: {
+            itemId: 'msg_azure_mirrored',
+          },
+        },
+      },
+    ];
+    const mirrored = [
+      {
+        type: 'text',
+        text: 'Same text',
+        providerOptions: {
+          azure: {
+            itemId: 'msg_azure_mirrored',
+          },
+          openai: {
+            itemId: 'msg_azure_mirrored',
+          },
+        },
+      },
+    ];
+
+    expect(CacheKeyGenerator.fromAIV5ModelMessageContent(azureOnly as any)).toBe(
+      CacheKeyGenerator.fromAIV5ModelMessageContent(mirrored as any),
+    );
   });
 });
