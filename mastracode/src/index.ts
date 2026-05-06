@@ -31,7 +31,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
-import { attachCavemanThreadStatePersistence } from './agents/thread-caveman-state.js';
+import { attachCavemanThreadStatePersistence, restoreCavemanForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
@@ -613,7 +613,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Persist /om caveman-observations toggle per-thread (mastracode-only concern;
   // intentionally not in core's harness loadThreadMetadata).
-  attachCavemanThreadStatePersistence(harness as unknown as Harness<Record<string, unknown>>);
+  const cavemanHarness = harness as unknown as Harness<Record<string, unknown>>;
+  attachCavemanThreadStatePersistence(cavemanHarness);
+  await restoreCavemanForCurrentThread(cavemanHarness).catch(() => {
+    // Persistence is best-effort; don't crash startup if storage hiccups.
+  });
 
   return {
     harness,
