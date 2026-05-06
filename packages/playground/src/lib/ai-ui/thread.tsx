@@ -167,7 +167,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
         <ComposerAttachments />
 
         <div
-          className="bg-surface3 rounded-2xl border border-border1 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
+          className="bg-surface3 rounded-[22px] border border-border1 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
           onClick={e => {
             if (e.target === e.currentTarget) textareaRef.current?.focus();
           }}
