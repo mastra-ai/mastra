@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import z from 'zod';
 
 import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
@@ -225,6 +226,107 @@ describe('task state transactions', () => {
     expect(harness.getState().tasks).toEqual([
       { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
     ]);
+  });
+
+  it('serializes direct setState calls with queued state transactions', async () => {
+    let releaseValidation!: () => void;
+    const validationGate = new Promise<void>(resolve => {
+      releaseValidation = resolve;
+    });
+    let validationCount = 0;
+
+    const harness = new Harness<Record<string, unknown>>({
+      id: 'test-harness',
+      storage: new InMemoryStore(),
+      stateSchema: z
+        .object({
+          tasks: z.array(z.unknown()).optional(),
+          marker: z.string().optional(),
+        })
+        .superRefine(async () => {
+          validationCount++;
+          if (validationCount === 1) {
+            await validationGate;
+          }
+        }),
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            name: 'test-agent',
+            instructions: 'You are a test agent.',
+            model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+          }),
+        },
+      ],
+    });
+
+    const setStatePromise = harness.setState({
+      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+    });
+    const transactionPromise = (harness as any).updateState((state: Record<string, unknown>) => {
+      expect(state.tasks).toEqual([
+        { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+      ]);
+      return { updates: { marker: 'after-set-state' }, result: undefined };
+    });
+
+    releaseValidation();
+    await Promise.all([setStatePromise, transactionPromise]);
+
+    expect(harness.getState()).toMatchObject({
+      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+      marker: 'after-set-state',
+    });
+  });
+});
+
+describe('task tool permissions', () => {
+  it('removes denied built-in and configured harness tools even when yolo is enabled', async () => {
+    const harness = new Harness<Record<string, unknown>>({
+      id: 'test-harness',
+      storage: new InMemoryStore(),
+      initialState: {
+        yolo: true,
+        permissionRules: {
+          categories: {},
+          tools: {
+            task_write: 'deny',
+            task_update: 'deny',
+            custom_tool: 'deny',
+          },
+        },
+      },
+      tools: {
+        custom_tool: {
+          description: 'custom',
+          execute: async () => ({ ok: true }),
+        },
+      },
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent: new Agent({
+            name: 'test-agent',
+            instructions: 'You are a test agent.',
+            model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+          }),
+        },
+      ],
+    });
+
+    const toolsets = await (harness as any).buildToolsets(new RequestContext());
+
+    expect(toolsets.harnessBuiltIn.task_write).toBeUndefined();
+    expect(toolsets.harnessBuiltIn.task_update).toBeUndefined();
+    expect(toolsets.harnessBuiltIn.task_complete).toBeDefined();
+    expect(toolsets.harness.custom_tool).toBeUndefined();
+    expect((harness as any).resolveToolApproval('task_update')).toBe('deny');
+    expect((harness as any).resolveToolApproval('task_complete')).toBe('allow');
   });
 });
 

@@ -326,11 +326,7 @@ export class Harness<TState = {}> {
     return { ...this.state };
   }
 
-  /**
-   * Update harness state. Validates against schema if provided.
-   * Emits state_changed event.
-   */
-  async setState(updates: Partial<TState>): Promise<void> {
+  private async applyStateUpdates(updates: Partial<TState>): Promise<void> {
     const changedKeys = Object.keys(updates);
     const newState = { ...this.state, ...updates };
 
@@ -348,6 +344,19 @@ export class Harness<TState = {}> {
     this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
   }
 
+  /**
+   * Update harness state. Validates against schema if provided.
+   * Emits state_changed event.
+   */
+  async setState(updates: Partial<TState>): Promise<void> {
+    const run = this.stateUpdateQueue.then(() => this.applyStateUpdates(updates));
+    this.stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private async updateState<TResult>(
     updater: (
       state: Readonly<TState>,
@@ -355,12 +364,10 @@ export class Harness<TState = {}> {
       | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
       | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
   ): Promise<TResult> {
-    // Serializes read-modify-write helpers that opt into this path. Direct
-    // setState() calls remain immediate for backwards compatibility.
     const run = this.stateUpdateQueue.then(async () => {
       const update = await updater(this.getState());
       if (update.updates && Object.keys(update.updates).length > 0) {
-        await this.setState(update.updates);
+        await this.applyStateUpdates(update.updates);
       }
       for (const event of update.events ?? []) {
         this.emit(event);
@@ -1367,16 +1374,18 @@ export class Harness<TState = {}> {
 
   /**
    * Resolve whether a tool call should be auto-approved, denied, or asked.
-   * Resolution chain: yolo → per-tool policy → session tool grant →
+   * Resolution chain: per-tool deny → yolo → per-tool policy → session tool grant →
    * session category grant → category policy → "ask"
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
     const state = this.state as Record<string, unknown>;
-    if (state.yolo === true) return 'allow';
-
     const rules = this.getPermissionRules();
 
     const toolPolicy = rules.tools[toolName];
+    if (toolPolicy === 'deny') return 'deny';
+
+    if (state.yolo === true) return 'allow';
+
     if (toolPolicy) return toolPolicy;
 
     if (this.sessionGrantedTools.has(toolName)) return 'allow';
@@ -3134,12 +3143,12 @@ export class Harness<TState = {}> {
     };
 
     // Resolve user-configured harness tools (needed for both the harness toolset and subagent allowedHarnessTools)
-    let resolvedHarnessTools = undefined;
+    let resolvedHarnessTools: ToolsInput | undefined = undefined;
     if (this.config.tools) {
       const tools =
         typeof this.config.tools === 'function' ? await this.config.tools({ requestContext }) : this.config.tools;
       if (tools) {
-        resolvedHarnessTools = tools;
+        resolvedHarnessTools = { ...tools };
       }
     }
 
@@ -3199,6 +3208,14 @@ export class Harness<TState = {}> {
     if (this.config.disableBuiltinTools?.length) {
       for (const toolId of this.config.disableBuiltinTools) {
         delete builtInTools[toolId];
+      }
+    }
+
+    const permissionRules = this.getPermissionRules();
+    for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
+      if (policy === 'deny') {
+        delete builtInTools[toolId];
+        delete resolvedHarnessTools?.[toolId];
       }
     }
 

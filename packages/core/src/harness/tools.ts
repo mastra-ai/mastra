@@ -221,9 +221,9 @@ const taskItemSchema = taskItemInputSchema.extend({
   id: taskIdSchema,
 });
 
-export type TaskItem = z.infer<typeof taskItemInputSchema>;
-export type TaskItemInput = TaskItem;
-export type TaskItemSnapshot = z.infer<typeof taskItemSchema>;
+export type TaskItemInput = z.infer<typeof taskItemInputSchema>;
+export type TaskItem = z.infer<typeof taskItemSchema>;
+export type TaskItemSnapshot = TaskItem;
 
 const taskToolResultSchema = z.object({
   content: z.string(),
