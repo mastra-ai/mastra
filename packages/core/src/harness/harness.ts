@@ -1042,16 +1042,12 @@ export class Harness<TState = {}> {
       }
       const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
       const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
-      const hasCavemanObservations = typeof meta?.cavemanObservations === 'boolean';
 
       if (hasObservationThreshold) {
         updates.observationThreshold = meta.observationThreshold;
       }
       if (hasReflectionThreshold) {
         updates.reflectionThreshold = meta.reflectionThreshold;
-      }
-      if (hasCavemanObservations) {
-        updates.cavemanObservations = meta.cavemanObservations;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -1068,12 +1064,6 @@ export class Harness<TState = {}> {
         const reflectionThreshold = this.getReflectionThreshold();
         if (reflectionThreshold !== undefined) {
           await this.setThreadSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
-        }
-      }
-      if (!hasCavemanObservations) {
-        const cavemanObservations = this.getCavemanObservations();
-        if (cavemanObservations !== undefined) {
-          await this.setThreadSetting({ key: 'cavemanObservations', value: cavemanObservations });
         }
       }
     } catch {
@@ -1238,16 +1228,6 @@ export class Harness<TState = {}> {
    */
   getReflectionThreshold(): number | undefined {
     return (this.state as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
-  }
-
-  /**
-   * Returns whether observations and reflections use the terse caveman-style
-   * instruction. Reads from state with no fallback to omConfig (the host
-   * controls the on-disk default).
-   */
-  getCavemanObservations(): boolean | undefined {
-    const value = (this.state as any).cavemanObservations;
-    return typeof value === 'boolean' ? value : undefined;
   }
 
   /**
