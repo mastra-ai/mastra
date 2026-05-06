@@ -42,7 +42,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: row.run_id ?? '',
     result: parseJson(row.result),
     error: parseJson(row.error),
-    suspendData: parseJson(row.suspend_data),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
@@ -97,7 +97,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     await this.db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_data', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -174,7 +174,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
         args: serializeJson(task.args),
         result: serializeJson(task.result),
         error: serializeJson(task.error),
-        suspend_data: serializeJson(task.suspendData),
+        suspend_payload: serializeJson(task.suspendPayload),
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
@@ -203,9 +203,9 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
       setClauses.push(`[error] = @p${idx}`);
       params[`p${idx++}`] = serializeJson(update.error);
     }
-    if ('suspendData' in update) {
-      setClauses.push(`[suspend_data] = @p${idx}`);
-      params[`p${idx++}`] = serializeJson(update.suspendData);
+    if ('suspendPayload' in update) {
+      setClauses.push(`[suspend_payload] = @p${idx}`);
+      params[`p${idx++}`] = serializeJson(update.suspendPayload);
     }
     if ('retryCount' in update) {
       setClauses.push(`[retry_count] = @p${idx}`);

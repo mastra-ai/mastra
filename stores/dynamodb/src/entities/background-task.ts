@@ -84,7 +84,7 @@ export const backgroundTaskEntity = new Entity({
       required: false,
       ...jsonSetGet,
     },
-    suspendData: {
+    suspendPayload: {
       type: 'string',
       required: false,
       ...jsonSetGet,

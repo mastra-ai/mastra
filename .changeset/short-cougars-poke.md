@@ -12,4 +12,4 @@
 '@mastra/pg': patch
 ---
 
-Track `suspendedAt` and `suspendData` on background tasks. SQL adapters auto-migrate the new column via `alterTable`.
+Track `suspendedAt` and `suspendPayload` on background tasks. SQL adapters auto-migrate the new columns via `alterTable`.

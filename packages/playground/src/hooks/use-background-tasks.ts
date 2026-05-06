@@ -16,7 +16,7 @@ export interface BackgroundTaskEvent {
   error?: { message: string; stack?: string };
   status: BackgroundTaskStatus;
   args: Record<string, unknown>;
-  suspendData?: unknown;
+  suspendPayload?: unknown;
 }
 
 export interface UseBackgroundTaskStreamOptions extends StreamBackgroundTasksParams {

@@ -744,9 +744,6 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       const lastSuspendedTools =
         targetMessage.metadata?.mode === 'stream' ? targetMessage.metadata?.suspendedTools : {};
 
-      const suspendPayload =
-        chunk.type === 'background-task-suspended' ? chunk.payload.suspendData : chunk.payload.suspendPayload;
-
       const nextMessage = {
         ...targetMessage,
         metadata: mergeBgTaskMetadata(
@@ -769,7 +766,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
-                suspendPayload,
+                suspendPayload: chunk.payload.suspendPayload,
                 runId: chunk.runId,
               },
             },

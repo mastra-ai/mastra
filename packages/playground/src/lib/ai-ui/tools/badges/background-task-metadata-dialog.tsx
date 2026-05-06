@@ -54,7 +54,7 @@ const BackgroundTaskMetadata = ({
 
   const args = backgroundTask?.args;
   const result = backgroundTask?.result as any;
-  const suspendData = backgroundTask?.suspendData;
+  const suspendPayload = backgroundTask?.suspendPayload;
 
   let argSlot = null;
 
@@ -74,11 +74,11 @@ const BackgroundTaskMetadata = ({
       <CodeEditor data={result} />
     );
 
-  const suspendDataSlot =
-    typeof suspendData === 'string' ? (
-      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendData}</pre>
+  const suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
-      <CodeEditor data={suspendData} />
+      <CodeEditor data={suspendPayload} />
     );
 
   return (
@@ -100,10 +100,10 @@ const BackgroundTaskMetadata = ({
             {argSlot}
           </div>
 
-          {suspendDataSlot !== undefined && suspendData && (
+          {suspendPayloadSlot !== undefined && suspendPayload && (
             <div className="space-y-2">
               <Txt className="text-neutral3">Background Task Suspend Data</Txt>
-              {suspendDataSlot}
+              {suspendPayloadSlot}
             </div>
           )}
 

@@ -47,6 +47,14 @@ export class BackgroundTaskManager {
   // Cleanup interval handle
   private cleanupInterval?: ReturnType<typeof setInterval>;
 
+  // Tracks the in-flight `init(pubsub)` so consumers can await readiness.
+  // Mastra fires init as fire-and-forget in `#ensureBackgroundTaskManager`,
+  // so without this any caller that hits `enqueue`/`resume`/`cancel`
+  // before init completes races against worker subscription + workflow
+  // registration. Public methods that depend on init await this promise
+  // before doing work.
+  private initPromise?: Promise<void>;
+
   constructor(config: BackgroundTaskManagerConfig = { enabled: false }) {
     this.config = {
       globalConcurrency: config.globalConcurrency ?? 10,
@@ -75,6 +83,12 @@ export class BackgroundTaskManager {
   }
 
   async init(pubsub: PubSub): Promise<void> {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.#doInit(pubsub);
+    return this.initPromise;
+  }
+
+  async #doInit(pubsub: PubSub): Promise<void> {
     this.pubsub = pubsub;
 
     // Worker: subscribes with group so only one worker processes each task.
@@ -98,14 +112,13 @@ export class BackgroundTaskManager {
       await ack?.();
     };
 
-    await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
-    await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
-
-    // Workflow engine scaffold. When `engine === 'workflow'`, build and
-    // register the per-task workflow on Mastra so the workflow event
-    // processor can resolve it by id. `enqueue` still routes through the
-    // legacy dispatch path until step 2 of the migration; this is just the
-    // seam.
+    // Register the workflow BEFORE subscribing the worker so that any
+    // dispatch event the worker picks up can immediately resolve the
+    // workflow on Mastra. Reversing this order races: a publish that
+    // arrives between `subscribe(TOPIC_DISPATCH)` and the workflow
+    // registration triggers `__getInternalWorkflow` to throw
+    // `Workflow with id __background-task not found`, the task stays at
+    // `running` forever, and the dispatch is silently dropped.
     if (this.config.engine === 'workflow' && this.#mastra) {
       // Dynamic import breaks the static cycle:
       // agent → background-tasks → manager → workflow → workflows/evented →
@@ -118,6 +131,9 @@ export class BackgroundTaskManager {
         this.#mastra.__registerInternalWorkflow(workflow as any);
       }
     }
+
+    await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
+    await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
 
     // Recover stale tasks from a previous process
     await this.recoverStaleTasks();
@@ -159,6 +175,13 @@ export class BackgroundTaskManager {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot enqueue new tasks');
     }
+
+    // Mastra fires `init` as fire-and-forget. If a caller hits enqueue
+    // before init completes, the dispatch publish fires before the worker
+    // subscribes and the event is dropped (or, worse, lands on a worker
+    // whose Mastra hasn't yet registered the bg-task workflow → "Workflow
+    // with id __background-task not found"). Await readiness up front.
+    if (this.initPromise) await this.initPromise;
 
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? randomUUID(),
@@ -211,6 +234,7 @@ export class BackgroundTaskManager {
   }
 
   async cancel(taskId: string): Promise<void> {
+    if (this.initPromise) await this.initPromise;
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
     if (!task) {
@@ -310,6 +334,8 @@ export class BackgroundTaskManager {
     if (!this.#mastra) {
       throw new Error('Mastra is not registered with this manager');
     }
+
+    if (this.initPromise) await this.initPromise;
 
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
@@ -522,7 +548,7 @@ export class BackgroundTaskManager {
               payload.payload = data.chunk;
               break;
             case 'task.suspended':
-              payload.suspendData = data.suspendData;
+              payload.suspendPayload = data.suspendPayload;
               payload.suspendedAt = data.suspendedAt;
               payload.args = data.args;
               break;
@@ -854,7 +880,7 @@ export class BackgroundTaskManager {
     await storage.updateTask(taskId, {
       status: 'running',
       startedAt: new Date(),
-      suspendData: undefined,
+      suspendPayload: undefined,
       suspendedAt: undefined,
     });
     const resumedTask = await storage.getTask(taskId);
@@ -1166,7 +1192,7 @@ export class BackgroundTaskManager {
         chunk: task.chunk,
         completedAt: task.completedAt,
         startedAt: task.startedAt,
-        suspendData: task.suspendData,
+        suspendPayload: task.suspendPayload,
         suspendedAt: task.suspendedAt,
       },
       runId: task.id,

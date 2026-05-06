@@ -104,7 +104,7 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
         toolCallId: payload.toolCallId as string,
         toolName: payload.toolName as string,
         isSuspended: !!payload.suspendedAt,
-        suspendData: payload.suspendData as unknown,
+        suspendPayload: payload.suspendPayload as unknown,
       };
     })
     .filter(e => !!e.toolCallId);
@@ -116,7 +116,7 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
 
   const suspendedIdList = entries
     .filter(e => e.isSuspended)
-    .map(e => `${e.toolCallId} (${e.toolName}); suspendData: ${JSON.stringify(e.suspendData)}`)
+    .map(e => `${e.toolCallId} (${e.toolName}); suspendPayload: ${JSON.stringify(e.suspendPayload)}`)
     .join(', ');
 
   return (
@@ -125,7 +125,7 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
     `Use these result(s) to answer the user's original question.` +
-    `IMPORTANT: The following tool-call IDs were suspended (their suspendData is provided): ${suspendedIdList}, do not attempt to resume them, let the user know that they are suspended, ` +
+    `IMPORTANT: The following tool-call IDs were suspended (their suspendPayload is provided): ${suspendedIdList}, do not attempt to resume them, let the user know that they are suspended, ` +
     `the user will decide when to resume them.`
   );
 }

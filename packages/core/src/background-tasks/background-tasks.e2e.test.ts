@@ -461,7 +461,7 @@ describeE2E('Background Tasks E2E', () => {
       const bgSuspended = chunks1.find(c => c.type === 'background-task-suspended');
       expect(bgSuspended).toBeDefined();
       expect(bgSuspended.payload.taskId).toBe(bgStarted.payload.taskId);
-      expect(bgSuspended.payload.suspendData).toMatchObject({ awaiting: 'analyst-approval' });
+      expect(bgSuspended.payload.suspendPayload).toMatchObject({ awaiting: 'analyst-approval' });
 
       // No completed chunk yet — the task is parked.
       expect(chunks1.find(c => c.type === 'background-task-completed')).toBeUndefined();
@@ -471,7 +471,7 @@ describeE2E('Background Tasks E2E', () => {
       const taskId = bgStarted.payload.taskId as string;
       const suspendedTask = await manager.getTask(taskId);
       expect(suspendedTask?.status).toBe('suspended');
-      expect(suspendedTask?.suspendData).toMatchObject({ awaiting: 'analyst-approval' });
+      expect(suspendedTask?.suspendPayload).toMatchObject({ awaiting: 'analyst-approval' });
 
       // --- Out-of-band: analyst approves, bg task resumes and completes ---
       await manager.resume(taskId, { approved: true, notes: 'looks promising' });
@@ -483,7 +483,7 @@ describeE2E('Background Tasks E2E', () => {
       expect(completedTask?.status).toBe('completed');
       expect((completedTask?.result as { summary: string }).summary).toContain('solana');
       expect((completedTask?.result as { summary: string }).summary).toContain('looks promising');
-      expect(completedTask?.suspendData).toBeUndefined();
+      expect(completedTask?.suspendPayload).toBeUndefined();
 
       // --- Follow-up turn: streamUntilIdle picks up the resumed result from memory ---
       const stream2 = await memoryAgent.streamUntilIdle(
@@ -583,7 +583,10 @@ describeE2E('Background Tasks E2E', () => {
       let suspendPayload: any = undefined;
       for await (const chunk of stream1.fullStream) {
         chunks1.push(chunk);
-        if (chunk.type === 'tool-call-suspended' && chunk.payload?.toolName === 'lookupWithDomain') {
+        if (
+          (chunk.type === 'tool-call-suspended' || chunk.type === 'background-task-suspended') &&
+          chunk.payload?.toolName === 'lookupWithDomain'
+        ) {
           suspendedToolCallId = chunk.payload.toolCallId;
           suspendPayload = chunk.payload.suspendPayload;
         }

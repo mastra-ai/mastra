@@ -97,7 +97,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         }, task.timeoutMs);
 
         // Wrap the workflow runtime's `suspend` so we persist
-        // `status: 'suspended'` + `suspendData`, fire the per-task
+        // `status: 'suspended'` + `suspendPayload`, fire the per-task
         // suspend hook (so the bg-task's `onResult` updates the agent's
         // message list), and publish the lifecycle event before
         // delegating. The runtime's `suspend` does not throw — it sets a
@@ -106,11 +106,11 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         // step body after the executor returns, so `wrappedSuspend` can
         // safely run all its side effects synchronously inside the
         // tool's call.
-        let suspendData: any;
+        let pendingSuspend: { data?: unknown; suspendOptions?: SuspendOptions } | undefined;
         const wrappedSuspend = async (data?: unknown, suspendOptions?: SuspendOptions) => {
           await storage.updateTask(taskId, {
             status: 'suspended',
-            suspendData: data,
+            suspendPayload: data,
             suspendedAt: new Date(),
           });
           const suspendedTask = await storage.getTask(taskId);
@@ -122,7 +122,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
             await manager.runLocalSuspendHooks(suspendedTask);
             await manager.publishLifecycleEvent('task.suspended', suspendedTask);
           }
-          suspendData = { data, suspendOptions };
+          pendingSuspend = { data, suspendOptions };
         };
 
         try {
@@ -135,8 +135,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
             resumeData,
           });
 
-          if (suspendData) {
-            return suspend(suspendData?.data, suspendData?.suspendOptions as SuspendOptions);
+          if (pendingSuspend) {
+            return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
           }
 
           // Success path — same ordering as legacy handleDispatch: persist

@@ -22,7 +22,7 @@ function toRecord(task: BackgroundTask): Record<string, any> {
     args: task.args,
     result: task.result ?? null,
     error: task.error ?? null,
-    suspend_data: task.suspendData ?? null,
+    suspend_payload: task.suspendPayload ?? null,
     retry_count: task.retryCount,
     max_retries: task.maxRetries,
     timeout_ms: task.timeoutMs,
@@ -46,7 +46,7 @@ function fromRecord(record: Record<string, any>): BackgroundTask {
     runId: record.run_id ?? '',
     result: record.result ?? undefined,
     error: record.error ?? undefined,
-    suspendData: record.suspend_data ?? undefined,
+    suspendPayload: record.suspend_payload ?? undefined,
     retryCount: Number(record.retry_count ?? 0),
     maxRetries: Number(record.max_retries ?? 0),
     timeoutMs: Number(record.timeout_ms ?? 300_000),
@@ -80,7 +80,7 @@ export class BackgroundTasksStorageCloudflare extends BackgroundTasksStorage {
     if ('status' in update) merged.status = update.status!;
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
-    if ('suspendData' in update) merged.suspendData = update.suspendData;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
     if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;

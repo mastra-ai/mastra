@@ -23,7 +23,7 @@ function toDoc(task: BackgroundTask): Record<string, any> {
     args: task.args,
     result: task.result ?? null,
     error: task.error ?? null,
-    suspend_data: task.suspendData ?? null,
+    suspend_payload: task.suspendPayload ?? null,
     retry_count: task.retryCount,
     max_retries: task.maxRetries,
     timeout_ms: task.timeoutMs,
@@ -47,7 +47,7 @@ function fromDoc(doc: Record<string, any>): BackgroundTask {
     runId: doc.run_id ?? '',
     result: doc.result ?? undefined,
     error: doc.error ?? undefined,
-    suspendData: doc.suspend_data ?? undefined,
+    suspendPayload: doc.suspend_payload ?? undefined,
     retryCount: Number(doc.retry_count ?? 0),
     maxRetries: Number(doc.max_retries ?? 0),
     timeoutMs: Number(doc.timeout_ms ?? 300_000),
@@ -133,7 +133,7 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if ('status' in update) $set.status = update.status;
     if ('result' in update) $set.result = update.result ?? null;
     if ('error' in update) $set.error = update.error ?? null;
-    if ('suspendData' in update) $set.suspend_data = update.suspendData ?? null;
+    if ('suspendPayload' in update) $set.suspend_payload = update.suspendPayload ?? null;
     if ('retryCount' in update) $set.retry_count = update.retryCount;
     if ('startedAt' in update) $set.startedAt = update.startedAt?.toISOString() ?? null;
     if ('suspendedAt' in update) $set.suspendedAt = update.suspendedAt?.toISOString() ?? null;

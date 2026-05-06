@@ -39,7 +39,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: row.run_id ?? '',
     result: parseJson(row.result),
     error: parseJson(row.error),
-    suspendData: parseJson(row.suspend_data),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count ?? 0),
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
@@ -64,7 +64,7 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_data', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
   }
 
@@ -89,7 +89,7 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           'args',
           'result',
           'error',
-          'suspend_data',
+          'suspend_payload',
           'retry_count',
           'max_retries',
           'timeout_ms',
@@ -110,7 +110,7 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           serializeJson(task.args),
           serializeJson(task.result),
           serializeJson(task.error),
-          serializeJson(task.suspendData),
+          serializeJson(task.suspendPayload),
           task.retryCount,
           task.maxRetries,
           task.timeoutMs,
@@ -139,9 +139,9 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
       sets.push('error = ?');
       params.push(serializeJson(update.error));
     }
-    if ('suspendData' in update) {
-      sets.push('suspend_data = ?');
-      params.push(serializeJson(update.suspendData));
+    if ('suspendPayload' in update) {
+      sets.push('suspend_payload = ?');
+      params.push(serializeJson(update.suspendPayload));
     }
     if ('retryCount' in update) {
       sets.push('retry_count = ?');

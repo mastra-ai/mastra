@@ -41,7 +41,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: String(row.run_id),
     result: parseJson(row.result),
     error: parseJson(row.error),
-    suspendData: parseJson(row.suspend_data),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
@@ -72,7 +72,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_data', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
   }
 
@@ -96,7 +96,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         args: task.args,
         result: task.result ?? null,
         error: task.error ?? null,
-        suspend_data: task.suspendData ?? null,
+        suspend_payload: task.suspendPayload ?? null,
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
@@ -124,9 +124,9 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       setClauses.push('error = jsonb(?)');
       params.push(serializeJson(update.error));
     }
-    if ('suspendData' in update) {
-      setClauses.push('suspend_data = jsonb(?)');
-      params.push(serializeJson(update.suspendData));
+    if ('suspendPayload' in update) {
+      setClauses.push('suspend_payload = jsonb(?)');
+      params.push(serializeJson(update.suspendPayload));
     }
     if ('retryCount' in update) {
       setClauses.push('retry_count = ?');

@@ -58,7 +58,7 @@ export interface BackgroundTask {
    * `status === 'suspended'`; cleared on resume. Surfaced on lifecycle events
    * so consumers don't have to read the workflow snapshot directly.
    */
-  suspendData?: unknown;
+  suspendPayload?: unknown;
 }
 
 export type BackgroundTaskOutputChunk = Extract<AgentChunkType, { type: 'tool-output' }>;
@@ -306,7 +306,7 @@ export interface ToolExecutor {
        */
       onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
       /**
-       * Pause the task. Persists `status: 'suspended'` + `suspendData`,
+       * Pause the task. Persists `status: 'suspended'` + `suspendPayload`,
        * publishes a `task.suspended` lifecycle event, and signals the workflow
        * runtime so the run snapshot is preserved. The tool should return
        * shortly after `await suspend(data)` — its return value is discarded

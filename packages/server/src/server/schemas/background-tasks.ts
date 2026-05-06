@@ -59,7 +59,7 @@ export const backgroundTaskResponseSchema = z.object({
   retryCount: z.number(),
   maxRetries: z.number(),
   timeoutMs: z.number(),
-  suspendData: z.unknown().optional(),
+  suspendPayload: z.unknown().optional(),
 });
 
 export const listBackgroundTaskResponseSchema = z.object({

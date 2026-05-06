@@ -446,7 +446,7 @@ export interface BackgroundTaskSuspendedPayload {
   agentId: string;
   args: Record<string, unknown>;
   /** Whatever the tool passed to `suspend(data)`. */
-  suspendData?: unknown;
+  suspendPayload?: unknown;
   /** When the task suspended. */
   suspendedAt?: Date;
 }

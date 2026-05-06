@@ -34,7 +34,7 @@ function toElectroRecord(task: BackgroundTask): Record<string, unknown> {
     args: serializeJson(task.args),
     result: serializeJson(task.result),
     error: serializeJson(task.error),
-    suspendData: serializeJson(task.suspendData),
+    suspendPayload: serializeJson(task.suspendPayload),
     retryCount: task.retryCount,
     maxRetries: task.maxRetries,
     timeoutMs: task.timeoutMs,
@@ -70,7 +70,7 @@ function fromElectroRecord(data: Record<string, any>): BackgroundTask {
     runId: String(data.runId),
     result: parseJson(data.result),
     error: parseJson(data.error),
-    suspendData: parseJson(data.suspendData),
+    suspendPayload: parseJson(data.suspendPayload),
     retryCount: Number(data.retryCount ?? 0),
     maxRetries: Number(data.maxRetries ?? 0),
     timeoutMs: Number(data.timeoutMs ?? 300_000),
@@ -137,11 +137,11 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
           setFields.error = serializeJson(update.error);
         }
       }
-      if ('suspendData' in update) {
-        if (update.suspendData === undefined || update.suspendData === null) {
-          removeFields.push('suspendData');
+      if ('suspendPayload' in update) {
+        if (update.suspendPayload === undefined || update.suspendPayload === null) {
+          removeFields.push('suspendPayload');
         } else {
-          setFields.suspendData = serializeJson(update.suspendData);
+          setFields.suspendPayload = serializeJson(update.suspendPayload);
         }
       }
       if ('startedAt' in update) {

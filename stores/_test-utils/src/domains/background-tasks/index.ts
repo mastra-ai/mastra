@@ -144,7 +144,7 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(result!.error).toBeUndefined();
       });
 
-      it('persists suspendData and suspendedAt on suspend and clears them on resume', async () => {
+      it('persists suspendPayload and suspendedAt on suspend and clears them on resume', async () => {
         if (!bgStorage) return;
         const task = createSampleTask({ status: 'running', startedAt: new Date() });
         await bgStorage.createTask(task);
@@ -153,25 +153,25 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         const suspendedAt = new Date();
         await bgStorage.updateTask(task.id, {
           status: 'suspended',
-          suspendData: suspendPayload,
+          suspendPayload,
           suspendedAt,
         });
 
         const suspended = await bgStorage.getTask(task.id);
         expect(suspended!.status).toBe('suspended');
-        expect(suspended!.suspendData).toEqual(suspendPayload);
+        expect(suspended!.suspendPayload).toEqual(suspendPayload);
         expect(suspended!.suspendedAt?.getTime()).toBe(suspendedAt.getTime());
 
-        // On resume the manager clears suspendData + suspendedAt and flips status back.
+        // On resume the manager clears suspendPayload + suspendedAt and flips status back.
         await bgStorage.updateTask(task.id, {
           status: 'running',
-          suspendData: undefined,
+          suspendPayload: undefined,
           suspendedAt: undefined,
         });
 
         const resumed = await bgStorage.getTask(task.id);
         expect(resumed!.status).toBe('running');
-        expect(resumed!.suspendData).toBeUndefined();
+        expect(resumed!.suspendPayload).toBeUndefined();
         expect(resumed!.suspendedAt).toBeUndefined();
       });
     });

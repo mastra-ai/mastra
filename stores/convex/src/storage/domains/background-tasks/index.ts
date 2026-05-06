@@ -5,7 +5,7 @@ import type { ConvexDomainConfig } from '../../db';
 
 type StoredTask = Omit<
   BackgroundTask,
-  'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt' | 'args' | 'result' | 'error' | 'suspendData'
+  'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt' | 'args' | 'result' | 'error' | 'suspendPayload'
 > & {
   createdAt: string;
   startedAt?: string;
@@ -14,7 +14,7 @@ type StoredTask = Omit<
   args: string;
   result?: string;
   error?: string;
-  suspendData?: string;
+  suspendPayload?: string;
 };
 
 function serializeJson(v: unknown): any {
@@ -28,7 +28,7 @@ function toStored(task: BackgroundTask): StoredTask {
     args: serializeJson(task.args),
     result: serializeJson(task.result),
     error: serializeJson(task.error),
-    suspendData: serializeJson(task.suspendData),
+    suspendPayload: serializeJson(task.suspendPayload),
     createdAt: task.createdAt.toISOString(),
     startedAt: task.startedAt?.toISOString(),
     suspendedAt: task.suspendedAt?.toISOString(),
@@ -57,7 +57,7 @@ function fromStored(stored: StoredTask): BackgroundTask {
     runId: stored.runId,
     result: parseJson(stored.result),
     error: parseJson(stored.error),
-    suspendData: parseJson(stored.suspendData),
+    suspendPayload: parseJson(stored.suspendPayload),
     retryCount: stored.retryCount,
     maxRetries: stored.maxRetries,
     timeoutMs: stored.timeoutMs,
@@ -90,12 +90,12 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     if (!existing) return;
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
-    // Keep `result`/`error`/`suspendData` raw here — `toStored(merged)` below
+    // Keep `result`/`error`/`suspendPayload` raw here — `toStored(merged)` below
     // serializes them exactly once. Serializing twice would double-encode
     // (e.g. `"\"value\""`).
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
-    if ('suspendData' in update) merged.suspendData = update.suspendData;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
     if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;

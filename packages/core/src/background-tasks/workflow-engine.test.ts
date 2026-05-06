@@ -426,7 +426,7 @@ describe('BackgroundTaskManager [engine=workflow]', () => {
     }
   });
 
-  it('suspends mid-execution and persists status + suspendData', async () => {
+  it('suspends mid-execution and persists status + suspendPayload', async () => {
     const manager = mastra.backgroundTaskManager!;
     const executeFn = vi.fn(async (_args, opts: any) => {
       await opts.suspend({ awaiting: 'human-approval' });
@@ -443,7 +443,7 @@ describe('BackgroundTaskManager [engine=workflow]', () => {
 
     const suspended = await manager.getTask(task.id);
     expect(suspended?.status).toBe('suspended');
-    expect(suspended?.suspendData).toEqual({ awaiting: 'human-approval' });
+    expect(suspended?.suspendPayload).toEqual({ awaiting: 'human-approval' });
     expect(suspended?.result).toBeUndefined();
     expect(executeFn).toHaveBeenCalledTimes(1);
   });
@@ -473,7 +473,7 @@ describe('BackgroundTaskManager [engine=workflow]', () => {
     const suspendedChunk = chunks.find(c => c.type === 'background-task-suspended');
     expect(suspendedChunk).toBeDefined();
     expect(suspendedChunk.payload.taskId).toBe(task.id);
-    expect(suspendedChunk.payload.suspendData).toEqual({ ask: 'pause' });
+    expect(suspendedChunk.payload.suspendPayload).toEqual({ ask: 'pause' });
   });
 
   it('resumes a suspended task with resumeData and completes', async () => {
@@ -499,7 +499,7 @@ describe('BackgroundTaskManager [engine=workflow]', () => {
     const completed = await manager.getTask(task.id);
     expect(completed?.status).toBe('completed');
     expect(completed?.result).toEqual({ approvedBy: 'alice' });
-    expect(completed?.suspendData).toBeUndefined();
+    expect(completed?.suspendPayload).toBeUndefined();
     expect(executeFn).toHaveBeenCalledTimes(2);
   });
 
@@ -659,7 +659,7 @@ describe('BackgroundTaskManager [engine=workflow]', () => {
       const mgr2 = m2.backgroundTaskManager!;
       const stillSuspended = await mgr2.getTask(task.id);
       expect(stillSuspended?.status).toBe('suspended');
-      expect(stillSuspended?.suspendData).toEqual({ checkpoint: 1 });
+      expect(stillSuspended?.suspendPayload).toEqual({ checkpoint: 1 });
     } finally {
       await m2.backgroundTaskManager?.shutdown();
       await m2.stopEventEngine();

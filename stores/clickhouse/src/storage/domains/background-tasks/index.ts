@@ -39,7 +39,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: row.run_id ?? '',
     result: parseJson(row.result),
     error: parseJson(row.error),
-    suspendData: parseJson(row.suspend_data),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count ?? 0),
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
@@ -66,7 +66,7 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_data', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
   }
 
@@ -90,7 +90,7 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
           args: serializeJson(task.args),
           result: serializeJson(task.result),
           error: serializeJson(task.error),
-          suspend_data: serializeJson(task.suspendData),
+          suspend_payload: serializeJson(task.suspendPayload),
           retry_count: task.retryCount,
           max_retries: task.maxRetries,
           timeout_ms: task.timeoutMs,
@@ -112,7 +112,7 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     if ('status' in update) merged.status = update.status!;
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
-    if ('suspendData' in update) merged.suspendData = update.suspendData;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
     if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;

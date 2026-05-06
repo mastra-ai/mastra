@@ -32,6 +32,13 @@ const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
   'background-task-cancelled',
+  // Suspended is non-terminal for the bg task itself (it can be resumed
+  // later via `manager.resume`), but it IS terminal-for-this-iteration of
+  // the streamUntilIdle wrapper: the agent should react to the suspend in
+  // a follow-up turn so the user is told the task is parked. Without
+  // this, the wrapper waits indefinitely for completed/failed/cancelled
+  // and the stream times out.
+  'background-task-suspended',
 ]);
 
 async function resolveScope(
@@ -62,18 +69,30 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
       return {
         toolCallId: payload.toolCallId as string | undefined,
         toolName: payload.toolName as string | undefined,
+        isSuspended: !!payload.suspendedAt,
+        suspendPayload: payload.suspendPayload as unknown,
       };
     })
     .filter(e => !!e.toolCallId);
 
-  const idList = entries.map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId)).join(', ');
+  const idList = entries
+    .filter(e => !e.isSuspended)
+    .map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId))
+    .join(', ');
+
+  const suspendedIdList = entries
+    .filter(e => e.isSuspended)
+    .map(e => `${e.toolCallId} (${e.toolName}); suspendPayload: ${JSON.stringify(e.suspendPayload)}`)
+    .join(', ');
 
   return (
     `Background task(s) you previously dispatched have completed. ` +
     `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
-    `Use these result(s) to answer the user's original question.`
+    `Use these result(s) to answer the user's original question.` +
+    `IMPORTANT: The following tool-call IDs were suspended (their suspendPayload is provided): ${suspendedIdList}, do not attempt to resume them, let the user know that they are suspended, ` +
+    `the user will decide when to resume them.`
   );
 }
 
