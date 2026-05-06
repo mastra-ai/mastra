@@ -25,10 +25,10 @@ import {
   submitPlanTool,
   taskCheckTool,
   taskCompleteTool,
-  type TaskItem,
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
+import type { TaskItemSnapshot } from './tools';
 import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
@@ -2390,7 +2390,7 @@ export class Harness<TState = {}> {
    * This updates the Harness-owned display snapshot without emitting a live
    * `task_updated` event, since no task tool just ran.
    */
-  restoreDisplayTasks(tasks: TaskItem[]): void {
+  restoreDisplayTasks(tasks: TaskItemSnapshot[]): void {
     this.displayState.previousTasks = [...this.displayState.tasks];
     this.displayState.tasks = [...tasks];
     this.dispatchDisplayStateChanged(false);

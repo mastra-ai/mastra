@@ -5,7 +5,7 @@
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessMessage, HarnessMessageContent, TaskItem, TaskItemInput } from '@mastra/core/harness';
+import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -35,7 +35,7 @@ export { formatToolResult };
  */
 export function renderCompletedTasksInline(
   state: TUIState,
-  tasks: TaskItem[],
+  tasks: TaskItemSnapshot[],
   insertIndex = -1,
   collapsed = false,
 ): void {
@@ -76,7 +76,7 @@ export function renderCompletedTasksInline(
 /**
  * Render inline display when tasks are cleared.
  */
-export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem[], insertIndex = -1): void {
+export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
   const container = new Container();
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
@@ -97,9 +97,9 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
 
 function renderTaskTransitionFromHistory(
   state: TUIState,
-  previousTasks: TaskItem[],
-  nextTasks: TaskItem[],
-): { tasks: TaskItem[]; replacedWithInline: boolean } {
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
   const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
 
   if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
@@ -265,7 +265,7 @@ function getTaskResultTasks(result: unknown): TaskItemInput[] | undefined {
   return Array.isArray(tasks) ? (tasks as TaskItemInput[]) : undefined;
 }
 
-function areTasksEqual(left: readonly TaskItem[] | undefined, right: readonly TaskItem[]): boolean {
+function areTasksEqual(left: readonly TaskItemSnapshot[] | undefined, right: readonly TaskItemSnapshot[]): boolean {
   if (!left || left.length !== right.length) return false;
   return left.every((task, index) => {
     const other = right[index];
@@ -279,7 +279,11 @@ function areTasksEqual(left: readonly TaskItem[] | undefined, right: readonly Ta
   });
 }
 
-function applyTaskPatchFallback(tasks: TaskItem[], args: unknown, status?: TaskItem['status']): TaskItem[] {
+function applyTaskPatchFallback(
+  tasks: TaskItemSnapshot[],
+  args: unknown,
+  status?: TaskItemSnapshot['status'],
+): TaskItemSnapshot[] {
   if (
     typeof args !== 'object' ||
     args === null ||
@@ -289,17 +293,17 @@ function applyTaskPatchFallback(tasks: TaskItem[], args: unknown, status?: TaskI
     return tasks;
   }
 
-  const patch = args as { id: string; content?: string; status?: TaskItem['status']; activeForm?: string };
+  const patch = args as { id: string; content?: string; status?: TaskItemSnapshot['status']; activeForm?: string };
   return tasks.map(task => (task.id === patch.id ? { ...task, ...patch, ...(status ? { status } : {}) } : task));
 }
 
 function applyTaskToolResult(
-  tasks: TaskItem[],
+  tasks: TaskItemSnapshot[],
   toolName: string,
   args: unknown,
   result: unknown,
   isError: boolean,
-): TaskItem[] {
+): TaskItemSnapshot[] {
   if (isError) return tasks;
 
   if (toolName === 'task_write') {
@@ -328,8 +332,8 @@ function applyTaskToolResult(
   return tasks;
 }
 
-function replayTaskState(messages: HarnessMessage[]): TaskItem[] {
-  let tasks: TaskItem[] = [];
+function replayTaskState(messages: HarnessMessage[]): TaskItemSnapshot[] {
+  let tasks: TaskItemSnapshot[] = [];
 
   for (const message of messages) {
     if (message.role !== 'assistant') continue;
@@ -639,7 +643,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
   const currentTasks =
     typeof state.harness.getState === 'function'
-      ? (state.harness.getState() as { tasks?: TaskItem[] }).tasks
+      ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
       : undefined;
   if (!areTasksEqual(currentTasks, previousTasksAcc)) {
     try {
@@ -650,7 +654,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     }
   }
   const harnessWithReplayTasks = state.harness as typeof state.harness & {
-    restoreDisplayTasks?: (tasks: TaskItem[]) => void;
+    restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
   };
   harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
 

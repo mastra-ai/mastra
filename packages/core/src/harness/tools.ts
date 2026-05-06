@@ -221,8 +221,9 @@ const taskItemSchema = taskItemInputSchema.extend({
   id: taskIdSchema,
 });
 
-export type TaskItemInput = z.infer<typeof taskItemInputSchema>;
-export type TaskItem = z.infer<typeof taskItemSchema>;
+export type TaskItem = z.infer<typeof taskItemInputSchema>;
+export type TaskItemInput = TaskItem;
+export type TaskItemSnapshot = z.infer<typeof taskItemSchema>;
 
 const taskToolResultSchema = z.object({
   content: z.string(),
@@ -294,7 +295,7 @@ function makeUniqueTaskId(id: string, usedIds: Set<string>, reservedIds: Set<str
   return nextId;
 }
 
-export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItem[] = []): TaskItem[] {
+export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItemSnapshot[] = []): TaskItemSnapshot[] {
   const usedIds = new Set<string>();
   const contentOccurrences = new Map<string, number>();
   const omittedContentCounts = new Map<string, number>();
@@ -346,7 +347,7 @@ export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItem[] 
   });
 }
 
-function getTasksFromState(state: unknown): TaskItem[] {
+function getTasksFromState(state: unknown): TaskItemSnapshot[] {
   const typedState = state as {
     tasks?: TaskItemInput[];
   };
@@ -356,12 +357,12 @@ function getTasksFromState(state: unknown): TaskItem[] {
   return assignTaskIds(typedState?.tasks || []);
 }
 
-function getCurrentTasks(harnessCtx: HarnessRequestContext<Record<string, unknown>> | undefined): TaskItem[] {
+function getCurrentTasks(harnessCtx: HarnessRequestContext<Record<string, unknown>> | undefined): TaskItemSnapshot[] {
   const state = harnessCtx?.getState ? harnessCtx.getState() : harnessCtx?.state;
   return getTasksFromState(state);
 }
 
-async function readTasks(harnessCtx: HarnessRequestContext<Record<string, unknown>>): Promise<TaskItem[]> {
+async function readTasks(harnessCtx: HarnessRequestContext<Record<string, unknown>>): Promise<TaskItemSnapshot[]> {
   if (harnessCtx.updateState) {
     return harnessCtx.updateState(state => ({
       result: getTasksFromState(state),
@@ -371,7 +372,7 @@ async function readTasks(harnessCtx: HarnessRequestContext<Record<string, unknow
   return getCurrentTasks(harnessCtx);
 }
 
-function formatTaskListResult(tasks: TaskItem[]): string {
+function formatTaskListResult(tasks: TaskItemSnapshot[]): string {
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.find(t => t.status === 'in_progress');
   const total = tasks.length;
@@ -387,11 +388,11 @@ function formatTaskListResult(tasks: TaskItem[]): string {
   return summary;
 }
 
-function summarizeTaskCheck(tasks: TaskItem[]): {
+function summarizeTaskCheck(tasks: TaskItemSnapshot[]): {
   summary: TaskCheckSummary;
-  inProgressTasks: TaskItem[];
-  pendingTasks: TaskItem[];
-  incompleteTasks: TaskItem[];
+  inProgressTasks: TaskItemSnapshot[];
+  pendingTasks: TaskItemSnapshot[];
+  incompleteTasks: TaskItemSnapshot[];
 } {
   const completedTasks = tasks.filter(task => task.status === 'completed');
   const inProgressTasks = tasks.filter(task => task.status === 'in_progress');
@@ -447,11 +448,11 @@ function formatTaskCheckResult(taskCheck: ReturnType<typeof summarizeTaskCheck>)
   return response;
 }
 
-function hasMultipleInProgress(tasks: TaskItem[]): boolean {
+function hasMultipleInProgress(tasks: TaskItemSnapshot[]): boolean {
   return tasks.filter(task => task.status === 'in_progress').length > 1;
 }
 
-function multipleInProgressError(tasks: TaskItem[]) {
+function multipleInProgressError(tasks: TaskItemSnapshot[]) {
   return {
     content: 'Only one task can be in_progress at a time.',
     tasks,
@@ -461,7 +462,7 @@ function multipleInProgressError(tasks: TaskItem[]) {
 
 async function writeTasks(
   harnessCtx: HarnessRequestContext<Record<string, unknown>> | undefined,
-  tasks: TaskItem[],
+  tasks: TaskItemSnapshot[],
 ): Promise<void> {
   if (!harnessCtx) return;
 
@@ -475,7 +476,7 @@ async function writeTasks(
 
 async function mutateTasks(
   harnessCtx: HarnessRequestContext<Record<string, unknown>>,
-  mutation: (currentTasks: TaskItem[]) => TaskToolResult,
+  mutation: (currentTasks: TaskItemSnapshot[]) => TaskToolResult,
 ): Promise<TaskToolResult> {
   if (harnessCtx.updateState) {
     return harnessCtx.updateState(state => {
@@ -504,7 +505,7 @@ async function mutateTasks(
   return result;
 }
 
-function formatAvailableTaskIds(tasks: TaskItem[]): string {
+function formatAvailableTaskIds(tasks: TaskItemSnapshot[]): string {
   if (tasks.length === 0) return 'No tasks are currently tracked.';
   return `Available task IDs:\n${tasks.map(t => `- ${t.id}: ${t.content} (${t.status})`).join('\n')}`;
 }

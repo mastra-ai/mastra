@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
-import type { HarnessEvent, HarnessThread, TaskItem } from '@mastra/core/harness';
+import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
 
 import { getCurrentGitBranch } from '../utils/project.js';
 import {
@@ -289,7 +289,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'task_updated': {
-      const tasks = event.tasks as TaskItem[];
+      const tasks = event.tasks as TaskItemSnapshot[];
       if (state.taskProgress) {
         state.taskProgress.updateTasks(tasks ?? []);
 

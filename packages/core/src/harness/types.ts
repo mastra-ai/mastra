@@ -9,7 +9,7 @@ import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
-import type { TaskItem } from './tools';
+import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
 // Heartbeat Handlers
@@ -633,10 +633,10 @@ export interface HarnessDisplayState {
 
   // ── Tasks ────────────────────────────────────────────────────────────
   /** Current task list (from task tools) */
-  tasks: TaskItem[];
+  tasks: TaskItemSnapshot[];
 
   /** Previous task list snapshot (for diff detection) */
-  previousTasks: TaskItem[];
+  previousTasks: TaskItemSnapshot[];
 }
 
 /**
@@ -871,7 +871,7 @@ export type HarnessEvent =
   | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
   | {
       type: 'task_updated';
-      tasks: TaskItem[];
+      tasks: TaskItemSnapshot[];
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 

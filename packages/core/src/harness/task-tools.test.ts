@@ -6,7 +6,7 @@ import { InMemoryStore } from '../storage/mock';
 
 import { Harness } from './harness';
 import { assignTaskIds, taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from './tools';
-import type { TaskItem } from './tools';
+import type { TaskItem, TaskItemSnapshot } from './tools';
 import type { HarnessEvent, HarnessRequestContext } from './types';
 
 function createTaskContext(
@@ -205,7 +205,7 @@ describe('task state transactions', () => {
 
     const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
       await firstUpdateGate;
-      const tasks = state.tasks as TaskItem[];
+      const tasks = state.tasks as TaskItemSnapshot[];
       const updatedTasks = tasks.map(task =>
         task.id === 'tests' ? { ...task, status: 'in_progress' as const } : task,
       );
@@ -213,7 +213,7 @@ describe('task state transactions', () => {
     });
 
     const secondUpdate = (harness as any).updateState((state: Record<string, unknown>) => {
-      const tasks = state.tasks as TaskItem[];
+      const tasks = state.tasks as TaskItemSnapshot[];
       expect(tasks[0]!.status).toBe('in_progress');
       const updatedTasks = tasks.map(task => (task.id === 'tests' ? { ...task, status: 'completed' as const } : task));
       return { updates: { tasks: updatedTasks }, result: updatedTasks };
@@ -374,7 +374,7 @@ describe('taskWriteTool', () => {
     const ctx = createTaskContext();
     ctx.setState.mockImplementation(async updates => {
       Object.assign(ctx.state, {
-        tasks: updates.tasks.map(({ id: _id, ...task }: TaskItem) => task),
+        tasks: updates.tasks.map(({ id: _id, ...task }: TaskItemSnapshot) => task),
       });
     });
 
@@ -521,7 +521,7 @@ describe('taskCheckTool', () => {
 
     const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
       await firstUpdateGate;
-      const tasks = state.tasks as TaskItem[];
+      const tasks = state.tasks as TaskItemSnapshot[];
       const updatedTasks = tasks.map(task => (task.id === 'tests' ? { ...task, status: 'completed' as const } : task));
       return { updates: { tasks: updatedTasks }, result: updatedTasks };
     });
@@ -644,6 +644,6 @@ describe('taskCheckTool', () => {
 
     const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
 
-    expect(result.tasks.map((task: TaskItem) => task.id)).toEqual(['task_item', 'task_item_2']);
+    expect(result.tasks.map((task: TaskItemSnapshot) => task.id)).toEqual(['task_item', 'task_item_2']);
   });
 });
