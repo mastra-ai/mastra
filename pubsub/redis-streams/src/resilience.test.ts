@@ -123,10 +123,13 @@ describe('worker resilience and concurrency', () => {
       );
     })();
 
+    // Give a small grace window for any duplicate redeliveries to surface,
+    // then assert exact step count: with consumer-group competing-consumer
+    // semantics each step should be executed exactly once across both
+    // workers. Any drift here points at a real ack/nack regression.
+    await new Promise(r => setTimeout(r, 1500));
     const delta = countMarker(server, 'step-execute-hit') - before;
-    expect(delta).toBeGreaterThanOrEqual(3 * N);
-    // No catastrophic duplication (looser: at most 2x is still healthy).
-    expect(delta).toBeLessThan(3 * N * 2);
+    expect(delta).toBe(3 * N);
   }, 90_000);
 
   it('MASTRA_WORKERS=scheduler boots only the scheduler subsystem', async () => {

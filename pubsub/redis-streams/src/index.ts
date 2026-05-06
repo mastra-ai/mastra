@@ -41,8 +41,11 @@ export interface RedisStreamsPubSubConfig {
   reclaimIdleMs?: number;
   /**
    * Maximum number of times a single event will be redelivered via nack
-   * before it is dropped (acked without republish). Defaults to 5. Set to 0
-   * to disable the cap (events redeliver forever on every nack).
+   * before it is dropped (acked without republish). Defaults to 5. Set to
+   * `Infinity` to disable the cap (events redeliver forever on every nack).
+   *
+   * `0` is treated as `Infinity` with a one-time warn for back-compat;
+   * prefer `Infinity` to disable the cap explicitly.
    */
   maxDeliveryAttempts?: number;
   /**
@@ -82,7 +85,17 @@ export class RedisStreamsPubSub extends PubSub {
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
     this.#reclaimIntervalMs = options.reclaimIntervalMs ?? 30_000;
     this.#reclaimIdleMs = options.reclaimIdleMs ?? 60_000;
-    this.#maxDeliveryAttempts = options.maxDeliveryAttempts ?? 5;
+    const cap = options.maxDeliveryAttempts ?? 5;
+    if (cap === 0) {
+      options.logger?.warn?.(
+        'redis-streams: maxDeliveryAttempts=0 is treated as Infinity for back-compat; pass Infinity to disable the cap explicitly.',
+      );
+      this.#maxDeliveryAttempts = Infinity;
+    } else if (cap < 0 || Number.isNaN(cap)) {
+      throw new Error(`redis-streams: maxDeliveryAttempts must be >= 1 or Infinity, got ${cap}`);
+    } else {
+      this.#maxDeliveryAttempts = cap;
+    }
     this.#logger = options.logger;
   }
 
@@ -386,7 +399,7 @@ export class RedisStreamsPubSub extends PubSub {
       // Cap redelivery to avoid an infinite poison-pill loop. When the cap
       // is hit we drop the event (xAck without republish) and warn so an
       // operator can find it in logs.
-      if (this.#maxDeliveryAttempts > 0 && attempt >= this.#maxDeliveryAttempts) {
+      if (attempt >= this.#maxDeliveryAttempts) {
         this.#logger?.warn?.('redis-streams: dropping event after max delivery attempts', {
           topic: sub.topic,
           eventType: event.type,

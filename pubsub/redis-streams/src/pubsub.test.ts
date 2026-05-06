@@ -404,6 +404,44 @@ describe('RedisStreamsPubSub', () => {
       expect(attempts).toBe(3);
       expect(warns.some(w => /max delivery attempts/.test(String(w.msg)))).toBe(true);
     });
+
+    it('Infinity disables the cap (events keep redelivering)', async () => {
+      const ps = new RedisStreamsPubSub({
+        url: REDIS_URL,
+        blockMs: 200,
+        maxDeliveryAttempts: Infinity,
+      });
+      pubsubs.push(ps);
+
+      const topic = `t-cap-inf-${randomUUID()}`;
+      const groupName = `g-cap-inf-${randomUUID()}`;
+      let attempts = 0;
+      const cb: EventCallback = (_event, _ack, nack) => {
+        attempts++;
+        void nack?.();
+      };
+      await ps.subscribe(topic, cb, { group: groupName });
+      await ps.publish(topic, makeEvent({ type: 'poison-inf' }));
+
+      // Should keep redelivering past the default cap of 5.
+      await waitFor(() => attempts >= 8, { timeoutMs: 10_000 });
+      expect(attempts).toBeGreaterThanOrEqual(8);
+    });
+
+    it('warns and treats 0 as Infinity for back-compat', async () => {
+      const warns: string[] = [];
+      const ps = new RedisStreamsPubSub({
+        url: REDIS_URL,
+        blockMs: 200,
+        maxDeliveryAttempts: 0,
+        logger: {
+          debug: () => {},
+          warn: (msg: any) => warns.push(String(msg)),
+        },
+      });
+      pubsubs.push(ps);
+      expect(warns.some(w => /maxDeliveryAttempts=0/.test(w))).toBe(true);
+    });
   });
 
   describe('unsubscribe scoping', () => {
