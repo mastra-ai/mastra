@@ -15,6 +15,9 @@ let planCounter = 0;
 const FORKED_SUBAGENT_NESTING_NOTICE =
   'Do not call the `subagent` tool. You are currently running inside a forked subagent, and this is the maximum allowed subagent nesting level. Further subagent calls will return an error. Answer the task directly using the conversation history and the other tools available to you.';
 
+const FORKED_SUBAGENT_TASK_NOTICE =
+  'Do not call `task_write`, `task_update`, `task_complete`, or `task_check` inside a forked subagent. Forked subagents keep the parent task-tool schemas for prompt-cache stability, but the parent agent owns the visible task list. Track forked subagent work in your final answer instead.';
+
 /**
  * Converts the user's answer into the text returned to the model after the `ask_user`
  * tool resumes. Free-text and single-select prompts already produce a single string,
@@ -244,6 +247,7 @@ const taskCheckResultSchema = taskToolResultSchema.extend({
 
 export type TaskCheckSummary = z.infer<typeof taskCheckSummarySchema>;
 export type TaskCheckResult = z.infer<typeof taskCheckResultSchema>;
+type TaskToolResult = z.infer<typeof taskToolResultSchema>;
 
 const TASK_ID_SLUG_MAX_LENGTH = 48;
 
@@ -278,12 +282,12 @@ function createDeterministicTaskId(task: TaskItemInput, occurrence: number): str
   return `task_${slug || 'item'}${suffix}`;
 }
 
-function makeUniqueTaskId(id: string, usedIds: Set<string>): string {
-  if (!usedIds.has(id)) return id;
+function makeUniqueTaskId(id: string, usedIds: Set<string>, reservedIds: Set<string> = new Set()): string {
+  if (!usedIds.has(id) && !reservedIds.has(id)) return id;
 
   let suffix = 2;
   let nextId = `${id}_${suffix}`;
-  while (usedIds.has(nextId)) {
+  while (usedIds.has(nextId) || reservedIds.has(nextId)) {
     suffix += 1;
     nextId = `${id}_${suffix}`;
   }
@@ -295,6 +299,7 @@ export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItem[] 
   const contentOccurrences = new Map<string, number>();
   const omittedContentCounts = new Map<string, number>();
   const explicitTaskIds = new Set(tasks.map(task => task.id).filter((id): id is string => Boolean(id)));
+  const reusablePreviousIds = new Map<number, string>();
 
   for (const task of tasks) {
     if (!task.id) {
@@ -302,25 +307,34 @@ export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItem[] 
     }
   }
 
-  return tasks.map(task => {
+  tasks.forEach((task, index) => {
+    if (task.id || omittedContentCounts.get(task.content) !== 1) return;
+
+    const previousMatches = previousTasks.filter(
+      previous => previous.content === task.content && !explicitTaskIds.has(previous.id),
+    );
+    if (previousMatches.length === 1) {
+      reusablePreviousIds.set(index, previousMatches[0]!.id);
+    }
+  });
+
+  const reservedIds = new Set([...explicitTaskIds, ...reusablePreviousIds.values()]);
+
+  return tasks.map((task, index) => {
     const contentOccurrence = (contentOccurrences.get(task.content) ?? 0) + 1;
     contentOccurrences.set(task.content, contentOccurrence);
 
     const fallbackId = createDeterministicTaskId(task, contentOccurrence);
-    const previousMatches = previousTasks.filter(
-      previous => previous.content === task.content && !usedIds.has(previous.id) && !explicitTaskIds.has(previous.id),
-    );
-    // Compatibility fallback only reuses previous IDs for unambiguous exact-content
-    // matches. Duplicate omitted tasks require explicit IDs to avoid assigning the
-    // wrong historical ID to a rewritten task.
-    const canReusePreviousId = !task.id && omittedContentCounts.get(task.content) === 1 && previousMatches.length === 1;
+    const reusablePreviousId = reusablePreviousIds.get(index);
 
     // If the model repeats an explicit ID in the same write, keep the first one
     // and mint/reuse a stable fallback for the duplicate instead of failing the whole list.
-    const id = makeUniqueTaskId(
-      task.id && !usedIds.has(task.id) ? task.id : canReusePreviousId ? previousMatches[0]!.id : fallbackId,
-      usedIds,
-    );
+    const requestedId = task.id && !usedIds.has(task.id) ? task.id : undefined;
+    const id =
+      requestedId ??
+      (reusablePreviousId && !usedIds.has(reusablePreviousId)
+        ? reusablePreviousId
+        : makeUniqueTaskId(fallbackId, usedIds, reservedIds));
     usedIds.add(id);
 
     return {
@@ -332,8 +346,7 @@ export function assignTaskIds(tasks: TaskItemInput[], previousTasks: TaskItem[] 
   });
 }
 
-function getCurrentTasks(harnessCtx: HarnessRequestContext | undefined): TaskItem[] {
-  const state = harnessCtx?.getState ? harnessCtx.getState() : harnessCtx?.state;
+function getTasksFromState(state: unknown): TaskItem[] {
   const typedState = state as {
     tasks?: TaskItemInput[];
   };
@@ -341,6 +354,21 @@ function getCurrentTasks(harnessCtx: HarnessRequestContext | undefined): TaskIte
   // Older task snapshots may not include IDs. Recreate deterministic IDs as a compatibility fallback;
   // current storage/schema integrations should persist IDs so explicit model-chosen IDs survive replay.
   return assignTaskIds(typedState?.tasks || []);
+}
+
+function getCurrentTasks(harnessCtx: HarnessRequestContext<Record<string, unknown>> | undefined): TaskItem[] {
+  const state = harnessCtx?.getState ? harnessCtx.getState() : harnessCtx?.state;
+  return getTasksFromState(state);
+}
+
+async function readTasks(harnessCtx: HarnessRequestContext<Record<string, unknown>>): Promise<TaskItem[]> {
+  if (harnessCtx.updateState) {
+    return harnessCtx.updateState(state => ({
+      result: getTasksFromState(state),
+    }));
+  }
+
+  return getCurrentTasks(harnessCtx);
 }
 
 function formatTaskListResult(tasks: TaskItem[]): string {
@@ -431,7 +459,10 @@ function multipleInProgressError(tasks: TaskItem[]) {
   };
 }
 
-async function writeTasks(harnessCtx: HarnessRequestContext | undefined, tasks: TaskItem[]): Promise<void> {
+async function writeTasks(
+  harnessCtx: HarnessRequestContext<Record<string, unknown>> | undefined,
+  tasks: TaskItem[],
+): Promise<void> {
   if (!harnessCtx) return;
 
   await harnessCtx.setState({ tasks });
@@ -440,6 +471,37 @@ async function writeTasks(harnessCtx: HarnessRequestContext | undefined, tasks: 
     type: 'task_updated',
     tasks,
   });
+}
+
+async function mutateTasks(
+  harnessCtx: HarnessRequestContext<Record<string, unknown>>,
+  mutation: (currentTasks: TaskItem[]) => TaskToolResult,
+): Promise<TaskToolResult> {
+  if (harnessCtx.updateState) {
+    return harnessCtx.updateState(state => {
+      const result = mutation(getTasksFromState(state));
+      return {
+        result,
+        updates: result.isError ? undefined : { tasks: result.tasks },
+        events: result.isError
+          ? undefined
+          : [
+              {
+                type: 'task_updated' as const,
+                tasks: result.tasks,
+              },
+            ],
+      };
+    });
+  }
+
+  // Compatibility path for third-party HarnessRequestContext objects created
+  // before updateState existed. Core Harness contexts always provide updateState.
+  const result = mutation(getCurrentTasks(harnessCtx));
+  if (!result.isError) {
+    await writeTasks(harnessCtx, result.tasks);
+  }
+  return result;
 }
 
 function formatAvailableTaskIds(tasks: TaskItem[]): string {
@@ -478,7 +540,9 @@ States:
   outputSchema: taskToolResultSchema,
   execute: async ({ tasks }, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as
+        | HarnessRequestContext<Record<string, unknown>>
+        | undefined;
       if (!harnessCtx) {
         return {
           content: 'Unable to update task list (no harness context)',
@@ -487,21 +551,18 @@ States:
         };
       }
 
-      const currentTasks = getCurrentTasks(harnessCtx);
-      const normalizedTasks = assignTaskIds(tasks, currentTasks);
-      if (hasMultipleInProgress(normalizedTasks)) {
-        return multipleInProgressError(currentTasks);
-      }
+      return await mutateTasks(harnessCtx, currentTasks => {
+        const normalizedTasks = assignTaskIds(tasks, currentTasks);
+        if (hasMultipleInProgress(normalizedTasks)) {
+          return multipleInProgressError(currentTasks);
+        }
 
-      // Always update state and emit immediately for real-time updates.
-      // The UI will handle deduplication if needed.
-      await writeTasks(harnessCtx, normalizedTasks);
-
-      return {
-        content: formatTaskListResult(normalizedTasks),
-        tasks: normalizedTasks,
-        isError: false,
-      };
+        return {
+          content: formatTaskListResult(normalizedTasks),
+          tasks: normalizedTasks,
+          isError: false,
+        };
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {
@@ -539,7 +600,9 @@ Usage:
   outputSchema: taskToolResultSchema,
   execute: async ({ id, content, status, activeForm }, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as
+        | HarnessRequestContext<Record<string, unknown>>
+        | undefined;
       if (!harnessCtx) {
         return {
           content: 'Unable to update task list (no harness context)',
@@ -548,37 +611,36 @@ Usage:
         };
       }
 
-      const tasks = getCurrentTasks(harnessCtx);
-      const taskIndex = tasks.findIndex(task => task.id === id);
-      if (taskIndex === -1) {
+      return await mutateTasks(harnessCtx, tasks => {
+        const taskIndex = tasks.findIndex(task => task.id === id);
+        if (taskIndex === -1) {
+          return {
+            content: `Task not found: ${id}\n\n${formatAvailableTaskIds(tasks)}`,
+            tasks,
+            isError: true,
+          };
+        }
+
+        const updatedTasks = tasks.map((task, index) =>
+          index === taskIndex
+            ? {
+                ...task,
+                ...(content !== undefined ? { content } : {}),
+                ...(status !== undefined ? { status } : {}),
+                ...(activeForm !== undefined ? { activeForm } : {}),
+              }
+            : task,
+        );
+        if (hasMultipleInProgress(updatedTasks)) {
+          return multipleInProgressError(tasks);
+        }
+
         return {
-          content: `Task not found: ${id}\n\n${formatAvailableTaskIds(tasks)}`,
-          tasks,
-          isError: true,
+          content: formatTaskListResult(updatedTasks),
+          tasks: updatedTasks,
+          isError: false,
         };
-      }
-
-      const updatedTasks = tasks.map((task, index) =>
-        index === taskIndex
-          ? {
-              ...task,
-              ...(content !== undefined ? { content } : {}),
-              ...(status !== undefined ? { status } : {}),
-              ...(activeForm !== undefined ? { activeForm } : {}),
-            }
-          : task,
-      );
-      if (hasMultipleInProgress(updatedTasks)) {
-        return multipleInProgressError(tasks);
-      }
-
-      await writeTasks(harnessCtx, updatedTasks);
-
-      return {
-        content: formatTaskListResult(updatedTasks),
-        tasks: updatedTasks,
-        isError: false,
-      };
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {
@@ -606,7 +668,9 @@ Usage:
   outputSchema: taskToolResultSchema,
   execute: async ({ id }, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as
+        | HarnessRequestContext<Record<string, unknown>>
+        | undefined;
       if (!harnessCtx) {
         return {
           content: 'Unable to update task list (no harness context)',
@@ -615,32 +679,31 @@ Usage:
         };
       }
 
-      const tasks = getCurrentTasks(harnessCtx);
-      const taskIndex = tasks.findIndex(task => task.id === id);
-      if (taskIndex === -1) {
+      return await mutateTasks(harnessCtx, tasks => {
+        const taskIndex = tasks.findIndex(task => task.id === id);
+        if (taskIndex === -1) {
+          return {
+            content: `Task not found: ${id}\n\n${formatAvailableTaskIds(tasks)}`,
+            tasks,
+            isError: true,
+          };
+        }
+
+        const updatedTasks = tasks.map((task, index) =>
+          index === taskIndex
+            ? {
+                ...task,
+                status: 'completed' as const,
+              }
+            : task,
+        );
+
         return {
-          content: `Task not found: ${id}\n\n${formatAvailableTaskIds(tasks)}`,
-          tasks,
-          isError: true,
+          content: formatTaskListResult(updatedTasks),
+          tasks: updatedTasks,
+          isError: false,
         };
-      }
-
-      const updatedTasks = tasks.map((task, index) =>
-        index === taskIndex
-          ? {
-              ...task,
-              status: 'completed' as const,
-            }
-          : task,
-      );
-
-      await writeTasks(harnessCtx, updatedTasks);
-
-      return {
-        content: formatTaskListResult(updatedTasks),
-        tasks: updatedTasks,
-        isError: false,
-      };
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {
@@ -671,7 +734,9 @@ summary.allCompleted is true only when at least one tracked task exists and ever
   outputSchema: taskCheckResultSchema,
   execute: async ({}, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as
+        | HarnessRequestContext<Record<string, unknown>>
+        | undefined;
 
       if (!harnessCtx) {
         const emptyCheck = summarizeTaskCheck([]);
@@ -684,8 +749,8 @@ summary.allCompleted is true only when at least one tracked task exists and ever
         };
       }
 
-      // Prefer live harness state when available; fall back to the request snapshot for older contexts.
-      const tasks = getCurrentTasks(harnessCtx);
+      // Queue behind pending task mutations when the Harness transaction helper is available.
+      const tasks = await readTasks(harnessCtx);
       const taskCheck = summarizeTaskCheck(tasks);
 
       return {
@@ -879,7 +944,7 @@ Use this tool when:
         subagentToRun = parentAgent;
         // Display value only; forked runs use the parent agent's configured model.
         resolvedModelId = opts.getParentModelId?.() || 'parent-agent';
-        task = `${task}\n\n${FORKED_SUBAGENT_NESTING_NOTICE}`;
+        task = `${task}\n\n${FORKED_SUBAGENT_NESTING_NOTICE}\n\n${FORKED_SUBAGENT_TASK_NOTICE}`;
         streamMemory = { thread: forkedThread.id, resource: forkedThread.resourceId };
         // Allow a recovery step if the forked model accidentally calls the
         // inherited-but-disabled `subagent` tool. Without this, the single-step
@@ -913,6 +978,8 @@ Use this tool when:
             for (const [toolId, tool] of Object.entries(setTools as ToolsInput)) {
               if (toolId === 'subagent') {
                 patched[toolId] = patchSubagentToolForFork(tool);
+              } else if (isForkedTaskToolId(toolId)) {
+                patched[toolId] = patchTaskToolForFork(tool, toolId);
               } else {
                 patched[toolId] = tool;
               }
@@ -1143,6 +1210,33 @@ function patchSubagentToolForFork(tool: unknown): any {
   // object, provider-defined tool). `Object.assign` on a fresh object keeps
   // own enumerable props; that is enough for the toolset-merge layer to
   // serialize the same schema/description into the model request.
+  return Object.assign({}, tool as Record<string, unknown>, { execute: stubExecute });
+}
+
+function isForkedTaskToolId(toolId: string): boolean {
+  return toolId === 'task_write' || toolId === 'task_update' || toolId === 'task_complete' || toolId === 'task_check';
+}
+
+function patchTaskToolForFork(tool: unknown, toolId: string): any {
+  const stubExecute = async () => {
+    const baseResult = {
+      content: FORKED_SUBAGENT_TASK_NOTICE,
+      tasks: [],
+      isError: true,
+    };
+
+    if (toolId === 'task_check') {
+      const taskCheck = summarizeTaskCheck([]);
+      return {
+        ...baseResult,
+        summary: taskCheck.summary,
+        incompleteTasks: taskCheck.incompleteTasks,
+      };
+    }
+
+    return baseResult;
+  };
+
   return Object.assign({}, tool as Record<string, unknown>, { execute: stubExecute });
 }
 

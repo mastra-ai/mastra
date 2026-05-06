@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage/mock';
 
+import { Harness } from './harness';
 import { assignTaskIds, taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from './tools';
 import type { TaskItem } from './tools';
 import type { HarnessEvent, HarnessRequestContext } from './types';
@@ -14,12 +17,23 @@ function createTaskContext(
   const setState = vi.fn(async updates => {
     Object.assign(state, updates);
   });
+  const updateState = vi.fn(async updater => {
+    const update = await updater(state);
+    if (update.updates) {
+      await setState(update.updates);
+    }
+    for (const event of update.events ?? []) {
+      events.push(event);
+    }
+    return update.result;
+  });
 
   const requestContext = new RequestContext();
   const harnessCtx: Partial<HarnessRequestContext<typeof state>> = {
     state,
     getState: () => state,
     setState,
+    updateState,
     emitEvent: event => events.push(event),
   };
   requestContext.set('harness', harnessCtx);
@@ -29,7 +43,22 @@ function createTaskContext(
     requestContext,
     setState,
     state,
+    updateState,
   };
+}
+
+function createHarness() {
+  const agent = new Agent({
+    name: 'test-agent',
+    instructions: 'You are a test agent.',
+    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+  });
+
+  return new Harness<Record<string, unknown>>({
+    id: 'test-harness',
+    storage: new InMemoryStore(),
+    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+  });
 }
 
 describe('assignTaskIds', () => {
@@ -102,6 +131,38 @@ describe('assignTaskIds', () => {
     ]);
   });
 
+  it('reserves later explicit ids before minting generated fallback ids', () => {
+    const tasks = assignTaskIds([
+      { content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+      { id: 'task_write_tests', content: 'Run checks', status: 'in_progress', activeForm: 'Running checks' },
+    ]);
+
+    expect(tasks).toEqual([
+      { id: 'task_write_tests_2', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+      { id: 'task_write_tests', content: 'Run checks', status: 'in_progress', activeForm: 'Running checks' },
+    ]);
+  });
+
+  it('reserves reusable previous ids before minting generated fallback ids', () => {
+    const tasks = assignTaskIds(
+      [
+        { content: 'Review', status: 'pending', activeForm: 'Reviewing' },
+        { content: 'Other', status: 'pending', activeForm: 'Doing other' },
+        { id: 'task_review', content: 'New', status: 'in_progress', activeForm: 'Doing new' },
+      ],
+      [
+        { id: 'task_review', content: 'Review', status: 'pending', activeForm: 'Reviewing' },
+        { id: 'task_review_2', content: 'Other', status: 'pending', activeForm: 'Doing other' },
+      ],
+    );
+
+    expect(tasks).toEqual([
+      { id: 'task_review_3', content: 'Review', status: 'pending', activeForm: 'Reviewing' },
+      { id: 'task_review_2', content: 'Other', status: 'pending', activeForm: 'Doing other' },
+      { id: 'task_review', content: 'New', status: 'in_progress', activeForm: 'Doing new' },
+    ]);
+  });
+
   it('reuses remaining duplicate-content ids after later explicit ids are reserved', () => {
     const tasks = assignTaskIds(
       [
@@ -127,6 +188,43 @@ describe('assignTaskIds', () => {
 
     expect(task!.id.startsWith('task_')).toBe(true);
     expect(task!.id.length).toBeLessThanOrEqual('task_'.length + 48);
+  });
+});
+
+describe('task state transactions', () => {
+  it('serializes state updates against the latest task state', async () => {
+    const harness = createHarness();
+    await harness.setState({
+      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+    });
+
+    let releaseFirst!: () => void;
+    const firstUpdateGate = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+
+    const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
+      await firstUpdateGate;
+      const tasks = state.tasks as TaskItem[];
+      const updatedTasks = tasks.map(task =>
+        task.id === 'tests' ? { ...task, status: 'in_progress' as const } : task,
+      );
+      return { updates: { tasks: updatedTasks }, result: updatedTasks };
+    });
+
+    const secondUpdate = (harness as any).updateState((state: Record<string, unknown>) => {
+      const tasks = state.tasks as TaskItem[];
+      expect(tasks[0]!.status).toBe('in_progress');
+      const updatedTasks = tasks.map(task => (task.id === 'tests' ? { ...task, status: 'completed' as const } : task));
+      return { updates: { tasks: updatedTasks }, result: updatedTasks };
+    });
+
+    releaseFirst();
+    await Promise.all([firstUpdate, secondUpdate]);
+
+    expect(harness.getState().tasks).toEqual([
+      { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
+    ]);
   });
 });
 
@@ -409,6 +507,41 @@ describe('taskCompleteTool', () => {
 });
 
 describe('taskCheckTool', () => {
+  it('waits for queued task mutations before reading task state', async () => {
+    const harness = createHarness();
+    await harness.setState({
+      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+    });
+    const requestContext = await (harness as any).buildRequestContext();
+
+    let releaseFirst!: () => void;
+    const firstUpdateGate = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+
+    const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
+      await firstUpdateGate;
+      const tasks = state.tasks as TaskItem[];
+      const updatedTasks = tasks.map(task => (task.id === 'tests' ? { ...task, status: 'completed' as const } : task));
+      return { updates: { tasks: updatedTasks }, result: updatedTasks };
+    });
+
+    const checkResultPromise = (taskCheckTool as any).execute({}, { requestContext });
+
+    releaseFirst();
+    await firstUpdate;
+    const checkResult = await checkResultPromise;
+
+    expect(checkResult.summary).toMatchObject({
+      completed: 1,
+      incomplete: 0,
+      allCompleted: true,
+    });
+    expect(checkResult.tasks).toEqual([
+      { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
+    ]);
+  });
+
   it('returns structured summary fields and incomplete task ids', async () => {
     const ctx = createTaskContext([
       { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },

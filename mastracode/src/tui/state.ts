@@ -101,8 +101,8 @@ export interface TUIState {
   pendingTools: Map<string, IToolExecutionComponent>;
   /** Task tools are hidden on success but promoted to normal tool boxes on errors */
   pendingTaskToolIds: Set<string>;
-  /** Position hint for task_write inline rendering when streaming */
-  taskWriteInsertIndex: number;
+  /** Position hint for inline task-tool rendering when streaming */
+  taskToolInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
   seenToolCallIds: Set<string>;
   /** Track subagent tool call IDs to skip in trailing content logic */
@@ -236,7 +236,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     isInitialized: false,
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
-    taskWriteInsertIndex: -1,
+    taskToolInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
     currentRunSystemReminderKeys: new Set(),

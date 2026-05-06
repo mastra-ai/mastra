@@ -8,7 +8,15 @@ import { UserMessageComponent } from './components/user-message.js';
 import { addUserMessage, renderExistingMessages } from './render-messages.js';
 import type { TUIState } from './state.js';
 
+function createRestoreDisplayTasks(displayState: { tasks?: unknown[]; previousTasks?: unknown[] }) {
+  return vi.fn((tasks: unknown[]) => {
+    displayState.previousTasks = displayState.tasks ? [...displayState.tasks] : [];
+    displayState.tasks = [...tasks];
+  });
+}
+
 function createState(): TUIState {
+  const displayState = { isRunning: false, tasks: [], previousTasks: [] };
   return {
     chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
@@ -22,8 +30,9 @@ function createState(): TUIState {
     messageComponentsById: new Map(),
     followUpComponents: [],
     harness: {
-      getDisplayState: () => ({ isRunning: false }),
+      getDisplayState: () => displayState,
       setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: createRestoreDisplayTasks(displayState),
     },
   } as unknown as TUIState;
 }
@@ -157,6 +166,7 @@ describe('renderExistingMessages subagents', () => {
       getDisplayState: () => ({ isRunning: false }),
       getFullModelId: () => 'openai/gpt-5.5',
       setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -225,6 +235,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => displayState,
       setState,
+      restoreDisplayTasks: createRestoreDisplayTasks(displayState),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -288,6 +299,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => displayState,
       setState,
+      restoreDisplayTasks: createRestoreDisplayTasks(displayState),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -297,7 +309,7 @@ describe('renderExistingMessages task tools', () => {
     expect(displayState.tasks).toEqual(checkedTasks);
   });
 
-  it('replays legacy task_write snapshots with deterministic task ids when ids are absent', async () => {
+  it('replays early task patch history without structured task snapshots', async () => {
     const messages: HarnessMessage[] = [
       {
         id: 'assistant-1',
@@ -346,6 +358,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => ({ isRunning: false }),
       setState,
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -391,6 +404,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => displayState,
       setState,
+      restoreDisplayTasks: createRestoreDisplayTasks(displayState),
     } as unknown as TUIState['harness'];
 
     await expect(renderExistingMessages(state)).resolves.toBeUndefined();
@@ -461,6 +475,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => ({ isRunning: false }),
       setState,
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -522,7 +537,10 @@ describe('renderExistingMessages task tools', () => {
           type: 'tool_result',
           id: 'tool-2',
           name: 'task_update',
-          result: { content: 'Tasks updated' },
+          result: {
+            content: 'Tasks updated',
+            tasks: [{ id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' }],
+          },
           isError: false,
         },
       ],
@@ -535,6 +553,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue([oldTaskWrite, ...fillerMessages, visibleTaskUpdate]),
       getDisplayState: () => ({ isRunning: false }),
       setState,
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -610,6 +629,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => ({ isRunning: false }),
       setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -660,6 +680,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue(messages),
       getDisplayState: () => ({ isRunning: false }),
       setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -680,6 +701,7 @@ describe('renderExistingMessages task tools', () => {
       listMessages: vi.fn().mockResolvedValue([]),
       getDisplayState: () => ({ isRunning: false }),
       setState,
+      restoreDisplayTasks: vi.fn(),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

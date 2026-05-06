@@ -355,6 +355,17 @@ Return the current `HarnessDisplayState` snapshot for UI rendering.
 const displayState = harness.getDisplayState()
 ```
 
+#### `restoreDisplayTasks(tasks)`
+
+Restore the task portion of `HarnessDisplayState` after a UI replays persisted task tool history. This emits `display_state_changed` without emitting a live `task_updated` event.
+
+If later task tools should read the replayed tasks, persist the same task list with `setState({ tasks })` before calling `restoreDisplayTasks(tasks)`.
+
+```typescript
+await harness.setState({ tasks: replayedTasks })
+harness.restoreDisplayTasks(replayedTasks)
+```
+
 #### `setState(updates)`
 
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.

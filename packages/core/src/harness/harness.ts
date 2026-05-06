@@ -25,6 +25,7 @@ import {
   submitPlanTool,
   taskCheckTool,
   taskCompleteTool,
+  type TaskItem,
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
@@ -149,6 +150,7 @@ export class Harness<TState = {}> {
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
+  private stateUpdateQueue: Promise<void> = Promise.resolve();
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -344,6 +346,33 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
+  }
+
+  private async updateState<TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
+  ): Promise<TResult> {
+    // Serializes read-modify-write helpers that opt into this path. Direct
+    // setState() calls remain immediate for backwards compatibility.
+    const run = this.stateUpdateQueue.then(async () => {
+      const update = await updater(this.getState());
+      if (update.updates && Object.keys(update.updates).length > 0) {
+        await this.setState(update.updates);
+      }
+      for (const event of update.events ?? []) {
+        this.emit(event);
+      }
+      return update.result;
+    });
+
+    this.stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private getSchemaDefaults(): Partial<TState> {
@@ -2357,6 +2386,17 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Restore task display state after a UI replays persisted task tool history.
+   * This updates the Harness-owned display snapshot without emitting a live
+   * `task_updated` event, since no task tool just ran.
+   */
+  restoreDisplayTasks(tasks: TaskItem[]): void {
+    this.displayState.previousTasks = [...this.displayState.tasks];
+    this.displayState.tasks = [...tasks];
+    this.dispatchDisplayStateChanged(false);
+  }
+
+  /**
    * Reset display state fields that are scoped to a thread.
    * Called on thread switch/creation.
    */
@@ -2649,18 +2689,22 @@ export class Harness<TState = {}> {
 
     this.dispatchToListeners(event);
 
+    if (event.type !== 'display_state_changed') {
+      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
+      this.dispatchDisplayStateChanged(isCritical);
+    }
+  }
+
+  private dispatchDisplayStateChanged(isCritical: boolean): void {
     // After every event, emit display_state_changed so UIs that prefer a single
     // subscribe-and-render pattern can do so. We dispatch directly to listeners
     // (not through emit()) to avoid infinite recursion.
-    if (event.type !== 'display_state_changed') {
-      this.dispatchToListeners({
-        type: 'display_state_changed',
-        displayState: this.displayState,
-      });
-    }
+    this.dispatchToListeners({
+      type: 'display_state_changed',
+      displayState: this.displayState,
+    });
 
-    if (event.type !== 'display_state_changed' && this.displayStateSchedulers.size > 0) {
-      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
+    if (this.displayStateSchedulers.size > 0) {
       for (const scheduler of Array.from(this.displayStateSchedulers)) {
         scheduler.notify(this.displayState, isCritical);
       }
@@ -3175,6 +3219,7 @@ export class Harness<TState = {}> {
       state: this.getState(),
       getState: () => this.getState(),
       setState: updates => this.setState(updates),
+      updateState: updater => this.updateState(updater),
       threadId: this.currentThreadId,
       resourceId: this.resourceId,
       modeId: this.currentModeId,

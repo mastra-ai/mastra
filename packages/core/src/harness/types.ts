@@ -979,6 +979,21 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Update harness state */
   setState: (updates: Partial<TState>) => Promise<void>;
 
+  /** Update harness state from the latest state snapshot in a serialized transaction */
+  updateState?: <TResult>(
+    updater: (state: Readonly<TState>) =>
+      | {
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }
+      | Promise<{
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }>,
+  ) => Promise<TResult>;
+
   /** Current thread ID */
   threadId: string | null;
 

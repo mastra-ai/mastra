@@ -21,7 +21,7 @@ import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
-function isTaskTool(toolName: string): boolean {
+export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
 
@@ -151,8 +151,8 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       return;
     }
 
-    if (isTaskTool(toolName)) {
-      state.taskWriteInsertIndex = state.chatContainer.children.length;
+    if (isTaskMutationTool(toolName)) {
+      state.taskToolInsertIndex = state.chatContainer.children.length;
       const component = new ToolExecutionComponentEnhanced(
         toolName,
         args,
@@ -238,7 +238,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   }
 
   if (state.pendingTools.has(toolCallId)) {
-    if (isTaskTool(toolName)) {
+    if (isTaskMutationTool(toolName)) {
       state.pendingTaskToolIds?.add(toolCallId);
     }
     return;
@@ -259,9 +259,9 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
     state.ui.requestRender();
-  } else if (isTaskTool(toolName)) {
+  } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
-    state.taskWriteInsertIndex = state.chatContainer.children.length;
+    state.taskToolInsertIndex = state.chatContainer.children.length;
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},

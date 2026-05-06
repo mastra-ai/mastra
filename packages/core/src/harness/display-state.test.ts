@@ -53,7 +53,7 @@ describe('defaultDisplayState', () => {
   it('returns independent instances', () => {
     const ds1 = defaultDisplayState();
     const ds2 = defaultDisplayState();
-    ds1.tasks.push({ content: 'test', status: 'pending', activeForm: 'Testing' });
+    ds1.tasks.push({ id: 'test', content: 'test', status: 'pending', activeForm: 'Testing' });
     expect(ds2.tasks).toEqual([]);
   });
 });
@@ -1224,6 +1224,18 @@ describe('display_state_changed emission', () => {
     emit(harness, { type: 'display_state_changed', displayState: harness.getDisplayState() });
     expect(events.length).toBe(1);
     expect(events[0]!.type).toBe('display_state_changed');
+  });
+
+  it('restores replayed task display state without emitting task_updated', () => {
+    const tasks = [{ id: 'tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' }];
+
+    harness.restoreDisplayTasks(tasks);
+
+    const displayStateChanged = events.find(event => event.type === 'display_state_changed');
+    expect(harness.getDisplayState().tasks).toEqual(tasks);
+    expect(harness.getDisplayState().previousTasks).toEqual([]);
+    expect(events.map(event => event.type)).toEqual(['display_state_changed']);
+    expect(displayStateChanged).toMatchObject({ displayState: harness.getDisplayState() });
   });
 
   it('emits display_state_changed for each event in a sequence', () => {

@@ -34,7 +34,7 @@ function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIS
     },
     allToolComponents: [],
     chatContainer: { children: [] },
-    taskWriteInsertIndex: 5,
+    taskToolInsertIndex: 5,
     ui: { requestRender: vi.fn() },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
@@ -101,24 +101,24 @@ describe('dispatchEvent thread lifecycle', () => {
     );
   });
 
-  it('resets taskWriteInsertIndex on thread_changed', async () => {
+  it('resets taskToolInsertIndex on thread_changed', async () => {
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
       state,
     );
 
-    expect(state.taskWriteInsertIndex).toBe(-1);
+    expect(state.taskToolInsertIndex).toBe(-1);
   });
 
-  it('resets taskWriteInsertIndex on thread_created', async () => {
+  it('resets taskToolInsertIndex on thread_created', async () => {
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
       state,
     );
 
-    expect(state.taskWriteInsertIndex).toBe(-1);
+    expect(state.taskToolInsertIndex).toBe(-1);
   });
 
   it('clears taskProgress UI component on thread_changed', async () => {
@@ -162,7 +162,7 @@ describe('dispatchEvent task updates', () => {
     await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
 
     expect(ectx.renderCompletedTasksInline).toHaveBeenCalledWith(tasks, 5, true);
-    expect(state.taskWriteInsertIndex).toBe(-1);
+    expect(state.taskToolInsertIndex).toBe(-1);
   });
 
   it('does not render a duplicate completed task list for repeated all-completed updates', async () => {

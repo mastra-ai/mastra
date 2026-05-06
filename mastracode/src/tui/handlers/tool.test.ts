@@ -18,7 +18,7 @@ function createToolHandlerContext(): EventHandlerContext {
     allToolComponents: [],
     toolOutputExpanded: false,
     hideThinkingBlock: false,
-    taskWriteInsertIndex: -1,
+    taskToolInsertIndex: -1,
   } as unknown as TUIState;
 
   return {

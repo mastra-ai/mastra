@@ -129,7 +129,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
       }
-      state.taskWriteInsertIndex = -1;
+      state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -160,7 +160,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
-      state.taskWriteInsertIndex = -1;
+      state.taskToolInsertIndex = -1;
       break;
     }
 
@@ -306,9 +306,9 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           }
         }
         // Fall back to the position recorded during streaming (when no inline component was created)
-        if (insertIndex === -1 && state.taskWriteInsertIndex >= 0) {
-          insertIndex = state.taskWriteInsertIndex;
-          state.taskWriteInsertIndex = -1;
+        if (insertIndex === -1 && state.taskToolInsertIndex >= 0) {
+          insertIndex = state.taskToolInsertIndex;
+          state.taskToolInsertIndex = -1;
         }
 
         // Check if all tasks are completed

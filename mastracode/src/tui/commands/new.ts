@@ -19,7 +19,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }
-  state.taskWriteInsertIndex = -1;
+  state.taskToolInsertIndex = -1;
 
   ctx.updateStatusLine();
   state.ui.requestRender();

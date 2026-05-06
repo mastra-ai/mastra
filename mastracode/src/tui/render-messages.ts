@@ -19,7 +19,7 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
-import { formatToolResult } from './handlers/tool.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
@@ -93,6 +93,31 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   } else {
     state.chatContainer.addChild(container);
   }
+}
+
+function renderTaskTransitionFromHistory(
+  state: TUIState,
+  previousTasks: TaskItem[],
+  nextTasks: TaskItem[],
+): { tasks: TaskItem[]; replacedWithInline: boolean } {
+  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
+
+  if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
+    if (!wasAllCompleted) {
+      renderCompletedTasksInline(state, nextTasks, -1, true);
+    }
+    return { tasks: nextTasks, replacedWithInline: true };
+  }
+
+  if (nextTasks.length === 0) {
+    if (previousTasks.length > 0) {
+      renderClearedTasksInline(state, previousTasks);
+      return { tasks: [], replacedWithInline: true };
+    }
+    return { tasks: [], replacedWithInline: false };
+  }
+
+  return { tasks: nextTasks, replacedWithInline: true };
 }
 
 // =============================================================================
@@ -254,7 +279,7 @@ function areTasksEqual(left: readonly TaskItem[] | undefined, right: readonly Ta
   });
 }
 
-function applyTaskPatch(tasks: TaskItem[], args: unknown, status?: TaskItem['status']): TaskItem[] {
+function applyTaskPatchFallback(tasks: TaskItem[], args: unknown, status?: TaskItem['status']): TaskItem[] {
   if (
     typeof args !== 'object' ||
     args === null ||
@@ -287,9 +312,12 @@ function applyTaskToolResult(
 
   if (toolName === 'task_update' || toolName === 'task_complete') {
     const resultTasks = getTaskResultTasks(result);
+    // Current task patch tools return structured task snapshots. Keep this
+    // fallback only for early persisted histories created before that snapshot
+    // field existed.
     return resultTasks
       ? assignTaskIds(resultTasks, tasks)
-      : applyTaskPatch(tasks, args, toolName === 'task_complete' ? 'completed' : undefined);
+      : applyTaskPatchFallback(tasks, args, toolName === 'task_complete' ? 'completed' : undefined);
   }
 
   if (toolName === 'task_check') {
@@ -474,11 +502,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             );
           }
 
-          // If this was task_write with all completed or cleared, show inline instead of tool component
+          // Successful task transition tools render through the pinned task UI,
+          // not as regular tool result boxes.
           let replacedWithInline = false;
-          if (content.name === 'task_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-            const wasAllCompleted =
-              previousTasksAcc.length > 0 && previousTasksAcc.every(t => t.status === 'completed');
+          if (isTaskMutationTool(content.name) && toolResult?.type === 'tool_result' && !toolResult.isError) {
             const nextTasks = applyTaskToolResult(
               previousTasksAcc,
               content.name,
@@ -486,45 +513,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               toolResult.result,
               toolResult.isError,
             );
-            if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
-              previousTasksAcc = nextTasks;
-              if (!wasAllCompleted) {
-                renderCompletedTasksInline(state, nextTasks);
-              }
-              replacedWithInline = true;
-            } else if (nextTasks.length === 0) {
-              // Tasks were cleared - show with previous tasks if we have them
-              if (previousTasksAcc.length > 0) {
-                renderClearedTasksInline(state, previousTasksAcc);
-                replacedWithInline = true;
-              }
-              previousTasksAcc = [];
-            } else {
-              // Track for detecting clears
-              previousTasksAcc = nextTasks;
-              replacedWithInline = true;
-            }
-          }
-
-          if (
-            (content.name === 'task_update' || content.name === 'task_complete') &&
-            toolResult?.type === 'tool_result' &&
-            !toolResult.isError
-          ) {
-            const wasAllCompleted =
-              previousTasksAcc.length > 0 && previousTasksAcc.every(t => t.status === 'completed');
-            previousTasksAcc = applyTaskToolResult(
-              previousTasksAcc,
-              content.name,
-              content.args,
-              toolResult.result,
-              toolResult.isError,
-            );
-            const isAllCompleted = previousTasksAcc.length > 0 && previousTasksAcc.every(t => t.status === 'completed');
-            if (!wasAllCompleted && isAllCompleted) {
-              renderCompletedTasksInline(state, previousTasksAcc);
-            }
-            replacedWithInline = true;
+            const transition = renderTaskTransitionFromHistory(state, previousTasksAcc, nextTasks);
+            previousTasksAcc = transition.tasks;
+            replacedWithInline = transition.replacedWithInline;
           }
 
           if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
@@ -658,9 +649,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       // Keep the reconstructed task list local to display state in that case.
     }
   }
-  const displayState = state.harness.getDisplayState() as { tasks?: TaskItem[]; previousTasks?: TaskItem[] };
-  displayState.previousTasks = displayState.tasks ? [...displayState.tasks] : [];
-  displayState.tasks = [...previousTasksAcc];
+  const harnessWithReplayTasks = state.harness as typeof state.harness & {
+    restoreDisplayTasks?: (tasks: TaskItem[]) => void;
+  };
+  harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
 
   state.ui.requestRender();
 }
