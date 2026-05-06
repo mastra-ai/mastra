@@ -92,7 +92,10 @@ describe('provisionObserveProject', () => {
     expect(platformFetchMock).toHaveBeenNthCalledWith(
       2,
       'https://platform.test/v1/studio/projects',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'my-app' }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'my-app', studioEnabled: false, serverEnabled: false }),
+      }),
     );
     expect(platformFetchMock).toHaveBeenNthCalledWith(
       3,
@@ -275,7 +278,10 @@ describe('provisionObserveProject', () => {
     expect(platformFetchMock).toHaveBeenNthCalledWith(
       2,
       'https://platform.test/v1/studio/projects',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'fresh-app' }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'fresh-app', studioEnabled: false, serverEnabled: false }),
+      }),
     );
   });
 
@@ -303,7 +309,10 @@ describe('provisionObserveProject', () => {
     expect(platformFetchMock).toHaveBeenNthCalledWith(
       1,
       'https://platform.test/v1/studio/projects',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'my-app' }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'my-app', studioEnabled: false, serverEnabled: false }),
+      }),
     );
   });
 

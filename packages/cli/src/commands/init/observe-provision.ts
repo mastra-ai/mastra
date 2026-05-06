@@ -177,10 +177,13 @@ async function createProjectByName({
   orgId: string;
   name: string;
 }): Promise<ObserveProject> {
+  // Create as observe-only: no Studio or Server runtime attached. The first
+  // `mastra studio deploy` / `mastra server deploy` flips the matching flag
+  // on the platform side.
   const res = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/projects`, {
     method: 'POST',
     headers: { ...authHeaders(token, orgId), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, studioEnabled: false, serverEnabled: false }),
   });
   if (!res.ok) {
     throw new Error(`Failed to create project (${res.status})`);
