@@ -86,7 +86,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
-    const caveman = state?.cavemanObservations ?? true;
+    const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}`;

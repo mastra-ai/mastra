@@ -161,8 +161,9 @@ export interface GlobalSettings {
     omReflectionThreshold: number | null;
     /**
      * Whether observations and reflections use the terse caveman-style instruction.
-     * `null` means inherit the built-in default (currently `true`). Used as the
-     * default for new threads unless overridden per-thread.
+     * `null` means inherit the built-in default (currently `false` — caveman is
+     * opt-in via `/om` settings). Used as the default for new threads unless
+     * overridden per-thread.
      */
     omCavemanObservations: boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */

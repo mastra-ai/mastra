@@ -80,7 +80,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
     observationThreshold: ctx.state.harness.getObservationThreshold() ?? 30_000,
     reflectionThreshold: ctx.state.harness.getReflectionThreshold() ?? 40_000,
     cavemanObservations:
-      ((ctx.state.harness.getState() as Record<string, unknown>).cavemanObservations as boolean | undefined) ?? true,
+      ((ctx.state.harness.getState() as Record<string, unknown>).cavemanObservations as boolean | undefined) ?? false,
   };
 
   return new Promise<void>(resolve => {

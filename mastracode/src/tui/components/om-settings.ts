@@ -287,8 +287,8 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'caveman-observations',
         label: 'Caveman observations',
         description:
-          'Use terse caveman-style compression for observations and reflections. ' +
-          'Turn off for standard prose if caveman style produces poor recall',
+          'Optional. Use terse caveman-style compression for observations and reflections ' +
+          'instead of standard prose. Off by default; turn on if you prefer the more compact style',
         currentValue: config.cavemanObservations ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new BooleanSubmenu(
