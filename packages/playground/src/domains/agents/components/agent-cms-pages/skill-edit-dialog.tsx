@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useCreateSkill } from '../../hooks/use-create-skill';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
-import { createInitialStructure, updateRootFolderName } from './skill-file-tree';
+import { createInitialStructure, updateRootFolderName } from './skill-file-tree-utils';
 import { SkillFolder } from './skill-folder';
 import { useWorkspaces } from '@/domains/workspace/hooks';
 

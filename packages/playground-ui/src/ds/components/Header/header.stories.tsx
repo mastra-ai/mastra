@@ -9,7 +9,6 @@ const meta: Meta<typeof Header> = {
   parameters: {
     layout: 'fullscreen',
   },
-  tags: ['autodocs'],
   argTypes: {
     border: {
       control: { type: 'boolean' },

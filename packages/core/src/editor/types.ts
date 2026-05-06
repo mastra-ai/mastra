@@ -182,6 +182,7 @@ export interface IEditorAgentNamespace {
   applyStoredOverrides(
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
+    requestContext?: RequestContext,
   ): Promise<Agent>;
 }
 

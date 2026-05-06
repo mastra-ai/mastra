@@ -87,6 +87,9 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   /** When true, processOutputStream also receives `data-*` chunks. Default: false. */
   processDataParts?: boolean
 
+  /** Callback invoked when this processor detects a violation, regardless of strategy. */
+  onViolation?: (violation: ProcessorViolation) => void | Promise<void>
+
   processInput?(
     args: ProcessInputArgs<TTripwireMetadata>,
   ): Promise<ProcessInputResult> | ProcessInputResult
@@ -149,6 +152,13 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
     type: 'boolean',
     description:
       'When true, the processOutputStream method also receives `data-*` chunks emitted by tools via writer.custom(). Defaults to false.',
+    isOptional: true,
+  },
+  {
+    name: 'onViolation',
+    type: '(violation: ProcessorViolation) => void | Promise<void>',
+    description:
+      'Optional callback invoked when the processor detects a policy violation, regardless of strategy (block or warn). Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught to prevent interfering with processor logic. The violation object contains processorId, message, and a processor-specific detail field.',
     isOptional: true,
   },
 ]}

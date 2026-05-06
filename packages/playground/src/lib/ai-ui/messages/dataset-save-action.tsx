@@ -2,7 +2,6 @@ import { useMessage } from '@assistant-ui/react';
 import {
   Button,
   CodeEditor,
-  IconButton,
   Label,
   Select,
   SelectTrigger,
@@ -22,7 +21,7 @@ import {
 } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useDatasetSaveContext } from '../context/dataset-save-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -63,7 +62,7 @@ function DatasetSaveDialog({
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
-  const datasets = data?.datasets ?? [];
+  const datasets = useMemo(() => data?.datasets ?? [], [data?.datasets]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedDatasetId) {
@@ -205,15 +204,15 @@ function DatasetSaveActionInner() {
 
   return (
     <>
-      <IconButton
-        variant="light"
-        size="md"
+      <Button
+        variant="default"
+        size="icon-md"
         tooltip="Save to dataset"
         className="bg-transparent text-neutral3 hover:text-neutral6"
         onClick={handleClick}
       >
         <DatabaseIcon className="h-4 w-4" />
-      </IconButton>
+      </Button>
       <DatasetSaveDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

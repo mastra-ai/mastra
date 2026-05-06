@@ -243,6 +243,18 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
       });
     });
 
+    describe('deleteTask', () => {
+      it('deletes a single task synchronously', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ id: 'delete-one' });
+        await bgStorage.createTask(task);
+
+        await bgStorage.deleteTask(task.id);
+
+        expect(await bgStorage.getTask(task.id)).toBeNull();
+      });
+    });
+
     describe('deleteTasks', () => {
       it('deletes tasks matching status filter', async () => {
         if (!bgStorage) return;

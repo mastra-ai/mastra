@@ -36,6 +36,12 @@ interface StreamStepOptions {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
+  /**
+   * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
+   * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
+   * drives continuation from outside the loop.
+   */
+  skipBgTaskWait?: boolean;
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -57,6 +63,7 @@ export function createStreamStep<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
+  skipBgTaskWait,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -96,6 +103,7 @@ export function createStreamStep<OUTPUT = undefined>({
           backgroundTaskManager,
           agentBackgroundConfig,
           backgroundTaskManagerConfig: backgroundTaskManager?.config,
+          skipBgTaskWait,
         },
         agentId,
         agentName,

@@ -351,6 +351,31 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     ```
   </TabItem>
 
+  <TabItem value="apify" label="Apify">
+    [Apify](https://apify.com) is the largest marketplace of tools for AI, with thousands of ready-made [Actors](https://apify.com/store) to extract real-time data from any website, track competitors, generate leads, analyze sentiment, or orchestrate your apps. Connect your agent through the [Apify MCP Server](https://mcp.apify.com).
+
+    ```typescript
+    import { MCPClient } from '@mastra/mcp'
+
+    export const mcp = new MCPClient({
+      servers: {
+        apify: {
+          url: new URL('https://mcp.apify.com'),
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${process.env.APIFY_TOKEN}`,
+            },
+          },
+        },
+      },
+    })
+    ```
+
+    Get your API token from the [Apify Console](https://console.apify.com/settings/integrations) and store it as `APIFY_TOKEN` in your environment.
+
+    To pick specific Actors and tools, use the [Apify MCP server configurator](https://mcp.apify.com) and copy the generated URL.
+  </TabItem>
+
   <TabItem value="ampersand" label="Ampersand">
     [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
 
@@ -403,8 +428,19 @@ MCP servers can be discovered through registries. Here's how to connect to some 
   </TabItem>
 </Tabs>
 
+## MCP Apps
+
+MCP servers can serve interactive HTML UIs via the MCP Apps extension. Tools with associated `ui://` resources render sandboxed iframes in Studio — both on tool detail pages and inline in agent chat. The app iframe can call server tools and inject messages into the conversation.
+
+:::note
+
+Visit [MCP Apps](/docs/mcp/mcp-apps) for setup instructions and the app bridge API.
+
+:::
+
 ## Related
 
+- [MCP Apps](/docs/mcp/mcp-apps)
 - [Using Tools](/docs/agents/using-tools)
 - [MCPClient](/reference/tools/mcp-client)
 - [MCPServer](/reference/tools/mcp-server)

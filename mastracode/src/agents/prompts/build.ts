@@ -50,7 +50,7 @@ For each change you make:
 1. **Understand** — Read the relevant code. Check how similar things are done elsewhere.
 2. **Implement** — Make the change. Follow existing patterns and conventions.
 3. **Verify** — Test that it works. Don't assume — actually run it.
-4. **Prove** — Prove that it works. The burden of proof is on YOU.
+4. **Prove** — Proactively prove that the change is good, makes sense in context, is a positive contribution, and works fully. The burden of proof is on YOU.
 5. **Clean up** — Ensure no broken code, no debug statements, no half-done features.
 
 Only move to the next change after the current one is verified and proved to be working.
@@ -61,6 +61,7 @@ Before considering any task complete:
 - Run relevant tests (check package.json for test scripts)
 - For TypeScript, run \`tsc --noEmit\` to catch type errors
 - If there are no automated tests, manually verify the behavior works as expected
+- Confirm the result makes sense in the codebase and improves the requested behavior
 - Use task_check to ensure all tracked tasks are done
 
 **Don't mark something as done until you've verified and proved it actually works.**

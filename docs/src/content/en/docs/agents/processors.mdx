@@ -375,6 +375,14 @@ See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-
 
 Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.
 
+By default, `ToolCallFilter` filters the initial input before the agent loop starts. Use `filterAfterToolSteps` to also filter during each loop step while preserving recent tool-producing steps.
+
+```typescript
+new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+```
+
 See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
 
 ### `ToolSearchProcessor`
@@ -656,6 +664,42 @@ The retry mechanism:
 - Replays the step with the abort reason added as context for the LLM
 - Tracks retry count via the `retryCount` parameter
 - Respects `maxProcessorRetries` limit on the agent
+
+### Violation callbacks
+
+All processors expose an `onViolation` property that fires whenever a policy violation is detected — both when `abort()` is called (block strategy) and when a processor issues a warning (warn strategy). Use it for alerting, logging, or side effects without affecting the processor's main logic:
+
+```typescript title="src/mastra/processors/violation-logging.ts"
+import { ModerationProcessor, CostGuardProcessor } from '@mastra/core/processors'
+
+const moderation = new ModerationProcessor({
+  model: 'openai/gpt-5-nano',
+  strategy: 'block',
+})
+
+moderation.onViolation = ({ processorId, message, detail }) => {
+  // Log to external monitoring, send alerts, update dashboards
+  monitor.track('processor_violation', { processorId, message, detail })
+}
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 10.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ processorId, message, detail }) => {
+  alertSystem.notify(`[${processorId}] ${message}`)
+}
+```
+
+The callback receives a `ProcessorViolation` object with:
+
+- `processorId`: The ID of the processor that detected the violation
+- `message`: A human-readable description of what was violated
+- `detail`: Processor-specific metadata (e.g. cost usage, detected PII types, moderation categories)
+
+`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are silently caught to prevent interfering with the processor pipeline.
 
 ### Abort and tripwire chunks
 

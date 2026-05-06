@@ -19,9 +19,13 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateLogsArgs,
@@ -48,6 +52,7 @@ import type {
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -331,6 +336,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    try {
+      return await tracingOps.getSpans(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId: args.traceId, count: args.spanIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     try {
       return await traceRootsOps.getRootSpan(this.#client, args);
@@ -390,6 +412,22 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    try {
+      return await tracingOps.listBranches(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_BRANCHES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -507,6 +545,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    try {
+      return await scoresOps.getScoreById(this.#client, scoreId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SCORE_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { scoreId },
         },
         error,
       );

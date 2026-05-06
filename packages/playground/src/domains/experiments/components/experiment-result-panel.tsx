@@ -13,16 +13,7 @@ import {
   Notice,
 } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
-import {
-  FileOutputIcon,
-  Calendar1Icon,
-  PlayIcon,
-  FileCodeIcon,
-  PanelRightIcon,
-  OctagonAlertIcon,
-  TagIcon,
-  XIcon,
-} from 'lucide-react';
+import { FileOutputIcon, Calendar1Icon, PlayIcon, FileCodeIcon, PanelRightIcon, TagIcon, XIcon } from 'lucide-react';
 
 const scoreColumns = [
   { name: 'scorer', label: 'Scorer', size: '1fr' },
@@ -89,10 +80,8 @@ export function ExperimentResultPanel({
         </MainHeader>
 
         {hasError && (
-          <Notice variant="destructive">
-            <OctagonAlertIcon />
+          <Notice variant="destructive" title="Error">
             <Notice.Message>
-              <strong>Error: </strong>
               {formatValue(
                 result?.error && typeof result.error === 'object'
                   ? (result.error as Record<string, unknown>).message

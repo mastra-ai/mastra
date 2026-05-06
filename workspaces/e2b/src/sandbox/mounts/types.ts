@@ -4,15 +4,16 @@
 
 import type { Sandbox } from 'e2b';
 
-export const LOG_PREFIX = '[@mastra/e2b]';
-
+import type { E2BAzureBlobMountConfig } from './azure';
 import type { E2BGCSMountConfig } from './gcs';
 import type { E2BS3MountConfig } from './s3';
+
+export const LOG_PREFIX = '[@mastra/e2b]';
 
 /**
  * Union of mount configs supported by E2B sandbox.
  */
-export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig;
+export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig | E2BAzureBlobMountConfig;
 
 /**
  * Context for mount operations.
@@ -57,6 +58,20 @@ export function validateEndpoint(endpoint: string): void {
     new URL(endpoint);
   } catch {
     throw new Error(`Invalid endpoint URL: "${endpoint}"`);
+  }
+}
+
+/**
+ * Validate an AWS region (or R2's "auto") before interpolating into shell commands.
+ * Accepts standard AWS region codes like "us-east-1", "ap-northeast-1", and "auto".
+ */
+const SAFE_REGION = /^[a-z0-9-]{2,32}$/;
+
+export function validateRegion(region: unknown): asserts region is string {
+  if (typeof region !== 'string' || !SAFE_REGION.test(region)) {
+    throw new Error(
+      `Invalid region: ${JSON.stringify(region)}. Region must be a string of lowercase alphanumeric or hyphens (e.g., "us-east-1", "ap-northeast-1", "auto").`,
+    );
   }
 }
 

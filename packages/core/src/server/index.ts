@@ -62,6 +62,14 @@ type RegisterApiRouteOptions<P extends string> = {
    * When false, skips Mastra auth for this route (defaults to true)
    */
   requiresAuth?: boolean;
+  /**
+   * Explicit RBAC permission for the route.
+   */
+  requiresPermission?: ApiRoute['requiresPermission'];
+  /**
+   * Optional FGA configuration for resource-level authorization.
+   */
+  fga?: ApiRoute['fga'];
 };
 
 function validateOptions<P extends string>(
@@ -121,6 +129,8 @@ export function registerApiRoute<P extends string>(
     openapi: options.openapi,
     middleware: options.middleware,
     requiresAuth: options.requiresAuth,
+    requiresPermission: options.requiresPermission,
+    fga: options.fga,
   } as unknown as ValidatePath<P, ApiRoute>;
 }
 

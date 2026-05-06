@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -143,6 +144,7 @@ export class ReflectorRunner {
     resourceId?: string,
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
+  private mastra?: Mastra;
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -165,6 +167,7 @@ export class ReflectorRunner {
     ) => Promise<void>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
+    mastra?: Mastra;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -177,15 +180,24 @@ export class ReflectorRunner {
     this.persistMarkerToStorage = opts.persistMarkerToStorage;
     this.persistMarkerToMessage = opts.persistMarkerToMessage;
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
+    this.mastra = opts.mastra;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
   }
 
   private createAgent(model: ConcreteReflectionModel): Agent {
-    return new Agent({
+    const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
       model,
     });
+    if (this.mastra) {
+      agent.__registerMastra(this.mastra);
+    }
+    return agent;
   }
 
   private getObservationMarkerConfig(record?: ObservationalMemoryRecord): ObservationMarkerConfig {
@@ -601,14 +613,23 @@ export class ReflectorRunner {
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
-      try {
-        await Promise.race([
-          asyncOp,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-        ]);
-      } catch {
-        // Timeout or error - proceed with what we have
+      // TTL and provider-change triggers should not block on in-progress
+      // reflection buffering. The async op will finish in the background
+      // and the buffered result will be available for activation on the next turn.
+      if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: async op in progress, not blocking for ${activationMetadata.triggeredBy} trigger`,
+        );
+      } else {
+        omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
+        try {
+          await Promise.race([
+            asyncOp,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
+          ]);
+        } catch {
+          // Timeout or error - proceed with what we have
+        }
       }
     }
 
@@ -870,6 +891,13 @@ export class ReflectorRunner {
           `[OM:reflect] blockAfter exceeded (${observationTokens} >= ${this.reflectionConfig.blockAfter}), falling through to sync reflection`,
         );
       } else {
+        const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
+        if (observationTokens < activationPoint) {
+          omDebug(
+            `[OM:reflect] skipping async reflection — observationTokens (${observationTokens}) below activation point (${activationPoint}), triggered by ${activationTriggeredBy}`,
+          );
+          return;
+        }
         omDebug(
           `[OM:reflect] async activation failed, no blockAfter or below it (obsTokens=${observationTokens}, blockAfter=${this.reflectionConfig.blockAfter}) — starting background reflection`,
         );

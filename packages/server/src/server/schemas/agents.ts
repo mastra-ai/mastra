@@ -300,6 +300,9 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   threadId: z.string().optional(),
 });
 
+export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
+  maxIdleMs: z.number().int().positive().optional(),
+});
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
@@ -490,3 +493,21 @@ export const enhanceInstructionsResponseSchema = z.object({
   explanation: z.string().describe('Explanation of the changes made'),
   new_prompt: z.string().describe('The enhanced instructions'),
 });
+
+// ============================================================================
+// Observe (Resumable Streams) Schemas
+// ============================================================================
+
+/**
+ * Body schema for observing an agent stream
+ * Used to reconnect to an existing stream and receive missed events
+ */
+export const observeAgentBodySchema = z.object({
+  runId: z.string().describe('The run ID to observe/reconnect to'),
+  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+});
+
+/**
+ * Response schema for observe endpoint (streaming response)
+ */
+export const observeAgentResponseSchema = z.any(); // Streaming response

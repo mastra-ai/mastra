@@ -226,7 +226,7 @@ describe('MCP Tool Tracing', () => {
         originalTool: testTool as any,
         options: {
           name: 'test-tool',
-          requireApproval: needsApprovalFn as any,
+          requireApproval: needsApprovalFn,
         },
       });
 

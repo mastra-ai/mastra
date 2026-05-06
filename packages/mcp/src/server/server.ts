@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -16,6 +17,7 @@ import { createTool, isValidationError } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
+import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -46,6 +48,7 @@ import type {
   ElicitRequest,
   LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
@@ -53,7 +56,7 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt } from './types';
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt, AppResources } from './types';
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -96,6 +99,7 @@ export class MCPServer extends MCPServerBase {
   private resourceOptions?: MCPServerResources;
   private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
+  private jsonSchemaValidator?: jsonSchemaValidator;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
 
@@ -236,22 +240,91 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
+  constructor(
+    opts: MCPServerConfig & {
+      resources?: MCPServerResources;
+      prompts?: MCPServerPrompts;
+      /**
+       * Optional MCP App resources configuration.
+       *
+       * Registers `ui://` resources that serve interactive HTML UIs as defined
+       * by the MCP Apps extension (SEP-1865). These are automatically merged
+       * into the resource system and served alongside any user-provided resources.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   appResources: {
+       *     'ui://weather/dashboard': {
+       *       name: 'Weather Dashboard',
+       *       html: '<html>...</html>',
+       *       meta: { csp: { connectDomains: ['https://api.weather.com'] } },
+       *     },
+       *   },
+       * });
+       * ```
+       */
+      appResources?: AppResources;
+      /**
+       * Optional custom JSON Schema validator forwarded to the underlying MCP
+       * SDK server. Use this to opt into a non-default validator
+       * implementation.
+       *
+       * Pass `CfWorkerJsonSchemaValidator` (from
+       * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+       * Cloudflare Workers / V8 isolates: the default
+       * `AjvJsonSchemaValidator` compiles validators with `new Function(...)`,
+       * which workerd refuses to evaluate when a registered tool has an
+       * `outputSchema`.
+       *
+       * @example
+       * ```typescript
+       * import { MCPServer } from '@mastra/mcp';
+       * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+       *
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+       * });
+       * ```
+       */
+      jsonSchemaValidator?: jsonSchemaValidator;
+    },
+  ) {
     super(opts);
-    this.resourceOptions = opts.resources;
+
+    // Merge appResources into the resource system
+    this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
     this.promptOptions = opts.prompts;
+    this.jsonSchemaValidator = opts.jsonSchemaValidator;
 
     const capabilities: ServerCapabilities = {
       tools: {},
       logging: { enabled: true },
     };
 
-    if (opts.resources) {
+    if (this.resourceOptions) {
       capabilities.resources = { subscribe: true, listChanged: true };
     }
 
     if (opts.prompts) {
       capabilities.prompts = { listChanged: true };
+    }
+
+    // Advertise MCP Apps extension if any tool has UI metadata or appResources are configured
+    const hasUiTools = Object.values(this.convertedTools).some(
+      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+    );
+    if (hasUiTools || opts.appResources) {
+      capabilities.extensions = {
+        ...capabilities.extensions,
+        'io.modelcontextprotocol/ui': {},
+      };
     }
 
     this.server = new Server(
@@ -262,6 +335,7 @@ export class MCPServer extends MCPServerBase {
       {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
+        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
       },
     );
 
@@ -374,6 +448,100 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Merges appResources into the resource system alongside any user-provided resources.
+   *
+   * App resources are auto-registered as `ui://` resources with the MCP Apps MIME type.
+   * If the user also provides a `resources` config, the two are merged — user callbacks
+   * take precedence for overlapping URIs.
+   */
+  private mergeAppResources(
+    userResources: MCPServerResources | undefined,
+    appResources: AppResources | undefined,
+  ): MCPServerResources | undefined {
+    if (!appResources || Object.keys(appResources).length === 0) {
+      return userResources;
+    }
+
+    // Resolve HTML content for all app resources (read files once at startup)
+    const resolvedAppResources = new Map<string, { resource: Resource; html: string }>();
+    for (const [uri, appResource] of Object.entries(appResources)) {
+      let html: string;
+      if (appResource.html) {
+        html = appResource.html;
+      } else if (appResource.htmlPath) {
+        html = readFileSync(appResource.htmlPath, 'utf-8');
+      } else {
+        this.logger.warn(`App resource '${uri}' has neither html nor htmlPath — skipping`);
+        continue;
+      }
+
+      const resource: Resource = {
+        uri,
+        name: appResource.name,
+        ...(appResource.description ? { description: appResource.description } : {}),
+        mimeType: RESOURCE_MIME_TYPE,
+        ...(appResource.meta ? { _meta: { ui: appResource.meta } } : {}),
+      };
+
+      resolvedAppResources.set(uri, { resource, html });
+    }
+
+    if (resolvedAppResources.size === 0) {
+      return userResources;
+    }
+
+    // Build merged resource callbacks
+    const appListResources = async () => {
+      return Array.from(resolvedAppResources.values()).map(r => r.resource);
+    };
+
+    const appGetResourceContent = async ({ uri }: { uri: string }) => {
+      const appRes = resolvedAppResources.get(uri);
+      if (appRes) {
+        return { text: appRes.html };
+      }
+      throw new Error(`App resource not found: ${uri}`);
+    };
+
+    if (!userResources) {
+      return {
+        listResources: appListResources,
+        getResourceContent: appGetResourceContent,
+      };
+    }
+
+    // Merge: user resources take precedence, app resources are appended
+    return {
+      listResources: async ({ extra }) => {
+        const userResourceList = await userResources.listResources({ extra });
+        const appResourceList = await appListResources();
+        // Filter out app resources that conflict with user-defined ones
+        const userUris = new Set(userResourceList.map(r => r.uri));
+        const nonConflicting = appResourceList.filter(r => !userUris.has(r.uri));
+        return [...userResourceList, ...nonConflicting];
+      },
+      getResourceContent: async ({ uri, extra }) => {
+        // Try user resources first, fall back to app resources
+        const appRes = resolvedAppResources.get(uri);
+        if (appRes) {
+          // Check if user also defines this URI — if so, prefer user
+          try {
+            const userResourceList = await userResources.listResources({ extra });
+            if (userResourceList.some(r => r.uri === uri)) {
+              return userResources.getResourceContent({ uri, extra });
+            }
+          } catch {
+            // If user listResources fails, fall through to app resource
+          }
+          return { text: appRes.html };
+        }
+        return userResources.getResourceContent({ uri, extra });
+      },
+      ...(userResources.resourceTemplates ? { resourceTemplates: userResources.resourceTemplates } : {}),
+    };
+  }
+
+  /**
    * Creates a new Server instance configured with all handlers for HTTP sessions.
    * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
    */
@@ -391,6 +559,20 @@ export class MCPServer extends MCPServerBase {
       capabilities.prompts = { listChanged: true };
     }
 
+    // Re-apply extension capabilities for the new server instance
+    const hasUiTools = Object.values(this.convertedTools).some(
+      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+    );
+    if (hasUiTools || this.resourceOptions) {
+      const hasUiResources = this.definedResources?.some(r => r.uri.startsWith('ui://'));
+      if (hasUiTools || hasUiResources) {
+        capabilities.extensions = {
+          ...capabilities.extensions,
+          'io.modelcontextprotocol/ui': {},
+        };
+      }
+    }
+
     const serverInstance = new Server(
       {
         name: this.name,
@@ -399,6 +581,7 @@ export class MCPServer extends MCPServerBase {
       {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
+        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
       },
     );
 
@@ -414,9 +597,11 @@ export class MCPServer extends MCPServerBase {
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    serverInstance.setRequestHandler(ListToolsRequestSchema, async () => {
+    serverInstance.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
+      const proxiedContext = this.createProxiedRequestContext(extra);
+      const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
-        tools: Object.values(this.convertedTools).map(tool => {
+        tools: tools.map(([, tool]) => {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
@@ -431,7 +616,17 @@ export class MCPServer extends MCPServerBase {
           }
           const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
           if (toolMeta) {
-            toolSpec._meta = toolMeta;
+            // Normalize UI metadata for backward compatibility with older hosts:
+            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
+            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
+            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
+            if (uiMeta?.resourceUri && !legacyUri) {
+              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+            } else if (legacyUri && !uiMeta?.resourceUri) {
+              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
+            } else {
+              toolSpec._meta = toolMeta;
+            }
           }
           return toolSpec;
         }),
@@ -517,6 +712,8 @@ export class MCPServer extends MCPServerBase {
             throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
           },
         };
+
+        await this.enforceToolExecutionFGA(request.params.name, proxiedContext);
 
         const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 
@@ -1879,16 +2076,46 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  public getToolListInfo(): {
-    tools: Array<{
-      name: string;
-      description?: string;
-      inputSchema: any;
-      outputSchema?: any;
-      toolType?: MCPToolType;
-      _meta?: Record<string, unknown>;
-    }>;
-  } {
+  public getToolListInfo(requestContext?: RequestContext):
+    | {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }
+    | Promise<{
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (fgaProvider && requestContext) {
+      return this.getAuthorizedConvertedToolEntries(requestContext).then(tools => ({
+        tools: tools.map(([toolId, tool]) => ({
+          id: toolId,
+          name: tool.id || toolId,
+          description: tool.description,
+          inputSchema: this.convertSchema(tool.parameters),
+          outputSchema: this.convertSchema(tool.outputSchema),
+          toolType: tool.mcp?.toolType,
+          _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
+        })),
+      }));
+    }
+
+    if (fgaProvider && !requestContext) {
+      return { tools: [] };
+    }
+
     this.logger.debug('Getting tool list', { server: this.name });
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
@@ -1896,7 +2123,7 @@ export class MCPServer extends MCPServerBase {
         name: tool.id || toolId,
         description: tool.description,
         inputSchema: this.convertSchema(tool.parameters),
-        outputSchema: this.convertSchema(tool.parameters),
+        outputSchema: this.convertSchema(tool.outputSchema),
         toolType: tool.mcp?.toolType,
         _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
       })),
@@ -1947,6 +2174,68 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  private createProxiedRequestContext(extra?: unknown): RequestContext {
+    const proxiedContext = new RequestContext();
+    if (extra && typeof extra === 'object') {
+      Object.entries(extra as Record<string, unknown>).forEach(([key, value]) => {
+        proxiedContext.set(key, value);
+      });
+    }
+    return proxiedContext;
+  }
+
+  private async getAuthorizedConvertedToolEntries(
+    requestContext: RequestContext,
+  ): Promise<Array<[string, (typeof this.convertedTools)[string]]>> {
+    const entries = Object.entries(this.convertedTools);
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return entries;
+    }
+
+    const user = requestContext.get('user');
+    if (!user) {
+      return [];
+    }
+
+    const accessible = await Promise.all(
+      entries.map(async ([toolId, tool]) => {
+        try {
+          await this.enforceToolExecutionFGA(toolId, requestContext);
+          return [toolId, tool] as [string, (typeof this.convertedTools)[string]];
+        } catch (error) {
+          if (error instanceof Error && error.name === 'FGADeniedError') {
+            return null;
+          }
+          throw error;
+        }
+      }),
+    );
+
+    return accessible.filter((entry): entry is [string, (typeof this.convertedTools)[string]] => entry !== null);
+  }
+
+  private async enforceToolExecutionFGA(toolId: string, requestContext?: RequestContext): Promise<void> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return;
+    }
+
+    const { checkFGA, FGADeniedError, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const resourceId = JSON.stringify([this.id, toolId]);
+    const user = requestContext?.get('user');
+    if (!user) {
+      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+    }
+
+    await checkFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'tool', id: resourceId },
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+    });
+  }
+
   /**
    * Executes a specific tool provided by this MCP server.
    *
@@ -1972,7 +2261,7 @@ export class MCPServer extends MCPServerBase {
   public async executeTool(
     toolId: string,
     args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string },
+    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
     let validatedArgs = args;
@@ -2051,7 +2340,9 @@ export class MCPServer extends MCPServerBase {
       const finalExecutionContext = {
         messages: executionContext?.messages || [],
         toolCallId: executionContext?.toolCallId || randomUUID(),
+        requestContext: executionContext?.requestContext,
       };
+      await this.enforceToolExecutionFGA(toolId, finalExecutionContext.requestContext);
       const result = await tool.execute(validatedArgs, finalExecutionContext);
       this.logger.info('Tool executed successfully', { tool: toolId });
       return result;
@@ -2071,5 +2362,58 @@ export class MCPServer extends MCPServerBase {
       this.logger.trackException(mastraError);
       throw mastraError;
     }
+  }
+
+  /**
+   * Reads the content of a resource by URI.
+   *
+   * Used by the Studio API to proxy `ui://` resource reads for MCP Apps rendering.
+   *
+   * @param uri - The resource URI to read (e.g. `ui://weather/dashboard`)
+   * @returns Promise resolving to the resource content
+   */
+  public async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    if (!this.resourceOptions?.getResourceContent) {
+      throw new MastraError({
+        id: 'MCP_SERVER_RESOURCES_NOT_CONFIGURED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { uri },
+      });
+    }
+
+    const extra = {} as any;
+    const result = await this.resourceOptions.getResourceContent({ uri, extra });
+    const contents = Array.isArray(result) ? result : [result];
+
+    return {
+      contents: contents.map(c => ({
+        uri,
+        ...('text' in c && c.text !== undefined ? { text: c.text } : {}),
+        ...('blob' in c && c.blob !== undefined ? { blob: c.blob } : {}),
+      })),
+    };
+  }
+
+  /**
+   * Lists all resources available on this MCP server.
+   *
+   * Used by the Studio API to discover `ui://` resources for MCP Apps.
+   *
+   * @returns Promise resolving to the list of resources
+   */
+  public async listResources(): Promise<{ resources: Resource[] }> {
+    if (!this.resourceOptions?.listResources) {
+      return { resources: [] };
+    }
+
+    const extra = {} as any;
+    if (this.definedResources) {
+      return { resources: this.definedResources };
+    }
+
+    const resources = await this.resourceOptions.listResources({ extra });
+    this.definedResources = resources;
+    return { resources };
   }
 }

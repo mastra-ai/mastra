@@ -896,7 +896,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         },
                       ],
                     },
-                    "createdAt": 2024-01-01T00:00:00.001Z,
+                    "createdAt": 2024-01-01T00:00:00.000Z,
                     "id": "1234",
                     "role": "assistant",
                   },
@@ -930,7 +930,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "createdAt": 2024-01-01T00:00:00.000Z,
                       "modelId": "mock-model-id",
                       "provider": "mock-provider",
                       "structuredOutput": {
@@ -1000,7 +1000,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                             },
                           ],
                         },
-                        "createdAt": 2024-01-01T00:00:00.001Z,
+                        "createdAt": 2024-01-01T00:00:00.000Z,
                         "id": "1234",
                         "role": "assistant",
                       },
@@ -1034,7 +1034,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "createdAt": 2024-01-01T00:00:00.000Z,
                           "modelId": "mock-model-id",
                           "provider": "mock-provider",
                           "structuredOutput": {
@@ -1083,6 +1083,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolCalls": [],
               "toolResults": [],
               "totalUsage": {
+                "cacheCreationInputTokens": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
@@ -1214,7 +1215,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         },
                       ],
                     },
-                    "createdAt": 2024-01-01T00:00:00.001Z,
+                    "createdAt": 2024-01-01T00:00:00.000Z,
                     "id": "1234",
                     "role": "assistant",
                   },
@@ -1248,7 +1249,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "createdAt": 2024-01-01T00:00:00.000Z,
                       "modelId": "mock-model-id",
                       "provider": "mock-provider",
                     },
@@ -1308,7 +1309,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                             },
                           ],
                         },
-                        "createdAt": 2024-01-01T00:00:00.001Z,
+                        "createdAt": 2024-01-01T00:00:00.000Z,
                         "id": "1234",
                         "role": "assistant",
                       },
@@ -1342,7 +1343,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "createdAt": 2024-01-01T00:00:00.000Z,
                           "modelId": "mock-model-id",
                           "provider": "mock-provider",
                         },
@@ -1388,6 +1389,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolCalls": [],
               "toolResults": [],
               "totalUsage": {
+                "cacheCreationInputTokens": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
@@ -1519,7 +1521,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         },
                       ],
                     },
-                    "createdAt": 2024-01-01T00:00:00.001Z,
+                    "createdAt": 2024-01-01T00:00:00.000Z,
                     "id": "1234",
                     "role": "assistant",
                   },
@@ -1553,7 +1555,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "id": "1234",
                     "metadata": {
-                      "createdAt": 2024-01-01T00:00:00.001Z,
+                      "createdAt": 2024-01-01T00:00:00.000Z,
                       "modelId": "mock-model-id",
                       "provider": "mock-provider",
                     },
@@ -1613,7 +1615,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                             },
                           ],
                         },
-                        "createdAt": 2024-01-01T00:00:00.001Z,
+                        "createdAt": 2024-01-01T00:00:00.000Z,
                         "id": "1234",
                         "role": "assistant",
                       },
@@ -1647,7 +1649,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "id": "1234",
                         "metadata": {
-                          "createdAt": 2024-01-01T00:00:00.001Z,
+                          "createdAt": 2024-01-01T00:00:00.000Z,
                           "modelId": "mock-model-id",
                           "provider": "mock-provider",
                         },
@@ -1693,6 +1695,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolCalls": [],
               "toolResults": [],
               "totalUsage": {
+                "cacheCreationInputTokens": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,

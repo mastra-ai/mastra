@@ -105,13 +105,14 @@ export function WorkflowTrigger({
   const streamResultToUse = result ?? streamResult;
   const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
+  const setWorkflowResult = setResult;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
       if (!workflow) return;
 
       setCancelResponse(null);
-      setResult(null);
+      setWorkflowResult(null);
 
       const run = await createWorkflowRun({ workflowId });
 
@@ -156,13 +157,13 @@ export function WorkflowTrigger({
       setInnerRunId(paramsRunId);
       setContextRunId(paramsRunId);
     }
-  }, [paramsRunId]);
+  }, [observeWorkflowStream, paramsRunId, setContextRunId, workflowId]);
 
   useEffect(() => {
     if (streamResult) {
-      setResult(streamResult);
+      setWorkflowResult(streamResult);
     }
-  }, [streamResult]);
+  }, [setWorkflowResult, streamResult]);
 
   if (isLoading) {
     return (
@@ -246,7 +247,7 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
 
   return (
     <>
-      <Button variant="light" onClick={() => setOpen(true)} className="w-full truncate">
+      <Button variant="default" onClick={() => setOpen(true)} className="w-full truncate">
         <Icon>
           <Braces className="text-neutral3" />
         </Icon>

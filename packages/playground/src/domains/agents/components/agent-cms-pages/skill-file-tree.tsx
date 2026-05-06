@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { IconButton, TooltipProvider, Tree } from '@mastra/playground-ui';
+import { Button, TooltipProvider, Tree } from '@mastra/playground-ui';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -16,56 +16,6 @@ export interface SkillFileTreeProps {
 
 // Well-known IDs for structural nodes
 const STRUCTURAL_IDS = new Set(['root', 'skill-md', 'license-md', 'references', 'scripts', 'assets']);
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-export function createInitialStructure(name: string): InMemoryFileNode[] {
-  const slug = slugify(name) || 'untitled';
-  return [
-    {
-      id: 'root',
-      name: slug,
-      type: 'folder',
-      children: [
-        { id: 'skill-md', name: 'SKILL.md', type: 'file', content: '' },
-        { id: 'license-md', name: 'LICENSE.md', type: 'file', content: '' },
-        { id: 'references', name: 'references', type: 'folder', children: [] },
-        { id: 'scripts', name: 'scripts', type: 'folder', children: [] },
-        { id: 'assets', name: 'assets', type: 'folder', children: [] },
-      ],
-    },
-  ];
-}
-
-export function updateRootFolderName(files: InMemoryFileNode[], name: string): InMemoryFileNode[] {
-  const slug = slugify(name) || 'untitled';
-  return files.map(node => (node.id === 'root' ? { ...node, name: slug } : node));
-}
-
-export function extractSkillInstructions(files: InMemoryFileNode[]): string {
-  const root = files.find(n => n.id === 'root');
-  if (!root?.children) return '';
-  const skillMd = root.children.find(n => n.id === 'skill-md');
-  return skillMd?.content ?? '';
-}
-
-export function extractSkillLicense(files: InMemoryFileNode[]): string | undefined {
-  const root = files.find(n => n.id === 'root');
-  if (!root?.children) return undefined;
-  const licenseMd = root.children.find(n => n.id === 'license-md');
-  const content = licenseMd?.content?.trim();
-  return content || undefined;
-}
-
-export function isImageContent(content: string | undefined): boolean {
-  return !!content && content.startsWith('data:image/');
-}
 
 function getFileIcon(name: string): ReactNode {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -138,24 +88,12 @@ function containsNode(nodes: InMemoryFileNode[], targetId: string): boolean {
   return false;
 }
 
-export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, content: string): InMemoryFileNode[] {
-  return nodes.map(node => {
-    if (node.id === nodeId) {
-      return { ...node, content };
-    }
-    if (node.children) {
-      return { ...node, children: updateNodeContent(node.children, nodeId, content) };
-    }
-    return node;
-  });
-}
-
 function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () => void }) {
   return (
     <span className="opacity-0 group-hover:opacity-100">
-      <IconButton size="sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
+      <Button size="icon-sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
         <Plus />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -163,12 +101,12 @@ function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () =>
 function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAddFolder: () => void }) {
   return (
     <span className="flex opacity-0 group-hover:opacity-100">
-      <IconButton size="sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
+      <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
         <Plus />
-      </IconButton>
-      <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
+      </Button>
+      <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
         <FolderPlus />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -176,8 +114,8 @@ function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAd
 function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id: string) => void }) {
   return (
     <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-      <IconButton
-        size="sm"
+      <Button
+        size="icon-sm"
         variant="ghost"
         tooltip="Delete file"
         onClick={e => {
@@ -186,7 +124,7 @@ function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id:
         }}
       >
         <Trash2 />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -225,14 +163,14 @@ function UserNodeList({
               actions={
                 !readOnly && (
                   <span className="flex opacity-0 group-hover:opacity-100">
-                    <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
+                    <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
                       <Plus />
-                    </IconButton>
-                    <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
+                    </Button>
+                    <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
                       <FolderPlus />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
+                    </Button>
+                    <Button
+                      size="icon-sm"
                       variant="ghost"
                       tooltip="Delete folder"
                       onClick={e => {
@@ -241,7 +179,7 @@ function UserNodeList({
                       }}
                     >
                       <Trash2 />
-                    </IconButton>
+                    </Button>
                   </span>
                 )
               }

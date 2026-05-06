@@ -14,9 +14,9 @@ import type { HTMLAttributes } from 'react';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { useTheme } from '@/ds/components/ThemeProvider';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
-import { useIsDarkMode } from '@/store/playground-store';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 
@@ -217,7 +217,7 @@ function buildLightTheme(): Extension {
 }
 
 export const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 
