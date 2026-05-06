@@ -446,17 +446,6 @@ export interface Config<
    * - `MastraWorker[]`: Use exactly these workers
    */
   workers?: MastraWorker[] | false;
-  /**
-   * Shared secret used to authenticate calls from standalone OrchestrationWorker
-   * instances to the server's internal step-execution endpoint.
-   *
-   * When set, the server will reject any step-execution request that does not
-   * carry a matching `workerToken` field in its body. The same value must be
-   * available to the worker process via `MASTRA_WORKER_SECRET`.
-   *
-   * Falls back to `process.env.MASTRA_WORKER_SECRET` when omitted.
-   */
-  workerSecret?: string;
 }
 
 /**
@@ -550,7 +539,6 @@ export class Mastra<
   #channels?: TChannels;
   #environment?: string;
   #workers: MastraWorker[] = [];
-  #workerSecret?: string;
   #workerFilter?: Set<string>;
 
   #events: {
@@ -581,16 +569,6 @@ export class Mastra<
 
   getWorker<T extends MastraWorker>(name: string): T | undefined {
     return this.#workers.find(w => w.name === name) as T | undefined;
-  }
-
-  /**
-   * Shared secret used to authenticate calls to the internal step-execution
-   * endpoint from standalone OrchestrationWorker instances. Returns
-   * `undefined` when no secret is configured (in-process / single-process
-   * deployments don't need it).
-   */
-  getWorkerSecret(): string | undefined {
-    return this.#workerSecret;
   }
 
   get backgroundTaskManager() {
@@ -948,10 +926,6 @@ export class Mastra<
         w.__registerMastra(this);
       }
     }
-
-    // Worker token shared secret for standalone OrchestrationWorker → server
-    // step-execution authentication. Config wins; env var is the fallback.
-    this.#workerSecret = config?.workerSecret ?? process.env.MASTRA_WORKER_SECRET;
 
     let logger: TLogger;
     if (config?.logger === false) {

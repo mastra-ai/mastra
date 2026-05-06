@@ -193,6 +193,20 @@ export function buildFanoutWorkflow() {
 }
 
 export function buildMastra(opts: { storageUrl: string; redisUrl: string }) {
+  // Optional test auth provider: when TEST_AUTH_TOKEN is set, the server
+  // accepts only that token via Authorization: Bearer ... and rejects
+  // everything else. Used by auth-e2e.test.ts to verify that the
+  // step-execution endpoint is gated by the framework's normal auth path.
+  const expectedToken = process.env.TEST_AUTH_TOKEN;
+  const auth = expectedToken
+    ? {
+        authenticateToken: async (token: string) => {
+          if (token === expectedToken) return { id: 'worker' };
+          return null;
+        },
+      }
+    : undefined;
+
   return new Mastra({
     workflows: {
       'cross-process-greet': buildWorkflow(),
@@ -206,6 +220,7 @@ export function buildMastra(opts: { storageUrl: string; redisUrl: string }) {
     backgroundTasks: { enabled: true },
     logger: false,
     server: {
+      ...(auth ? { auth } : {}),
       middleware: [
         async (c, next) => {
           if (c.req.path.includes('/steps/execute')) {

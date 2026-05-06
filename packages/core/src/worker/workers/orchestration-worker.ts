@@ -44,23 +44,15 @@ export class OrchestrationWorker extends MastraWorker {
     }
 
     // If MASTRA_STEP_EXECUTION_URL is set, use HttpRemoteStrategy
-    // (standalone worker calling back to the server for step execution)
+    // (standalone worker calling back to the server for step execution).
+    // The strategy reads MASTRA_WORKER_AUTH_TOKEN itself and forwards it
+    // through the server's normal Mastra auth provider — there is no
+    // separate "worker secret" gate.
     const remoteUrl = process.env.MASTRA_STEP_EXECUTION_URL;
     if (remoteUrl) {
       const { HttpRemoteStrategy } = await import('../strategies/http-remote-strategy');
-      const workerToken = process.env.MASTRA_WORKER_SECRET;
-      if (!workerToken) {
-        deps.logger?.warn?.(
-          'OrchestrationWorker: MASTRA_STEP_EXECUTION_URL is set but MASTRA_WORKER_SECRET is not. ' +
-            'Remote step execution requests will be rejected by servers that enforce a worker secret.',
-        );
-      }
       this.#strategy = new HttpRemoteStrategy({
         serverUrl: remoteUrl,
-        auth: process.env.MASTRA_STEP_EXECUTION_AUTH
-          ? { type: 'api-key', key: process.env.MASTRA_STEP_EXECUTION_AUTH }
-          : undefined,
-        workerToken,
       });
     }
 

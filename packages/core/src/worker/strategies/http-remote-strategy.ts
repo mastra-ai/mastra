@@ -2,39 +2,56 @@ import type { StepResult } from '../../workflows/types';
 import type { StepExecutionParams, StepExecutionStrategy } from '../types';
 
 /**
+ * Auth credential used by `HttpRemoteStrategy` when calling the server's
+ * step-execution endpoint. The server's configured Mastra auth provider
+ * (`authenticateToken`) decides whether to accept the credential — this
+ * strategy just forwards it.
+ *
+ * - `bearer`: send `Authorization: Bearer <token>` (default when only a
+ *   token string is available)
+ * - `api-key`: send `x-worker-api-key: <key>` for deployments that prefer
+ *   a custom header (the auth provider's `authenticateToken(_, request)`
+ *   callback can read it from `request.headers`)
+ * - `header`: arbitrary header / value pair for fully custom schemes
+ */
+export type HttpRemoteAuthConfig =
+  | { type: 'bearer'; token: string }
+  | { type: 'api-key'; key: string }
+  | { type: 'header'; name: string; value: string };
+
+/**
  * Executes workflow steps by calling a remote server endpoint over HTTP.
  * Used in standalone worker deployments where the worker runs orchestration
  * logic but delegates actual step execution to the server.
+ *
+ * Authentication piggy-backs on Mastra's existing auth pipeline: the route
+ * is marked `requiresAuth: true` and the deployer's `authenticateToken`
+ * provider validates the credential we send here. There is no separate
+ * "worker secret" — whatever auth scheme the rest of the server uses is
+ * what the worker uses too.
  */
-export type HttpRemoteAuthConfig = { type: 'api-key'; key: string } | { type: 'bearer'; token: string };
-
 export class HttpRemoteStrategy implements StepExecutionStrategy {
   #baseUrl: URL;
   #auth?: HttpRemoteAuthConfig;
   #timeoutMs: number;
-  #workerToken?: string;
 
-  constructor({
-    serverUrl,
-    auth,
-    timeoutMs,
-    workerToken,
-  }: {
-    serverUrl: string;
-    auth?: HttpRemoteAuthConfig;
-    timeoutMs?: number;
-    /**
-     * Shared secret used to authenticate this worker to the server's
-     * step-execution endpoint. Falls back to `process.env.MASTRA_WORKER_SECRET`.
-     */
-    workerToken?: string;
-  }) {
+  constructor({ serverUrl, auth, timeoutMs }: { serverUrl: string; auth?: HttpRemoteAuthConfig; timeoutMs?: number }) {
     // Normalize once: ensure trailing slash so URL joins compose correctly.
     const normalized = serverUrl.endsWith('/') ? serverUrl : `${serverUrl}/`;
     this.#baseUrl = new URL(normalized);
-    this.#auth = auth;
+    this.#auth = auth ?? HttpRemoteStrategy.#authFromEnv();
     this.#timeoutMs = timeoutMs ?? 30_000;
-    this.#workerToken = workerToken ?? process.env.MASTRA_WORKER_SECRET;
+  }
+
+  /**
+   * Default credential resolution: when `MASTRA_WORKER_AUTH_TOKEN` is set,
+   * send it as a bearer token. The server's auth provider decides whether
+   * to accept it.
+   */
+  static #authFromEnv(): HttpRemoteAuthConfig | undefined {
+    const token = process.env.MASTRA_WORKER_AUTH_TOKEN;
+    if (!token) return undefined;
+    return { type: 'bearer', token };
   }
 
   async executeStep(params: StepExecutionParams): Promise<StepResult<any, any, any, any>> {
@@ -69,6 +86,9 @@ export class HttpRemoteStrategy implements StepExecutionStrategy {
    * Build a JSON-serializable request body. The `params.requestContext` is
    * a plain object; if a caller stuffed a non-serializable value into it we
    * surface a clear error instead of silently dropping fields.
+   *
+   * `abortSignal` is consumed via fetch's `signal` argument — it must not
+   * be in the body.
    */
   #buildBody(params: StepExecutionParams): string {
     const { abortSignal: _abortSignal, requestContext, ...rest } = params;
@@ -84,7 +104,6 @@ export class HttpRemoteStrategy implements StepExecutionStrategy {
     return JSON.stringify({
       ...rest,
       requestContext: safeRequestContext,
-      ...(this.#workerToken ? { workerToken: this.#workerToken } : {}),
     });
   }
 
@@ -109,6 +128,9 @@ export class HttpRemoteStrategy implements StepExecutionStrategy {
     if (!this.#auth) return {};
     if (this.#auth.type === 'api-key') {
       return { 'x-worker-api-key': this.#auth.key };
+    }
+    if (this.#auth.type === 'header') {
+      return { [this.#auth.name]: this.#auth.value };
     }
     return { authorization: `Bearer ${this.#auth.token}` };
   }

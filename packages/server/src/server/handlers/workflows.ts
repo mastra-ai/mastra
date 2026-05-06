@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
@@ -1211,21 +1212,12 @@ const stepExecutionBodySchema = z.object({
   format: z.enum(['legacy', 'vnext']).optional(),
   perStep: z.boolean().optional(),
   validateInputs: z.boolean().optional(),
-  /**
-   * Shared secret used to authenticate the calling OrchestrationWorker
-   * against this server's configured `workerSecret`. Required when the
-   * server has a secret configured; ignored otherwise.
-   */
-  workerToken: z.string().optional(),
 });
 
 type StepExecutionBody = z.infer<typeof stepExecutionBodySchema>;
 
 interface StepExecutionHandlerArgs extends StepExecutionBody {
-  mastra: {
-    getWorkerSecret(): string | undefined;
-    getWorkflow: (id: string) => unknown;
-  };
+  mastra: Mastra;
   workflowId: string;
   runId: string;
 }
@@ -1233,6 +1225,11 @@ interface StepExecutionHandlerArgs extends StepExecutionBody {
 // Reuse the InProcessStrategy across requests for a given Mastra instance.
 // The strategy is stateless beyond its mastra reference, but allocating it
 // per request triggers a dynamic import on the hot path.
+//
+// The dynamic import is intentional: `@mastra/core/worker` is a new subpath
+// added on this branch, and using a static import would fail
+// `pnpm --filter ./packages/server check:core-imports` until peer-dep
+// floors are bumped. Once they are, this can become a static import.
 const strategyByMastra = new WeakMap<object, { executeStep: (p: unknown) => Promise<unknown> }>();
 
 async function getStepStrategy(mastra: object) {
@@ -1247,12 +1244,17 @@ async function getStepStrategy(mastra: object) {
   return cached;
 }
 
+// Step execution returns the worker's StepResult. Its shape is dynamic
+// (depends on the step's output schema), so we use a permissive z.any().
+const stepExecutionResponseSchema = z.any();
+
 export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   method: 'POST',
   path: '/workflows/:workflowId/runs/:runId/steps/execute',
   responseType: 'json',
   pathParamSchema: workflowRunPathParams,
   bodySchema: stepExecutionBodySchema,
+  responseSchema: stepExecutionResponseSchema,
   summary: 'Execute a workflow step',
   description:
     'Internal endpoint used by standalone OrchestrationWorker instances to execute workflow steps remotely via HttpRemoteStrategy.',
@@ -1260,13 +1262,12 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   requiresAuth: true,
   handler: (async ({ mastra, workflowId, runId, ...body }: StepExecutionHandlerArgs) => {
     try {
-      const expectedSecret = mastra.getWorkerSecret?.();
-      if (expectedSecret) {
-        if (!body.workerToken || body.workerToken !== expectedSecret) {
-          throw new HTTPException(401, { message: 'Invalid or missing worker token' });
-        }
-      }
-
+      // Auth is enforced by the framework via `requiresAuth: true` and the
+      // deployer's `authenticateToken` provider. Note that when NO auth
+      // provider is configured, the framework currently treats the route
+      // as public (see ServerAdapter.checkRouteAuth). Operators deploying
+      // standalone workers must configure an auth provider to gate this
+      // endpoint — there is no implicit fail-closed.
       const strategy = await getStepStrategy(mastra);
       const result = await strategy.executeStep({
         workflowId,
