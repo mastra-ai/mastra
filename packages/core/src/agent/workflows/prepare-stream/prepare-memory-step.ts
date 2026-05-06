@@ -191,7 +191,14 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         messageList: messageList,
         processorStates,
         tripwire,
-        threadExists: !!existingThread,
+        // Reflect the post-step persisted state, not the pre-step lookup. When
+        // this branch creates the thread via `memory.createThread({ saveThread: true })`,
+        // the thread is persisted by the time we return, so `threadExists` must
+        // be `true`. Reporting `false` here causes `#executeOnFinish` to call
+        // `memory.createThread` again with whatever `thread.metadata` it has
+        // (often stale or `undefined`), and the storage backend's upsert wipes
+        // any metadata a processor wrote via `updateThread` mid-run. See #16216.
+        threadExists: !!threadObject,
       };
     },
   });

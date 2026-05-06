@@ -460,7 +460,8 @@ export class AgentLegacyHandler {
               messageObjects: [],
               agentSpan,
               tripwire: inputStepResult.tripwire,
-              threadExists: !!existingThread,
+              // Reflect post-step persisted state, not the pre-step lookup. See #16216.
+              threadExists: !!threadObject,
             };
           }
         }
@@ -477,7 +478,8 @@ export class AgentLegacyHandler {
           messageObjects: processedList,
           agentSpan,
           tripwire,
-          threadExists: !!existingThread,
+          // Reflect post-step persisted state, not the pre-step lookup. See #16216.
+          threadExists: !!threadObject,
         };
       },
       after: async ({
