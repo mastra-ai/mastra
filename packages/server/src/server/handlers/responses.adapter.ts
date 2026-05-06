@@ -56,6 +56,10 @@ function getToolKey(toolCallId: string | null, messageId: string, partIndex: num
   return toolCallId ?? `${messageId}:${partIndex}`;
 }
 
+function getFunctionCallOutputItemId(toolCallId: string) {
+  return `${toolCallId}:output`;
+}
+
 /**
  * Normalizes tool parameter schemas so the Responses API always exposes the
  * plain JSON Schema object regardless of whether the source tool came from a
@@ -120,7 +124,7 @@ function stringifyToolPayload(value: unknown) {
     return value;
   }
 
-  return JSON.stringify(value ?? {});
+  return JSON.stringify(value === undefined ? {} : value);
 }
 
 function createOutputMessage({
@@ -261,10 +265,15 @@ function mapMastraMessageToResponseToolItems({
         ? toolInvocation.toolCallId
         : getToolKey(null, message.id, partIndex);
 
-    if (getMessageRole(message) === 'assistant' && toolName && !emittedCallIds.has(toolCallId)) {
+    if (
+      getMessageRole(message) === 'assistant' &&
+      toolName &&
+      toolInvocation.args !== undefined &&
+      !emittedCallIds.has(toolCallId)
+    ) {
       items.push(
         createFunctionCallItem({
-          itemId: `${message.id}:${partIndex}:call`,
+          itemId: toolCallId,
           callId: toolCallId,
           name: toolName,
           args: toolInvocation.args,
@@ -280,7 +289,7 @@ function mapMastraMessageToResponseToolItems({
     ) {
       items.push(
         createFunctionCallOutputItem({
-          itemId: `${message.id}:${partIndex}:output`,
+          itemId: getFunctionCallOutputItemId(toolCallId),
           callId: toolCallId,
           output: toolInvocation.result,
         }),
@@ -348,6 +357,26 @@ export function mapMastraMessagesToConversationItems(messages: MastraDBMessage[]
   return items;
 }
 
+function mergeFallbackOutputItems({
+  output,
+  fallbackOutputItems,
+}: {
+  output: ResponseOutputItem[];
+  fallbackOutputItems: ResponseOutputItem[];
+}): ResponseOutputItem[] {
+  if (!fallbackOutputItems.length) {
+    return output;
+  }
+
+  const outputById = new Map(output.map(item => [item.id, item]));
+  const fallbackIds = new Set(fallbackOutputItems.map(item => item.id));
+
+  return [
+    ...fallbackOutputItems.map(item => outputById.get(item.id) ?? item),
+    ...output.filter(item => !fallbackIds.has(item.id)),
+  ];
+}
+
 /**
  * Maps the stored Mastra messages for one response turn back into OpenAI-style
  * `response.output` items, preserving tool/message ordering from the thread.
@@ -357,18 +386,30 @@ export function mapMastraMessagesToResponseOutputItems({
   outputMessageId,
   status,
   fallbackText,
+  fallbackOutputItems = [],
 }: {
   messages: MastraDBMessage[] | undefined;
   outputMessageId: string;
   status: ResponseObject['status'];
   fallbackText: string;
+  fallbackOutputItems?: ResponseOutputItem[];
 }): ResponseOutputItem[] {
   if (!messages?.length) {
+    if (fallbackOutputItems.length) {
+      return fallbackOutputItems;
+    }
+
     return [createOutputMessage({ messageId: outputMessageId, status, text: fallbackText })];
   }
 
   const output: ResponseOutputItem[] = [];
   const lastAssistantIndex = [...messages].map(message => message.role).lastIndexOf('assistant');
+  const outputMessageIndex =
+    [...messages]
+      .map((message, index) => ({ index, message }))
+      .reverse()
+      .find(({ message }) => getMessageRole(message) === 'assistant' && getMessageText(message))?.index ??
+    lastAssistantIndex;
   const toolResultCallIds = collectToolResultCallIds(messages);
   const emittedCallIds = new Set<string>();
   const emittedResultCallIds = new Set<string>();
@@ -387,7 +428,7 @@ export function mapMastraMessagesToResponseOutputItems({
     if (getMessageRole(message) === 'assistant' && text) {
       output.push(
         createOutputMessage({
-          messageId: messageIndex === lastAssistantIndex ? outputMessageId : message.id,
+          messageId: messageIndex === outputMessageIndex ? outputMessageId : message.id,
           status,
           text,
         }),
@@ -399,7 +440,7 @@ export function mapMastraMessagesToResponseOutputItems({
     output.push(createOutputMessage({ messageId: outputMessageId, status, text: fallbackText }));
   }
 
-  return output;
+  return mergeFallbackOutputItems({ output, fallbackOutputItems });
 }
 
 /**
@@ -493,6 +534,7 @@ export function buildCompletedResponse({
   tools,
   store,
   messages,
+  fallbackOutputItems,
 }: {
   responseId: string;
   outputMessageId: string;
@@ -510,6 +552,7 @@ export function buildCompletedResponse({
   tools: ResponseTool[];
   store: boolean;
   messages?: MastraDBMessage[];
+  fallbackOutputItems?: ResponseOutputItem[];
 }): ResponseObject {
   return {
     id: responseId,
@@ -523,6 +566,7 @@ export function buildCompletedResponse({
       outputMessageId,
       status,
       fallbackText: text,
+      fallbackOutputItems,
     }),
     usage: toResponseUsage(usage),
     error: null,
@@ -597,6 +641,7 @@ export function mapResponseTurnRecordToResponse(match: ResponseTurnRecord): Resp
       outputMessageId: match.message.id,
       status: match.metadata.status,
       fallbackText: getMessageText(match.message),
+      fallbackOutputItems: match.metadata.outputItems,
     }),
     usage: match.metadata.usage,
     error: null,
@@ -646,4 +691,662 @@ export function extractTextDelta(value: unknown): string | null {
     default:
       return null;
   }
+}
+
+type ResponseOutputItemAddedPayload = {
+  type: 'response.output_item.added';
+  output_index: number;
+  item: ResponseOutputItem;
+};
+
+type ResponseContentPartAddedPayload = {
+  type: 'response.content_part.added';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ReturnType<typeof createOutputTextPart>;
+};
+
+type ResponseOutputTextDeltaPayload = {
+  type: 'response.output_text.delta';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  delta: string;
+};
+
+type ResponseFunctionCallArgumentsDeltaPayload = {
+  type: 'response.function_call_arguments.delta';
+  output_index: number;
+  item_id: string;
+  delta: string;
+};
+
+type ResponseFunctionCallArgumentsDonePayload = {
+  type: 'response.function_call_arguments.done';
+  output_index: number;
+  item_id: string;
+  name: string;
+  arguments: string;
+};
+
+type ResponseOutputItemDonePayload = {
+  type: 'response.output_item.done';
+  output_index: number;
+  item: ResponseOutputItem;
+};
+
+type ResponseOutputTextDonePayload = {
+  type: 'response.output_text.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  text: string;
+};
+
+type ResponseContentPartDonePayload = {
+  type: 'response.content_part.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ReturnType<typeof createOutputTextPart>;
+};
+
+type ResponseSsePayload =
+  | ResponseOutputItemAddedPayload
+  | ResponseContentPartAddedPayload
+  | ResponseOutputTextDeltaPayload
+  | ResponseFunctionCallArgumentsDeltaPayload
+  | ResponseFunctionCallArgumentsDonePayload
+  | ResponseOutputItemDonePayload
+  | ResponseOutputTextDonePayload
+  | ResponseContentPartDonePayload;
+
+type ResponseSseEvent<TPayload extends ResponseSsePayload = ResponseSsePayload> = {
+  event: TPayload['type'];
+  payload: TPayload;
+};
+
+function createResponseSseEvent<TPayload extends ResponseSsePayload>(payload: TPayload): ResponseSseEvent<TPayload> {
+  return { event: payload.type, payload };
+}
+
+type ToolCallStreamState = {
+  argumentsText: string;
+  completed: boolean;
+  itemId: string;
+  name: string;
+  outputIndex: number;
+};
+
+type ToolResultStreamState = {
+  args: unknown;
+  result: unknown;
+  toolCallId: string;
+  toolName?: string;
+};
+
+function getChunkPayload(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return isRecord(value.payload) ? value.payload : value;
+}
+
+function stringifyResponsePayload(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return JSON.stringify(value === undefined ? {} : value);
+}
+
+function stringifyFunctionCallArguments(value: unknown, fallback = ''): string {
+  const serialized = value === undefined || value === null ? fallback : stringifyResponsePayload(value);
+  return serialized || fallback || '{}';
+}
+
+function removeWhitespaceOutsideJsonStrings(value: string): string {
+  let inString = false;
+  let escaped = false;
+  let result = '';
+
+  for (const char of value) {
+    if (escaped) {
+      escaped = false;
+      result += char;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escaped = true;
+      result += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (!inString && /\s/.test(char)) {
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
+function getRemainingArgumentsDelta(current: string, canonical: string): string | null {
+  if (!current) {
+    return canonical;
+  }
+
+  if (canonical.startsWith(current)) {
+    return canonical.slice(current.length);
+  }
+
+  const compactCurrent = removeWhitespaceOutsideJsonStrings(current);
+  const compactCanonical = removeWhitespaceOutsideJsonStrings(canonical);
+  if (compactCurrent && compactCanonical.startsWith(compactCurrent)) {
+    return compactCanonical.slice(compactCurrent.length);
+  }
+
+  return null;
+}
+
+function isCompleteJsonString(value: string): boolean {
+  if (!value) {
+    return true;
+  }
+
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function serializeToolError(error: unknown) {
+  if (error instanceof Error) {
+    return { error: error.message };
+  }
+
+  return { error };
+}
+
+function getToolCallStart(value: unknown) {
+  if (!isRecord(value) || value.type !== 'tool-call-input-streaming-start') {
+    return null;
+  }
+
+  const payload = getChunkPayload(value);
+  const toolCallId = payload?.toolCallId;
+  const toolName = payload?.toolName;
+  if (typeof toolCallId !== 'string' || typeof toolName !== 'string') {
+    return null;
+  }
+
+  return { toolCallId, toolName };
+}
+
+function getToolCallDelta(value: unknown) {
+  if (!isRecord(value) || value.type !== 'tool-call-delta') {
+    return null;
+  }
+
+  const payload = getChunkPayload(value);
+  const toolCallId = payload?.toolCallId;
+  // Mastra/AI SDK stream chunks have used different names for streamed tool
+  // argument text across versions; normalize them to the Responses delta shape.
+  const delta = payload?.argsTextDelta ?? payload?.inputTextDelta ?? payload?.argsDelta ?? payload?.delta;
+  if (!payload || typeof toolCallId !== 'string' || typeof delta !== 'string') {
+    return null;
+  }
+
+  return {
+    toolCallId,
+    toolName: typeof payload.toolName === 'string' ? payload.toolName : undefined,
+    delta,
+  };
+}
+
+function getToolCall(value: unknown) {
+  if (!isRecord(value) || value.type !== 'tool-call') {
+    return null;
+  }
+
+  const payload = getChunkPayload(value);
+  const toolCallId = payload?.toolCallId;
+  const toolName = payload?.toolName;
+  const args = payload?.args ?? payload?.input;
+  if (typeof toolCallId !== 'string' || typeof toolName !== 'string') {
+    return null;
+  }
+
+  return { toolCallId, toolName, args };
+}
+
+function getToolResult(value: unknown) {
+  if (!isRecord(value) || (value.type !== 'tool-result' && value.type !== 'tool-error')) {
+    return null;
+  }
+
+  const payload = getChunkPayload(value);
+  const toolCallId = payload?.toolCallId;
+  if (!payload || typeof toolCallId !== 'string') {
+    return null;
+  }
+
+  const toolName = typeof payload.toolName === 'string' ? payload.toolName : undefined;
+  const args = payload.args ?? payload.input;
+
+  if (value.type === 'tool-error') {
+    return { toolCallId, toolName, args, result: serializeToolError(payload.error) };
+  }
+
+  const outputValue = payload.result !== undefined ? payload.result : payload.output;
+  const result = payload.isError ? serializeToolError(outputValue) : outputValue;
+
+  return { toolCallId, toolName, args, result };
+}
+
+export function createResponseStreamEventTranslator(responseId: string) {
+  // Keep emitted SSE terminal payloads and the final completed response output
+  // aligned. Once a tool call is completed, later duplicate/canonical chunks are
+  // ignored because Responses SSE has no replacement event for arguments.done.
+  let text = '';
+  let nextOutputIndex = 0;
+  let textOutputIndex: number | null = null;
+  const completedToolResultCallIds = new Set<string>();
+  const pendingToolResults = new Map<string, ToolResultStreamState>();
+  const toolCalls = new Map<string, ToolCallStreamState>();
+  const outputItems = new Map<number, ResponseOutputItem>();
+
+  const ensureTextOutputItem = (): { events: ResponseSseEvent[]; outputIndex: number } => {
+    if (textOutputIndex !== null) {
+      return { events: [], outputIndex: textOutputIndex };
+    }
+
+    textOutputIndex = nextOutputIndex++;
+    return {
+      outputIndex: textOutputIndex,
+      events: [
+        createResponseSseEvent({
+          type: 'response.output_item.added',
+          output_index: textOutputIndex,
+          item: {
+            id: responseId,
+            type: 'message',
+            role: 'assistant',
+            status: 'in_progress',
+            content: [],
+          },
+        }),
+        createResponseSseEvent({
+          type: 'response.content_part.added',
+          output_index: textOutputIndex,
+          content_index: 0,
+          item_id: responseId,
+          part: createOutputTextPart(''),
+        }),
+      ],
+    };
+  };
+
+  const ensureToolCallItem = ({
+    toolCallId,
+    toolName,
+  }: {
+    toolCallId: string;
+    toolName: string;
+  }): { events: ResponseSseEvent[]; state: ToolCallStreamState } => {
+    const existing = toolCalls.get(toolCallId);
+    if (existing) {
+      return { events: [], state: existing };
+    }
+
+    const state = {
+      argumentsText: '',
+      completed: false,
+      itemId: toolCallId,
+      name: toolName,
+      outputIndex: nextOutputIndex++,
+    };
+    toolCalls.set(toolCallId, state);
+
+    return {
+      state,
+      events: [
+        createResponseSseEvent({
+          type: 'response.output_item.added',
+          output_index: state.outputIndex,
+          item: {
+            id: state.itemId,
+            type: 'function_call',
+            call_id: toolCallId,
+            name: toolName,
+            arguments: '',
+            status: 'in_progress',
+          },
+        }),
+      ],
+    };
+  };
+
+  const completeToolCallItem = ({
+    events,
+    state,
+    toolCallId,
+    toolName,
+    args,
+  }: {
+    events: ResponseSseEvent[];
+    state: ToolCallStreamState;
+    toolCallId: string;
+    toolName: string;
+    args: string;
+  }): ResponseSseEvent[] => {
+    if (state.completed) {
+      return events;
+    }
+
+    const item = {
+      id: state.itemId,
+      type: 'function_call' as const,
+      call_id: toolCallId,
+      name: toolName,
+      arguments: args,
+      status: 'completed' as const,
+    };
+
+    state.argumentsText = args;
+    state.completed = true;
+    outputItems.set(state.outputIndex, item);
+
+    return [
+      ...events,
+      createResponseSseEvent({
+        type: 'response.function_call_arguments.done',
+        item_id: state.itemId,
+        output_index: state.outputIndex,
+        name: toolName,
+        arguments: args,
+      }),
+      createResponseSseEvent({
+        type: 'response.output_item.done',
+        output_index: state.outputIndex,
+        item,
+      }),
+    ];
+  };
+
+  const completeToolResultItem = ({
+    events,
+    toolResult,
+  }: {
+    events: ResponseSseEvent[];
+    toolResult: ToolResultStreamState;
+  }): ResponseSseEvent[] => {
+    if (completedToolResultCallIds.has(toolResult.toolCallId)) {
+      return events;
+    }
+    completedToolResultCallIds.add(toolResult.toolCallId);
+    pendingToolResults.delete(toolResult.toolCallId);
+
+    const outputIndex = nextOutputIndex++;
+    const item = {
+      id: getFunctionCallOutputItemId(toolResult.toolCallId),
+      type: 'function_call_output' as const,
+      call_id: toolResult.toolCallId,
+      output: stringifyResponsePayload(toolResult.result),
+    };
+    outputItems.set(outputIndex, item);
+
+    return [
+      ...events,
+      createResponseSseEvent({
+        type: 'response.output_item.added',
+        output_index: outputIndex,
+        item,
+      }),
+      createResponseSseEvent({
+        type: 'response.output_item.done',
+        output_index: outputIndex,
+        item,
+      }),
+    ];
+  };
+
+  return {
+    get text() {
+      return text;
+    },
+
+    getOutputItems({ text, status }: { text: string; status: ResponseObject['status'] }) {
+      const items = new Map(outputItems);
+      if (text) {
+        const messageOutputIndex = textOutputIndex ?? nextOutputIndex;
+        items.set(messageOutputIndex, createOutputMessage({ messageId: responseId, status, text }));
+      }
+
+      return [...items.entries()].sort(([left], [right]) => left - right).map(([, item]) => item);
+    },
+
+    consume(value: unknown): ResponseSseEvent[] {
+      const textDelta = extractTextDelta(value);
+      if (textDelta) {
+        const { events, outputIndex } = ensureTextOutputItem();
+        text += textDelta;
+        return [
+          ...events,
+          createResponseSseEvent({
+            type: 'response.output_text.delta',
+            output_index: outputIndex,
+            content_index: 0,
+            item_id: responseId,
+            delta: textDelta,
+          }),
+        ];
+      }
+
+      const toolCallStart = getToolCallStart(value);
+      if (toolCallStart) {
+        return ensureToolCallItem(toolCallStart).events;
+      }
+
+      const toolCallDelta = getToolCallDelta(value);
+      if (toolCallDelta) {
+        const existing = toolCalls.get(toolCallDelta.toolCallId);
+        if (!existing && !toolCallDelta.toolName) {
+          return [];
+        }
+        if (existing?.completed) {
+          return [];
+        }
+
+        const ensured = ensureToolCallItem({
+          toolCallId: toolCallDelta.toolCallId,
+          toolName: toolCallDelta.toolName ?? existing!.name,
+        });
+
+        ensured.state.argumentsText += toolCallDelta.delta;
+        return [
+          ...ensured.events,
+          createResponseSseEvent({
+            type: 'response.function_call_arguments.delta',
+            item_id: ensured.state.itemId,
+            output_index: ensured.state.outputIndex,
+            delta: toolCallDelta.delta,
+          }),
+        ];
+      }
+
+      if (isRecord(value) && value.type === 'tool-call-input-streaming-end') {
+        return [];
+      }
+
+      const toolCall = getToolCall(value);
+      if (toolCall) {
+        const { events, state } = ensureToolCallItem(toolCall);
+        const canonicalArgs = stringifyFunctionCallArguments(toolCall.args, state.argumentsText);
+        if (state.completed) {
+          const nextEvents = completeToolCallItem({
+            events,
+            state,
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            args: canonicalArgs,
+          });
+
+          const pendingToolResult = pendingToolResults.get(toolCall.toolCallId);
+          return pendingToolResult
+            ? completeToolResultItem({ events: nextEvents, toolResult: pendingToolResult })
+            : nextEvents;
+        }
+
+        const remainingArgsDelta = getRemainingArgumentsDelta(state.argumentsText, canonicalArgs);
+        const args =
+          remainingArgsDelta === null
+            ? // If both strings are valid but disagree, keep the bytes already emitted
+              // as deltas so arguments.done and response.output stay consistent.
+              isCompleteJsonString(state.argumentsText)
+              ? state.argumentsText
+              : canonicalArgs
+            : state.argumentsText + remainingArgsDelta;
+        const nextEvents = remainingArgsDelta
+          ? [
+              ...events,
+              createResponseSseEvent({
+                type: 'response.function_call_arguments.delta',
+                item_id: state.itemId,
+                output_index: state.outputIndex,
+                delta: remainingArgsDelta,
+              }),
+            ]
+          : events;
+
+        const completedEvents = completeToolCallItem({
+          events: nextEvents,
+          state,
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          args,
+        });
+
+        const pendingToolResult = pendingToolResults.get(toolCall.toolCallId);
+        return pendingToolResult
+          ? completeToolResultItem({ events: completedEvents, toolResult: pendingToolResult })
+          : completedEvents;
+      }
+
+      const toolResult = getToolResult(value);
+      if (toolResult) {
+        const existingToolCallState = toolCalls.get(toolResult.toolCallId);
+        if (!existingToolCallState && !toolResult.toolName) {
+          return [];
+        }
+
+        const { events: toolCallEvents, state: toolCallState } = ensureToolCallItem({
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.toolName ?? existingToolCallState!.name,
+        });
+
+        if (completedToolResultCallIds.has(toolResult.toolCallId)) {
+          return [];
+        }
+
+        const events: ResponseSseEvent[] = [...toolCallEvents];
+        if (!toolCallState.completed) {
+          const args = stringifyFunctionCallArguments(toolResult.args, toolCallState.argumentsText || '{}');
+          if (
+            toolResult.args === undefined &&
+            (!toolCallState.argumentsText || !isCompleteJsonString(toolCallState.argumentsText))
+          ) {
+            pendingToolResults.set(toolResult.toolCallId, toolResult);
+            return events;
+          }
+
+          events.push(
+            ...completeToolCallItem({
+              events: [],
+              state: toolCallState,
+              toolCallId: toolResult.toolCallId,
+              toolName: toolResult.toolName ?? toolCallState.name,
+              args,
+            }),
+          );
+        }
+
+        return completeToolResultItem({ events, toolResult });
+      }
+
+      return [];
+    },
+
+    flushPendingToolResults(): ResponseSseEvent[] {
+      const events: ResponseSseEvent[] = [];
+      for (const toolResult of pendingToolResults.values()) {
+        const toolCallState = toolCalls.get(toolResult.toolCallId);
+        if (!toolCallState) {
+          continue;
+        }
+
+        if (!toolCallState.completed) {
+          const safeFallbackArgs = isCompleteJsonString(toolCallState.argumentsText)
+            ? toolCallState.argumentsText
+            : '{}';
+          events.push(
+            ...completeToolCallItem({
+              events: [],
+              state: toolCallState,
+              toolCallId: toolResult.toolCallId,
+              toolName: toolResult.toolName ?? toolCallState.name,
+              args: stringifyFunctionCallArguments(toolResult.args, safeFallbackArgs),
+            }),
+          );
+        }
+
+        events.push(...completeToolResultItem({ events: [], toolResult }));
+      }
+
+      return events;
+    },
+
+    completeText(text: string, completedItem: Extract<ResponseOutputItem, { type: 'message' }>): ResponseSseEvent[] {
+      const { events, outputIndex } = ensureTextOutputItem();
+      const completedTextItem = {
+        ...completedItem,
+        content: [createOutputTextPart(text)],
+      };
+
+      return [
+        ...events,
+        createResponseSseEvent({
+          type: 'response.output_text.done',
+          output_index: outputIndex,
+          content_index: 0,
+          item_id: responseId,
+          text,
+        }),
+        createResponseSseEvent({
+          type: 'response.content_part.done',
+          output_index: outputIndex,
+          content_index: 0,
+          item_id: responseId,
+          part: createOutputTextPart(text),
+        }),
+        createResponseSseEvent({
+          type: 'response.output_item.done',
+          output_index: outputIndex,
+          item: completedTextItem,
+        }),
+      ];
+    },
+  };
 }

@@ -4,7 +4,13 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
-import type { ResponseObject, ResponseTextConfig, ResponseTool, ResponseUsage } from '../schemas/responses';
+import type {
+  ResponseObject,
+  ResponseOutputItem,
+  ResponseTextConfig,
+  ResponseTool,
+  ResponseUsage,
+} from '../schemas/responses';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 export type ThreadExecutionContext = {
@@ -36,6 +42,7 @@ export type ResponseTurnRecordMetadata = {
   tools: ResponseTool[];
   store: boolean;
   messageIds: string[];
+  outputItems?: ResponseOutputItem[];
 };
 
 export type ResponseTurnRecord = {
@@ -105,7 +112,8 @@ function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnR
     (responseMetadata.previousResponseId !== undefined && typeof responseMetadata.previousResponseId !== 'string') ||
     !Array.isArray(responseMetadata.tools) ||
     typeof responseMetadata.store !== 'boolean' ||
-    !Array.isArray(responseMetadata.messageIds)
+    !Array.isArray(responseMetadata.messageIds) ||
+    (responseMetadata.outputItems !== undefined && !Array.isArray(responseMetadata.outputItems))
   ) {
     return null;
   }
@@ -124,6 +132,7 @@ function readResponseTurnRecordMetadata(message: MastraDBMessage): ResponseTurnR
     tools: responseMetadata.tools as ResponseTool[],
     store: responseMetadata.store,
     messageIds: responseMetadata.messageIds.filter((value): value is string => typeof value === 'string'),
+    outputItems: responseMetadata.outputItems as ResponseOutputItem[] | undefined,
   };
 }
 
@@ -291,6 +300,217 @@ function createSyntheticResponseMessage({
   };
 }
 
+function hasTextPart(message: MastraDBMessage): boolean {
+  return Boolean(
+    message.content?.parts?.some(
+      part => isPlainObject(part) && part.type === 'text' && typeof part.text === 'string' && part.text.length > 0,
+    ),
+  );
+}
+
+function parseFunctionCallArguments(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function createSyntheticMessagesFromOutputItems({
+  contextOutputItems,
+  outputItems,
+  responseId,
+  threadContext,
+}: {
+  contextOutputItems?: ResponseOutputItem[];
+  outputItems: ResponseOutputItem[];
+  responseId: string;
+  threadContext: ThreadExecutionContext;
+}): MastraDBMessage[] {
+  const toolContextItems = contextOutputItems ?? outputItems;
+  const toolCallsById = new Map(
+    toolContextItems.flatMap(item =>
+      item.type === 'function_call'
+        ? [[item.call_id, { args: parseFunctionCallArguments(item.arguments), toolName: item.name }] as const]
+        : [],
+    ),
+  );
+
+  return outputItems.map((item): MastraDBMessage => {
+    const baseMessage = {
+      createdAt: new Date(),
+      threadId: threadContext.threadId,
+      resourceId: threadContext.resourceId,
+    };
+
+    if (item.type === 'function_call') {
+      return {
+        ...baseMessage,
+        id: `${responseId}:tool-call:${item.call_id}`,
+        role: 'assistant',
+        type: 'tool-call',
+        content: {
+          format: 2 as const,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: item.call_id,
+                toolName: item.name,
+                args: parseFunctionCallArguments(item.arguments),
+              },
+            },
+          ],
+        },
+      };
+    }
+
+    if (item.type === 'function_call_output') {
+      const toolCall = toolCallsById.get(item.call_id);
+
+      return {
+        ...baseMessage,
+        id: `${responseId}:tool-result:${item.call_id}`,
+        role: 'tool',
+        type: 'tool-result',
+        content: {
+          format: 2 as const,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: item.call_id,
+                toolName: toolCall?.toolName ?? 'unknown',
+                args: toolCall?.args ?? {},
+                result: item.output,
+              },
+            },
+          ],
+        },
+      } as unknown as MastraDBMessage;
+    }
+
+    return {
+      ...baseMessage,
+      id: item.id,
+      role: 'assistant',
+      type: 'text',
+      content: {
+        format: 2 as const,
+        parts: item.content.map(part => ({ type: 'text' as const, text: part.text })),
+      },
+    };
+  });
+}
+
+function getToolInvocationParts(message: MastraDBMessage): Array<Record<string, unknown>> {
+  const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
+
+  return parts.flatMap(part =>
+    isPlainObject(part) && part.type === 'tool-invocation' && isPlainObject(part.toolInvocation)
+      ? [part.toolInvocation]
+      : [],
+  );
+}
+
+function getMissingFallbackOutputItems({
+  fallbackOutputItems = [],
+  messages,
+}: {
+  fallbackOutputItems?: ResponseObject['output'];
+  messages: MastraDBMessage[];
+}): ResponseOutputItem[] {
+  if (!fallbackOutputItems.length) {
+    return [];
+  }
+
+  const existingCallIds = new Set<string>();
+  const existingResultCallIds = new Set<string>();
+  const hasAssistantText = messages.some(message => message.role === 'assistant' && hasTextPart(message));
+
+  for (const message of messages) {
+    for (const toolInvocation of getToolInvocationParts(message)) {
+      const toolCallId = typeof toolInvocation.toolCallId === 'string' ? toolInvocation.toolCallId : null;
+      if (!toolCallId) {
+        continue;
+      }
+
+      if (message.role === 'assistant' && toolInvocation.args !== undefined) {
+        existingCallIds.add(toolCallId);
+      }
+      if (toolInvocation.result !== undefined) {
+        existingResultCallIds.add(toolCallId);
+      }
+    }
+  }
+
+  return fallbackOutputItems.filter(item => {
+    if (item.type === 'function_call') {
+      return !existingCallIds.has(item.call_id);
+    }
+
+    if (item.type === 'function_call_output') {
+      return !existingResultCallIds.has(item.call_id);
+    }
+
+    if (item.type === 'message') {
+      return !hasAssistantText && item.content.some(part => part.text.length > 0);
+    }
+
+    return false;
+  });
+}
+
+function getFallbackOutputIdForMessage(message: MastraDBMessage, responseId: string): string | null {
+  for (const toolInvocation of getToolInvocationParts(message)) {
+    const toolCallId = typeof toolInvocation.toolCallId === 'string' ? toolInvocation.toolCallId : null;
+    if (!toolCallId) {
+      continue;
+    }
+
+    if (message.role === 'assistant' && toolInvocation.args !== undefined) {
+      return toolCallId;
+    }
+
+    if (toolInvocation.result !== undefined) {
+      return `${toolCallId}:output`;
+    }
+  }
+
+  if (message.role === 'assistant' && hasTextPart(message)) {
+    return responseId;
+  }
+
+  return null;
+}
+
+function sortMessagesByFallbackOutputOrder({
+  fallbackOutputItems = [],
+  messages,
+  responseId,
+}: {
+  fallbackOutputItems?: ResponseObject['output'];
+  messages: MastraDBMessage[];
+  responseId: string;
+}): MastraDBMessage[] {
+  if (!fallbackOutputItems.length) {
+    return messages;
+  }
+
+  const outputOrder = new Map(fallbackOutputItems.map((item, index) => [item.id, index]));
+
+  return messages
+    .map((message, index) => ({
+      index,
+      message,
+      outputIndex: outputOrder.get(getFallbackOutputIdForMessage(message, responseId) ?? '') ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((left, right) => left.outputIndex - right.outputIndex || left.index - right.index)
+    .map(({ message }) => message);
+}
+
 /**
  * Resolves the Mastra messages that belong to the response turn being stored.
  */
@@ -299,11 +519,13 @@ export async function resolveResponseTurnMessagesForStorage({
   responseId,
   text,
   threadContext,
+  fallbackOutputItems,
 }: {
   result: ResponseResultLike;
   responseId: string;
   text: string;
   threadContext: ThreadExecutionContext | null;
+  fallbackOutputItems?: ResponseObject['output'];
 }): Promise<MastraDBMessage[]> {
   const response = await result.response;
   const responseMessages = response?.dbMessages?.length ? response.dbMessages : [];
@@ -313,10 +535,31 @@ export async function resolveResponseTurnMessagesForStorage({
   }
 
   if (responseMessages.length === 0) {
+    if (fallbackOutputItems?.length) {
+      return createSyntheticMessagesFromOutputItems({ outputItems: fallbackOutputItems, responseId, threadContext });
+    }
+
     return [createSyntheticResponseMessage({ responseId, text, threadContext })];
   }
 
-  return responseMessages;
+  const missingFallbackItems = getMissingFallbackOutputItems({ fallbackOutputItems, messages: responseMessages });
+  const syntheticFallbackMessages = createSyntheticMessagesFromOutputItems({
+    contextOutputItems: fallbackOutputItems ?? [],
+    outputItems: missingFallbackItems,
+    responseId,
+    threadContext,
+  });
+  const resolvedMessages = sortMessagesByFallbackOutputOrder({
+    fallbackOutputItems,
+    messages: [...responseMessages, ...syntheticFallbackMessages],
+    responseId,
+  });
+
+  if (text && !resolvedMessages.some(message => message.role === 'assistant' && hasTextPart(message))) {
+    return [...resolvedMessages, createSyntheticResponseMessage({ responseId, text, threadContext })];
+  }
+
+  return resolvedMessages;
 }
 
 /**
@@ -351,10 +594,15 @@ export async function persistResponseTurnRecord({
   }));
 
   const lastAssistantIndex = [...normalizedMessages].map(message => message.role).lastIndexOf('assistant');
+  const responseAnchorIndex =
+    [...normalizedMessages]
+      .map((message, index) => ({ index, message }))
+      .reverse()
+      .find(({ message }) => message.role === 'assistant' && hasTextPart(message))?.index ?? lastAssistantIndex;
   const lastAssistantMessage =
-    lastAssistantIndex >= 0
+    responseAnchorIndex >= 0
       ? {
-          ...normalizedMessages[lastAssistantIndex]!,
+          ...normalizedMessages[responseAnchorIndex]!,
           id: responseId,
         }
       : ({
@@ -370,15 +618,15 @@ export async function persistResponseTurnRecord({
           },
         } satisfies MastraDBMessage);
 
-  if (lastAssistantIndex >= 0) {
-    normalizedMessages[lastAssistantIndex] = lastAssistantMessage;
+  if (responseAnchorIndex >= 0) {
+    normalizedMessages[responseAnchorIndex] = lastAssistantMessage;
   } else {
     normalizedMessages.push(lastAssistantMessage);
   }
 
   const staleMessageIds =
-    lastAssistantIndex >= 0 && messages[lastAssistantIndex]?.id && messages[lastAssistantIndex]?.id !== responseId
-      ? [messages[lastAssistantIndex]!.id]
+    responseAnchorIndex >= 0 && messages[responseAnchorIndex]?.id && messages[responseAnchorIndex]?.id !== responseId
+      ? [messages[responseAnchorIndex]!.id]
       : [];
 
   const storedMessage = writeResponseTurnRecordMetadata(lastAssistantMessage, {
@@ -386,8 +634,8 @@ export async function persistResponseTurnRecord({
     messageIds: normalizedMessages.map(message => message.id),
   });
 
-  if (lastAssistantIndex >= 0) {
-    normalizedMessages[lastAssistantIndex] = storedMessage;
+  if (responseAnchorIndex >= 0) {
+    normalizedMessages[responseAnchorIndex] = storedMessage;
   } else {
     normalizedMessages[normalizedMessages.length - 1] = storedMessage;
   }
