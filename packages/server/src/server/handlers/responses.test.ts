@@ -3326,10 +3326,17 @@ describe('Responses Handlers', () => {
     })) as Response;
 
     const created = await readJson(response);
+    const storedMessages = await memory.recall({ threadId: created.conversation_id, perPage: false });
+    const storedMessageIds = storedMessages.messages.map(message => message.id);
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
       responseId: created.id,
     });
+
+    expect(storedMessageIds).toEqual(
+      expect.arrayContaining(['assistant-zero-arg-tool-call', 'tool-zero-arg-result', created.id]),
+    );
+    expect(storedMessageIds).not.toContain(`${created.id}:tool-call:call_zero_arg_persisted`);
 
     for (const output of [created.output, retrieved.output]) {
       expect(output).toMatchObject([

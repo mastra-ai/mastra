@@ -461,7 +461,7 @@ function getMissingFallbackOutputItems({
         continue;
       }
 
-      if (message.role === 'assistant' && toolInvocation.args !== undefined) {
+      if (message.role === 'assistant' && (toolInvocation.args !== undefined || toolInvocation.result === undefined)) {
         existingCallIds.add(toolCallId);
       }
       if (toolInvocation.result !== undefined) {
