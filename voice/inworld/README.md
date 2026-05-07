@@ -32,7 +32,7 @@ const voices = await voice.getSpeakers();
 ```typescript
 const voice = new InworldVoice({
   speechModel: {
-    name: 'inworld-tts-1.5-max', // or 'inworld-tts-1.5-mini' for lower latency
+    name: 'inworld-tts-2', // default; also 'inworld-tts-1.5-max' or 'inworld-tts-1.5-mini'
     apiKey: 'your-key', // or set INWORLD_API_KEY env var
   },
   listeningModel: {
@@ -53,7 +53,9 @@ const stream = await voice.speak('Hello', {
   audioEncoding: 'WAV', // override format
   sampleRateHertz: 24000, // override sample rate
   speakingRate: 1.2, // 0.5 - 1.5
-  temperature: 0.8, // (0, 2]
+  temperature: 0.8, // (0, 2] — ignored on inworld-tts-2
+  deliveryMode: 'CREATIVE', // STABLE | BALANCED | CREATIVE — only honored on inworld-tts-2
+  language: 'fr-FR', // BCP-47 per-call override; auto-detected when omitted
 });
 ```
 
@@ -88,10 +90,11 @@ Alex, Ashley, Craig, Deborah, Dennis, Dominus, Edward, Elizabeth, Hades, Heitor,
 
 ## TTS Models
 
-| Model                  | Quality | Latency       |
-| ---------------------- | ------- | ------------- |
-| `inworld-tts-1.5-max`  | Highest | ~200ms median |
-| `inworld-tts-1.5-mini` | Good    | ~100ms median |
+| Model                  | Quality | Latency       | Notes                                           |
+| ---------------------- | ------- | ------------- | ----------------------------------------------- |
+| `inworld-tts-2`        | Highest | ~200ms median | **Default.** Flagship; supports `deliveryMode`. |
+| `inworld-tts-1.5-max`  | High    | ~200ms median | Previous flagship. Supports `temperature`.      |
+| `inworld-tts-1.5-mini` | Good    | ~100ms median | Lower latency, reduced quality.                 |
 
 ## STT Models
 

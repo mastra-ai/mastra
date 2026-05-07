@@ -20,7 +20,7 @@ const voice = new InworldVoice()
 // Initialize with custom configuration
 const voice = new InworldVoice({
   speechModel: {
-    name: 'inworld-tts-1.5-max',
+    name: 'inworld-tts-2',
     apiKey: 'your-api-key',
   },
   listeningModel: {
@@ -46,17 +46,17 @@ const transcript = await voice.listen(audioStream)
     type: 'InworldVoiceConfig',
     description: 'Configuration for text-to-speech functionality.',
     isOptional: true,
-    defaultValue: "{ name: 'inworld-tts-1.5-max' }",
+    defaultValue: "{ name: 'inworld-tts-2' }",
     properties: [
       {
         type: 'InworldVoiceConfig',
         parameters: [
           {
             name: 'name',
-            type: "'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini'",
+            type: "'inworld-tts-2' | 'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini'",
             description: 'The Inworld TTS model to use.',
             isOptional: true,
-            defaultValue: "'inworld-tts-1.5-max'",
+            defaultValue: "'inworld-tts-2'",
           },
           {
             name: 'apiKey',
@@ -186,7 +186,20 @@ const audioStream = await voice.speak('Hello, world!', {
           {
             name: 'temperature',
             type: 'number',
-            description: 'Controls voice variability.',
+            description:
+              'Controls voice variability. Honored on `inworld-tts-1.5-*` models; ignored by `inworld-tts-2`.',
+            isOptional: true,
+          },
+          {
+            name: 'deliveryMode',
+            type: "'STABLE' | 'BALANCED' | 'CREATIVE'",
+            description: 'Steering control for delivery style. Only honored by `inworld-tts-2`.',
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'BCP-47 language code for this request. Auto-detected when omitted.',
             isOptional: true,
           },
         ],
@@ -279,4 +292,5 @@ const speakers = await voice.getSpeakers()
 
 - The TTS endpoint uses progressive NDJSON streaming, so audio playback can begin before the full response is received.
 - An API key can be provided via the `speechModel` or `listeningModel` config, or the `INWORLD_API_KEY` environment variable.
+- `inworld-tts-2` is the default flagship model. Use `deliveryMode` (`STABLE` | `BALANCED` | `CREATIVE`) to steer delivery style on this model. The `temperature` option is ignored on `inworld-tts-2`.
 - The `inworld-tts-1.5-mini` model offers lower latency at the cost of reduced voice quality compared to `inworld-tts-1.5-max`.

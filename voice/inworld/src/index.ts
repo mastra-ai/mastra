@@ -3,7 +3,9 @@ import { MastraVoice } from '@mastra/core/voice';
 
 const INWORLD_API_BASE = 'https://api.inworld.ai';
 
-type InworldTtsModel = 'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini';
+type InworldTtsModel = 'inworld-tts-2' | 'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini';
+
+type DeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE';
 
 type InworldSttModel = 'groq/whisper-large-v3';
 
@@ -27,6 +29,8 @@ interface InworldSpeakOptions {
   sampleRateHertz?: number;
   speakingRate?: number;
   temperature?: number;
+  deliveryMode?: DeliveryMode;
+  language?: string;
 }
 
 interface InworldListenOptions {
@@ -45,6 +49,7 @@ export type {
   InworldSttModel,
   AudioEncoding,
   SttAudioEncoding,
+  DeliveryMode,
 };
 
 export class InworldVoice extends MastraVoice {
@@ -57,7 +62,7 @@ export class InworldVoice extends MastraVoice {
    * Creates an instance of the InworldVoice class.
    *
    * @param {Object} options - The options for the voice configuration.
-   * @param {InworldVoiceConfig} [options.speechModel] - TTS model config. Default: inworld-tts-1.5-max.
+   * @param {InworldVoiceConfig} [options.speechModel] - TTS model config. Default: inworld-tts-2.
    * @param {InworldListeningConfig} [options.listeningModel] - STT model config. Default: groq/whisper-large-v3.
    * @param {string} [options.speaker] - Default voice ID. Default: 'Dennis'.
    * @param {AudioEncoding} [options.audioEncoding] - TTS audio format. Default: 'MP3'.
@@ -91,7 +96,7 @@ export class InworldVoice extends MastraVoice {
 
     super({
       speechModel: {
-        name: speechModel?.name ?? 'inworld-tts-1.5-max',
+        name: speechModel?.name ?? 'inworld-tts-2',
         apiKey,
       },
       listeningModel: {
@@ -181,13 +186,15 @@ export class InworldVoice extends MastraVoice {
     const body = {
       text,
       voiceId: speaker,
-      modelId: this.speechModel?.name ?? 'inworld-tts-1.5-max',
+      modelId: this.speechModel?.name ?? 'inworld-tts-2',
       audioConfig: {
         audioEncoding: options?.audioEncoding ?? this.audioEncoding,
         sampleRateHertz: options?.sampleRateHertz ?? this.sampleRateHertz,
         ...(options?.speakingRate !== undefined && { speakingRate: options.speakingRate }),
       },
       ...(options?.temperature !== undefined && { temperature: options.temperature }),
+      ...(options?.deliveryMode !== undefined && { deliveryMode: options.deliveryMode }),
+      ...(options?.language !== undefined && { language: options.language }),
     };
 
     const response = await fetch(`${INWORLD_API_BASE}/tts/v1/voice:stream`, {

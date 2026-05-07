@@ -157,7 +157,7 @@ describe('InworldVoice', () => {
 
       const reqBody = JSON.parse(fetchCall[1]!.body as string);
       expect(reqBody.voiceId).toBe('Dennis');
-      expect(reqBody.modelId).toBe('inworld-tts-1.5-max');
+      expect(reqBody.modelId).toBe('inworld-tts-2');
       expect(reqBody.audioConfig.audioEncoding).toBe('MP3');
       expect(reqBody.audioConfig.sampleRateHertz).toBe(48000);
     });
@@ -291,6 +291,93 @@ describe('InworldVoice', () => {
 
       const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
       expect(reqBody.modelId).toBe('inworld-tts-1.5-mini');
+    });
+
+    it('uses tts-1.5-max model when explicitly configured', async () => {
+      const voice = new InworldVoice({
+        speechModel: { apiKey: 'test-key', name: 'inworld-tts-1.5-max' },
+      });
+      const audioBase64 = Buffer.from('audio').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBody([audioBase64]), { status: 200 }),
+      );
+
+      await voice.speak('Hello');
+
+      const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+      expect(reqBody.modelId).toBe('inworld-tts-1.5-max');
+    });
+
+    it('forwards deliveryMode when provided', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const audioBase64 = Buffer.from('audio').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBody([audioBase64]), { status: 200 }),
+      );
+
+      await voice.speak('Hello', { deliveryMode: 'CREATIVE' });
+
+      const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+      expect(reqBody.deliveryMode).toBe('CREATIVE');
+    });
+
+    it('omits deliveryMode when not provided', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const audioBase64 = Buffer.from('audio').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBody([audioBase64]), { status: 200 }),
+      );
+
+      await voice.speak('Hello');
+
+      const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+      expect(reqBody.deliveryMode).toBeUndefined();
+    });
+
+    it('forwards per-call language when provided', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const audioBase64 = Buffer.from('audio').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBody([audioBase64]), { status: 200 }),
+      );
+
+      await voice.speak('Bonjour', { language: 'fr-FR' });
+
+      const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+      expect(reqBody.language).toBe('fr-FR');
+    });
+
+    it('omits language when not provided', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const audioBase64 = Buffer.from('audio').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBody([audioBase64]), { status: 200 }),
+      );
+
+      await voice.speak('Hello');
+
+      const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+      expect(reqBody.language).toBeUndefined();
+    });
+
+    it('still serializes temperature on tts-2 (server ignores it)', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' } });
+      const audioBase64 = Buffer.from('audio').toString('base64');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(createNdjsonBody([audioBase64]), { status: 200 }),
+      );
+
+      await voice.speak('Hello', { temperature: 0.7 });
+
+      const reqBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string);
+      expect(reqBody.modelId).toBe('inworld-tts-2');
+      expect(reqBody.temperature).toBe(0.7);
     });
   });
 

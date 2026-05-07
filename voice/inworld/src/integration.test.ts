@@ -70,9 +70,34 @@ describeIf('InworldVoice — real API integration', () => {
     expect(dennis).toBeDefined();
   }, 15_000);
 
-  it('TTS 1.5 Max', async () => {
+  it('TTS 2', async () => {
     const start = performance.now();
     const stream = await voice.speak('Hello, this is a test of Inworld text to speech.');
+    const { buffer, ttfaMs } = await consumeStream(stream, start);
+
+    console.log(`TTS 2 — TTFA: ${ttfaMs}ms, size: ${buffer.length} bytes`);
+    expect(buffer.length).toBeGreaterThan(1000);
+  }, 30_000);
+
+  it('TTS 2 with deliveryMode CREATIVE', async () => {
+    const start = performance.now();
+    const stream = await voice.speak('Testing creative delivery mode on TTS 2.', {
+      deliveryMode: 'CREATIVE',
+    });
+    const { buffer, ttfaMs } = await consumeStream(stream, start);
+
+    console.log(`TTS 2 (CREATIVE) — TTFA: ${ttfaMs}ms, size: ${buffer.length} bytes`);
+    expect(buffer.length).toBeGreaterThan(1000);
+  }, 30_000);
+
+  it('TTS 1.5 Max', async () => {
+    const maxVoice = new InworldVoice({
+      speechModel: { apiKey: API_KEY!, name: 'inworld-tts-1.5-max' },
+    });
+    await warmupConnection(maxVoice);
+
+    const start = performance.now();
+    const stream = await maxVoice.speak('Hello, this is a test of Inworld text to speech.');
     const { buffer, ttfaMs } = await consumeStream(stream, start);
 
     console.log(`TTS Max — TTFA: ${ttfaMs}ms, size: ${buffer.length} bytes`);
