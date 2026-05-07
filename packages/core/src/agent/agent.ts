@@ -140,6 +140,20 @@ type ModelFallbacks = {
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
 
+/**
+ * Per-call options consumed by {@link Agent.resolveInputProcessors} when
+ * deciding whether to auto-register synthetic processors (currently only
+ * {@link ResponseCache}). These mirror the values from the per-call options
+ * bag that aren't already encoded in `configuredProcessorOverrides` /
+ * `requestContext`.
+ *
+ * @internal
+ */
+type ResolveInputProcessorsPerCallOptions = {
+  responseCache?: AgentResponseCacheOption;
+  memory?: AgentMemoryOption;
+};
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
@@ -657,6 +671,70 @@ export class Agent<
   }
 
   /**
+   * Gets the {@link ResponseCache} processor to add when response caching
+   * is enabled (via agent constructor or per-call options) and no manual
+   * `ResponseCache` is already registered. Mirrors the shape of the other
+   * auto-derived `getXxxProcessors` helpers (memory, workspace, skills,
+   * channels, browser).
+   *
+   * Returns `[]` when:
+   * - response caching is disabled,
+   * - the user already added a `ResponseCache` (we leave their setup alone),
+   * - or no usable cache is available (no custom cache + no Mastra server cache).
+   *
+   * @internal
+   */
+  private async getResponseCacheProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    _requestContext?: RequestContext,
+    perCallOptions?: ResolveInputProcessorsPerCallOptions,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    const config = resolveResponseCacheConfig(this.#responseCache, perCallOptions?.responseCache);
+    if (!config.enabled) return [];
+
+    // De-dupe like the other patterns: skip auto-registration when the user
+    // already registered a ResponseCache manually.
+    const hasManual = configuredProcessors.some(p => !isProcessorWorkflow(p) && p instanceof ResponseCache);
+    if (hasManual) {
+      this.logger.debug(
+        `[Agent:${this.name}] responseCache requested but a ResponseCache processor is already registered — leaving the user's setup alone`,
+      );
+      return [];
+    }
+
+    let cache = config.cache;
+    if (!cache) {
+      const serverCache = this.#mastra?.getServerCache();
+      if (serverCache) {
+        cache = createMastraCacheFromServerCache(serverCache);
+      }
+    }
+
+    if (!cache) {
+      this.logger.debug(
+        `[Agent:${this.name}] responseCache requested but no cache available — pass responseCache.cache or register the agent with a Mastra instance`,
+      );
+      return [];
+    }
+
+    // Default scope to memory.resource (when memory is configured) for
+    // multi-tenant isolation. `scope: null` opts out explicitly.
+    const memoryOption = perCallOptions?.memory;
+    const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
+
+    return [
+      new ResponseCache({
+        cache,
+        key: config.key,
+        ttl: config.ttl,
+        scope,
+        bust: config.bust,
+        agentId: this.id,
+      }),
+    ];
+  }
+
+  /**
    * Gets the workspace-instructions processors to add when the workspace has a
    * filesystem or sandbox (i.e. something to describe).
    * @internal
@@ -914,6 +992,7 @@ export class Agent<
   private async resolveInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    perCallOptions?: ResolveInputProcessorsPerCallOptions,
   ): Promise<InputProcessorOrWorkflow[]> {
     // Get configured input processors - use overrides if provided (from generate/stream options),
     // otherwise use agent constructor processors
@@ -945,12 +1024,22 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
+    // Get the auto-registered ResponseCache (with deduplication). Appended
+    // *after* configuredProcessors so the cache key reflects every prompt
+    // mutation from earlier processors.
+    const responseCacheProcessors = await this.getResponseCacheProcessors(
+      configuredProcessors,
+      requestContext,
+      perCallOptions,
+    );
+
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
-    // User-configured processors run last to allow customization
+    // User-configured processors run after auto-derived layers to allow customization
+    // Response cache runs last so its key includes every prompt-mutating effect above
     return [
       ...memoryProcessors,
       ...workspaceProcessors,
@@ -958,6 +1047,7 @@ export class Agent<
       ...channelProcessors,
       ...browserProcessors,
       ...configuredProcessors,
+      ...responseCacheProcessors,
     ];
   }
 
@@ -969,8 +1059,9 @@ export class Agent<
   private async listResolvedInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    perCallOptions?: ResolveInputProcessorsPerCallOptions,
   ): Promise<InputProcessorOrWorkflow[]> {
-    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides, perCallOptions);
     return this.combineProcessorsIntoWorkflow(processors, `${this.id}-input-processor`);
   }
 
@@ -982,8 +1073,9 @@ export class Agent<
   private async listResolvedLLMRequestProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    perCallOptions?: ResolveInputProcessorsPerCallOptions,
   ): Promise<InputProcessorOrWorkflow[]> {
-    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides, perCallOptions);
   }
 
   /**
@@ -5055,86 +5147,6 @@ export class Agent<
   }
 
   /**
-   * Resolve the user-configured input processors only (without the
-   * memory/workspace/skills/channel/browser auto-derived ones). Used when
-   * we need to append a synthetic processor (e.g. {@link ResponseCache})
-   * without double-resolving the auto-derived layer in the loop.
-   *
-   * @internal
-   */
-  async #resolveUserInputProcessors(
-    requestContext?: RequestContext,
-    perCallOverride?: InputProcessorOrWorkflow[],
-  ): Promise<InputProcessorOrWorkflow[]> {
-    if (perCallOverride !== undefined) return perCallOverride;
-    if (!this.#inputProcessors) return [];
-    if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({
-        requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-      });
-    }
-    return this.#inputProcessors;
-  }
-
-  /**
-   * Resolve the {@link ResponseCache} processor that should be auto-registered
-   * for a call (if any). Returns `undefined` when:
-   *
-   * - response caching is disabled,
-   * - no usable cache is available (no custom cache + no Mastra server cache),
-   * - the user has manually added a `ResponseCache` to their input
-   *   processors (we leave manual setups alone and just log a debug skip).
-   *
-   * @internal
-   */
-  async #resolveAutoResponseCacheProcessor(args: {
-    perCallOption: AgentResponseCacheOption | undefined;
-    requestContext?: RequestContext;
-    mergedOptions: Record<string, unknown>;
-    inputProcessors: InputProcessorOrWorkflow[];
-  }): Promise<ResponseCache | undefined> {
-    const config = resolveResponseCacheConfig(this.#responseCache, args.perCallOption);
-    if (!config.enabled) return undefined;
-
-    const hasManual = args.inputProcessors.some(p => p instanceof ResponseCache);
-    if (hasManual) {
-      this.logger.debug(
-        `[Agent:${this.name}] responseCache requested but a ResponseCache processor is already registered — leaving the user's setup alone`,
-      );
-      return undefined;
-    }
-
-    let cache = config.cache;
-    if (!cache) {
-      const serverCache = this.#mastra?.getServerCache();
-      if (serverCache) {
-        cache = createMastraCacheFromServerCache(serverCache);
-      }
-    }
-
-    if (!cache) {
-      this.logger.debug(
-        `[Agent:${this.name}] responseCache requested but no cache available — pass responseCache.cache or register the agent with a Mastra instance`,
-      );
-      return undefined;
-    }
-
-    // Default scope to memory.resource (when memory is configured) for
-    // multi-tenant isolation. `scope: null` opts out explicitly.
-    const memoryOption = (args.mergedOptions.memory ?? undefined) as AgentMemoryOption | undefined;
-    const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
-
-    return new ResponseCache({
-      cache,
-      key: config.key,
-      ttl: config.ttl,
-      scope,
-      bust: config.bust,
-      agentId: this.id,
-    });
-  }
-
-  /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
@@ -5336,14 +5348,22 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedInputProcessors(requestContext, overrides),
+      }) =>
+        this.listResolvedInputProcessors(requestContext, overrides, {
+          responseCache: options.responseCache,
+          memory: options.memory,
+        }),
       llmRequestInputProcessors: async ({
         requestContext,
         overrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
+      }) =>
+        this.listResolvedLLMRequestProcessors(requestContext, overrides, {
+          responseCache: options.responseCache,
+          memory: options.memory,
+        }),
       outputProcessors: async ({
         requestContext,
         overrides,
@@ -5879,30 +5899,16 @@ export class Agent<
       });
     }
 
-    // Auto-register a ResponseCache processor for this call if response
-    // caching is enabled and the user hasn't manually registered one.
-    // Caching now happens *inside* the agentic loop on the
-    // `processLLMRequest` hook so the cache key includes memory + input
-    // processor effects (preventing cross-user context leaks) and so each
-    // step in a tool loop is independently cacheable.
-    const generateUserInputProcessors = await this.#resolveUserInputProcessors(
-      mergedOptions.requestContext,
-      mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined,
-    );
-    const generateResponseCacheProcessor = await this.#resolveAutoResponseCacheProcessor({
-      perCallOption: options?.responseCache,
-      requestContext: mergedOptions.requestContext,
-      mergedOptions: mergedOptions as unknown as Record<string, unknown>,
-      inputProcessors: generateUserInputProcessors,
-    });
-
-    const generateInputProcessorOverrides = generateResponseCacheProcessor
-      ? [...generateUserInputProcessors, generateResponseCacheProcessor]
-      : (mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined);
-
+    // Response caching (when enabled via agent constructor or per-call
+    // `responseCache` option) is auto-registered as a ResponseCache
+    // processor inside resolveInputProcessors, the same way memory /
+    // workspace / skills / channel / browser processors are. Caching
+    // happens on the `processLLMRequest` hook inside the agentic loop so
+    // the cache key includes memory + input-processor effects (preventing
+    // cross-user context leaks) and so each step in a tool loop is
+    // independently cacheable.
     const executeOptions = {
       ...mergedOptions,
-      inputProcessors: generateInputProcessorOverrides,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6033,27 +6039,10 @@ export class Agent<
       });
     }
 
-    // Auto-register a ResponseCache processor for this call. See
-    // generate() above for details on why caching now lives inside the
-    // agentic loop instead of at the top of stream/generate.
-    const streamUserInputProcessors = await this.#resolveUserInputProcessors(
-      mergedOptions.requestContext,
-      mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined,
-    );
-    const streamResponseCacheProcessor = await this.#resolveAutoResponseCacheProcessor({
-      perCallOption: streamOptions?.responseCache,
-      requestContext: mergedOptions.requestContext,
-      mergedOptions: mergedOptions as unknown as Record<string, unknown>,
-      inputProcessors: streamUserInputProcessors,
-    });
-
-    const streamInputProcessorOverrides = streamResponseCacheProcessor
-      ? [...streamUserInputProcessors, streamResponseCacheProcessor]
-      : (mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined);
-
+    // Response caching is auto-registered as a ResponseCache processor
+    // inside resolveInputProcessors. See generate() for the full rationale.
     const executeOptions = {
       ...mergedOptions,
-      inputProcessors: streamInputProcessorOverrides,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
