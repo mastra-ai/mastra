@@ -2143,6 +2143,72 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Resumes a suspended agent stream until idle with custom resume data.
+   * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
+   */
+  async resumeStreamUntilIdle<OUTPUT extends {}>(
+    resumeData: JSONValue,
+    options: ResumeStreamParams<OUTPUT> & {
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...options,
+      resumeData,
+      requestContext: parseClientRequestContext(options.requestContext),
+      clientTools: processClientTools(options.clientTools),
+      structuredOutput: options.structuredOutput
+        ? {
+            ...options.structuredOutput,
+            schema: standardSchemaToJSONSchema(toStandardSchema(options.structuredOutput.schema)),
+          }
+        : undefined,
+    };
+
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream-until-idle');
+
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
