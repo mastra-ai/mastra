@@ -1922,6 +1922,8 @@ export class MastraClient extends BaseResource {
     if (params.runId) searchParams.set('runId', params.runId);
     if (params.threadId) searchParams.set('threadId', params.threadId);
     if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.toolName) searchParams.set('toolName', params.toolName);
+    if (params.toolCallId) searchParams.set('toolCallId', params.toolCallId);
     if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
     if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
     if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);
