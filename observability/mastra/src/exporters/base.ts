@@ -148,9 +148,9 @@ export abstract class BaseExporter implements ObservabilityExporter {
    *
    * @param reason - Reason why the exporter is disabled
    */
-  protected setDisabled(reason: string): void {
+  protected setDisabled(reason: string, level: 'warn' | 'debug' = 'warn'): void {
     this.#disabled = true;
-    this.logger.warn(`${this.name} disabled: ${reason}`);
+    this.logger[level](`${this.name} disabled: ${reason}`);
   }
 
   /**
@@ -181,6 +181,20 @@ export abstract class BaseExporter implements ObservabilityExporter {
       }
     }
     return event;
+  }
+
+  /**
+   * Default onTracingEvent handler that delegates to exportTracingEvent.
+   *
+   * This provides backward compatibility: existing exporters that only implement
+   * _exportTracingEvent will automatically receive tracing events routed through
+   * the ObservabilityBus. Subclasses can override this if they need different
+   * routing behavior for bus-delivered events.
+   *
+   * Handler presence on ObservabilityExporter = signal support.
+   */
+  onTracingEvent(event: TracingEvent): void | Promise<void> {
+    return this.exportTracingEvent(event);
   }
 
   /**

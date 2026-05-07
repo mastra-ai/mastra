@@ -4,8 +4,12 @@ import { createWorkflow } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
+import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
+import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
 export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
@@ -13,9 +17,22 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   _internal,
   ...rest
 }: OuterLLMRun<Tools, OUTPUT>) {
+  const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(rest.toolCallConcurrency);
+  const toolCallForeachOptions: ToolCallForeachOptions = {
+    // This initial value is a conservative fallback for resume paths that can enter
+    // a suspended foreach before llm-execution recomputes the effective step tools.
+    concurrency: resolveToolCallConcurrency({
+      requireToolApproval: rest.requireToolApproval,
+      tools: rest.tools,
+      activeTools: rest.activeTools as string[] | undefined,
+      configuredConcurrency: configuredToolCallConcurrency,
+    }),
+  };
+
   const llmExecutionStep = createLLMExecutionStep({
     models,
     _internal,
+    toolCallForeachOptions,
     ...rest,
   });
 
@@ -34,36 +51,17 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     llmExecutionStep,
   );
 
-  // Sequential execution may be required for tool calls to avoid race conditions, otherwise concurrency is configurable
-  let toolCallConcurrency = 10;
-  if (rest?.toolCallConcurrency) {
-    toolCallConcurrency = rest.toolCallConcurrency > 0 ? rest.toolCallConcurrency : 10;
-  }
+  const backgroundTaskCheckStep = createBackgroundTaskCheckStep({
+    models,
+    _internal,
+    ...rest,
+  });
 
-  // Check for sequential execution requirements:
-  // 1. Global requireToolApproval flag
-  // 2. Any tool has suspendSchema
-  // 3. Any tool has requireApproval flag
-  const hasRequireToolApproval = !!rest.requireToolApproval;
-
-  let hasSuspendSchema = false;
-  let hasRequireApproval = false;
-
-  if (rest.tools) {
-    for (const tool of Object.values(rest.tools)) {
-      if ((tool as any)?.hasSuspendSchema) {
-        hasSuspendSchema = true;
-      }
-
-      if ((tool as any)?.requireApproval) {
-        hasRequireApproval = true;
-      }
-
-      if (hasSuspendSchema || hasRequireApproval) break;
-    }
-  }
-
-  const sequentialExecutionRequired = hasRequireToolApproval || hasSuspendSchema || hasRequireApproval;
+  const isTaskCompleteStep = createIsTaskCompleteStep({
+    models,
+    _internal,
+    ...rest,
+  });
 
   return createWorkflow({
     id: 'executionWorkflow',
@@ -83,24 +81,13 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        // Add assistant response messages to messageList BEFORE processing tool calls
-        // This ensures messages are available for persistence before suspension
-        const responseMessages = typedInputData.messages.nonUser;
-        if (responseMessages && responseMessages.length > 0) {
-          rest.messageList.add(responseMessages, 'response');
-        }
-        return typedInputData;
-      },
-      { id: 'add-response-to-messagelist' },
-    )
-    .map(
-      async ({ inputData }) => {
-        const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         return typedInputData.output.toolCalls || [];
       },
       { id: 'map-tool-calls' },
     )
-    .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : toolCallConcurrency })
+    .foreach(toolCallStep, toolCallForeachOptions)
     .then(llmMappingStep)
+    .then(backgroundTaskCheckStep)
+    .then(isTaskCompleteStep)
     .commit();
 }

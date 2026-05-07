@@ -25,6 +25,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
 } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
@@ -92,6 +93,12 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
 
     // Create the table (or add missing columns if it already exists)
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: SPAN_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -356,6 +363,52 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
+      const result = await this.client.query({
+        query: `
+          SELECT traceId, spanId, parentSpanId, name,
+            entityType, entityId, entityName,
+            spanType, error, isEvent,
+            startedAt, endedAt, createdAt, updatedAt
+          FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          WHERE traceId = {traceId:String}
+          ORDER BY startedAt ASC
+        `,
+        query_params: { traceId },
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = (await result.json()) as any[];
+      if (!rows || rows.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: transformRows(rows) as GetTraceLightResponse['spans'],
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_LIGHT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
   async updateSpan(args: UpdateSpanArgs): Promise<void> {
     const { traceId, spanId, updates } = args;
     try {
@@ -417,7 +470,8 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     try {
       // ClickHouse stores null strings as empty strings, so check for both
@@ -604,8 +658,8 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
       // startedAt is never null (required field), so no special handling needed
       // Note: endedAt is DateTime64 - only check for NULL (not empty string like String columns)
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = orderBy?.direction ?? 'DESC';
       let orderClause: string;
       if (sortField === 'endedAt') {
         // Use CASE WHEN to handle NULLs for endedAt (DateTime64 column)

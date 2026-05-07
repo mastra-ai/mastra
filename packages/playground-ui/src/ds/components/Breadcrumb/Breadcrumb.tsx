@@ -2,8 +2,8 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
-import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;
@@ -22,7 +22,7 @@ export interface CrumbProps {
   isCurrent?: boolean;
   as: React.ElementType;
   className?: string;
-  to: string;
+  to?: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
   action?: React.ReactNode;

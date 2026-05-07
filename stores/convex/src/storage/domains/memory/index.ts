@@ -217,6 +217,24 @@ export class MemoryConvex extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
+    // When perPage is 0 with no includes, there's nothing to return.
+    if (perPage === 0 && (!include || include.length === 0)) {
+      return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+    }
+
+    // When perPage is 0, we only need included messages — skip full thread load
+    if (perPage === 0 && include && include.length > 0) {
+      const messages = await this._getIncludedMessages(include);
+      const list = new MessageList().add(messages, 'memory');
+      return {
+        messages: this._sortMessages(list.get.all.db(), field, direction),
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+
     // Fetch messages from all threads
     let rows: StoredMessage[] = [];
     for (const tid of threadIds) {
@@ -250,81 +268,34 @@ export class MemoryConvex extends MemoryStorage {
 
     const totalThreadMessages = rows.length;
     const paginatedRows = perPageInput === false ? rows : rows.slice(offset, offset + perPage);
-    const messages = paginatedRows.map(row => this.parseStoredMessage(row));
+    let messages = paginatedRows.map(row => this.parseStoredMessage(row));
     const messageIds = new Set(messages.map(msg => msg.id));
 
     if (include && include.length > 0) {
-      // Cache messages from threads as needed
-      const threadMessagesCache = new Map<string, StoredMessage[]>();
-      // Pre-populate cache with already-fetched thread messages
-      for (const tid of threadIds) {
-        const tidRows = rows.filter(r => r.thread_id === tid);
-        threadMessagesCache.set(tid, tidRows);
+      // Pre-populate cache with already-fetched thread messages, but only when
+      // rows represent a full unfiltered thread snapshot. When resourceId or
+      // dateRange filters are active, the rows are a subset and would cause
+      // addContextMessages() to compute neighbors from a truncated snapshot.
+      const preloadedThreads = new Map<string, StoredMessage[]>();
+      if (!resourceId && !filter?.dateRange) {
+        for (const tid of threadIds) {
+          preloadedThreads.set(
+            tid,
+            rows.filter(r => r.thread_id === tid),
+          );
+        }
       }
 
-      for (const includeItem of include) {
-        // First, find the message to get its threadId
-        let targetThreadId: string | undefined;
-        let target: StoredMessage | undefined;
-
-        // Check in cached threads first
-        for (const [tid, cachedRows] of threadMessagesCache) {
-          target = cachedRows.find(row => row.id === includeItem.id);
-          if (target) {
-            targetThreadId = tid;
-            break;
-          }
+      const includedMessages = await this._getIncludedMessages(include, preloadedThreads);
+      for (const msg of includedMessages) {
+        if (!messageIds.has(msg.id)) {
+          messages.push(msg);
+          messageIds.add(msg.id);
         }
-
-        // If not found, query by message ID directly
-        if (!target) {
-          const messageRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
-            { field: 'id', value: includeItem.id },
-          ]);
-          if (messageRows.length > 0) {
-            target = messageRows[0];
-            targetThreadId = target!.thread_id;
-
-            // Cache the thread's messages for context lookup
-            if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
-              const otherThreadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
-                { field: 'thread_id', value: targetThreadId },
-              ]);
-              threadMessagesCache.set(targetThreadId, otherThreadRows);
-            }
-          }
-        }
-
-        if (!target || !targetThreadId) continue;
-
-        if (!messageIds.has(target.id)) {
-          messages.push(this.parseStoredMessage(target));
-          messageIds.add(target.id);
-        }
-
-        const targetThreadRows = threadMessagesCache.get(targetThreadId) || [];
-        await this.addContextMessages({
-          includeItem,
-          allMessages: targetThreadRows,
-          targetThreadId,
-          messageIds,
-          messages,
-        });
       }
     }
 
-    messages.sort((a, b) => {
-      const aValue =
-        field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
-      const bValue =
-        field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      }
-      return direction === 'ASC'
-        ? String(aValue).localeCompare(String(bValue))
-        : String(bValue).localeCompare(String(aValue));
-    });
+    messages = this._sortMessages(messages, field, direction);
 
     const hasMore =
       include && include.length > 0
@@ -549,6 +520,89 @@ export class MemoryConvex extends MemoryStorage {
 
     await this.saveResource({ resource: updated });
     return updated;
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue =
+        field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue =
+        field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
+  private async _getIncludedMessages(
+    include: NonNullable<StorageListMessagesInput['include']>,
+    preloadedThreads?: Map<string, StoredMessage[]>,
+  ): Promise<MastraDBMessage[]> {
+    if (include.length === 0) return [];
+
+    const messages: MastraDBMessage[] = [];
+    const messageIds = new Set<string>();
+    const threadMessagesCache = new Map<string, StoredMessage[]>(preloadedThreads ?? []);
+    const cachedTargets = new Map<string, { threadId: string; row: StoredMessage }>();
+
+    for (const [threadId, rows] of threadMessagesCache) {
+      for (const row of rows) {
+        cachedTargets.set(row.id, { threadId, row });
+      }
+    }
+
+    for (const includeItem of include) {
+      let targetThreadId: string | undefined;
+      let target: StoredMessage | undefined;
+
+      const cached = cachedTargets.get(includeItem.id);
+      if (cached) {
+        target = cached.row;
+        targetThreadId = cached.threadId;
+      }
+
+      // If not found, query by message ID directly
+      if (!target) {
+        const messageRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
+          { field: 'id', value: includeItem.id },
+        ]);
+        if (messageRows.length > 0) {
+          target = messageRows[0];
+          targetThreadId = target!.thread_id;
+
+          if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
+            const otherThreadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
+              { field: 'thread_id', value: targetThreadId },
+            ]);
+            threadMessagesCache.set(targetThreadId, otherThreadRows);
+            for (const row of otherThreadRows) {
+              cachedTargets.set(row.id, { threadId: targetThreadId, row });
+            }
+          }
+        }
+      }
+
+      if (!target || !targetThreadId) continue;
+
+      if (!messageIds.has(target.id)) {
+        messages.push(this.parseStoredMessage(target));
+        messageIds.add(target.id);
+      }
+
+      const targetThreadRows = threadMessagesCache.get(targetThreadId) || [];
+      await this.addContextMessages({
+        includeItem,
+        allMessages: targetThreadRows,
+        targetThreadId,
+        messageIds,
+        messages,
+      });
+    }
+
+    return messages;
   }
 
   private parseStoredMessage(message: StoredMessage): MastraDBMessage {

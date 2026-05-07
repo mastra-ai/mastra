@@ -1,10 +1,10 @@
 import type { WebClient } from '@slack/web-api';
-import { ANIMATION_INTERVAL, STEP_DISPLAY_DELAY, TOOL_DISPLAY_DELAY } from './constants.js';
-import { getStatusText } from './status.js';
-import { formatName, sleep } from './utils.js';
-import type { StreamingOptions, StreamState } from './types.js';
+import { ANIMATION_INTERVAL, STEP_DISPLAY_DELAY, TOOL_DISPLAY_DELAY } from './constants';
+import { getStatusText } from './status';
+import { formatName, sleep } from './utils';
+import type { StreamingOptions, StreamState } from './types';
 
-export type { StreamingOptions } from './types.js';
+export type { StreamingOptions } from './types';
 
 export async function streamToSlack(options: StreamingOptions): Promise<void> {
   const { mastra, slackClient, channel, threadTs, agentName, message, resourceId, threadId } = options;
@@ -71,8 +71,10 @@ export async function streamToSlack(options: StreamingOptions): Promise<void> {
     if (!agent) throw new Error(`Agent "${agentName}" not found`);
 
     const stream = await agent.stream(message, {
-      resourceId,
-      threadId,
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
     });
 
     // Process chunks

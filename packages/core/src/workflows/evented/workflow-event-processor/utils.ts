@@ -3,6 +3,25 @@ import type { Mastra } from '../../../mastra';
 import { EventedWorkflow } from '../workflow';
 import type { ParentWorkflow } from '.';
 
+/**
+ * Type guard to check if a step is actually a Workflow.
+ * A step is a Workflow if it's an EventedWorkflow instance or has component === 'WORKFLOW'.
+ */
+function isWorkflowStep(step: unknown): step is Workflow {
+  if (!step || typeof step !== 'object') {
+    return false;
+  }
+  // Check for EventedWorkflow instance first (most specific)
+  if (step instanceof EventedWorkflow) {
+    return true;
+  }
+  // Check for the 'WORKFLOW' component discriminator (used for nested workflows)
+  if ('component' in step && (step as { component?: string }).component === 'WORKFLOW') {
+    return true;
+  }
+  return false;
+}
+
 export function getNestedWorkflow(
   mastra: Mastra,
   { workflowId, executionPath, parentWorkflow }: ParentWorkflow,
@@ -18,7 +37,15 @@ export function getNestedWorkflow(
     workflow = nestedWorkflow;
   }
 
-  workflow = workflow ?? mastra.getWorkflow(workflowId);
+  // Internal workflows (registered via `Mastra.__registerInternalWorkflow`)
+  // aren't visible to `Mastra.getWorkflow` — it only sees the public registry.
+  // Prefer the internal registry first so nested-workflow resolution works
+  // for callers like the bg-tasks `__background-task` workflow.
+  workflow =
+    workflow ??
+    (mastra.__hasInternalWorkflow(workflowId)
+      ? mastra.__getInternalWorkflow(workflowId)
+      : mastra.getWorkflow(workflowId));
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];
   if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {
@@ -26,7 +53,21 @@ export function getNestedWorkflow(
   }
 
   if (parentStep?.type === 'step' || parentStep?.type === 'loop') {
-    return parentStep.step as Workflow;
+    // Validate that the inner step is actually a Workflow before returning
+    if (isWorkflowStep(parentStep.step)) {
+      return parentStep.step;
+    }
+    // Not a workflow - this is a regular step, return null
+    return null;
+  }
+
+  // Handle foreach - validate that the inner step is actually a Workflow
+  if (parentStep?.type === 'foreach') {
+    if (isWorkflowStep(parentStep.step)) {
+      return parentStep.step;
+    }
+    // Not a workflow - this is a regular step in a foreach, return null
+    return null;
   }
 
   return null;

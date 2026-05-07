@@ -3,19 +3,72 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { formatZodError } from '@mastra/server/handlers/error';
+import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+type RegisteredKoaRoute = {
+  route: ServerRoute;
+  prefix: string;
+  koaPath: string;
+  pathRegex: RegExp;
+  paramNames: string[];
+};
+type RouteDispatcherGroup = {
+  routes: RegisteredKoaRoute[];
+  stackLengthAfterRegistration: number;
+};
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
+
+/**
+ * Convert Koa context to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(ctx: Context): globalThis.Request {
+  const protocol = ctx.protocol || 'http';
+  const host = ctx.host || 'localhost';
+  const url = `${protocol}://${host}${ctx.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(ctx.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: ctx.method,
+    headers,
+  });
+}
 
 // Extend Koa types to include Mastra context
 declare module 'koa' {
@@ -33,8 +86,121 @@ declare module 'koa' {
 }
 
 export class MastraServer extends MastraServerBase<Koa, Context, Context> {
+  private readonly activeRouteDispatchers = new WeakMap<Koa, RouteDispatcherGroup>();
+
+  async init() {
+    this.registerErrorMiddleware();
+    await super.init();
+  }
+
+  /**
+   * Register a global error-handling middleware at the top of the middleware chain.
+   * This acts as a safety net for errors that propagate past route handlers
+   * (e.g., from auth middleware, context middleware, or when route handlers re-throw).
+   *
+   * When `server.onError` is configured, calls it and uses the response.
+   * Otherwise provides a default JSON error response.
+   *
+   * Errors are emitted on the app for logging (Koa convention) but NOT re-thrown,
+   * so this middleware is the final error boundary. Users who need custom error handling
+   * should use `server.onError` or register their own middleware between this and the routes.
+   */
+  private registerErrorMiddleware(): void {
+    const server = this;
+
+    this.app.use(async function mastraErrorBoundary(ctx: Context, next: Next) {
+      try {
+        await next();
+      } catch (err) {
+        // Try onError first (may have already been called in registerRoute,
+        // but this catches errors from other middleware too)
+        if (await server.handleOnError(err, ctx)) {
+          return;
+        }
+
+        // Default error handling
+        const error = err instanceof Error ? err : new Error(String(err));
+        let status = 500;
+        if (err && typeof err === 'object') {
+          if ('status' in err) {
+            status = (err as any).status;
+          } else if (
+            'details' in err &&
+            (err as any).details &&
+            typeof (err as any).details === 'object' &&
+            'status' in (err as any).details
+          ) {
+            status = (err as any).details.status;
+          }
+        }
+        ctx.status = status;
+        ctx.body = { error: error.message || 'Unknown error' };
+
+        // Emit the error for logging (standard Koa pattern) but don't re-throw
+        // since this middleware is the final error boundary.
+        ctx.app.emit('error', err, ctx);
+      }
+    });
+  }
+
+  /**
+   * Try to handle an error using the `server.onError` hook.
+   * Creates a minimal context shim compatible with the Hono-style onError signature.
+   *
+   * @returns true if the error was handled and the response was set on ctx
+   */
+  private async handleOnError(err: unknown, ctx: Context): Promise<boolean> {
+    // Guard against double invocation (route catch → re-throw → error middleware)
+    if ((ctx as any)._mastraOnErrorAttempted) return false;
+    (ctx as any)._mastraOnErrorAttempted = true;
+
+    const onError = this.mastra.getServer()?.onError;
+    if (!onError) return false;
+
+    const error = err instanceof Error ? err : new Error(String(err));
+
+    // Create a minimal context shim compatible with the onError signature
+    const shimContext = {
+      json: (data: unknown, status: number = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      req: {
+        path: ctx.path,
+        method: ctx.method,
+        header: (name: string) => {
+          const value = ctx.headers[name.toLowerCase()];
+          if (Array.isArray(value)) return value.join(', ');
+          return value;
+        },
+        url: ctx.url,
+      },
+    };
+
+    try {
+      const response = await onError(error, shimContext as any);
+      // Apply the Response from onError to the Koa context
+      ctx.status = response.status;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        ctx.body = await response.json();
+      } else {
+        ctx.body = await response.text();
+      }
+      return true;
+    } catch (onErrorErr) {
+      this.mastra.getLogger()?.error('Error in custom onError handler', {
+        error: onErrorErr instanceof Error ? { message: onErrorErr.message, stack: onErrorErr.stack } : onErrorErr,
+      });
+      return false;
+    }
+  }
+
   createContextMiddleware(): Middleware {
-    return async (ctx: Context, next: Next) => {
+    const server = this;
+
+    return async function mastraRequestContext(ctx: Context, next: Next) {
       // Parse request context from request body and add to context
       let bodyRequestContext: Record<string, any> | undefined;
       let paramsRequestContext: Record<string, any> | undefined;
@@ -74,16 +240,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
       }
 
-      const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      const requestContext = server.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
 
       // Set context in state object
       ctx.state.requestContext = requestContext;
-      ctx.state.mastra = this.mastra;
-      ctx.state.tools = this.tools || {};
-      if (this.taskStore) {
-        ctx.state.taskStore = this.taskStore;
+      ctx.state.mastra = server.mastra;
+      ctx.state.tools = server.tools || {};
+      if (server.taskStore) {
+        ctx.state.taskStore = server.taskStore;
       }
-      ctx.state.customRouteAuthConfig = this.customRouteAuthConfig;
+      ctx.state.customRouteAuthConfig = server.customRouteAuthConfig;
 
       // Create abort controller for request cancellation
       const controller = new AbortController();
@@ -99,17 +265,269 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     };
   }
 
+  private getRouteDispatcherGroup(app: Koa): RouteDispatcherGroup {
+    const activeGroup = this.activeRouteDispatchers.get(app);
+    if (activeGroup && app.middleware.length === activeGroup.stackLengthAfterRegistration) {
+      return activeGroup;
+    }
+
+    const group: RouteDispatcherGroup = {
+      routes: [],
+      stackLengthAfterRegistration: 0,
+    };
+    app.use(this.createRouteDispatcherMiddleware(group));
+    group.stackLengthAfterRegistration = app.middleware.length;
+    this.activeRouteDispatchers.set(app, group);
+    return group;
+  }
+
+  private createRouteDispatcherMiddleware(group: RouteDispatcherGroup): Middleware {
+    const server = this;
+
+    return async function mastraRouteDispatcher(ctx: Context, next: Next) {
+      const matchedRoute = server.findRegisteredRoute(group.routes, ctx);
+
+      if (!matchedRoute) {
+        await next();
+        return;
+      }
+
+      await server.handleMatchedRoute(matchedRoute, ctx);
+    };
+  }
+
+  private findRegisteredRoute(routes: RegisteredKoaRoute[], ctx: Context): RegisteredKoaRoute | undefined {
+    const method = ctx.method.toUpperCase();
+
+    for (const registeredRoute of routes) {
+      if (
+        registeredRoute.route.method.toUpperCase() !== 'ALL' &&
+        method !== registeredRoute.route.method.toUpperCase()
+      ) {
+        continue;
+      }
+
+      const match = registeredRoute.pathRegex.exec(ctx.path);
+      if (!match) {
+        continue;
+      }
+
+      ctx.params = {};
+      registeredRoute.paramNames.forEach((name, index) => {
+        ctx.params[name] = match[index + 1];
+      });
+
+      return registeredRoute;
+    }
+
+    return undefined;
+  }
+
+  private async handleMatchedRoute(registeredRoute: RegisteredKoaRoute, ctx: Context): Promise<void> {
+    const { route, prefix } = registeredRoute;
+
+    const authError = await this.checkRouteAuth(route, {
+      path: String(ctx.path || '/'),
+      method: String(ctx.method || 'GET'),
+      getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+      getQuery: name => (ctx.query as Record<string, string>)[name],
+      requestContext: ctx.state.requestContext,
+      request: toWebRequest(ctx),
+      buildAuthorizeContext: () => toWebRequest(ctx),
+    });
+
+    if (authError) {
+      // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+      if (authError.headers) {
+        for (const [key, value] of Object.entries(authError.headers)) {
+          ctx.set(key, value);
+        }
+      }
+
+      // If this is an auth error (not just a success-with-headers), return error response
+      if (authError.error) {
+        ctx.status = authError.status;
+        ctx.body = { error: authError.error };
+        return;
+      }
+    }
+
+    const params = await this.getParams(route, ctx);
+
+    // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+    if (params.bodyParseError) {
+      ctx.status = 400;
+      ctx.body = {
+        error: 'Invalid request body',
+        issues: [{ field: 'body', message: params.bodyParseError.message }],
+      };
+      return;
+    }
+
+    if (params.queryParams) {
+      try {
+        params.queryParams = await this.parseQueryParams(route, params.queryParams);
+      } catch (error) {
+        this.mastra.getLogger()?.error('Error parsing query params', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        });
+        if (error instanceof ZodError) {
+          const resolved = this.resolveValidationError(route, error, 'query');
+          ctx.status = resolved.status;
+          ctx.body = resolved.body;
+          return;
+        }
+        ctx.status = 400;
+        ctx.body = {
+          error: 'Invalid query parameters',
+          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+        };
+        return;
+      }
+    }
+
+    if (params.body) {
+      try {
+        params.body = await this.parseBody(route, params.body);
+      } catch (error) {
+        this.mastra.getLogger()?.error('Error parsing body', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        });
+        if (error instanceof ZodError) {
+          const resolved = this.resolveValidationError(route, error, 'body');
+          ctx.status = resolved.status;
+          ctx.body = resolved.body;
+          return;
+        }
+        ctx.status = 400;
+        ctx.body = {
+          error: 'Invalid request body',
+          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+        };
+        return;
+      }
+    }
+
+    // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+    if (params.urlParams) {
+      try {
+        params.urlParams = await this.parsePathParams(route, params.urlParams);
+      } catch (error) {
+        this.mastra.getLogger()?.error('Error parsing path params', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        });
+        if (error instanceof ZodError) {
+          const resolved = this.resolveValidationError(route, error, 'path');
+          ctx.status = resolved.status;
+          ctx.body = resolved.body;
+          return;
+        }
+        ctx.status = 400;
+        ctx.body = {
+          error: 'Invalid path parameters',
+          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+        };
+        return;
+      }
+    }
+
+    const handlerParams = {
+      ...params.urlParams,
+      ...params.queryParams,
+      ...(typeof params.body === 'object' ? params.body : {}),
+      requestContext: ctx.state.requestContext,
+      mastra: this.mastra,
+      tools: ctx.state.tools,
+      taskStore: ctx.state.taskStore,
+      abortSignal: ctx.state.abortSignal,
+      routePrefix: prefix,
+    };
+
+    // Check route permission requirement (EE feature)
+    // Uses convention-based permission derivation: permissions are auto-derived
+    // from route path/method unless explicitly set or route is public
+    const authConfig = this.mastra.getServer()?.auth;
+    if (authConfig) {
+      const hasPermission = await loadHasPermission();
+      if (hasPermission) {
+        const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+        if (permissionError) {
+          ctx.status = permissionError.status;
+          ctx.body = {
+            error: permissionError.error,
+            message: permissionError.message,
+          };
+          return;
+        }
+      }
+    }
+
+    // Check FGA authorization (EE feature)
+    const fgaError = await checkRouteFGA(this.mastra, route, ctx.state.requestContext, {
+      ...params.urlParams,
+      ...params.queryParams,
+      ...(typeof params.body === 'object' ? params.body : {}),
+    });
+    if (fgaError) {
+      ctx.status = fgaError.status;
+      ctx.body = { error: fgaError.error, message: fgaError.message };
+      return;
+    }
+
+    try {
+      const result = await route.handler(handlerParams);
+      await this.sendResponse(route, ctx, result, prefix);
+    } catch (error) {
+      this.mastra.getLogger()?.error('Error calling handler', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        path: route.path,
+        method: route.method,
+      });
+      // Attach status code to the error for upstream middleware
+      if (error && typeof error === 'object') {
+        if (!('status' in error)) {
+          // Check for MastraError with status in details
+          if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+            (error as any).status = (error.details as any).status;
+          }
+        }
+      }
+
+      // Try to call server.onError if configured
+      if (await this.handleOnError(error, ctx)) {
+        return;
+      }
+
+      // Re-throw so the error propagates up Koa's middleware chain
+      throw error;
+    }
+  }
+
   async stream(route: ServerRoute, ctx: Context, result: { fullStream: ReadableStream }): Promise<void> {
     // Tell Koa we're handling the response ourselves
     ctx.respond = false;
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Set status and headers via ctx.res directly since we're bypassing Koa's response
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     ctx.res.writeHead(200, {
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -135,7 +553,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
       }
     } catch (error) {
-      console.error(error);
+      this.mastra.getLogger()?.error('Error in stream processing', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
     } finally {
       ctx.res.end();
     }
@@ -148,7 +568,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = ctx.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -156,7 +576,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
           body = await this.parseMultipartFormData(ctx, maxFileSize);
         } catch (error) {
-          console.error('Failed to parse multipart form data:', error);
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Re-throw size limit errors, let others fall through to validation
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
@@ -236,8 +658,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        ctx.set(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
-      ctx.body = result;
+      // Explicitly set content-type and handle null/undefined to ensure proper JSON response
+      // Koa sets 204 No Content when body is null, but we want to return JSON null
+      ctx.type = 'application/json';
+      ctx.body = result === null || result === undefined ? JSON.stringify(null) : result;
     } else if (route.responseType === 'stream') {
       await this.stream(route, ctx, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
@@ -254,13 +688,27 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        ctx.res.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             ctx.res.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          ctx.res.off('error', onResError);
           ctx.res.end();
         }
       } else {
@@ -345,138 +793,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Convert Express-style :param to Koa-style :param (they're the same)
     const koaPath = fullPath;
 
-    // Define the route handler
-    const handler = async (ctx: Context, next: Next) => {
-      // Check if this route matches the request
-      const pathRegex = this.pathToRegex(koaPath);
-      const match = pathRegex.exec(ctx.path);
-
-      if (!match) {
-        await next();
-        return;
-      }
-
-      // Check HTTP method
-      if (route.method.toUpperCase() !== 'ALL' && ctx.method.toUpperCase() !== route.method.toUpperCase()) {
-        await next();
-        return;
-      }
-
-      // Extract URL params from regex match
-      const paramNames = this.extractParamNames(koaPath);
-      ctx.params = {};
-      paramNames.forEach((name, index) => {
-        ctx.params[name] = match[index + 1];
-      });
-
-      // Check route-level authentication/authorization
-      const authError = await this.checkRouteAuth(route, {
-        path: String(ctx.path || '/'),
-        method: String(ctx.method || 'GET'),
-        getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
-        getQuery: name => (ctx.query as Record<string, string>)[name],
-        requestContext: ctx.state.requestContext,
-      });
-
-      if (authError) {
-        ctx.status = authError.status;
-        ctx.body = { error: authError.error };
-        return;
-      }
-
-      const params = await this.getParams(route, ctx);
-
-      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
-      if (params.bodyParseError) {
-        ctx.status = 400;
-        ctx.body = {
-          error: 'Invalid request body',
-          issues: [{ field: 'body', message: params.bodyParseError.message }],
-        };
-        return;
-      }
-
-      if (params.queryParams) {
-        try {
-          params.queryParams = await this.parseQueryParams(route, params.queryParams);
-        } catch (error) {
-          console.error('Error parsing query params', error);
-          // Zod validation errors should return 400 Bad Request with structured issues
-          if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'query parameters');
-            return;
-          }
-          ctx.status = 400;
-          ctx.body = {
-            error: 'Invalid query parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-          };
-          return;
-        }
-      }
-
-      if (params.body) {
-        try {
-          params.body = await this.parseBody(route, params.body);
-        } catch (error) {
-          console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
-          // Zod validation errors should return 400 Bad Request with structured issues
-          if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'request body');
-            return;
-          }
-          ctx.status = 400;
-          ctx.body = {
-            error: 'Invalid request body',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-          };
-          return;
-        }
-      }
-
-      const handlerParams = {
-        ...params.urlParams,
-        ...params.queryParams,
-        ...(typeof params.body === 'object' ? params.body : {}),
-        requestContext: ctx.state.requestContext,
-        mastra: this.mastra,
-        tools: ctx.state.tools,
-        taskStore: ctx.state.taskStore,
-        abortSignal: ctx.state.abortSignal,
-        routePrefix: prefix,
-      };
-
-      try {
-        const result = await route.handler(handlerParams);
-        await this.sendResponse(route, ctx, result, prefix);
-      } catch (error) {
-        console.error('Error calling handler', error);
-        // Check if it's an HTTPException or MastraError with a status code
-        let status = 500;
-        if (error && typeof error === 'object') {
-          // Check for direct status property (HTTPException)
-          if ('status' in error) {
-            status = (error as any).status;
-          }
-          // Check for MastraError with status in details
-          else if (
-            'details' in error &&
-            error.details &&
-            typeof error.details === 'object' &&
-            'status' in error.details
-          ) {
-            status = (error.details as any).status;
-          }
-        }
-        ctx.status = status;
-        ctx.body = { error: error instanceof Error ? error.message : 'Unknown error' };
-      }
-    };
-
-    // Register the middleware
-    app.use(handler);
+    const group = this.getRouteDispatcherGroup(app);
+    group.routes.push({
+      route,
+      prefix,
+      koaPath,
+      pathRegex: this.pathToRegex(koaPath),
+      paramNames: this.extractParamNames(koaPath),
+    });
   }
 
   /**
@@ -504,18 +828,159 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     return matches.map(m => m.slice(1)); // Remove the leading ':'
   }
 
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const server = this;
+
+    this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
+      // Check if this request matches a protected custom route and run auth
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+      const matchedRoute = findMatchingCustomRoute(
+        path,
+        method,
+        server.customApiRoutes ?? server.mastra.getServer()?.apiRoutes,
+      );
+      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, server.customRouteAuthConfig);
+      const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
+
+      if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
+        const serverRoute: ServerRoute = {
+          method: (matchedRoute?.route.method ?? method) as any,
+          path: matchedRoute?.route.path ?? path,
+          responseType: 'json',
+          handler: async () => {},
+          requiresAuth: matchedRoute?.route.requiresAuth,
+          requiresPermission: matchedRoute?.route.requiresPermission,
+          fga: matchedRoute?.route.fga,
+        };
+
+        if (shouldRunCustomRouteAuth) {
+          const authError = await server.checkRouteAuth(serverRoute, {
+            path,
+            method,
+            getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+            getQuery: name => (ctx.query as Record<string, string>)[name],
+            requestContext: ctx.state.requestContext,
+            request: toWebRequest(ctx),
+            buildAuthorizeContext: () => toWebRequest(ctx),
+          });
+
+          if (authError) {
+            if (authError.headers) {
+              for (const [key, value] of Object.entries(authError.headers)) {
+                ctx.set(key, value);
+              }
+            }
+            if (authError.error) {
+              ctx.status = authError.status;
+              ctx.body = { error: authError.error };
+              return;
+            }
+          }
+
+          const authConfig = server.mastra.getServer()?.auth;
+          if (authConfig) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+              const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              if (permissionError) {
+                ctx.status = permissionError.status;
+                ctx.body = {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                };
+                return;
+              }
+            }
+          }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
+          ...(matchedRoute?.params ?? {}),
+          ...(ctx.query as Record<string, string>),
+          ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
+            ? (ctx.request.body as Record<string, unknown>)
+            : {}),
+        });
+        if (fgaError) {
+          ctx.status = fgaError.status;
+          ctx.body = { error: fgaError.error, message: fgaError.message };
+          return;
+        }
+      }
+
+      const response = await server.handleCustomRouteRequest(
+        `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
+        ctx.method,
+        ctx.headers as Record<string, string | string[] | undefined>,
+        ctx.request.body,
+        ctx.state.requestContext,
+      );
+      if (!response) return next();
+      ctx.respond = false;
+      await server.writeCustomRouteResponse(response, ctx.res);
+    });
+  }
+
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
       return;
     }
 
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    const server = this;
+
+    this.app.use(async function mastraHttpLogger(ctx: Context, next: Next) {
+      if (!server.shouldLogRequest(ctx.path)) {
+        return next();
+      }
+
+      const start = Date.now();
+      const method = ctx.method;
+      const path = ctx.path;
+
+      await next();
+
+      const duration = Date.now() - start;
+      const status = ctx.status;
+      const level = server.httpLoggingConfig?.level || 'info';
+
+      const logData: Record<string, any> = {
+        method,
+        path,
+        status,
+        duration: `${duration}ms`,
+      };
+
+      if (server.httpLoggingConfig?.includeQueryParams) {
+        logData.query = ctx.query;
+      }
+
+      if (server.httpLoggingConfig?.includeHeaders) {
+        const headers = { ...ctx.headers };
+        const redactHeaders = server.httpLoggingConfig.redactHeaders || [];
+        redactHeaders.forEach((h: string) => {
+          const key = h.toLowerCase();
+          if (headers[key] !== undefined) {
+            headers[key] = '[REDACTED]';
+          }
+        });
+        logData.headers = headers;
+      }
+
+      server.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+    });
   }
 }

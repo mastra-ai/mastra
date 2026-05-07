@@ -109,6 +109,16 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     fusionAlgorithm,
     queryMode,
   }: UpstashQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('UPSTASH', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Upstash queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName: namespace },
+      });
+    }
+
     try {
       const ns = this.client.namespace(namespace);
 

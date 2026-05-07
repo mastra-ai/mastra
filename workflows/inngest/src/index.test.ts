@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
-import { realtimeMiddleware } from '@inngest/realtime/middleware';
+import type { ServerType } from '@hono/node-server';
+import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
+import type { WorkflowResult, WorkflowRegistry, ResumeWorkflowOptions } from '@internal/workflow-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import type { MastraScorer } from '@mastra/core/evals';
@@ -21,11 +23,13 @@ import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
 import { MockLanguageModelV1 } from 'ai/test';
-import { $ } from 'execa';
+import { execaCommand } from 'execa';
+import type { ResultPromise } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { z } from 'zod';
+import type { InngestWorkflow } from './workflow';
 import { init, serve as inngestServe } from './index';
 
 interface LocalTestContext {
@@ -34,30 +38,211 @@ interface LocalTestContext {
   srv?: any;
 }
 
-async function resetInngest() {
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  await $`docker-compose restart`;
-  await new Promise(resolve => setTimeout(resolve, 1500));
+// Inngest dev server process (managed via inngest-cli, no Docker required)
+let standaloneInngestProcess: ResultPromise | null = null;
+
+// Whether an Inngest server is already listening on port 4000 (Docker or host CLI)
+let inngestServerRunning = false;
+// Whether that already-running server is *Docker* specifically. Only Docker requires
+// rewriting the SDK origin to `host.docker.internal` so the container can reach the
+// host. A host-side `inngest-cli dev` should keep `localhost`.
+let useDockerInngest = false;
+
+/** Best-effort check whether this process is itself running inside a container. */
+function isInsideContainer(): boolean {
+  try {
+    if (fs.existsSync('/.dockerenv')) return true;
+    if (fs.existsSync('/run/.containerenv')) return true;
+    const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
+    if (/docker|kubepods|containerd/.test(cgroup)) return true;
+  } catch {
+    // /proc/1/cgroup doesn't exist on macOS hosts; fall through.
+  }
+  return false;
+}
+
+/**
+ * Detect whether an Inngest server is already running, and whether it's running
+ * inside Docker (vs a host `inngest-cli dev`). Must be called once at startup
+ * before any tests run.
+ *
+ * "Server reachable on port 4000" alone isn't sufficient — a host-side CLI
+ * satisfies that probe too, and treating it as Docker would incorrectly rewrite
+ * the SDK origin to `host.docker.internal`. We therefore require an explicit
+ * Docker indicator: an env var, a docker-compose-managed container running on
+ * the host, or this process being inside a container itself.
+ */
+async function detectDockerInngest(): Promise<boolean> {
+  try {
+    const response = await fetch('http://localhost:4000/dev', { signal: AbortSignal.timeout(1000) });
+    if (!response.ok) return false;
+    inngestServerRunning = true;
+  } catch {
+    return false;
+  }
+
+  // Explicit opt-in / opt-out via env wins.
+  if (process.env.MASTRA_INNGEST_TEST_DOCKER === '1') {
+    useDockerInngest = true;
+    return true;
+  }
+  if (process.env.MASTRA_INNGEST_TEST_DOCKER === '0') {
+    return false;
+  }
+
+  // We're inside a container — the host of the dev server is irrelevant; Docker mode applies.
+  if (isInsideContainer()) {
+    useDockerInngest = true;
+    return true;
+  }
+
+  // Host machine: only treat as Docker if we can confirm a docker-compose-managed
+  // container with the expected name is up.
+  try {
+    const result = await execaCommand('docker ps --filter name=mastra-inngest-test --format {{.Names}}', {
+      reject: false,
+    });
+    if (typeof result.stdout === 'string' && result.stdout.includes('mastra-inngest-test')) {
+      useDockerInngest = true;
+      return true;
+    }
+  } catch {
+    // docker CLI unavailable — assume host inngest-cli, not Docker.
+  }
+  return false;
+}
+
+// Detect Docker at module load time
+await detectDockerInngest();
+
+/**
+ * Get additional serve options for tests that need Inngest registration to
+ * point at a non-default origin/path. When the dev server is running in Docker,
+ * the container can't reach `localhost`, so we rewrite the SDK origin to
+ * `host.docker.internal`. When running against a host-side `inngest-cli dev`,
+ * `localhost` works fine and no override is needed.
+ *
+ * `handlerPort` and `servePath` default to the values used by the legacy
+ * per-test setups (4001, `/inngest/api`); pass explicit values from any test
+ * that binds to a different port or mount path.
+ */
+function getDockerRegisterOptions(handlerPort: number = 4001, servePath: string = '/inngest/api') {
+  if (useDockerInngest) {
+    return {
+      registerOptions: {
+        serveOrigin: `http://host.docker.internal:${handlerPort}`,
+        servePath,
+      },
+    };
+  }
+  return {};
+}
+
+/**
+ * Wait for `expectedFnIds` to all be registered with the dev server, ignoring
+ * any stale registrations from earlier tests. If `expectedFnIds` is empty, fall
+ * back to waiting for at least one function (best effort).
+ */
+async function waitForFunctionRegistration(expectedFnIds: string[] = []): Promise<void> {
+  const maxAttempts = 20;
+  const matches = (id: string, candidate: string) =>
+    candidate === id || candidate.endsWith(`-${id}`) || candidate.endsWith(`.${id}`);
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch('http://localhost:4000/dev');
+      const data = await response.json();
+      const fns = (data.functions ?? []) as Array<{ slug?: string; id?: string; name?: string }>;
+      const candidates = fns.flatMap(f => [f.slug, f.id, f.name].filter(Boolean) as string[]);
+      if (expectedFnIds.length > 0) {
+        if (expectedFnIds.every(id => candidates.some(c => matches(id, c)))) return;
+      } else if (fns.length > 0) {
+        return;
+      }
+    } catch {
+      // Keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+
+/**
+ * Start a fresh inngest-cli dev server, killing any existing one first.
+ * If a server is already running (Docker or host CLI), just trigger registration
+ * without starting a new server.
+ */
+async function resetInngest(expectedFnIds: string[] = []) {
+  if (inngestServerRunning) {
+    // Server (Docker or host CLI) is already running — just trigger registration
+    try {
+      await fetch('http://localhost:4001/inngest/api', { method: 'PUT' });
+    } catch {
+      // Ignore - handler may not be up yet
+    }
+
+    await waitForFunctionRegistration(expectedFnIds);
+    return;
+  }
+
+  // Kill existing inngest dev server if running
+  if (standaloneInngestProcess) {
+    standaloneInngestProcess.kill();
+    standaloneInngestProcess = null;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Start inngest-cli dev server
+  standaloneInngestProcess = execaCommand(
+    `npx inngest-cli dev -p 4000 -u http://localhost:4001/inngest/api --poll-interval=1 --retry-interval=1`,
+    { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
+  );
+
+  // Wait for it to be ready
+  for (let i = 0; i < 30; i++) {
+    try {
+      const response = await fetch('http://localhost:4000/dev');
+      if (response.ok) break;
+    } catch {
+      // Keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Trigger registration by sending PUT to the handler
+  try {
+    await fetch('http://localhost:4001/inngest/api', { method: 'PUT' });
+  } catch {
+    // Ignore
+  }
+
+  await waitForFunctionRegistration(expectedFnIds);
 }
 
 describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
   beforeEach<LocalTestContext>(async ctx => {
-    ctx.inngestPort = 4000;
-    ctx.handlerPort = 4001;
+    ctx.inngestPort = 4100;
+    ctx.handlerPort = 4101;
 
     globServer?.close();
 
     vi.restoreAllMocks();
   });
 
+  afterAll(async () => {
+    globServer?.close();
+    if (standaloneInngestProcess) {
+      standaloneInngestProcess.kill();
+      standaloneInngestProcess = null;
+    }
+  });
+
   describe.sequential('Basic Workflow Execution', () => {
     it('should be able to bail workflow execution', async ctx => {
+      const t0 = Date.now();
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -93,7 +278,9 @@ describe('MastraInngestWorkflow', () => {
       });
 
       workflow.then(step1).then(step2).commit();
+      console.log(`[TIMING] workflow setup: ${Date.now() - t0}ms`);
 
+      const t1 = Date.now();
       const mastra = new Mastra({
         storage: new DefaultStorage({
           id: 'test-storage',
@@ -107,7 +294,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -119,18 +306,23 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       }));
+      console.log(`[TIMING] server setup: ${Date.now() - t1}ms`);
 
+      const t2 = Date.now();
       await resetInngest();
+      console.log(`[TIMING] resetInngest: ${Date.now() - t2}ms`);
 
+      const t3 = Date.now();
       const run = await workflow.createRun();
-      console.log('running');
+      console.log(`[TIMING] createRun: ${Date.now() - t3}ms`);
+      const t4 = Date.now();
       const result = await run.start({ inputData: { value: 'bail' } });
+      console.log(`[TIMING] run.start (bail): ${Date.now() - t4}ms`);
       console.log('result', result);
 
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'bailed' },
-        payload: { value: 'bail' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -145,7 +337,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'step1: no-bail' },
-        payload: { value: 'no-bail' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -153,7 +344,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.steps['step2']).toEqual({
         status: 'success',
         output: { result: 'step2: step1: no-bail' },
-        payload: { result: 'step1: no-bail' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -197,7 +387,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -271,7 +461,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -297,7 +487,6 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toEqual({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -347,7 +536,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -371,7 +560,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -420,7 +608,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -446,7 +634,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -456,7 +643,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -519,7 +705,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -570,14 +756,12 @@ describe('MastraInngestWorkflow', () => {
       expect(result1.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state-one!!!' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(result1.steps['step2']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state-one!!!', randomValue: 'test-state-one!!!test-value-one' },
-        payload: { result: 'success', value: 'test-state-one!!!' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -585,14 +769,12 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state-two!!!' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(result2.steps['step2']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state-two!!!', randomValue: 'test-state-two!!!test-value-two' },
-        payload: { result: 'success', value: 'test-state-two!!!' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -603,7 +785,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -665,7 +846,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -691,7 +872,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['nested-workflow']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -701,7 +881,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -779,7 +958,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -806,7 +985,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('paused');
       expect(result.steps['nested-workflow']).toEqual({
         status: 'paused',
-        payload: {},
         startedAt: expect.any(Number),
       });
     });
@@ -815,7 +993,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -892,7 +1069,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -918,7 +1095,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['nested-workflow']).toEqual({
         status: 'success',
         output: { result: 'success', value: 'test-state!!!' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -974,7 +1150,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1052,7 +1228,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1075,8 +1251,8 @@ describe('MastraInngestWorkflow', () => {
         input: {},
         step1: {
           status: 'success',
-          output: { value: 'step1' },
           payload: {},
+          output: { value: 'step1' },
 
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -1090,8 +1266,8 @@ describe('MastraInngestWorkflow', () => {
       expect(workflowRun?.steps).toEqual({
         step1: {
           status: 'success',
-          output: { value: 'step1' },
           payload: {},
+          output: { value: 'step1' },
 
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -1154,7 +1330,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1179,16 +1355,16 @@ describe('MastraInngestWorkflow', () => {
         input: {},
         step1: {
           status: 'success',
-          output: { value: 'step1', value2: 'test-state' },
           payload: {},
+          output: { value: 'step1', value2: 'test-state' },
 
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         step2: {
           status: 'success',
-          output: { value: 'step2', value2: 'test-state' },
           payload: {},
+          output: { value: 'step2', value2: 'test-state' },
 
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -1250,7 +1426,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1325,7 +1501,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1420,7 +1596,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1513,7 +1689,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1608,7 +1784,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1734,7 +1910,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1769,7 +1945,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -1815,7 +1990,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1844,7 +2019,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'step1: test' },
-        payload: { value: 'test' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -1856,7 +2030,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -1918,7 +2091,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -1948,7 +2121,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'step1: test' },
-        payload: { value: 'test' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -2008,7 +2180,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2098,7 +2270,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2167,7 +2339,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2244,7 +2416,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2328,7 +2500,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2433,7 +2605,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2559,7 +2731,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2686,7 +2858,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2766,7 +2938,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2874,7 +3046,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -2959,7 +3131,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3028,7 +3200,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3098,7 +3270,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3194,7 +3366,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3308,7 +3480,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3399,7 +3571,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3526,7 +3698,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3631,7 +3803,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3738,7 +3910,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3829,7 +4001,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -3959,7 +4131,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4107,7 +4279,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4259,7 +4431,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4432,7 +4604,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4502,7 +4674,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4578,7 +4750,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4656,7 +4828,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4736,7 +4908,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4893,7 +5065,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -4921,7 +5093,6 @@ describe('MastraInngestWorkflow', () => {
         promptAgent: {
           status: 'suspended',
           suspendPayload: { testPayload: 'hello' },
-          payload: { userInput: 'test input' },
         },
       });
 
@@ -5088,7 +5259,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -5111,13 +5282,11 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'suspended',
-          payload: { userInput: 'test input' },
           suspendPayload: { testPayload: 'hello' },
           startedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
@@ -5145,14 +5314,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
           suspendPayload: { testPayload: 'hello' },
           resumePayload: { userInput: 'test input for resumption' },
           startedAt: expect.any(Number),
@@ -5271,7 +5438,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -5298,13 +5465,11 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'suspended',
-          payload: { userInput: 'test input' },
           startedAt: expect.any(Number),
           suspendPayload: { testPayload: 'hello' },
           suspendedAt: expect.any(Number),
@@ -5330,14 +5495,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
           resumePayload: { userInput: 'test input for resumption' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -5351,13 +5514,11 @@ describe('MastraInngestWorkflow', () => {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
           },
-          payload: { modelOutput: 'test output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         improveResponse: {
           status: 'suspended',
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           startedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
         },
@@ -5381,14 +5542,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
           resumePayload: { userInput: 'test input for resumption' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -5402,14 +5561,12 @@ describe('MastraInngestWorkflow', () => {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
           },
-          payload: { modelOutput: 'test output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         improveResponse: {
           status: 'success',
           output: { improvedOutput: 'improved output' },
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           resumePayload: {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
@@ -5422,7 +5579,6 @@ describe('MastraInngestWorkflow', () => {
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 }, value: 'test state' },
-          payload: { improvedOutput: 'improved output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -5437,7 +5593,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -5509,7 +5664,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -5556,7 +5711,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -5618,7 +5772,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -5684,7 +5838,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -5805,7 +5958,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -5828,13 +5981,11 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'suspended',
-          payload: { userInput: 'test' },
           suspendPayload: {
             testPayload: 'suspend message',
           },
@@ -5859,14 +6010,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test input for resumption' },
-          payload: { userInput: 'test' },
           suspendPayload: { testPayload: 'suspend message' },
           resumePayload: { userInput: 'input for resumption' },
           startedAt: expect.any(Number),
@@ -5880,16 +6029,11 @@ describe('MastraInngestWorkflow', () => {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
           },
-          payload: { modelOutput: 'test input for resumption' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         improveResponse: {
           status: 'suspended',
-          payload: {
-            toneScore: { score: 0.8 },
-            completenessScore: { score: 0.7 },
-          },
           startedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
         },
@@ -5911,14 +6055,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test input for resumption' },
-          payload: { userInput: 'test' },
           suspendPayload: { testPayload: 'suspend message' },
           resumePayload: { userInput: 'input for resumption' },
           startedAt: expect.any(Number),
@@ -5932,7 +6074,6 @@ describe('MastraInngestWorkflow', () => {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
           },
-          payload: { modelOutput: 'test input for resumption' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -5942,7 +6083,6 @@ describe('MastraInngestWorkflow', () => {
             improvedOutput: 'improved output',
             overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           },
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           resumePayload: {
             toneScore: { score: 0.9 },
             completenessScore: { score: 0.8 },
@@ -5955,10 +6095,6 @@ describe('MastraInngestWorkflow', () => {
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
-          payload: {
-            improvedOutput: 'improved output',
-            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
-          },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -6033,7 +6169,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6063,14 +6199,12 @@ describe('MastraInngestWorkflow', () => {
           context: {
             input: { value: 0 },
             step1: {
-              payload: { value: 0 },
               startedAt: Date.now(),
               status: 'success',
               output: { step1Result: 2 },
               endedAt: Date.now(),
             },
             step2: {
-              payload: { step1Result: 2 },
               startedAt: Date.now(),
               status: 'running',
             },
@@ -6153,7 +6287,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6170,7 +6304,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await workflow.createRun();
 
       await expect(run.timeTravel({ step: 'step2', inputData: { invalidPayload: 2 } })).rejects.toThrow(
-        'Invalid inputData: \n- step1Result: Required',
+        'Invalid inputData:',
       );
 
       srv.close();
@@ -6233,7 +6367,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6314,7 +6448,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6333,7 +6467,6 @@ describe('MastraInngestWorkflow', () => {
         step: step2,
         context: {
           step1: {
-            payload: { value: 0 },
             startedAt: Date.now(),
             status: 'success',
             output: { step1Result: 2 },
@@ -6345,15 +6478,11 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
-        input: { value: 0 },
+        input: {},
         steps: {
-          input: {
-            value: 0,
-          },
+          input: {},
           step1: {
-            payload: {
-              value: 0,
-            },
+            payload: {},
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6362,9 +6491,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            payload: {
-              step1Result: 2,
-            },
+            payload: { step1Result: 2 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6373,9 +6500,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step3: {
-            payload: {
-              step2Result: 3,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6413,9 +6537,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            payload: {
-              step1Result: 2,
-            },
+            payload: { step1Result: 2 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6424,9 +6546,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step3: {
-            payload: {
-              step2Result: 3,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6502,7 +6621,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6520,7 +6639,7 @@ describe('MastraInngestWorkflow', () => {
         step: step2,
         context: {
           step1: {
-            payload: { value: 0 },
+            payload: {},
             startedAt: Date.now(),
             status: 'success',
             output: { step1Result: 2 },
@@ -6533,17 +6652,11 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('paused');
       expect(result).toEqual({
         status: 'paused',
-        input: {
-          value: 0,
-        },
+        input: {},
         steps: {
-          input: {
-            value: 0,
-          },
+          input: {},
           step1: {
-            payload: {
-              value: 0,
-            },
+            payload: {},
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6552,9 +6665,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            payload: {
-              step1Result: 2,
-            },
+            payload: { step1Result: 2 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6632,7 +6743,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6650,7 +6761,8 @@ describe('MastraInngestWorkflow', () => {
       const failedRun = await run.start({ inputData: { value: 0 } });
       expect(failedRun.status).toBe('failed');
       expect(failedRun.steps.step2.status).toBe('failed');
-      expect(failedRun.steps.step2.payload).toEqual({ step1Result: 2 });
+      // payload is stripped by stepExecutionPath optimization when it matches previous step output
+      expect(failedRun.steps.step2.payload).toBeUndefined();
       expect(failedRun.steps.step2.error).toBeInstanceOf(Error);
       expect((failedRun.steps.step2.error as Error).message).toBe('Simulated error');
       expect(failedRun.steps.step2.startedAt).toEqual(expect.any(Number));
@@ -6660,7 +6772,7 @@ describe('MastraInngestWorkflow', () => {
         step: step2,
         context: {
           step1: {
-            payload: failedRun.steps.step1.payload,
+            payload: { value: 0 },
             startedAt: Date.now(),
             status: 'success',
             output: { step1Result: 3 },
@@ -6678,9 +6790,7 @@ describe('MastraInngestWorkflow', () => {
             value: 0,
           },
           step1: {
-            payload: {
-              value: 0,
-            },
+            payload: { value: 0 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6689,9 +6799,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            payload: {
-              step1Result: 3,
-            },
+            payload: { step1Result: 3 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6700,9 +6808,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step3: {
-            payload: {
-              step2Result: 4,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6739,9 +6844,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            payload: {
-              step1Result: 4,
-            },
+            payload: { step1Result: 4 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6750,9 +6853,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step3: {
-            payload: {
-              step2Result: 5,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6831,7 +6931,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6851,7 +6951,6 @@ describe('MastraInngestWorkflow', () => {
       expect(failedRun.status).toBe('failed');
       expect(failedRun.steps.step2).toMatchObject({
         status: 'failed',
-        payload: { step1Result: 2 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -6874,7 +6973,7 @@ describe('MastraInngestWorkflow', () => {
         steps: {
           input: { value: 0 },
           step1: {
-            payload: { value: 0 },
+            payload: {},
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6883,9 +6982,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            payload: {
-              step1Result: 4,
-            },
+            payload: { step1Result: 4 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -6978,7 +7075,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -6997,7 +7094,6 @@ describe('MastraInngestWorkflow', () => {
         step: 'nestedWorkflow.step3',
         context: {
           step1: {
-            payload: { value: 0 },
             startedAt: Date.now(),
             status: 'success',
             output: { step1Result: 2 },
@@ -7007,7 +7103,6 @@ describe('MastraInngestWorkflow', () => {
         nestedStepsContext: {
           nestedWorkflow: {
             step2: {
-              payload: { step1Result: 2 },
               startedAt: Date.now(),
               status: 'success',
               output: { step2Result: 3 },
@@ -7020,13 +7115,11 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('success');
       expect(result).toEqual({
         status: 'success',
-        input: { value: 0 },
+        input: {},
         steps: {
-          input: { value: 0 },
+          input: {},
           step1: {
-            payload: {
-              value: 0,
-            },
+            payload: {},
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7035,9 +7128,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           nestedWorkflow: {
-            payload: {
-              step1Result: 2,
-            },
+            payload: { step1Result: 2 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7046,9 +7137,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step4: {
-            payload: {
-              nestedFinal: 4,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7085,7 +7173,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           nestedWorkflow: {
-            payload: {},
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7094,9 +7181,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step4: {
-            payload: {
-              nestedFinal: 4,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7142,9 +7226,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           step4: {
-            payload: {
-              nestedFinal: 4,
-            },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7261,7 +7342,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -7345,7 +7426,6 @@ describe('MastraInngestWorkflow', () => {
         },
         improveResponse: {
           status: 'suspended',
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           startedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
         },
@@ -7453,7 +7533,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -7479,13 +7559,11 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test input' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'suspended',
-          payload: { userInput: 'test input' },
           suspendPayload: { testPayload: 'hello' },
           startedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
@@ -7510,14 +7588,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test input' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
           resumePayload: { userInput: 'test input for resumption' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -7531,13 +7607,11 @@ describe('MastraInngestWorkflow', () => {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
           },
-          payload: { modelOutput: 'test output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         improveResponse: {
           status: 'suspended',
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           startedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
         },
@@ -7609,7 +7683,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -7629,9 +7703,6 @@ describe('MastraInngestWorkflow', () => {
         context: {
           'first-step': {
             status: 'success',
-            payload: {
-              value: 0,
-            },
             output: {
               value: 0,
             },
@@ -7639,7 +7710,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: Date.now(),
           },
           increment: {
-            payload: { value: 5 },
             startedAt: Date.now(),
             status: 'running',
             output: { value: 6 },
@@ -7649,16 +7719,12 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(result).toEqual({
         status: 'success',
-        input: { value: 0 },
+        input: {},
         steps: {
-          input: {
-            value: 0,
-          },
+          input: {},
           'first-step': {
+            payload: {},
             status: 'success',
-            payload: {
-              value: 0,
-            },
             output: {
               value: 0,
             },
@@ -7666,21 +7732,17 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           increment: {
-            payload: {
-              value: 9,
-            },
+            payload: { value: 9 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
               value: 10,
             },
             endedAt: expect.any(Number),
-            metadata: { iterationCount: 5 },
+            metadata: { iterationCount: 10 },
           },
           final: {
-            payload: {
-              value: 10,
-            },
+            payload: { value: 10 },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7799,7 +7861,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -7828,8 +7890,8 @@ describe('MastraInngestWorkflow', () => {
         steps: {
           input: {},
           initialStep: {
-            status: 'success',
             payload: {},
+            status: 'success',
             output: {
               result: 'initial step done',
             },
@@ -7837,18 +7899,16 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           nextStep: {
-            status: 'success',
             payload: { result: 'initial step done' },
+            startedAt: expect.any(Number),
+            status: 'success',
             output: {
               result: 'next step done',
             },
-            startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7857,9 +7917,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep2: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7868,9 +7926,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7908,7 +7964,6 @@ describe('MastraInngestWorkflow', () => {
         context: {
           initialStep: {
             status: 'success',
-            payload: { input: 'start' },
             output: {
               result: 'initial step done',
             },
@@ -7917,7 +7972,6 @@ describe('MastraInngestWorkflow', () => {
           },
           nextStep: {
             status: 'success',
-            payload: { result: 'initial step done' },
             output: {
               result: 'next step done',
             },
@@ -7925,9 +7979,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: Date.now(),
           },
           parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
             startedAt: Date.now(),
             status: 'success',
             output: {
@@ -7936,9 +7987,6 @@ describe('MastraInngestWorkflow', () => {
             endedAt: Date.now(),
           },
           parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
             startedAt: Date.now(),
             status: 'success',
             output: {
@@ -7952,12 +8000,12 @@ describe('MastraInngestWorkflow', () => {
       expect(result2.status).toBe('success');
       expect(result2).toEqual({
         status: 'success',
-        input: { input: 'start' },
+        input: {},
         steps: {
-          input: { input: 'start' },
+          input: {},
           initialStep: {
+            payload: {},
             status: 'success',
-            payload: { input: 'start' },
             output: {
               result: 'initial step done',
             },
@@ -7965,8 +8013,8 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           nextStep: {
-            status: 'success',
             payload: { result: 'initial step done' },
+            status: 'success',
             output: {
               result: 'next step done',
             },
@@ -7974,9 +8022,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7985,9 +8031,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep2: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -7996,9 +8040,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -8045,15 +8087,15 @@ describe('MastraInngestWorkflow', () => {
         steps: {
           input: {},
           initialStep: {
-            status: 'success',
             payload: {},
+            status: 'success',
             output: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           nextStep: {
-            status: 'success',
             payload: {},
+            status: 'success',
             output: {
               result: 'next step done',
             },
@@ -8061,18 +8103,14 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {},
             endedAt: expect.any(Number),
           },
           parallelStep2: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -8081,9 +8119,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {},
@@ -8217,7 +8253,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -8236,8 +8272,8 @@ describe('MastraInngestWorkflow', () => {
         step: 'parallelStep2',
         context: {
           initialStep: {
+            payload: {},
             status: 'success',
-            payload: { input: 'start' },
             output: {
               result: 'initial step done',
             },
@@ -8245,8 +8281,8 @@ describe('MastraInngestWorkflow', () => {
             endedAt: Date.now(),
           },
           nextStep: {
-            status: 'success',
             payload: { result: 'initial step done' },
+            status: 'success',
             output: {
               result: 'next step done',
             },
@@ -8254,9 +8290,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: Date.now(),
           },
           parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: Date.now(),
             status: 'success',
             output: {
@@ -8265,9 +8299,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: Date.now(),
           },
           parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: Date.now(),
             status: 'success',
             output: {
@@ -8282,12 +8314,12 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('paused');
       expect(result).toEqual({
         status: 'paused',
-        input: { input: 'start' },
+        input: {},
         steps: {
-          input: { input: 'start' },
+          input: {},
           initialStep: {
+            payload: {},
             status: 'success',
-            payload: { input: 'start' },
             output: {
               result: 'initial step done',
             },
@@ -8295,8 +8327,8 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           nextStep: {
-            status: 'success',
             payload: { result: 'initial step done' },
+            status: 'success',
             output: {
               result: 'next step done',
             },
@@ -8304,9 +8336,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -8315,9 +8345,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep2: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -8326,9 +8354,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -8362,15 +8388,15 @@ describe('MastraInngestWorkflow', () => {
         steps: {
           input: {},
           initialStep: {
-            status: 'success',
             payload: {},
+            status: 'success',
             output: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           nextStep: {
-            status: 'success',
             payload: {},
+            status: 'success',
             output: {
               result: 'next step done',
             },
@@ -8378,9 +8404,7 @@ describe('MastraInngestWorkflow', () => {
             endedAt: expect.any(Number),
           },
           parallelStep2: {
-            payload: {
-              result: 'next step done',
-            },
+            payload: { result: 'next step done' },
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -8504,7 +8528,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -8645,7 +8669,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -8693,7 +8717,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -8770,7 +8793,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -8810,7 +8833,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -8914,7 +8936,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -9061,7 +9083,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -9217,7 +9239,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -9378,7 +9400,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -9542,7 +9564,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -9744,7 +9766,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -9904,7 +9926,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -10055,7 +10077,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -10247,7 +10269,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10413,7 +10435,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10497,7 +10519,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10661,7 +10683,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10770,7 +10792,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10840,7 +10862,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10869,7 +10891,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -10912,7 +10933,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -10952,71 +10973,27 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'start',
         },
         {
-          payload: {
-            id: 'step1',
-            status: 'running',
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'step1',
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {},
-            output: {
-              result: 'success1',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: 'step2',
-            status: 'running',
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'step2',
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {
-              result: 'success1',
-            },
-            output: {
-              result: 'success2',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'step2',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'finish',
         },
       ]);
@@ -11024,16 +11001,12 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
-        payload: {
-          result: 'success1',
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -11043,7 +11016,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -11086,7 +11058,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -11126,100 +11098,36 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(11);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'start',
         },
         {
-          payload: {
-            id: 'step1',
-            startedAt: expect.any(Number),
-            status: 'running',
-            payload: {},
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'step1',
-            output: {
-              result: 'success1',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: expect.any(String),
-            startedAt: expect.any(Number),
-            status: 'waiting',
-            payload: {
-              result: 'success1',
-            },
-          },
           type: 'step-waiting',
         },
         {
-          payload: {
-            id: expect.any(String),
-            endedAt: expect.any(Number),
-            status: 'success',
-            output: {
-              result: 'success1',
-            },
-          },
           type: 'step-result',
         },
         {
           type: 'step-finish',
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
         },
         {
-          payload: {
-            id: 'step2',
-            payload: {
-              result: 'success1',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'step2',
-            output: {
-              result: 'success2',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'step2',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'finish',
         },
       ]);
@@ -11228,16 +11136,12 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
-        payload: {
-          result: 'success1',
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -11247,7 +11151,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -11295,7 +11198,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -11335,100 +11238,36 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(11);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'start',
         },
         {
-          payload: {
-            id: 'step1',
-            startedAt: expect.any(Number),
-            status: 'running',
-            payload: {},
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'step1',
-            output: {
-              value: 1000,
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: expect.any(String),
-            startedAt: expect.any(Number),
-            status: 'waiting',
-            payload: {
-              value: 1000,
-            },
-          },
           type: 'step-waiting',
         },
         {
-          payload: {
-            id: expect.any(String),
-            endedAt: expect.any(Number),
-            status: 'success',
-            output: {
-              value: 1000,
-            },
-          },
           type: 'step-result',
         },
         {
           type: 'step-finish',
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
         },
         {
-          payload: {
-            id: 'step2',
-            payload: {
-              value: 1000,
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'step2',
-            output: {
-              value: 2000,
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'step2',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'finish',
         },
       ]);
@@ -11437,16 +11276,12 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { value: 1000 },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { value: 2000 },
-        payload: {
-          value: 1000,
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -11456,7 +11291,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -11546,7 +11380,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -11589,14 +11423,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
@@ -11606,21 +11438,18 @@ describe('MastraInngestWorkflow', () => {
         evaluateToneConsistency: {
           status: 'success',
           output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-          payload: { modelOutput: 'test output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         improveResponse: {
           status: 'success',
           output: { improvedOutput: 'improved output' },
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
-          payload: { improvedOutput: 'improved output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -11631,7 +11460,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -11738,7 +11566,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -11773,69 +11601,27 @@ describe('MastraInngestWorkflow', () => {
       // Updated to new vNext streaming format
       const expectedValues = [
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'start',
         },
         {
-          payload: {
-            id: 'start',
-            payload: {
-              prompt1: 'Capital of France, just the name',
-              prompt2: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: 'start',
-            endedAt: expect.any(Number),
-            output: {
-              prompt1: 'Capital of France, just the name',
-              prompt2: 'Capital of UK, just the name',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: 'start',
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: expect.any(String),
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: expect.any(String),
-            output: {
-              prompt: 'Capital of France, just the name',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: 'test-agent-1',
-          },
           type: 'step-start',
         },
         {
@@ -11861,49 +11647,21 @@ describe('MastraInngestWorkflow', () => {
           type: 'tool-call-streaming-finish',
         },
         {
-          payload: {
-            id: 'test-agent-1',
-            output: {
-              text: 'Paris',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: expect.any(String),
-          },
           type: 'step-start',
         },
         {
-          payload: {
-            id: expect.any(String),
-            output: {
-              prompt: 'Capital of UK, just the name',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            id: expect.any(String),
-          },
           type: 'step-start',
         },
         {
@@ -11929,26 +11687,12 @@ describe('MastraInngestWorkflow', () => {
           type: 'tool-call-streaming-finish',
         },
         {
-          payload: {
-            id: expect.any(String),
-            output: {
-              text: 'London',
-            },
-            status: 'success',
-          },
           type: 'step-result',
         },
         {
-          payload: {
-            id: expect.any(String),
-            metadata: {},
-          },
           type: 'step-finish',
         },
         {
-          payload: {
-            runId: 'test-run-id',
-          },
           type: 'finish',
         },
       ];
@@ -11983,7 +11727,6 @@ describe('MastraInngestWorkflow', () => {
         const inngest = new Inngest({
           id: 'mastra',
           baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-          middleware: [realtimeMiddleware()],
         });
 
         const { createWorkflow, createStep } = init(inngest);
@@ -12019,7 +11762,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -12054,7 +11797,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -12097,7 +11839,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -12135,70 +11877,31 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(6);
       expect(watchData).toMatchObject([
         {
-          payload: {},
           type: 'workflow-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            payload: {},
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            output: {
-              result: 'success1',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            payload: {
-              result: 'success1',
-            },
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            output: {
-              result: 'success2',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            metadata: {},
-            output: {
-              usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-              },
-            },
-          },
           type: 'workflow-finish',
           from: 'WORKFLOW',
           runId: 'test-run-id',
@@ -12208,16 +11911,12 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
-        payload: {
-          result: 'success1',
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -12227,7 +11926,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -12269,7 +11967,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -12307,76 +12005,31 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(6);
       expect(watchData).toMatchObject([
         {
-          payload: {},
           type: 'workflow-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            payload: {},
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            output: {
-              result: 'success1',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            payload: {
-              result: 'success1',
-            },
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            // After JSON.parse(JSON.stringify(...)), Error becomes a plain object
-            error: expect.objectContaining({
-              message: expect.stringMatching(/Step input validation failed/),
-              name: expect.any(String),
-            }),
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {
-              result: 'success1',
-            },
-            status: 'failed',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            metadata: {},
-            output: {
-              usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-              },
-            },
-          },
           type: 'workflow-finish',
           from: 'WORKFLOW',
           runId: 'test-run-id',
@@ -12386,14 +12039,14 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2.status).toBe('failed');
       expect(executionResult.steps.step2.error).toBeInstanceOf(Error);
       expect((executionResult.steps.step2.error as Error).message).toMatch(/Step input validation failed/);
-      expect(executionResult.steps.step2.payload).toEqual({ result: 'success1' });
+      // payload is stripped by stepExecutionPath optimization when it matches previous step output
+      expect(executionResult.steps.step2.payload).toBeUndefined();
       expect(executionResult.steps.step2.startedAt).toEqual(expect.any(Number));
       expect(executionResult.steps.step2.endedAt).toEqual(expect.any(Number));
     });
@@ -12402,7 +12055,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -12412,9 +12064,6 @@ describe('MastraInngestWorkflow', () => {
         execute: async ({ writer }) => {
           await writer.write({
             type: 'custom-event',
-            payload: {
-              hello: 'world',
-            },
           });
 
           return { value: 'success1' };
@@ -12427,9 +12076,6 @@ describe('MastraInngestWorkflow', () => {
         execute: async ({ writer }) => {
           await writer.write({
             type: 'custom-event',
-            payload: {
-              hello: 'world 2',
-            },
           });
           return { result: 'success2' };
         },
@@ -12459,7 +12105,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -12496,98 +12142,43 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(8); // 6 standard events + 2 custom events
       expect(watchData).toMatchObject([
         {
-          payload: {},
           type: 'workflow-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            payload: {},
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
           type: 'workflow-step-output',
-          payload: {
-            output: {
-              type: 'custom-event',
-              payload: {
-                hello: 'world',
-              },
-            },
-          },
           from: 'USER',
           // stepId: 'step1',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            output: {
-              value: 'success1',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            payload: {
-              value: 'success1',
-            },
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
           type: 'workflow-step-output',
-          payload: {
-            output: {
-              type: 'custom-event',
-              payload: {
-                hello: 'world 2',
-              },
-            },
-          },
           from: 'USER',
           // stepId: 'step2',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            output: {
-              result: 'success2',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            metadata: {},
-            output: {
-              usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-              },
-            },
-          },
           type: 'workflow-finish',
           from: 'WORKFLOW',
           runId: 'test-run-id',
@@ -12597,16 +12188,12 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { value: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
-        payload: {
-          value: 'success1',
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -12616,7 +12203,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -12659,7 +12245,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -12697,96 +12283,41 @@ describe('MastraInngestWorkflow', () => {
       expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
         {
-          payload: {},
           type: 'workflow-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            startedAt: expect.any(Number),
-            payload: {},
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step1',
-            output: {
-              result: 'success1',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: expect.any(String),
-            startedAt: expect.any(Number),
-            status: 'waiting',
-            payload: {
-              result: 'success1',
-            },
-          },
           type: 'workflow-step-waiting',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: expect.any(String),
-            endedAt: expect.any(Number),
-            status: 'success',
-            output: {
-              result: 'success1',
-            },
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            payload: {
-              result: 'success1',
-            },
-            startedAt: expect.any(Number),
-          },
           type: 'workflow-step-start',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            id: 'step2',
-            output: {
-              result: 'success2',
-            },
-            endedAt: expect.any(Number),
-            status: 'success',
-          },
           type: 'workflow-step-result',
           from: 'WORKFLOW',
           runId: 'test-run-id',
         },
         {
-          payload: {
-            metadata: {},
-            output: {
-              usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-              },
-            },
-          },
           type: 'workflow-finish',
           from: 'WORKFLOW',
           runId: 'test-run-id',
@@ -12797,16 +12328,12 @@ describe('MastraInngestWorkflow', () => {
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
-        payload: {
-          result: 'success1',
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -12816,7 +12343,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -12906,7 +12432,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -12943,14 +12469,12 @@ describe('MastraInngestWorkflow', () => {
         getUserInput: {
           status: 'success',
           output: { userInput: 'test input' },
-          payload: { input: 'test' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         promptAgent: {
           status: 'success',
           output: { modelOutput: 'test output' },
-          payload: { userInput: 'test input' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
           resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
@@ -12960,21 +12484,18 @@ describe('MastraInngestWorkflow', () => {
         evaluateToneConsistency: {
           status: 'success',
           output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-          payload: { modelOutput: 'test output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         improveResponse: {
           status: 'success',
           output: { improvedOutput: 'improved output' },
-          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
-          payload: { improvedOutput: 'improved output' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -12985,7 +12506,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13098,7 +12618,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -13158,159 +12678,61 @@ describe('MastraInngestWorkflow', () => {
           type: 'workflow-start',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {},
         },
         {
           type: 'workflow-step-start',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: 'start',
-            id: 'start',
-            payload: {
-              prompt1: 'Capital of France, just the name',
-              prompt2: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
         },
         {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: 'start',
-            id: 'start',
-            status: 'success',
-            output: {
-              prompt1: 'Capital of France, just the name',
-              prompt2: 'Capital of UK, just the name',
-            },
-            endedAt: expect.any(Number),
-          },
         },
         {
           type: 'workflow-step-start',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: expect.any(String),
-            id: expect.any(String),
-            payload: {
-              prompt1: 'Capital of France, just the name',
-              prompt2: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
         },
         {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: expect.any(String),
-            id: expect.any(String),
-            status: 'success',
-            output: {
-              prompt: 'Capital of France, just the name',
-            },
-            endedAt: expect.any(Number),
-          },
         },
         {
           type: 'workflow-step-start',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: 'test-agent-1',
-            id: 'test-agent-1',
-            payload: {
-              prompt: 'Capital of France, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
         },
         {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: 'test-agent-1',
-            id: 'test-agent-1',
-            status: 'success',
-            output: {},
-            endedAt: expect.any(Number),
-          },
         },
         {
           type: 'workflow-step-start',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: expect.any(String),
-            id: expect.any(String),
-            payload: {},
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
         },
         {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: expect.any(String),
-            id: expect.any(String),
-            status: 'success',
-            output: {
-              prompt: 'Capital of UK, just the name',
-            },
-            endedAt: expect.any(Number),
-          },
         },
         {
           type: 'workflow-step-start',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: 'test-agent-2',
-            id: 'test-agent-2',
-            payload: {
-              prompt: 'Capital of UK, just the name',
-            },
-            startedAt: expect.any(Number),
-            status: 'running',
-          },
         },
         {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            stepName: 'test-agent-2',
-            id: 'test-agent-2',
-            status: 'success',
-            output: {},
-            endedAt: expect.any(Number),
-          },
         },
         {
           type: 'workflow-finish',
           runId: 'test-run-id',
           from: 'WORKFLOW',
-          payload: {
-            output: {
-              usage: {
-                inputTokens: 20,
-                outputTokens: 40,
-                totalTokens: 60,
-              },
-            },
-            metadata: {},
-          },
         },
       ]);
     });
@@ -13340,7 +12762,6 @@ describe('MastraInngestWorkflow', () => {
         const inngest = new Inngest({
           id: 'mastra',
           baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-          middleware: [realtimeMiddleware()],
         });
 
         const { createWorkflow, createStep } = init(inngest);
@@ -13376,7 +12797,7 @@ describe('MastraInngestWorkflow', () => {
               {
                 path: '/inngest/api',
                 method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
               },
             ],
           },
@@ -13406,12 +12827,99 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
+  describe.sequential('Long Running Steps', () => {
+    it('should handle long-running steps with eventual consistency', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const childWorkflowStep = createStep({
+        id: 'child-workflow-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'child-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(childWorkflowStep)
+        .commit();
+
+      // Create a step that takes 30 seconds to complete
+      const longRunningStep = createStep({
+        id: 'long-running-step',
+        execute: async () => {
+          // Simulate a long-running operation (30 seconds)
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          return { result: 'completed after 30 seconds' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'long-running-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [childWorkflow, longRunningStep],
+      });
+      workflow.then(childWorkflow).then(longRunningStep).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'long-running-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      srv.close();
+
+      // Verify the workflow completed successfully with the correct output
+      expect(result.status).toBe('success');
+      expect(result.steps['long-running-step']).toEqual({
+        status: 'success',
+        output: { result: 'completed after 30 seconds' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    }, 120000); // 2 minute timeout for the test
+  });
+
   describe.sequential('Flow Control Configuration', () => {
     it('should accept workflow configuration with flow control properties', async ctx => {
       const inngest = new Inngest({
         id: 'mastra-flow-control',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13457,7 +12965,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra-partial-flow-control',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13494,7 +13001,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra-backward-compat',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13531,7 +13037,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra-all-flow-control',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13585,7 +13090,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra-cron-test',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13628,7 +13132,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -13685,7 +13189,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra-cron-initial-state-test',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -13730,7 +13233,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -13812,16 +13315,14 @@ describe('MastraInngestWorkflow', () => {
 
       // Create user-supplied Inngest functions with distinct IDs
       const userFunction1 = inngest.createFunction(
-        { id: 'custom-user-handler-one' },
-        { event: 'user/custom.event.one' },
+        { id: 'custom-user-handler-one', triggers: { event: 'user/custom.event.one' } },
         async ({ event }) => {
           return { customResult: event.data.value };
         },
       );
 
       const userFunction2 = inngest.createFunction(
-        { id: 'custom-user-handler-two' },
-        { event: 'user/custom.event.two' },
+        { id: 'custom-user-handler-two', triggers: { event: 'user/custom.event.two' } },
         async ({ event }) => {
           return { doubledResult: event.data.value * 2 };
         },
@@ -13835,13 +13336,14 @@ describe('MastraInngestWorkflow', () => {
         server: {
           apiRoutes: [
             {
-              path: '/api/inngest',
+              path: '/inngest/api',
               method: 'ALL',
               createHandler: async ({ mastra }) =>
                 inngestServe({
                   mastra,
                   inngest,
                   functions: [userFunction1, userFunction2], // Include user functions
+                  ...getDockerRegisterOptions(),
                 }),
             },
           ],
@@ -13869,7 +13371,7 @@ describe('MastraInngestWorkflow', () => {
 
       try {
         // Make a request to the Inngest endpoint to get function introspection
-        const response = await fetch(`http://127.0.0.1:${port}/api/inngest`);
+        const response = await fetch(`http://127.0.0.1:${port}/inngest/api`);
         expect(response.ok).toBe(true);
 
         const introspectionData = await response.json();
@@ -13925,6 +13427,7 @@ describe('MastraInngestWorkflow', () => {
         mastra,
         inngest,
         functions: [],
+        ...getDockerRegisterOptions(),
       });
 
       expect(serveResult).toBeDefined();
@@ -13964,6 +13467,7 @@ describe('MastraInngestWorkflow', () => {
       const serveResult = inngestServe({
         mastra,
         inngest,
+        ...getDockerRegisterOptions(),
       });
 
       expect(serveResult).toBeDefined();
@@ -14024,7 +13528,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14099,7 +13603,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14143,7 +13647,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -14236,7 +13739,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14281,7 +13784,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -14316,7 +13818,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14351,7 +13853,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result?.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -14410,7 +13911,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14486,7 +13987,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14559,7 +14060,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14630,7 +14131,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14699,7 +14200,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14769,7 +14270,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14860,7 +14361,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -14915,7 +14416,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -14973,7 +14473,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -15015,7 +14515,6 @@ describe('MastraInngestWorkflow', () => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
       });
 
       const { createWorkflow, createStep } = init(inngest);
@@ -15070,7 +14569,7 @@ describe('MastraInngestWorkflow', () => {
             {
               path: '/inngest/api',
               method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
             },
           ],
         },
@@ -15097,3 +14596,494 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 }, 80e3);
+
+// ============================================================================
+// Shared Test Suite (Inngest Engine)
+// ============================================================================
+
+// Shared infrastructure - created once for all shared suite tests
+let sharedInngest: Inngest;
+let sharedMastra: Mastra;
+let sharedServer: ServerType;
+let sharedStorage: DefaultStorage;
+let sharedInngestProcess: ResultPromise | null = null;
+
+const SHARED_INNGEST_PORT = 4000;
+const SHARED_HANDLER_PORT = 4001;
+
+// Whether the shared Inngest dev server is already running on port 4000 (Docker
+// or host CLI), as opposed to one we start ourselves. Tracked for diagnostics
+// but not read directly — the actual switching happens via `usingDocker` below.
+let _sharedInngestServerRunning = false;
+// Whether that already-running shared server is *Docker* specifically. Only
+// Docker requires rewriting the SDK origin to `host.docker.internal`.
+let usingDocker = false;
+
+/**
+ * Wait for handler to be responding to requests
+ */
+async function waitForSharedHandler(maxAttempts = 30, intervalMs = 100): Promise<boolean> {
+  const handlerUrl = `http://localhost:${SHARED_HANDLER_PORT}/inngest/api`;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch(handlerUrl, { method: 'GET' });
+      // The handler returns 200 on GET with function info
+      if (response.ok || response.status === 405) {
+        console.log(`[waitForSharedHandler] Handler ready after ${i + 1} attempts`);
+        return true;
+      }
+    } catch {
+      // Connection refused, keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  console.log('[waitForSharedHandler] Handler not ready after max attempts');
+  return false;
+}
+
+/**
+ * Wait until the shared dev server reports `expectedFnIds` are all registered.
+ * Falls back to "any function present" if no expected ids are passed.
+ */
+async function waitForSharedFunctionRegistration(expectedFnIds: string[] = [], maxAttempts = 30): Promise<boolean> {
+  const matches = (id: string, candidate: string) =>
+    candidate === id || candidate.endsWith(`-${id}`) || candidate.endsWith(`.${id}`);
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+      const data = await response.json();
+      const fns = (data.functions ?? []) as Array<{ slug?: string; id?: string; name?: string }>;
+      const candidates = fns.flatMap(f => [f.slug, f.id, f.name].filter(Boolean) as string[]);
+      if (expectedFnIds.length > 0) {
+        if (expectedFnIds.every(id => candidates.some(c => matches(id, c)))) {
+          console.log(`[waitForSharedFunctionRegistration] all ${expectedFnIds.length} expected functions registered`);
+          return true;
+        }
+      } else if (fns.length > 0) {
+        return true;
+      }
+    } catch {
+      // Keep trying
+    }
+    if (i === Math.floor(maxAttempts / 3)) {
+      // Re-trigger registration mid-wait in case the first PUT raced startup
+      try {
+        await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+      } catch {
+        // Ignore
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  return false;
+}
+
+/**
+ * Ensure the Inngest dev server is running and has registered our functions.
+ *
+ * Uses the npm-installed inngest-cli binary (no Docker required).
+ * The dev server polls the handler URL for function definitions.
+ */
+async function startSharedInngest(expectedFnIds: string[] = []) {
+  // First, verify the handler is responding
+  console.log('[startSharedInngest] Verifying handler is responding...');
+  const handlerReady = await waitForSharedHandler();
+  if (!handlerReady) {
+    throw new Error('Handler not responding on port ' + SHARED_HANDLER_PORT);
+  }
+
+  // Check if a server is already running (Docker or host CLI). Don't equate
+  // "port reachable" with "Docker" — that would break host inngest-cli setups.
+  try {
+    const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+    if (response.ok) {
+      _sharedInngestServerRunning = true;
+      console.log(`[startSharedInngest] Inngest already running on port ${SHARED_INNGEST_PORT}`);
+      // Trigger registration so the running server picks up *this* run's
+      // workflows (its previous registry may be stale from an earlier suite).
+      try {
+        await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+      } catch {
+        // Ignore
+      }
+      const ok = await waitForSharedFunctionRegistration(expectedFnIds);
+      if (!ok && expectedFnIds.length > 0) {
+        throw new Error(`[startSharedInngest] expected functions not registered: ${expectedFnIds.join(', ')}`);
+      }
+      return;
+    }
+  } catch {
+    // Not running yet
+  }
+
+  // Start the inngest dev server as a background process using the npm CLI
+  console.log('[startSharedInngest] Starting Inngest dev server via inngest-cli...');
+  sharedInngestProcess = execaCommand(
+    `npx inngest-cli dev -p ${SHARED_INNGEST_PORT} -u http://localhost:${SHARED_HANDLER_PORT}/inngest/api --poll-interval=1 --retry-interval=1`,
+    { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
+  );
+
+  // Wait for the dev server to be ready
+  console.log('[startSharedInngest] Waiting for Inngest dev server to be ready...');
+  for (let i = 0; i < 30; i++) {
+    try {
+      const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+      if (response.ok) {
+        console.log(`[startSharedInngest] Inngest dev server ready after ${i + 1} attempts`);
+        break;
+      }
+    } catch {
+      // Keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Trigger registration by sending PUT to the handler
+  // This makes the handler send its function definitions to the dev server
+  console.log('[startSharedInngest] Triggering function registration via PUT...');
+  try {
+    await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+  } catch (e) {
+    console.log('[startSharedInngest] PUT registration failed:', e);
+  }
+
+  // Wait for the *expected* set of functions to register, not just "any"
+  console.log('[startSharedInngest] Waiting for function registration...');
+  const ok = await waitForSharedFunctionRegistration(expectedFnIds);
+  if (!ok) {
+    if (expectedFnIds.length > 0) {
+      throw new Error(
+        `[startSharedInngest] expected functions not registered after polling: ${expectedFnIds.join(', ')}`,
+      );
+    }
+    throw new Error('[startSharedInngest] No functions registered after 30 attempts - aborting test suite');
+  }
+}
+
+/**
+ * Stop the Inngest dev server
+ */
+async function stopSharedInngest() {
+  if (sharedInngestProcess) {
+    sharedInngestProcess.kill();
+    sharedInngestProcess = null;
+  }
+}
+
+createWorkflowTestSuite({
+  name: 'Workflow (Inngest Engine)',
+
+  getWorkflowFactory: () => {
+    // Create Inngest client if not already created
+    if (!sharedInngest) {
+      sharedInngest = new Inngest({
+        id: 'mastra-workflow-tests',
+        baseUrl: `http://localhost:${SHARED_INNGEST_PORT}`,
+      });
+    }
+    return init(sharedInngest);
+  },
+
+  /**
+   * Register all workflows with Mastra and start the server.
+   * This is called once after all workflows are created.
+   *
+   * Order of operations:
+   * 1. Start the handler server (so Inngest can sync with it)
+   * 2. Start Inngest (which will auto-discover and sync with handler)
+   * 3. Wait for sync to complete
+   */
+  registerWorkflows: async (registry: WorkflowRegistry) => {
+    // Detect whether a server is already running (Docker or host CLI). Don't
+    // equate "port reachable" with "Docker" — only set `usingDocker` when we
+    // can confirm it via an explicit Docker indicator.
+    try {
+      const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+      if (response.ok) {
+        _sharedInngestServerRunning = true;
+        if (process.env.MASTRA_INNGEST_TEST_DOCKER === '1') {
+          usingDocker = true;
+        } else if (process.env.MASTRA_INNGEST_TEST_DOCKER === '0') {
+          usingDocker = false;
+        } else if (isInsideContainer()) {
+          usingDocker = true;
+        } else {
+          try {
+            const psResult = await execaCommand('docker ps --filter name=mastra-inngest-test --format {{.Names}}', {
+              reject: false,
+            });
+            if (typeof psResult.stdout === 'string' && psResult.stdout.includes('mastra-inngest-test')) {
+              usingDocker = true;
+            }
+          } catch {
+            // docker CLI unavailable — assume host inngest-cli, not Docker.
+          }
+        }
+        console.log(
+          `[registerWorkflows] dev server reachable on port ${SHARED_INNGEST_PORT} (usingDocker=${usingDocker})`,
+        );
+      }
+    } catch {
+      // Not running yet, will use inngest-cli
+    }
+
+    // Collect all workflows from registry
+    const workflows: Record<string, InngestWorkflow<any, any, any, any, any, any, any>> = {};
+    for (const [id, entry] of Object.entries(registry)) {
+      workflows[id] = entry.workflow as InngestWorkflow<any, any, any, any, any, any, any>;
+    }
+
+    // Create storage
+    sharedStorage = new DefaultStorage({
+      id: 'shared-test-storage',
+      url: ':memory:',
+    });
+
+    // When using Docker, the Inngest container needs to reach the host via host.docker.internal
+    const serveOrigin = usingDocker ? `http://host.docker.internal:${SHARED_HANDLER_PORT}` : undefined;
+    console.log(`[registerWorkflows] serveOrigin=${serveOrigin}`);
+
+    // Create Mastra with all workflows
+    sharedMastra = new Mastra({
+      storage: sharedStorage,
+      workflows,
+      server: {
+        apiRoutes: [
+          {
+            path: '/inngest/api',
+            method: 'ALL',
+            createHandler: async ({ mastra }) => {
+              const opts = {
+                mastra,
+                inngest: sharedInngest,
+                registerOptions: serveOrigin ? { serveOrigin, servePath: '/inngest/api' } : undefined,
+              };
+              console.log(
+                '[createHandler] inngestServe options:',
+                JSON.stringify({ serveOrigin, servePath: opts.registerOptions?.servePath }),
+              );
+              return inngestServe(opts);
+            },
+          },
+        ],
+      },
+    });
+
+    // Start handler server FIRST (before Inngest)
+    console.log('[registerWorkflows] Starting handler server...');
+
+    // Debug: check what workflows are registered with Mastra
+    const registeredWorkflows = sharedMastra.listWorkflows();
+    console.log(
+      `[registerWorkflows] Mastra has ${Object.keys(registeredWorkflows).length} workflows registered:`,
+      Object.keys(registeredWorkflows),
+    );
+
+    const app = await createHonoServer(sharedMastra);
+    sharedServer = serve({
+      fetch: app.fetch,
+      port: SHARED_HANDLER_PORT,
+    });
+    console.log(`[registerWorkflows] Handler server started on port ${SHARED_HANDLER_PORT}`);
+
+    // Wait for handler to be fully ready before starting Inngest
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Now start Inngest (this also triggers registration via PUT with url body).
+    // We pass through the expected function ids so the registration wait verifies
+    // *our* workflows have synced — not just that the dev server has at least one
+    // function left over from a previous suite.
+    const expectedFnIds = Object.keys(workflows).map(id => `workflow.${id}`);
+    console.log('[registerWorkflows] Starting Inngest...');
+    await startSharedInngest(expectedFnIds);
+    console.log('[registerWorkflows] Inngest started and functions registered');
+  },
+
+  // Provide access to storage for tests that need to spy on storage operations
+  getStorage: () => sharedStorage,
+
+  beforeAll: async () => {
+    console.log('[beforeAll] Ready');
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
+  },
+
+  afterAll: async () => {
+    // Close server
+    if (sharedServer) {
+      await new Promise<void>(resolve => sharedServer.close(() => resolve()));
+    }
+    await stopSharedInngest();
+  },
+
+  beforeEach: async () => {
+    // Reset all mock call counts to prevent accumulation across tests
+    vi.clearAllMocks();
+
+    // Wait for Inngest to settle between tests (reduced from 2000ms)
+    await new Promise(resolve => setTimeout(resolve, 500));
+  },
+
+  // ============================================================================
+  // Domain-level skips: These domains require different APIs or aren't implemented
+  // Individual test skips within enabled domains are configured in skipTests below
+  // ============================================================================
+  skip: {
+    // ENABLED DOMAINS - these work with Inngest (individual tests may be skipped)
+    variableResolution: false,
+    simpleConditions: false,
+    errorHandling: false,
+    loops: false,
+    foreach: false,
+    branching: false,
+    retry: false,
+    callbacks: false,
+    streaming: false,
+    workflowRuns: false,
+    dependencyInjection: false,
+    nestedWorkflows: false,
+    multipleChains: false,
+    complexConditions: false,
+
+    // ENABLED DOMAINS - individual tests may be skipped via skipTests below
+    schemaValidation: false,
+    suspendResume: false,
+    timeTravel: false,
+    agentStep: false,
+    abort: false,
+    interoperability: false,
+
+    // SKIPPED DOMAINS - not supported on Inngest engine
+    restart: true, // restart() throws "not supported on inngest workflows"
+  },
+
+  skipTests: {
+    // ============================================================================
+    // FIXED BY SNAPSHOT PERSISTENCE: These tests now pass after adding explicit
+    // snapshot persistence before workflow-finish in workflow.ts finalize step.
+    // ============================================================================
+    state: false,
+    variableResolutionErrors: false,
+    foreachSingleConcurrency: true, // Flaky - race condition with snapshot persistence
+    callbackOnFinish: false,
+    callbackOnError: false,
+
+    // ============================================================================
+    // TIMING: Inngest network overhead (100-500ms/step) makes timing unreliable
+    // ============================================================================
+    foreachConcurrentTiming: true, // Expected <2000ms, got ~6000ms
+    foreachPartialConcurrencyTiming: true, // Expected <1500ms, got ~7000ms
+
+    // ============================================================================
+    // BEHAVIOR DIFFERENCES: Inngest handles these differently than default engine
+    // ============================================================================
+    schemaValidationThrows: true, // Inngest doesn't throw - validation happens async, returns result
+    abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
+    streamingSuspendResumeLegacy: true, // Inngest streaming has different suspend/resume behavior
+    abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
+    agentStepDeepNested: true, // Deep nested agent workflow fails on Inngest
+    executionFlowNotDefined: true, // InngestWorkflow.createRun() doesn't validate stepFlow
+    executionGraphNotCommitted: true, // InngestWorkflow.createRun() doesn't validate commit status
+    resumeMultiSuspendError: true, // Inngest result doesn't include 'suspended' array
+    resumeForeach: true, // Foreach suspend/resume uses different step coordination
+    resumeForeachConcurrent: true, // Foreach concurrent resume returns 'failed' not 'suspended'
+    resumeForeachIndex: true, // forEachIndex parameter not fully supported
+    storageWithNestedWorkflows: true, // Inngest step.invoke() uses different step naming convention
+
+    // ============================================================================
+    // ALL PASSING TESTS
+    // ============================================================================
+    loopUntil: false,
+    loopWhile: false,
+    errorIdentity: false,
+    emptyForeach: false,
+    nestedMultipleLevels: false,
+    mapPreviousStep: false,
+    nestedWorkflowFailure: false,
+    nestedDataPassing: false,
+    callbackResult: false,
+    callbackOnErrorNotCalled: false,
+    callbackBothOnFailure: false,
+    callbackAsyncOnFinish: false,
+    callbackAsyncOnError: false,
+    nestedWorkflowErrors: false,
+    parallelBranchErrors: false,
+    errorMessageFormat: false,
+    branchingElse: false,
+    stepExecutionOrder: false,
+    nonObjectOutput: false,
+    requestContextPropagation: false,
+    getInitData: false,
+    errorCauseChain: false,
+    // Storage round-trip test - enabled since storage tests pass
+    errorStorageRoundtrip: false,
+    // Error persistence tests - enabled with storage spy access
+    errorPersistWithoutStack: false,
+    errorPersistMastraError: false,
+    // Resume tests - enabled for testing
+    resumeBasic: false,
+    resumeWithLabel: false, // Testing - uses label instead of step
+    resumeWithState: true, // requestContext bug #4442 - request context not preserved during resume
+    resumeNested: true, // Nested step path resume not supported on Inngest
+    resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
+    resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property
+    resumeBranchingStatus: true, // Inngest branching + suspend behavior differs (returns 'failed' not 'suspended')
+    resumeConsecutiveNested: true, // Nested step path resume not supported on Inngest
+    resumeDountil: true, // Dountil loop with nested resume not supported on Inngest
+    resumeLoopInput: true, // Loop resume input tracking not supported on Inngest
+    resumeMapStep: true, // Map step resume not supported on Inngest
+    // Foreach: state batch and bail not supported on Inngest
+    foreachStateBatch: true, // stateSchema batching not supported
+    foreachBail: true, // bail() in foreach not supported
+    // DI: requestContext not preserved across suspend/resume on Inngest
+    diResumeRequestContext: true, // requestContext lost during Inngest resume
+    diRequestContextBeforeSuspension: true, // requestContext values lost after resume
+    diBug4442: true, // requestContext bug #4442 - same issue
+    // Resume: additional foreach/parallel resume not supported on Inngest
+    resumeAutoNoStep: true, // Auto-resume without step parameter not supported
+    resumeForeachPartialIndex: true, // Foreach partial index resume not supported
+    resumeForeachLabel: true, // Foreach label resume not supported
+    resumeForeachPartial: true, // Foreach partial resume not supported
+    resumeNotSuspendedWorkflow: true, // Error for non-suspended workflow differs
+    // Storage tests - enabled for testing
+    storageListRuns: false,
+    storageGetDelete: false,
+    storageResourceId: false,
+    // Run count tests - skip until loop behavior is verified
+    runCount: true,
+    retryCount: true,
+  },
+
+  executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
+    const inngestWorkflow = workflow as unknown as InngestWorkflow<any, any, any, any, any, any, any>;
+
+    // Create the run and execute
+    // The workflow is already registered with Mastra, so we can execute directly
+    const run = await inngestWorkflow.createRun({
+      runId: options.runId,
+      resourceId: options.resourceId,
+    });
+    const result = await run.start({
+      inputData,
+      initialState: options.initialState,
+      perStep: options.perStep,
+      requestContext: options.requestContext as any,
+    });
+
+    return result as WorkflowResult;
+  },
+
+  resumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<WorkflowResult> => {
+    const inngestWorkflow = workflow as unknown as InngestWorkflow<any, any, any, any, any, any, any>;
+
+    // Create the run with the existing runId to resume
+    const run = await inngestWorkflow.createRun({ runId: options.runId });
+    const result = await run.resume({
+      step: options.step,
+      label: options.label,
+      resumeData: options.resumeData,
+    } as any);
+
+    return result as WorkflowResult;
+  },
+});

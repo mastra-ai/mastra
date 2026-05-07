@@ -1,26 +1,44 @@
 import { randomUUID } from 'node:crypto';
+import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
-import { MessageList } from '../../agent/message-list';
+import { MessageList, messagesAreEqual } from '../../agent/message-list';
+import type { MessageInput } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { isSupportedLanguageModel } from '../../agent/utils';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
-import type { TracingContext } from '../../observability';
-import { EntityType, SpanType } from '../../observability';
-import type { Processor } from '../../processors';
-import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
+import type { OutputResult, Processor } from '../../processors';
+import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import {
+  summarizeActiveToolsForSpan,
+  summarizeProcessorModelForSpan,
+  summarizeProcessorResultForSpan,
+  summarizeProcessorToolsForSpan,
+  summarizeToolChoiceForSpan,
+} from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
-import type { InferSchemaOutput, SchemaWithValidation } from '../../stream/base/schema';
-import type { ChunkType } from '../../stream/types';
+import { toStandardSchema } from '../../schema';
+import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+
+import { WorkflowRunOutput } from '../../stream/RunOutput';
+import type { ChunkType, LanguageModelUsage } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
+// Direct import (bypassing the index) avoids a cycle: the index does a
+// side-effect import of `./evented`, so going through it from here would
+// re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
 import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
@@ -31,12 +49,21 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  WorkflowRunStatus,
   StepParams,
   ToolStep,
   DefaultEngineType,
+  StepMetadata,
 } from '../../workflows/types';
-import { PUBSUB_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { validateCron } from '../scheduler/cron';
+import type { WorkflowScheduleConfig } from '../scheduler/types';
+import { forwardAgentStreamChunk } from '../stream-utils';
+import type { StreamChunkWriter } from '../stream-utils';
+import { __registerEventedCreateWorkflow } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
+import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
+import type { TripwireChunk } from './helpers';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -89,6 +116,7 @@ export function cloneStep<TStepId extends string>(
     execute: step.execute,
     retries: step.retries,
     scorers: step.scorers,
+    metadata: step.metadata,
     component: step.component,
   };
 }
@@ -136,6 +164,21 @@ function isProcessor(obj: unknown): obj is Processor {
   );
 }
 
+function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: unknown[] | undefined): boolean {
+  if (before === after) {
+    return true;
+  }
+
+  if (!before || !after) {
+    return before === after;
+  }
+
+  return (
+    before.length === after.length &&
+    before.every((message, index) => messagesAreEqual(message as MessageInput, after[index] as MessageInput))
+  );
+}
+
 // ============================================
 // Overloads (Public API - clean types for consumers)
 // ============================================
@@ -152,20 +195,20 @@ function isProcessor(obj: unknown): obj is Processor {
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -178,6 +221,7 @@ export function createStep<TStepId extends string, TStepOutput>(
     structuredOutput: { schema: TStepOutput };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
   },
 ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
 
@@ -205,7 +249,7 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
@@ -223,8 +267,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferSchemaOutput<typeof ProcessorStepSchema>,
-  InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -237,20 +281,20 @@ export function createStep<TProcessorId extends string>(
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -270,7 +314,11 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    return createStepFromProcessor(params);
+    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
+      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+    };
+    step.providesSkillDiscovery = params.providesSkillDiscovery;
+    return step;
   }
 
   if (isStepParams(params)) {
@@ -284,22 +332,151 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 // Internal Implementations
 // ============================================
 
-function createStepFromParams(
-  params: StepParams<any, any, any, any, any, any>,
-): Step<any, any, any, any, any, any, DefaultEngineType> {
+function createStepFromParams<
+  TStepId extends string,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+>(
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
+): Step<
+  TStepId,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
+  DefaultEngineType,
+  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+> {
+  // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
+  // but we need it to match the inferred generic types. The public overloads ensure
+  // type safety for consumers.
   return {
     id: params.id,
     description: params.description,
-    inputSchema: params.inputSchema,
-    stateSchema: params.stateSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    requestContextSchema: params.requestContextSchema,
+    inputSchema: toStandardSchema(params.inputSchema),
+    stateSchema: params.stateSchema ? toStandardSchema(params.stateSchema) : undefined,
+    outputSchema: toStandardSchema(params.outputSchema),
+    resumeSchema: params.resumeSchema ? toStandardSchema(params.resumeSchema) : undefined,
+    suspendSchema: params.suspendSchema ? toStandardSchema(params.suspendSchema) : undefined,
+    requestContextSchema: params.requestContextSchema ? toStandardSchema(params.requestContextSchema) : undefined,
     scorers: params.scorers,
     retries: params.retries,
-    execute: params.execute.bind(params),
+    metadata: params.metadata,
+    execute: params.execute.bind(params) as Step<
+      TStepId,
+      TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+      InferPublicSchema<TInputSchema>,
+      InferPublicSchema<TOutputSchema>,
+      TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+      TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
+      DefaultEngineType,
+      TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+    >['execute'],
   };
+}
+
+/**
+ * Processes an agent stream, publishing events and detecting tripwires.
+ * This helper unifies the V1 and V2 stream processing paths.
+ */
+async function processAgentStream(params: {
+  fullStream: AsyncIterable<unknown>;
+  isV2Model: boolean;
+  pubsub: { publish: (channel: string, data: any) => Promise<void> };
+  runId: string;
+  toolData: { name: string; args: unknown };
+  writer?: StreamChunkWriter;
+  streamFormat?: 'legacy' | 'vnext';
+  logger?: { debug: (msg: string, data?: unknown) => void };
+}): Promise<{ tripwireChunk: TripwireChunk | null }> {
+  const { fullStream, isV2Model, pubsub, runId, toolData, logger, writer, streamFormat } = params;
+
+  // Publish stream start event
+  try {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'tool-call-streaming-start', ...toolData },
+    });
+  } catch (err) {
+    // Non-critical: continue even if publish fails
+    logger?.debug('Failed to publish stream start event', { runId, error: err });
+  }
+
+  let tripwireChunk: TripwireChunk | null = null;
+
+  for await (const chunk of fullStream) {
+    // Check for tripwire chunks from agent processors
+    if (isTripwireChunk(chunk)) {
+      tripwireChunk = chunk;
+      break;
+    }
+
+    // Publish text deltas
+    if (typeof chunk === 'object' && chunk !== null && 'type' in chunk && chunk.type === 'text-delta') {
+      const textDelta = getTextDeltaFromChunk(chunk as any, isV2Model);
+      if (textDelta) {
+        try {
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-delta', ...toolData, argsTextDelta: textDelta },
+          });
+        } catch (err) {
+          // Non-critical: continue even if publish fails
+          logger?.debug('Failed to publish stream delta event', { runId, error: err });
+        }
+      }
+    }
+
+    if (streamFormat !== 'legacy') {
+      await forwardAgentStreamChunk({ writer, chunk });
+    }
+  }
+
+  // Publish stream finish event
+  try {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'tool-call-streaming-finish', ...toolData },
+    });
+  } catch (err) {
+    // Non-critical: continue even if publish fails
+    logger?.debug('Failed to publish stream finish event', { runId, error: err });
+  }
+
+  return { tripwireChunk };
+}
+
+/**
+ * Safely invokes the user's onFinish callback with error logging.
+ */
+async function safeOnFinish(
+  callback: ((result: unknown) => void | Promise<void>) | undefined,
+  result: unknown,
+  logger?: { warn: (msg: string, data?: unknown) => void },
+): Promise<void> {
+  if (!callback) return;
+  try {
+    await callback(result);
+  } catch (err) {
+    // User callback errors are logged but don't fail the step
+    logger?.warn('User onFinish callback threw an error', { error: err });
+  }
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
@@ -307,84 +484,132 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
-    | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+    | (AgentStepOptions<TStepOutput> & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+        metadata?: StepMetadata;
+      })
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
-    z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
-  const { retries, scorers, ...agentOptions } = options ?? {};
+    z.object({ text: z.string() })) as unknown as PublicSchema<TStepOutput>;
+  const { retries, scorers, metadata, ...agentOptions } = options ?? {};
 
   return {
     id: params.id,
     description: params.getDescription(),
-    inputSchema: z.object({
-      prompt: z.string(),
-    }),
-    outputSchema,
+    inputSchema: toStandardSchema(
+      z.object({
+        prompt: z.string(),
+      }),
+    ),
+    outputSchema: toStandardSchema(outputSchema),
     retries,
     scorers,
+    metadata,
     execute: async ({
       inputData,
       runId,
+      mastra,
       [PUBSUB_SYMBOL]: pubsub,
+      [STREAM_FORMAT_SYMBOL]: streamFormat,
       requestContext,
-      tracingContext,
       abortSignal,
       abort,
+      writer,
+      ...obsFields
     }) => {
-      // TODO: support stream
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-      // TODO: should use regular .stream()
-      const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-        ...(agentOptions ?? {}),
-        tracingContext,
-        requestContext,
-        onFinish: result => {
-          streamPromise.resolve(result.text);
-        },
-        abortSignal,
-      });
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
+      const observabilityContext = resolveObservabilityContext(obsFields);
+      const logger = mastra?.getLogger();
       const toolData = {
         name: params.name,
         args: inputData,
       };
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-      });
-      for await (const chunk of fullStream) {
-        if (chunk.type === 'text-delta') {
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-          });
+      // Detect model version to choose streaming method
+      const llm = await params.getLLM({ requestContext });
+      const modelInfo = llm.getModel();
+      const isV2Model = isSupportedLanguageModel(modelInfo);
+
+      // Track structured output result
+      let structuredResult: any = null;
+
+      // Common callback to capture structured output
+      const handleFinish = (result: { text: string; object?: unknown }) => {
+        const resultWithObject = result as typeof result & { object?: unknown };
+        if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
+          structuredResult = resultWithObject.object;
         }
+      };
+
+      // Get the appropriate stream based on model version
+      let fullStream: AsyncIterable<unknown>;
+      let textPromise: Promise<string>;
+
+      if (isV2Model) {
+        // V2+ model path: use .stream() which returns MastraModelOutput
+        // @ts-expect-error - TODO: fix this
+        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          ...observabilityContext,
+          requestContext,
+          onFinish: result => {
+            handleFinish(result);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+          },
+          abortSignal,
+        });
+        fullStream = modelOutput.fullStream;
+        textPromise = modelOutput.text;
+      } else {
+        // V1 model path: use .streamLegacy() for backwards compatibility
+        let resolveText: (value: string) => void;
+        textPromise = new Promise(resolve => {
+          resolveText = resolve;
+        });
+
+        const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          ...observabilityContext,
+          requestContext,
+          onFinish: result => {
+            handleFinish(result);
+            resolveText!(result.text);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+          },
+          abortSignal,
+        });
+        fullStream = legacyResult.fullStream;
       }
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
+
+      if (abortSignal.aborted) {
+        return abort() as TStepOutput;
+      }
+
+      // Process the stream (unified for V1/V2)
+      const { tripwireChunk } = await processAgentStream({
+        fullStream,
+        isV2Model,
+        pubsub,
         runId,
-        data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
+        toolData,
+        logger,
+        writer,
+        streamFormat,
       });
 
+      // Handle tripwire if detected
+      if (tripwireChunk) {
+        throw createTripWireFromChunk(tripwireChunk);
+      }
+
+      // Return structured output if available, otherwise return text
+      if (structuredResult !== null) {
+        return structuredResult as TStepOutput;
+      }
+
       return {
-        text: await streamPromise.promise,
+        text: await textPromise,
       } as TStepOutput;
     },
     component: params.component,
@@ -395,7 +620,9 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
-  const toolOpts = agentOrToolOptions as { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
+  const toolOpts = agentOrToolOptions as
+    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
+    | undefined;
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
   }
@@ -409,7 +636,20 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     suspendSchema: params.suspendSchema,
     retries: toolOpts?.retries,
     scorers: toolOpts?.scorers,
-    execute: async ({ inputData, mastra, requestContext, suspend, resumeData, runId, workflowId, state, setState }) => {
+    metadata: toolOpts?.metadata,
+    execute: async ({
+      inputData,
+      mastra,
+      requestContext,
+      suspend,
+      resumeData,
+      runId,
+      workflowId,
+      state,
+      setState,
+      ...obsFields
+    }) => {
+      const observabilityContext = resolveObservabilityContext(obsFields);
       // Tools receive (input, context) - just call the tool's execute
       if (!params.execute) {
         throw new Error(`Tool ${params.id} does not have an execute function`);
@@ -419,7 +659,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       const context = {
         mastra,
         requestContext,
-        tracingContext: { currentSpan: undefined }, // TODO: Pass proper tracing context when evented workflows support tracing
+        ...observabilityContext,
         workflow: {
           runId,
           workflowId,
@@ -442,8 +682,8 @@ function createStepFromProcessor<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferSchemaOutput<typeof ProcessorStepSchema>,
-  InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -501,16 +741,26 @@ function createStepFromProcessor<TProcessorId extends string>(
     }
   };
 
+  // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
+  // but TypeScript type inference has issues with the complex discriminated union types.
+  // We use type assertions here since toStandardSchema returns the schema directly
+  // when it already implements StandardSchemaWithJSON.
   return {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
-    inputSchema: ProcessorStepSchema,
-    outputSchema: ProcessorStepOutputSchema,
-    execute: async ({ inputData, requestContext, tracingContext }) => {
+    inputSchema: toStandardSchema(ProcessorStepSchema) as StandardSchemaWithJSON<z.infer<typeof ProcessorStepSchema>>,
+    outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
+      z.infer<typeof ProcessorStepOutputSchema>
+    >,
+    execute: async ({ inputData, requestContext, ...obsFields }) => {
+      const observabilityContext = resolveObservabilityContext(obsFields);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput;
+      const input = inputData as ProcessorStepOutput & {
+        processorStates?: Map<string, ProcessorState>;
+        abortSignal?: AbortSignal;
+      };
       const {
         phase,
         messages,
@@ -520,6 +770,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         part,
         streamParts,
         state,
+        result: outputResult,
         finishReason,
         toolCalls,
         text,
@@ -533,11 +784,172 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
+        messageId,
+        rotateResponseMessageId,
+        // Shared processor states map for accessing persisted state
+        processorStates,
+        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
+        abortSignal,
       } = input;
 
       // Create a minimal abort function that throws TripWire
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+      const initialMessageId = messageId;
+      let currentMessageId = messageId;
+      const rotateCurrentResponseMessageId = rotateResponseMessageId
+        ? () => {
+            currentMessageId = rotateResponseMessageId();
+            return currentMessageId;
+          }
+        : undefined;
+      const defaultOutputResult: OutputResult = {
+        text: '',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: 'unknown',
+        steps: [],
+      };
+
+      const buildProcessorSpanInput = () => {
+        switch (phase) {
+          case 'input':
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(systemMessages ? { systemMessages } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          case 'inputStep': {
+            const summarizedModel = summarizeProcessorModelForSpan(model);
+            const summarizedTools = summarizeProcessorToolsForSpan(tools);
+            const summarizedToolChoice = summarizeToolChoiceForSpan(toolChoice, tools);
+            const summarizedActiveTools = summarizeActiveToolsForSpan(activeTools, tools);
+
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(systemMessages ? { systemMessages } : {}),
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(currentMessageId ? { messageId: currentMessageId } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+              ...(summarizedModel ? { model: summarizedModel } : {}),
+              ...(summarizedTools ? { tools: summarizedTools } : {}),
+              ...(summarizedToolChoice ? { toolChoice: summarizedToolChoice } : {}),
+              ...(summarizedActiveTools ? { activeTools: summarizedActiveTools } : {}),
+            };
+          }
+          case 'outputResult': {
+            const summarizedResult = summarizeProcessorResultForSpan(outputResult ?? defaultOutputResult);
+
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(summarizedResult ? { result: summarizedResult } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          }
+          case 'outputStep':
+            return {
+              messages: (messages as MastraDBMessage[]) ?? [],
+              ...(systemMessages ? { systemMessages } : {}),
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(finishReason !== undefined ? { finishReason } : {}),
+              ...(text !== undefined ? { text } : {}),
+              ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          default:
+            return undefined;
+        }
+      };
+
+      const buildProcessorSpanOutput = (result: unknown) => {
+        if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+          return result;
+        }
+
+        const payload = result as Record<string, unknown>;
+        switch (phase) {
+          case 'input':
+            return {
+              ...(Array.isArray(payload.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+                ? { messages: payload.messages }
+                : {}),
+              ...(Array.isArray(payload.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+                ? { systemMessages: payload.systemMessages }
+                : {}),
+            };
+          case 'inputStep': {
+            const output: Record<string, unknown> = {};
+
+            if (
+              Array.isArray(payload.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+            ) {
+              output.messages = payload.messages;
+            }
+
+            if (
+              Array.isArray(payload.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+            ) {
+              output.systemMessages = payload.systemMessages;
+            }
+
+            if (payload.messageId !== undefined && payload.messageId !== initialMessageId) {
+              output.messageId = payload.messageId;
+            }
+
+            if (payload.model !== undefined && payload.model !== model) {
+              const summarizedModel = summarizeProcessorModelForSpan(payload.model);
+              if (summarizedModel) {
+                output.model = summarizedModel;
+              }
+            }
+
+            if (payload.tools !== undefined && payload.tools !== tools) {
+              const summarizedTools = summarizeProcessorToolsForSpan(payload.tools);
+              if (summarizedTools) {
+                output.tools = summarizedTools;
+              }
+            }
+
+            if (payload.toolChoice !== undefined && payload.toolChoice !== toolChoice) {
+              const summarizedToolChoice = summarizeToolChoiceForSpan(payload.toolChoice, payload.tools ?? tools);
+              if (summarizedToolChoice) {
+                output.toolChoice = summarizedToolChoice;
+              }
+            }
+
+            if (payload.activeTools !== undefined && payload.activeTools !== activeTools) {
+              const summarizedActiveTools = summarizeActiveToolsForSpan(payload.activeTools, payload.tools ?? tools);
+              if (summarizedActiveTools) {
+                output.activeTools = summarizedActiveTools;
+              }
+            }
+
+            if (payload.retryCount !== undefined && payload.retryCount !== retryCount) {
+              output.retryCount = payload.retryCount;
+            }
+
+            return output;
+          }
+          case 'outputResult':
+          case 'outputStep':
+            return {
+              ...(Array.isArray(payload.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+                ? { messages: payload.messages }
+                : {}),
+              ...(Array.isArray(payload.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+                ? { systemMessages: payload.systemMessages }
+                : {}),
+            };
+          default:
+            return undefined;
+        }
       };
 
       // Early return if processor doesn't implement this phase - no span created
@@ -548,7 +960,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Create processor span for non-stream phases
       // outputStream phase doesn't need its own span (stream chunks are already tracked)
-      const currentSpan = tracingContext?.currentSpan;
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
 
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
@@ -567,7 +979,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityType: getProcessorEntityType(phase),
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
-              input: { phase, messageCount: messages?.length },
+              input: buildProcessorSpanInput(),
               attributes: {
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
@@ -576,18 +988,38 @@ function createStepFromProcessor<TProcessorId extends string>(
             })
           : undefined;
 
-      // Create tracing context with processor span so internal agent calls nest correctly
-      const processorTracingContext: TracingContext | undefined = processorSpan
-        ? { currentSpan: processorSpan }
-        : tracingContext;
+      // Create observability context with processor span so internal agent calls nest correctly
+      const processorObservabilityContext: ObservabilityContext | undefined = createObservabilityContext(
+        processorSpan ? { currentSpan: processorSpan } : observabilityContext.tracingContext,
+      );
+
+      // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
+      // Otherwise fall back to the state passed in inputData
+      let processorState: Record<string, unknown>;
+      if (processorStates) {
+        // Get or create the ProcessorState for this processor
+        let ps = processorStates.get(processor.id);
+        if (!ps) {
+          ps = new ProcessorState();
+          processorStates.set(processor.id, ps);
+        }
+        processorState = ps.customState;
+      } else {
+        processorState = state ?? {};
+      }
 
       // Base context for all processor methods - includes requestContext for memory processors
-      // and tracingContext for proper span nesting when processors call internal agents
+      // and observabilityContext for proper span nesting when processors call internal agents
+      // state is per-processor state that persists across all method calls within this request
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
-        tracingContext: processorTracingContext,
+        ...processorObservabilityContext,
+        state: processorState,
+        abortSignal,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -606,7 +1038,9 @@ function createStepFromProcessor<TProcessorId extends string>(
         stepNumber,
         systemMessages,
         streamParts,
-        state,
+        state: processorState,
+        processorStates,
+        result: outputResult,
         finishReason,
         toolCalls,
         text,
@@ -620,13 +1054,18 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Helper to execute phase with proper span lifecycle management
+      // Uses executeWithContext to set the processor span as the active OTEL context,
+      // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
-          const result = await fn();
-          processorSpan?.end({ output: result });
+          const result = await executeWithContext({ span: processorSpan, fn });
+          processorSpan?.end({ output: buildProcessorSpanOutput(result) });
           return result;
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
@@ -741,6 +1180,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                messageId: currentMessageId,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -763,18 +1204,25 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps
-              return { ...passThrough, messages, ...validatedResult };
+              // so we must explicitly include it to avoid losing it for subsequent steps.
+              return {
+                ...passThrough,
+                messages,
+                ...validatedResult,
+                ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
+              };
             }
             return { ...passThrough, messages };
           }
 
           case 'outputStream': {
-            if (processor.processOutputStream) {
+            if (processor.processOutputStream && part) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
-              const mutableState = (state ?? {}) as Record<string, unknown>;
+              // Use processorState (from the shared processorStates Map) so state persists
+              // across processOutputStream and processOutputResult calls
+              const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -787,7 +1235,6 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
-                  input: { phase, streamParts: [] },
                   attributes: {
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
@@ -796,19 +1243,10 @@ function createStepFromProcessor<TProcessorId extends string>(
                 mutableState[spanKey] = processorSpan;
               }
 
-              // Update span with current chunk data
-              if (processorSpan) {
-                processorSpan.input = {
-                  phase,
-                  streamParts: streamParts ?? [],
-                  totalChunks: (streamParts ?? []).length,
-                };
-              }
-
-              // Create tracing context with processor span for internal agent calls
-              const processorTracingContext = processorSpan
-                ? { currentSpan: processorSpan }
-                : baseContext.tracingContext;
+              // Create observability context with processor span for internal agent calls
+              const processorObservabilityContext = createObservabilityContext(
+                processorSpan ? { currentSpan: processorSpan } : baseContext.tracingContext,
+              );
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
@@ -816,7 +1254,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               try {
                 result = await processor.processOutputStream({
                   ...baseContext,
-                  tracingContext: processorTracingContext,
+                  ...processorObservabilityContext,
                   part: part as ChunkType,
                   streamParts: (streamParts ?? []) as ChunkType[],
                   state: mutableState,
@@ -825,7 +1263,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
-                  processorSpan?.end({ output: result });
+                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
                   delete mutableState[spanKey];
                 }
               } catch (error) {
@@ -859,10 +1297,18 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultResult: OutputResult = {
+                text: '',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              };
+
               const result = await processor.processOutputResult({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
+                result: (passThrough.result as OutputResult) ?? defaultResult,
               });
 
               if (result instanceof MessageList) {
@@ -927,6 +1373,11 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultUsage: LanguageModelUsage = {
+                inputTokens: undefined,
+                outputTokens: undefined,
+                totalTokens: undefined,
+              };
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -935,6 +1386,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 finishReason,
                 toolCalls: toolCalls as any,
                 text,
+                usage: (usage as LanguageModelUsage) ?? defaultUsage,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
               });
@@ -992,7 +1444,15 @@ function createStepFromProcessor<TProcessorId extends string>(
       });
     },
     component: 'PROCESSOR',
-  };
+  } satisfies Step<
+    `processor:${TProcessorId}`,
+    unknown,
+    InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+    InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
+    unknown,
+    unknown,
+    DefaultEngineType
+  >;
 }
 
 export function createWorkflow<
@@ -1010,6 +1470,26 @@ export function createWorkflow<
     EventedEngineType
   >[],
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  if (params.schedule) {
+    const schedules = Array.isArray(params.schedule) ? params.schedule : [params.schedule];
+    if (Array.isArray(params.schedule)) {
+      const seenIds = new Set<string>();
+      for (const entry of schedules) {
+        if (!entry.id) {
+          throw new Error(
+            `Workflow "${params.id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
+          );
+        }
+        if (seenIds.has(entry.id)) {
+          throw new Error(`Workflow "${params.id}" declares duplicate schedule id "${entry.id}".`);
+        }
+        seenIds.add(entry.id);
+      }
+    }
+    for (const entry of schedules) {
+      validateCron(entry.cron, entry.timezone);
+    }
+  }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1028,6 +1508,13 @@ export function createWorkflow<
   });
 }
 
+// Register this factory with the default `createWorkflow` so that workflows
+// declared with the default factory are auto-promoted to evented when they
+// declare a `schedule`. Done at module-load time; the registration slot is
+// initialized as `undefined` in `../workflow.ts` and is read lazily on user
+// call, so module evaluation order doesn't matter.
+__registerEventedCreateWorkflow(createWorkflow as Parameters<typeof __registerEventedCreateWorkflow>[0]);
+
 export class EventedWorkflow<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
@@ -1037,9 +1524,27 @@ export class EventedWorkflow<
   TOutput = unknown,
   TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
+  #schedules: WorkflowScheduleConfig[];
+
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
     this.engineType = 'evented';
+    if (!params.schedule) {
+      this.#schedules = [];
+    } else if (Array.isArray(params.schedule)) {
+      this.#schedules = params.schedule.map(cfg => ({ ...cfg }));
+    } else {
+      this.#schedules = [{ ...params.schedule }];
+    }
+  }
+
+  /**
+   * Returns the cron schedule configurations declared on this workflow as a
+   * normalized array. Used by the Mastra scheduler to register declarative
+   * schedules at boot. Returns an empty array when no schedule is declared.
+   */
+  getScheduleConfigs(): WorkflowScheduleConfig[] {
+    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {
@@ -1053,6 +1558,22 @@ export class EventedWorkflow<
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
+
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+
+    const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
+    if (workflowsStore && !supportsConcurrentUpdates) {
+      throw new MastraError({
+        id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${this.id}" runs on the evented execution engine, which requires a storage adapter that supports concurrent updates. ` +
+          `Your current workflow storage adapter does not. Switch to an adapter that does (for example @mastra/libsql), or, if you do not need scheduled execution, ` +
+          `remove the \`schedule\` field from this workflow's definition to use the default execution engine.`,
+        details: { workflowId: this.id },
+      });
+    }
 
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
@@ -1069,6 +1590,8 @@ export class EventedWorkflow<
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
         validateInputs: this.options?.validateInputs,
+        inputSchema: this.inputSchema,
+        stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
       });
 
@@ -1086,8 +1609,12 @@ export class EventedWorkflow<
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
 
+    // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
+    if (existsInStorage && existingRun.status) {
+      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+    }
+
     if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
@@ -1136,6 +1663,8 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    inputSchema?: StandardSchemaWithJSON<TInput>;
+    stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
   }) {
     super(params);
@@ -1169,11 +1698,16 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    outputOptions,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -1220,6 +1754,7 @@ export class EventedRun<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
@@ -1229,6 +1764,7 @@ export class EventedRun<
       requestContext,
       abortController: this.abortController,
       perStep,
+      outputOptions,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -1314,11 +1850,186 @@ export class EventedRun<
     return { runId: this.runId };
   }
 
-  // TODO: stream
+  /**
+   * Starts the workflow execution as a stream, returning a WorkflowRunOutput
+   * with .fullStream for iteration and .result for the final result.
+   */
+  stream({
+    inputData,
+    requestContext,
+    initialState,
+    closeOnSuspend = true,
+    perStep,
+    outputOptions,
+  }: (TInput extends unknown ? { inputData?: TInput } : { inputData: TInput }) &
+    (TState extends unknown ? { initialState?: TState } : { initialState: TState }) & {
+      requestContext?: RequestContext;
+      closeOnSuspend?: boolean;
+      perStep?: boolean;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (this.closeStreamAction && this.streamOutput) {
+      return this.streamOutput;
+    }
+
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+          const { type, payload } = event;
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              stepName: (payload as any)?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+          try {
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
+          } catch (err) {
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
+          }
+        };
+
+        try {
+          const executionResults = await self.start({
+            inputData: inputData as TInput,
+            requestContext,
+            initialState: initialState as TState,
+            perStep,
+            outputOptions,
+          });
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+
+          if (closeOnSuspend) {
+            self.closeStreamAction?.().catch(() => {});
+          } else if (executionResults.status !== 'suspended') {
+            self.closeStreamAction?.().catch(() => {});
+          }
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
+
+  /**
+   * Resumes a suspended workflow as a stream, returning a WorkflowRunOutput
+   * with .fullStream for iteration and .result for the final result.
+   */
+  resumeStream<TResume>({
+    step,
+    resumeData,
+    requestContext,
+    perStep,
+    outputOptions,
+  }: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, any, TResume, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, any, TResume, any, TEngineType>,
+        ]
+      | string
+      | string[];
+    requestContext?: RequestContext;
+    perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+          const { type, payload } = event;
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              stepName: (payload as any)?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+          try {
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
+          } catch (err) {
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
+          }
+        };
+
+        try {
+          const executionResults = await self.resume({
+            resumeData,
+            step,
+            requestContext,
+            perStep,
+            outputOptions,
+          });
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+
+          // Wait a microtask to let any pending events flush through
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          self.closeStreamAction?.().catch(() => {});
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
 
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
-    step:
+    step?:
       | Step<string, any, any, TResumeSchema, any, any, TEngineType, any>
       | [
           ...Step<string, any, any, any, any, any, TEngineType, any>[],
@@ -1326,22 +2037,15 @@ export class EventedRun<
         ]
       | string
       | string[];
+    label?: string;
+    forEachIndex?: number;
     requestContext?: RequestContext;
     perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    let steps: string[] = [];
-    if (typeof params.step === 'string') {
-      steps = params.step.split('.');
-    } else {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-        typeof step === 'string' ? step : step?.id,
-      );
-    }
-
-    if (steps.length === 0) {
-      throw new Error('No steps provided to resume');
-    }
-
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
@@ -1354,12 +2058,84 @@ export class EventedRun<
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
     }
 
-    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-    if (!resumePath) {
+    // Check if workflow is suspended before proceeding
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    // Resolve label to step path if provided
+    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+
+    // Validate label exists if provided
+    if (params.label && !snapshotResumeLabel) {
+      const availableLabels = Object.keys(snapshot?.resumeLabels ?? {});
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
+        `Resume label "${params.label}" not found. ` + `Available labels: [${availableLabels.join(', ')}]`,
       );
     }
+
+    // Label takes precedence over step param
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
+
+    // Auto-detect suspended steps if no step is provided
+    let steps: string[];
+    if (stepParam) {
+      if (typeof stepParam === 'string') {
+        steps = stepParam.split('.');
+      } else {
+        steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+          typeof step === 'string' ? step : step?.id,
+        );
+      }
+    } else {
+      // Use suspendedPaths to detect suspended steps
+      const suspendedStepPaths: string[][] = [];
+
+      Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
+        // Check if this step has nested workflow suspension data
+        const stepResult = snapshot?.context?.[stepId];
+        if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
+          const stepRes = stepResult as any;
+          if (stepRes.status === 'suspended') {
+            const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
+            if (nestedPath && Array.isArray(nestedPath)) {
+              // For nested workflows, combine the parent step ID with the nested path
+              suspendedStepPaths.push([stepId, ...nestedPath]);
+            } else {
+              // For single-level suspension, just use the step ID
+              suspendedStepPaths.push([stepId]);
+            }
+          }
+        }
+      });
+
+      if (suspendedStepPaths.length === 0) {
+        throw new Error('No suspended steps found in this workflow run');
+      }
+
+      if (suspendedStepPaths.length === 1) {
+        // For single suspended step, use the full path
+        steps = suspendedStepPaths[0]!;
+      } else {
+        const pathStrings = suspendedStepPaths.map(path => `[${path.join(', ')}]`);
+        throw new Error(
+          `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+            'Please specify which step to resume using the "step" parameter.',
+        );
+      }
+    }
+
+    // Validate that the step is actually suspended
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
+      throw new Error(
+        `This workflow step "${steps?.[0]}" was not suspended. Available suspended steps: [${suspendedStepIds.join(', ')}]`,
+      );
+    }
+
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
 
     console.dir(
       { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
@@ -1391,6 +2167,9 @@ export class EventedRun<
 
     this.setupAbortHandler();
 
+    // Extract state from snapshot - could be in context.__state or in value
+    const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
+
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1398,16 +2177,19 @@ export class EventedRun<
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input as TInput,
+        initialState: resumeState as TState,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
           resumePath,
+          forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
         },
         pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
         perStep: params.perStep,
+        outputOptions: params.outputOptions,
       })
       .then(result => {
         if (result.status !== 'suspended') {

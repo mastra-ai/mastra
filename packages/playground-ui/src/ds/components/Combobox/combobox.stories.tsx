@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Fragment } from 'react';
 import { Combobox } from './combobox';
 
 const meta: Meta<typeof Combobox> = {
@@ -7,14 +8,13 @@ const meta: Meta<typeof Combobox> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },
     },
     variant: {
       control: { type: 'select' },
-      options: ['default', 'light', 'outline', 'ghost'],
+      options: ['default', 'ghost'],
     },
   },
 };
@@ -84,24 +84,6 @@ export const CustomEmptyText: Story = {
   },
 };
 
-export const LightVariant: Story = {
-  args: {
-    options: frameworkOptions,
-    placeholder: 'Select a framework...',
-    variant: 'light',
-    className: 'w-[200px]',
-  },
-};
-
-export const OutlineVariant: Story = {
-  args: {
-    options: frameworkOptions,
-    placeholder: 'Select a framework...',
-    variant: 'outline',
-    className: 'w-[200px]',
-  },
-};
-
 export const ManyOptions: Story = {
   args: {
     options: [
@@ -121,4 +103,28 @@ export const ManyOptions: Story = {
     placeholder: 'Select an option...',
     className: 'w-[200px]',
   },
+};
+
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      {(['default', 'ghost'] as const).map(variant => (
+        <Fragment key={variant}>
+          <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-[200px]" />
+        </Fragment>
+      ))}
+    </div>
+  ),
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      {(['default', 'md', 'sm'] as const).map(size => (
+        <Fragment key={size}>
+          <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-[200px]" />
+        </Fragment>
+      ))}
+    </div>
+  ),
 };

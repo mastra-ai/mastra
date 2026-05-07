@@ -6,6 +6,9 @@ const config = await createConfig();
 export default [
   ...config,
   {
+    ignores: ['src/**/explorations/**'],
+  },
+  {
     files: ['integration-tests/**/*'],
     ...(await import('typescript-eslint')).configs.disableTypeChecked,
   },

@@ -1,5 +1,5 @@
-import posthog from 'posthog-js';
 import { PostHogProvider as PHProvider } from '@posthog/react';
+import posthog from 'posthog-js';
 import { useEffect } from 'react';
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {

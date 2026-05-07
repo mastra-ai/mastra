@@ -11,6 +11,8 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
@@ -71,8 +73,8 @@ describe('Fastify Server Adapter', () => {
           },
         };
 
-        // Add body for POST/PUT/PATCH
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+        // Add body for POST/PUT/PATCH/DELETE
+        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 
@@ -88,7 +90,10 @@ describe('Fastify Server Adapter', () => {
         // Check if stream response
         const contentType = response.headers.get('content-type') || '';
         const transferEncoding = response.headers.get('transfer-encoding') || '';
-        const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
+        const isStream =
+          contentType.includes('text/plain') ||
+          contentType.includes('text/event-stream') ||
+          transferEncoding === 'chunked';
 
         if (isStream && response.body) {
           // Return stream response
@@ -477,5 +482,263 @@ describe('Fastify Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.addHook('preHandler', middleware);
     },
+  });
+
+  describe('Plugin Headers on Stream Responses', () => {
+    let context: AdapterTestContext;
+    let app: FastifyInstance | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (app) {
+        await app.close();
+        app = null;
+      }
+    });
+
+    it('should preserve headers set by plugins/hooks on stream responses', async () => {
+      app = Fastify();
+
+      // Simulate what a CORS plugin does: set headers in an onRequest hook
+      // This tests that headers set before the route handler are preserved
+      // when using reply.hijack() for streaming
+      app.addHook('onRequest', async (_request, reply) => {
+        reply.header('access-control-allow-origin', 'https://example.com');
+        reply.header('access-control-allow-credentials', 'true');
+        reply.header('x-custom-header', 'custom-value');
+      });
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Create a test route that returns a stream
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/test/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // Headers set by the hook should be preserved on stream responses
+      expect(response.headers.get('access-control-allow-origin')).toBe('https://example.com');
+      expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+      expect(response.headers.get('x-custom-header')).toBe('custom-value');
+
+      // Consume the stream to avoid hanging
+      await consumeSSEStream(response.body);
+    });
+
+    it('should preserve headers set by plugins/hooks on non-stream (JSON) responses', async () => {
+      app = Fastify();
+
+      // Simulate what a CORS plugin does: set headers in an onRequest hook
+      app.addHook('onRequest', async (_request, reply) => {
+        reply.header('access-control-allow-origin', 'https://example.com');
+        reply.header('access-control-allow-credentials', 'true');
+        reply.header('x-custom-header', 'custom-value');
+      });
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Create a test route that returns JSON (not a stream)
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/json',
+        responseType: 'json',
+        handler: async () => ({ message: 'hello' }),
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/test/json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // Headers should be present on JSON responses (this already works without the fix)
+      expect(response.headers.get('access-control-allow-origin')).toBe('https://example.com');
+      expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+      expect(response.headers.get('x-custom-header')).toBe('custom-value');
+
+      await response.json();
+    });
+  });
+
+  describe('Multipart File Handling (Busboy)', () => {
+    let context: AdapterTestContext;
+    let app: FastifyInstance | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (app) {
+        await app.close();
+        app = null;
+      }
+    });
+
+    it('should expose uploaded file as buffer', async () => {
+      app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload',
+        responseType: 'json',
+        handler: async (params: any) => {
+          return params;
+        },
+      };
+
+      adapter.registerContextMiddleware();
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      const form = new FormData();
+      form.append('file', new Blob(['hello world']), 'test.txt');
+
+      const response = await fetch(`${address}/test/upload`, {
+        method: 'POST',
+        body: form as any,
+      });
+
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.file).toBeDefined();
+
+      // reconstruct buffer from JSON
+      const reconstructed = Buffer.from(data.file.data);
+
+      expect(reconstructed.toString()).toBe('hello world');
+    });
+
+    it('should return error when file exceeds size limit (no hang)', async () => {
+      app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        bodyLimitOptions: { maxSize: 1024 },
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload-limit',
+        responseType: 'json',
+        handler: async (params: any) => params,
+      };
+
+      adapter.registerContextMiddleware();
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      const bigBuffer = new Uint8Array(1024 * 10);
+
+      const form = new FormData();
+      form.append('file', new Blob([bigBuffer]), 'big.txt');
+
+      const response = await fetch(`${address}/test/upload-limit`, {
+        method: 'POST',
+        body: form as any,
+      });
+
+      expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
+  describe('Custom route prefix validation', () => {
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+      await app.close();
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+      await app.close();
+    });
   });
 });

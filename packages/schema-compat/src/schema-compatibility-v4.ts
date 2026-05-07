@@ -10,6 +10,7 @@ import {
   ZodDefault,
   ZodNull,
   ZodNullable,
+  ZodIntersection,
 } from 'zod/v4';
 import type { ZodAny, ZodType } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
@@ -257,6 +258,13 @@ export class SchemaCompatLayer {
   }
 
   /**
+   * Type guard for intersection Zod types
+   */
+  isIntersection(v: ZodAny | ZodIntersection<any, any>): v is ZodIntersection<any, any> {
+    return v instanceof ZodIntersection;
+  }
+
+  /**
    * Determines whether this compatibility layer should be applied for the current model.
    *
    * @returns True if this compatibility layer should be used, false otherwise
@@ -284,7 +292,7 @@ export class SchemaCompatLayer {
    * @abstract
    */
   processZodType(value: ZodType): ZodType {
-    return this.parent.processZodType(value);
+    return this.parent.processZodType(value) as ZodType;
   }
 
   /**
@@ -304,19 +312,25 @@ export class SchemaCompatLayer {
 
     let result: ZodObject<any, any> = z.object(processedShape);
 
+    // Handle strict objects (catchall is ZodNever) - preserve strict behavior
     if (value._zod.def.catchall instanceof z.ZodNever) {
       result = z.strictObject(processedShape);
     }
-    if (value._zod.def.catchall && !(value._zod.def.catchall instanceof z.ZodNever)) {
+    // Handle passthrough objects (catchall is ZodUnknown)
+    else if (value._zod.def.catchall instanceof z.ZodUnknown) {
+      if (options.passthrough) {
+        // Preserve passthrough behavior
+        result = z.looseObject(processedShape);
+      }
+      // else: use default z.object() which strips unknown keys
+    }
+    // Handle custom catchall (not ZodNever or ZodUnknown)
+    else if (value._zod.def.catchall) {
       result = result.catchall(value._zod.def.catchall);
     }
 
     if (value.description) {
       result = result.describe(value.description);
-    }
-
-    if (options.passthrough && value._zod.def.catchall instanceof z.ZodUnknown) {
-      result = z.looseObject(processedShape);
     }
 
     return result;
@@ -641,6 +655,66 @@ export class SchemaCompatLayer {
     } else {
       return value;
     }
+  }
+
+  /**
+   * Default handler for Zod nullable types. Processes the inner type and maintains nullability.
+   *
+   * @param value - The Zod nullable to process
+   * @param handleTypes - Types that should be processed vs passed through
+   * @returns The processed Zod nullable
+   */
+  public defaultZodNullableHandler(
+    value: ZodNullable<any>,
+    handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
+  ): ZodType {
+    if (handleTypes.includes(value.constructor.name as AllZodType)) {
+      return this.processZodType(value._zod.def.innerType).nullable();
+    } else {
+      return value;
+    }
+  }
+
+  /**
+   * Recursively collects leaf types from a ZodIntersection tree.
+   */
+  private collectIntersectionLeaves(value: ZodType): ZodType[] {
+    if (value instanceof ZodIntersection) {
+      return [
+        ...this.collectIntersectionLeaves(value._zod.def.left as ZodType),
+        ...this.collectIntersectionLeaves(value._zod.def.right as ZodType),
+      ];
+    }
+    return [value];
+  }
+
+  /**
+   * Default handler for Zod intersection types.
+   * Flattens the intersection tree and merges object shapes into a single z.object().
+   * Falls back to z.any() for non-object intersections.
+   */
+  public defaultZodIntersectionHandler(value: ZodIntersection<any, any>): ZodType {
+    const leaves = this.collectIntersectionLeaves(value);
+    const processed = leaves.map(leaf => this.processZodType(leaf));
+
+    if (processed.every(p => p instanceof ZodObject)) {
+      const mergedShape: Record<string, ZodType> = {};
+      for (const obj of processed as ZodObject<any, any>[]) {
+        for (const [key, field] of Object.entries(obj.shape)) {
+          if (key in mergedShape) {
+            throw new Error('Cannot flatten intersections with overlapping keys');
+          }
+          mergedShape[key] = field as ZodType;
+        }
+      }
+      let result: ZodType = z.object(mergedShape);
+      if (value.description) {
+        result = result.describe(value.description);
+      }
+      return result;
+    }
+
+    return z.any().describe(value.description || 'intersection type');
   }
 
   /**

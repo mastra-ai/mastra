@@ -12,6 +12,9 @@ const config: Config = {
   favicon: '/img/favicon.ico',
   url: 'https://mastra.ai',
   baseUrl: '/',
+  // hint: do NOT set trailingSlash to any value to avoid rendering issues on vercel
+  // see: https://github.com/slorber/trailing-slash-guide
+  // trailingSlash: false,
   onBrokenLinks: 'throw',
   markdown: {
     hooks: {
@@ -32,6 +35,7 @@ const config: Config = {
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
+    hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
     mastraWebsite: process.env.MASTRA_WEBSITE,
     // Analytics
     gaId: process.env.GA_ID,
@@ -41,6 +45,8 @@ const config: Config = {
     kapaGroupId: process.env.KAPA_GROUP_ID,
   },
   plugins: [
+    [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
+    [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {
@@ -88,7 +94,7 @@ const config: Config = {
         siteTitle: 'Mastra',
         siteDescription:
           'Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server.',
-        excludeRoutes: ['/404', '/showcase'],
+        excludeRoutes: ['/404'],
       },
     ],
   ],
@@ -107,7 +113,7 @@ const config: Config = {
         },
         blog: false,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: './custom.css',
         },
         sitemap: {
           lastmod: 'date',

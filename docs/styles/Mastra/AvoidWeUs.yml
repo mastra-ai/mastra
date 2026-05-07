@@ -1,0 +1,11 @@
+extends: existence
+message: "Avoid first-person plural ('%s'). Refer to Mastra as 'Mastra' and the reader as 'you'."
+level: warning
+ignorecase: true
+tokens:
+  - '\bwe\b'
+  - '\bus\b'
+  - '\bour\b'
+  - '\bours\b'
+  - "let's"
+  - 'let us'

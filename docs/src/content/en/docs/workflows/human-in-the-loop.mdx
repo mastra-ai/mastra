@@ -16,50 +16,50 @@ Human-in-the-loop input works much like [pausing a workflow](/docs/workflows/sus
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
 ```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 const step1 = createStep({
-  id: "step-1",
+  id: 'step-1',
   inputSchema: z.object({
-    userEmail: z.string()
+    userEmail: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string()
+    output: z.string(),
   }),
   resumeSchema: z.object({
-    approved: z.boolean()
+    approved: z.boolean(),
   }),
   suspendSchema: z.object({
-    reason: z.string()
+    reason: z.string(),
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
-    const { userEmail } = inputData;
-    const { approved } = resumeData ?? {};
+    const { userEmail } = inputData
+    const { approved } = resumeData ?? {}
 
     if (!approved) {
       return await suspend({
-        reason: "Human approval required."
-      });
+        reason: 'Human approval required.',
+      })
     }
 
     return {
-      output: `Email sent to ${userEmail}`
-    };
-  }
-});
+      output: `Email sent to ${userEmail}`,
+    }
+  },
+})
 
 export const testWorkflow = createWorkflow({
-  id: "test-workflow",
+  id: 'test-workflow',
   inputSchema: z.object({
-    userEmail: z.string()
+    userEmail: z.string(),
   }),
   outputSchema: z.object({
-    output: z.string()
-  })
+    output: z.string(),
+  }),
 })
   .then(step1)
-  .commit();
+  .commit()
 ```
 
 ## Providing user feedback
@@ -67,28 +67,31 @@ export const testWorkflow = createWorkflow({
 When a workflow is suspended, you can access the payload returned by `suspend()` by identifying the suspended step and reading its `suspendPayload`.
 
 ```typescript {12} title="src/test-workflow.ts"
-const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRun();
+const workflow = mastra.getWorkflow('testWorkflow')
+const run = await workflow.createRun()
 
 const result = await run.start({
   inputData: {
-    userEmail: "alex@example.com"
-  }
-});
+    userEmail: 'alex@example.com',
+  },
+})
 
-if (result.status === "suspended") {
-  const suspendStep = result.suspended[0];
-  const suspendedPayload = result.steps[suspendStep[0]].suspendPayload;
+if (result.status === 'suspended') {
+  const suspendStep = result.suspended[0]
+  const suspendedPayload = result.steps[suspendStep[0]].suspendPayload
 
-  console.log(suspendedPayload);
+  console.log(suspendedPayload)
 }
 ```
-**Example output**
 
-The data returned by the step can include a reason and help the user understand what’s needed to resume the workflow.
+### Example output
+
+The data returned by the step can include a reason and help the user understand what's needed to resume the workflow.
 
 ```typescript
-{ reason: 'Confirm to send email.' }
+{
+  reason: 'Confirm to send email.'
+}
 ```
 
 ## Resuming workflows with human input
@@ -98,21 +101,21 @@ As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-
 ![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript {13}
-const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRun();
+const workflow = mastra.getWorkflow('testWorkflow')
+const run = await workflow.createRun()
 
 await run.start({
   inputData: {
-    userEmail: "alex@example.com"
-  }
-});
+    userEmail: 'alex@example.com',
+  },
+})
 
 const handleResume = async () => {
   const result = await run.resume({
-    step: "step-1",
-    resumeData: { approved: true }
-  });
-};
+    step: 'step-1',
+    resumeData: { approved: true },
+  })
+}
 ```
 
 ### Handling human rejection with `bail()`
@@ -122,33 +125,33 @@ Use `bail()` to stop workflow execution at a step without triggering an error. T
 ```typescript {6-10}
 const step1 = createStep({
   execute: async ({ inputData, resumeData, suspend, bail }) => {
-    const { userEmail } = inputData;
-    const { approved } = resumeData ?? {};
+    const { userEmail } = inputData
+    const { approved } = resumeData ?? {}
 
     if (approved === false) {
       return bail({
-        reason: "User rejected the request."
-      });
+        reason: 'User rejected the request.',
+      })
     }
 
     if (!approved) {
       return await suspend({
-        reason: "Human approval required."
-      });
+        reason: 'Human approval required.',
+      })
     }
 
     return {
-      message: `Email sent to ${userEmail}`
-    };
-  }
-});
+      message: `Email sent to ${userEmail}`,
+    }
+  },
+})
 ```
 
 ## Multi-turn human input
 
 For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
 
-```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts"
+```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" prettier:false
 const step1 = createStep({...});
 
 const step2 = createStep({
@@ -200,17 +203,17 @@ Each step must be resumed in sequence, with a separate call to `resume()` for ea
 ```typescript {4,11}
 const handleResume = async () => {
   const result = await run.resume({
-    step: "step-1",
-    resumeData: { approved: true }
-  });
-};
+    step: 'step-1',
+    resumeData: { approved: true },
+  })
+}
 
 const handleDelete = async () => {
   const result = await run.resume({
-    step: "step-2",
-    resumeData: { approved: true }
-  });
-};
+    step: 'step-2',
+    resumeData: { approved: true },
+  })
+}
 ```
 
 ## Related

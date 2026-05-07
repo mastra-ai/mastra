@@ -102,9 +102,9 @@ describe('CloudDeployer Server Runtime', () => {
       // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
-      // Check storage initialization
-      expect(entry).toContain('if (mastra?.storage) {');
-      expect(entry).toContain('mastra.storage.init()');
+      // Check storage initialization respects disableInit
+      expect(entry).toContain('!userStorage.disableInit');
+      expect(entry).toContain('userStorage.init()');
 
       // Check LibSQL setup
       expect(entry).toContain('const storage = new LibSQLStore({');
@@ -117,6 +117,11 @@ describe('CloudDeployer Server Runtime', () => {
 
       expect(entry).toContain('await storage.init()');
       expect(entry).toContain('mastra?.setStorage(storage)');
+
+      // Check that user storage respects disableInit
+      expect(entry).toContain('const userStorage = mastra?.getStorage()');
+      expect(entry).toContain('if (userStorage && !userStorage.disableInit)');
+      expect(entry).toContain('userStorage.init()');
     });
 
     it('should create node server with correct configuration', () => {
@@ -194,7 +199,7 @@ describe('CloudDeployer Server Runtime', () => {
 
       // Check optional chaining for mastra
       expect(entry).toContain('mastra?.getLogger()');
-      expect(entry).toContain('mastra?.storage');
+      expect(entry).toContain('mastra?.getStorage()');
       expect(entry).toContain('mastra?.setStorage');
     });
 

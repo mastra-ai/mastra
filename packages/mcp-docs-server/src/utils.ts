@@ -1,9 +1,8 @@
 import fs from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import z from 'zod';
 
-const mdxFileCache = new Map<string, string[]>();
+const mdFileCache = new Map<string, string[]>();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -17,9 +16,9 @@ export function fromPackageRoot(relative: string) {
 // can't use console.log() because it writes to stdout which will interfere with the MCP Stdio protocol
 export const log = console.error;
 
-async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
-  if (mdxFileCache.has(dir)) {
-    for (const file of mdxFileCache.get(dir)!) yield file;
+async function* walkMdFiles(dir: string): AsyncGenerator<string> {
+  if (mdFileCache.has(dir)) {
+    for (const file of mdFileCache.get(dir)!) yield file;
     return;
   }
   const filesInDir: string[] = [];
@@ -28,17 +27,17 @@ async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       // For directories, recurse and collect all files
-      for await (const file of walkMdxFiles(fullPath)) {
+      for await (const file of walkMdFiles(fullPath)) {
         filesInDir.push(file);
         yield file;
       }
-    } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
-      // For MDX files, add to collection and yield
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      // For all .md files, add to collection and yield
       filesInDir.push(fullPath);
       yield fullPath;
     }
   }
-  mdxFileCache.set(dir, filesInDir);
+  mdFileCache.set(dir, filesInDir);
 }
 
 async function searchDocumentContent(keywords: string[], baseDir: string): Promise<string[]> {
@@ -46,7 +45,7 @@ async function searchDocumentContent(keywords: string[], baseDir: string): Promi
 
   const fileScores = new Map<string, FileScore>();
 
-  for await (const filePath of walkMdxFiles(baseDir)) {
+  for await (const filePath of walkMdFiles(baseDir)) {
     let content: string;
     try {
       content = await fs.readFile(filePath, 'utf-8');
@@ -127,18 +126,15 @@ function calculateFinalScore(score: FileScore, totalKeywords: number): number {
   );
 }
 
-function extractKeywordsFromPath(path: string): string[] {
-  // Get only the filename (last part of the path)
-  const filename =
-    path
-      .split('/')
-      .pop() // Get last segment
-      ?.replace(/\.(mdx|md)$/, '') || ''; // Remove file extension
+function extractKeywordsFromPath(docPath: string): string[] {
+  // Get the file/folder name (last meaningful part of the path, excluding .md extension)
+  const cleanPath = docPath.replace(/\.md$/, '');
+  const fileName = cleanPath.split('/').pop() || '';
 
   const keywords = new Set<string>();
 
   // Split on hyphens, underscores, camelCase
-  const splitParts = filename.split(/[-_]|(?=[A-Z])/);
+  const splitParts = fileName.split(/[-_]|(?=[A-Z])/);
   splitParts.forEach(keyword => {
     if (keyword.length > 2) {
       keywords.add(keyword.toLowerCase());
@@ -168,17 +164,3 @@ export async function getMatchingPaths(path: string, queryKeywords: string[], ba
   const pathList = suggestedPaths.map(path => `- ${path}`).join('\n');
   return `Here are some paths that might be relevant based on your query:\n\n${pathList}`;
 }
-
-export const blogPostSchema = z.object({
-  slug: z.string(),
-  content: z.string(),
-  metadata: z.object({
-    title: z.string(),
-    publishedAt: z.string(),
-    summary: z.string(),
-    image: z.string().optional(),
-    author: z.string().optional(),
-    draft: z.boolean().optional().default(false),
-    categories: z.array(z.string()).or(z.string()),
-  }),
-});

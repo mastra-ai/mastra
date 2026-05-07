@@ -2,15 +2,23 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatLayer } from '../schema-compatibility';
-import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
+import type { ZodType } from '../schema.types';
+import {
+  isOptional,
+  isObj,
+  isArr,
+  isUnion,
+  isDefault,
+  isNumber,
+  isString,
+  isDate,
+  isNullable,
+  isNull,
+  isIntersection,
+} from '../zodTypes';
+import { OpenAISchemaCompatLayer } from './openai';
 
-export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: ModelInformation) {
-    super(model);
-  }
-
+export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `openApi3`;
   }
@@ -18,27 +26,21 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   isReasoningModel(): boolean {
     // there isn't a good way to automatically detect reasoning models besides doing this.
     // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    return (
-      this.getModel().modelId.includes(`o3`) ||
-      this.getModel().modelId.includes(`o4`) ||
-      this.getModel().modelId.includes(`o1`)
-    );
+    const modelId = this.getModel().modelId;
+    if (!modelId) return false;
+    return modelId.includes(`o3`) || modelId.includes(`o4`) || modelId.includes(`o1`);
   }
 
   shouldApply(): boolean {
-    if (
-      this.isReasoningModel() &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
-    ) {
+    const model = this.getModel();
+    if (this.isReasoningModel() && (model.provider.includes(`openai`) || model.modelId?.includes(`openai`))) {
       return true;
     }
 
     return false;
   }
 
-  processZodType(value: ZodTypeV3): ZodTypeV3;
-  processZodType(value: ZodTypeV4): ZodTypeV4;
-  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+  processZodType(value: ZodType): ZodType {
     if (isOptional(z)(value)) {
       // For OpenAI reasoning models strict mode, convert .optional() to .nullable() with transform
       // The transform converts null -> undefined to match original .optional() semantics
@@ -92,7 +94,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       }
 
       const description = this.mergeParameterDescription(value.description, constraints);
-      let result = this.processZodType(innerType);
+      let result = this.processZodType(innerType as ZodTypeV3 | ZodTypeV4);
       if (description) {
         result = result.describe(description);
       }
@@ -103,6 +105,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       return this.defaultZodStringHandler(value);
     } else if (isDate(z)(value)) {
       return this.defaultZodDateHandler(value);
+    } else if (isNull(z)(value)) {
+      return z
+        .any()
+        .refine(v => v === null, { message: 'must be null' })
+        .describe(value.description || 'must be null');
     } else if (value.constructor.name === 'ZodAny') {
       // It's bad practice in the tool to use any, it's not reasonable for models that don't support that OOTB, to cast every single possible type
       // in the schema. Usually when it's "any" it could be a json object or a union of specific types.
@@ -112,6 +119,10 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
           (value.description ?? '') +
             `\nArgument was an "any" type, but you (the LLM) do not support "any", so it was cast to a "string" type`,
         );
+    }
+
+    if (isIntersection(z)(value)) {
+      return this.defaultZodIntersectionHandler(value);
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);

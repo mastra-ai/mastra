@@ -10,8 +10,9 @@ import {
   ZodDefault,
   ZodNull,
   ZodNullable,
-} from 'zod';
-import type { ZodTypeAny } from 'zod';
+  ZodIntersection,
+} from 'zod/v3';
+import type { ZodTypeAny } from 'zod/v3';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';
@@ -50,6 +51,7 @@ export const isString = (v: ZodTypeAny): v is ZodString => v instanceof ZodStrin
 export const isNumber = (v: ZodTypeAny): v is ZodNumber => v instanceof ZodNumber;
 export const isDate = (v: ZodTypeAny): v is ZodDate => v instanceof ZodDate;
 export const isDefault = (v: ZodTypeAny): v is ZodDefault<any> => v instanceof ZodDefault;
+export const isIntersection = (v: ZodTypeAny): v is ZodIntersection<any, any> => v instanceof ZodIntersection;
 
 /**
  * Zod types that are not supported by most AI model providers and should be avoided.
@@ -215,6 +217,13 @@ export class SchemaCompatLayer {
   }
 
   /**
+   * Type guard for nullable Zod types
+   */
+  isNullable(v: ZodTypeAny): v is ZodNullable<any> {
+    return v instanceof ZodNullable;
+  }
+
+  /**
    * Type guard for array Zod types
    */
   isArr(v: ZodTypeAny): v is ZodArray<any, any> {
@@ -257,6 +266,13 @@ export class SchemaCompatLayer {
   }
 
   /**
+   * Type guard for intersection Zod types
+   */
+  isIntersection(v: ZodTypeAny): v is ZodIntersection<any, any> {
+    return v instanceof ZodIntersection;
+  }
+
+  /**
    * Determines whether this compatibility layer should be applied for the current model.
    *
    * @returns True if this compatibility layer should be used, false otherwise
@@ -284,7 +300,7 @@ export class SchemaCompatLayer {
    * @abstract
    */
   processZodType(value: ZodTypeAny): ZodTypeAny {
-    return this.parent.processZodType(value);
+    return this.parent.processZodType(value) as ZodTypeAny;
   }
 
   /**
@@ -599,6 +615,58 @@ export class SchemaCompatLayer {
     } else {
       return value;
     }
+  }
+
+  /**
+   * Default handler for Zod nullable types. Processes the inner type and maintains nullability.
+   *
+   * @param value - The Zod nullable to process
+   * @param handleTypes - Types that should be processed vs passed through
+   * @returns The processed Zod nullable
+   */
+  public defaultZodNullableHandler(
+    value: ZodNullable<any>,
+    handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
+  ): ZodTypeAny {
+    if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
+      return this.processZodType(value._def.innerType).nullable();
+    } else {
+      return value;
+    }
+  }
+
+  /**
+   * Recursively collects leaf types from a ZodIntersection tree.
+   */
+  private collectIntersectionLeaves(value: ZodTypeAny): ZodTypeAny[] {
+    if (value instanceof ZodIntersection) {
+      return [...this.collectIntersectionLeaves(value._def.left), ...this.collectIntersectionLeaves(value._def.right)];
+    }
+    return [value];
+  }
+
+  /**
+   * Default handler for Zod intersection types.
+   * Flattens the intersection tree and merges object shapes into a single z.object().
+   * Falls back to z.any() for non-object intersections.
+   */
+  public defaultZodIntersectionHandler(value: ZodIntersection<any, any>): ZodTypeAny {
+    const leaves = this.collectIntersectionLeaves(value);
+    const processed = leaves.map(leaf => this.processZodType(leaf));
+
+    if (processed.every(p => p instanceof ZodObject)) {
+      const mergedShape: Record<string, ZodTypeAny> = {};
+      for (const obj of processed as ZodObject<any, any, any>[]) {
+        Object.assign(mergedShape, obj.shape);
+      }
+      let result: ZodTypeAny = z.object(mergedShape);
+      if (value.description) {
+        result = result.describe(value.description);
+      }
+      return result;
+    }
+
+    return z.any().describe(value.description || 'intersection type');
   }
 
   /**

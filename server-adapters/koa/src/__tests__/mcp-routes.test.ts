@@ -72,8 +72,8 @@ describe('Koa MCP Registry Routes Integration', () => {
           },
         };
 
-        // Add body for POST/PUT/PATCH
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+        // Add body for POST/PUT/PATCH/DELETE
+        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

@@ -1,0 +1,3 @@
+{"i":"openai-gpt-4o-mini","p":"openai","m":"gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":7.5e-8},"it":{"c":1.5e-7},"ot":{"c":6e-7}}}]}}}
+{"i":"google-gemini-2-5-pro","p":"google","m":"gemini-2-5-pro","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":1.25e-7},"it":{"c":0.00000125},"ot":{"c":0.00001}}},{"w":[{"f":"tit","op":"gt","value":200000}],"r":{"icrt":{"c":2.5e-7},"it":{"c":0.0000025},"ot":{"c":0.000015}}}]}}}
+{"i":"anthropic-claude-sonnet-4-5","p":"anthropic","m":"claude-sonnet-4-5","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"icrt":{"c":3e-7},"icwt":{"c":0.00000375},"it":{"c":0.000003},"ot":{"c":0.000015}}}]}}}

@@ -1,6 +1,7 @@
+.turbo/**
 .docusaurus/**
 build/**
 node_modules/**
 static/**
-# Temporary until Prettier supports MDX properly
-**/*.mdx
+src/content/ja/**
+src/content/en/models/**

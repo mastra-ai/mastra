@@ -1,5 +1,5 @@
 import type { IMastraLogger } from '../../logger';
-import type { MemoryConfig } from '../../memory';
+import type { MemoryConfigInternal } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
 import type { MessageList } from '../message-list';
 
@@ -26,7 +26,7 @@ export class SaveQueueManager {
    * @param memoryConfig - Optional memory configuration to use for saving.
    * @returns A promise that resolves when the debounced save completes.
    */
-  private debounceSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfig): Promise<void> {
+  private debounceSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.saveDebounceTimers.has(threadId)) {
         clearTimeout(this.saveDebounceTimers.get(threadId)!);
@@ -57,7 +57,7 @@ export class SaveQueueManager {
    * @param messageList - The MessageList instance containing unsaved messages.
    * @param memoryConfig - Optional memory configuration to use for saving.
    */
-  private enqueueSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfig) {
+  private enqueueSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
     const next = prev
       .then(() => this.persistUnsavedMessages(messageList, memoryConfig))
@@ -92,7 +92,7 @@ export class SaveQueueManager {
    * @param messageList - The MessageList instance for the current thread.
    * @param memoryConfig - The memory configuration for saving.
    */
-  private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfig) {
+  private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
     const newMessages = messageList.drainUnsavedMessages();
     if (newMessages.length > 0 && this.memory) {
       await this.memory.saveMessages({
@@ -111,7 +111,7 @@ export class SaveQueueManager {
    * @param threadId - The ID of the thread whose messages are being saved.
    * @param memoryConfig - Optional memory configuration for saving.
    */
-  async batchMessages(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfig) {
+  async batchMessages(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfigInternal) {
     if (!threadId) return;
     const earliest = messageList.getEarliestUnsavedMessageTimestamp();
     const now = Date.now();
@@ -131,7 +131,7 @@ export class SaveQueueManager {
    * @param threadId - The ID of the thread whose messages are being saved.
    * @param memoryConfig - Optional memory configuration for saving.
    */
-  async flushMessages(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfig) {
+  async flushMessages(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfigInternal) {
     if (!threadId) return;
     this.clearDebounce(threadId);
     return this.enqueueSave(threadId, messageList, memoryConfig);

@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 export const workflowRunStatusSchema = z.enum([
@@ -37,6 +37,7 @@ const serializedStepSchema = z.object({
   suspendSchema: z.string().optional(),
   component: z.string().optional(),
   isWorkflow: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -76,7 +77,7 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  snapshot: z.union([z.object({}), z.string()]),
+  snapshot: z.union([z.record(z.string(), z.any()), z.string()]),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),
@@ -139,6 +140,7 @@ export const resumeBodySchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
   perStep: z.boolean().optional(),
+  forEachIndex: z.number().int().nonnegative().optional(),
 });
 
 /**
@@ -281,4 +283,16 @@ export const createWorkflowRunResponseSchema = z.object({
 export const createWorkflowRunBodySchema = z.object({
   resourceId: z.string().optional(),
   disableScorers: z.boolean().optional(),
+});
+
+/**
+ * Schema for observe workflow query params
+ * Extends runId with optional offset for efficient resume
+ */
+export const observeWorkflowQuerySchema = z.object({
+  runId: z.string().describe('Unique identifier for the run'),
+  offset: z.coerce
+    .number()
+    .optional()
+    .describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });
