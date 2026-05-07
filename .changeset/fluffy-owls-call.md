@@ -3,10 +3,12 @@
 'mastracode': minor
 ---
 
-Added persistent goal support and more ways to start goals in Mastra Code.
+Added `/goal` to Mastra Code, a persistent autonomous task loop similar to the goal modes in Codex and Hermes-style coding agents.
 
-Mastra Code now supports `/goal` with configurable judge defaults, persisted goal state, input locking while the judge evaluates, and safer continuation handling so user follow-ups and pause actions take priority over judge decisions. Goal reminders and terminal judge results are persisted as system reminders.
+A user can start a goal with `/goal <objective>`. Mastra Code saves that objective to the current thread, runs the normal assistant turn, then asks a separate judge model whether the goal is `done`, should `continue`, or is `waiting` on an explicit user checkpoint. When the judge says to continue, Mastra Code feeds the judge feedback back into the conversation as a system reminder and keeps working until the goal is complete, paused, cleared, or reaches the configured attempt limit. Goals survive thread switches and restarts, show progress in the status line, and lock input while the judge is evaluating so follow-ups, pauses, and queued actions are handled safely.
 
-Plans can now be accepted as goals directly from the inline plan approval UI. Slash commands can opt into goal mode with `goal: true`, and skills can opt into goal mode with `metadata.goal: true`. `/goal` also supports objectives that span multiple lines.
+Added `/judge` to configure the default judge model and max attempts used by future goals. Goal setup metadata and terminal judge results are persisted as system reminders so resumed threads keep their goal context.
+
+Added more ways to create goals: approved plans can be selected as a goal from the inline plan approval UI, slash commands can opt into `/goal/<command>` with top-level `goal: true`, and skills can opt into goal commands with `metadata.goal: true`. `/goal` objectives can also span multiple lines.
 
 The Harness system-reminder message shape now preserves goal metadata used by Mastra Code goal reminders.
