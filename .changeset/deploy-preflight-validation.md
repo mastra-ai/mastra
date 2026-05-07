@@ -12,5 +12,5 @@ Add pre-deploy validation (preflight) to `mastra studio deploy` and `mastra serv
 **How it runs**
 
 - Runs after the local build (or after `--skip-build` when `.mastra/output/index.mjs` already exists), before zipping/uploading.
-- Errors always block the deploy. Warnings prompt for confirmation in interactive mode and pass through silently in `--yes` / headless mode.
+- Errors always block the deploy and exit non-zero (so CI surfaces them as a real failure). Warnings prompt for confirmation in interactive mode and pass through silently in `--yes` / headless mode; declining the prompt cancels with exit code 0.
 - Opt out entirely with `--skip-preflight` or `MASTRA_SKIP_PREFLIGHT=1`.

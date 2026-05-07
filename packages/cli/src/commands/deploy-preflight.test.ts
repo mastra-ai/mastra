@@ -162,23 +162,23 @@ describe('printPreflightIssues', () => {
     fix: 'add it to .env',
   };
 
-  it('returns true when there are no issues', async () => {
+  it('returns ok when there are no issues', async () => {
     const result = await printPreflightIssues([], { autoAccept: true });
-    expect(result).toBe(true);
+    expect(result).toBe('ok');
   });
 
-  it('blocks deploy on errors even with autoAccept (--yes)', async () => {
+  it('returns blocked on errors even with autoAccept (--yes)', async () => {
     const result = await printPreflightIssues([errorIssue], { autoAccept: true });
-    expect(result).toBe(false);
+    expect(result).toBe('blocked');
   });
 
-  it('blocks deploy on errors mixed with warnings under autoAccept', async () => {
+  it('returns blocked on errors mixed with warnings under autoAccept', async () => {
     const result = await printPreflightIssues([errorIssue, warningIssue], { autoAccept: true });
-    expect(result).toBe(false);
+    expect(result).toBe('blocked');
   });
 
-  it('passes through warnings-only under autoAccept', async () => {
+  it('returns ok for warnings-only under autoAccept', async () => {
     const result = await printPreflightIssues([warningIssue], { autoAccept: true });
-    expect(result).toBe(true);
+    expect(result).toBe('ok');
   });
 });

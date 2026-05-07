@@ -123,22 +123,27 @@ export async function preflightBuildOutput(
   return issues;
 }
 
+export type PreflightOutcome = 'ok' | 'blocked' | 'cancelled';
+
 /**
- * Print preflight issues. Returns `true` when the deploy should proceed,
- * `false` when the user cancelled or errors are present.
+ * Print preflight issues and decide whether the deploy should proceed.
  *
- * - No issues: returns true silently.
- * - Warnings only: prints them; in interactive mode prompts to confirm,
- *   in `autoAccept` mode passes through.
- * - One or more errors: prints them and returns false. Errors always block
- *   the deploy regardless of `--yes` / headless mode — opt out with
- *   `--skip-preflight` if a check is genuinely a false positive.
+ * Returns:
+ * - `'ok'`     — no issues, or warnings the caller has accepted.
+ * - `'blocked'`— at least one error-severity issue. Errors always block,
+ *                regardless of `autoAccept` / headless mode. Caller should
+ *                exit non-zero so CI surfaces the failure.
+ * - `'cancelled'` — warnings only, but the user explicitly declined the
+ *                confirmation prompt. Caller should exit zero (normal
+ *                user-initiated cancel).
+ *
+ * `--skip-preflight` is the escape hatch when a check is a false positive.
  */
 export async function printPreflightIssues(
   issues: PreflightIssue[],
   options: { autoAccept: boolean },
-): Promise<boolean> {
-  if (issues.length === 0) return true;
+): Promise<PreflightOutcome> {
+  if (issues.length === 0) return 'ok';
 
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
@@ -156,11 +161,11 @@ export async function printPreflightIssues(
       `Deploy blocked by ${errors.length} preflight error(s). ` +
         `Fix the issues above, or pass --skip-preflight to override.`,
     );
-    return false;
+    return 'blocked';
   }
 
   // Warnings only.
-  if (options.autoAccept) return true;
+  if (options.autoAccept) return 'ok';
 
   const confirmed = await p.confirm({
     message: `Found ${warnings.length} preflight warning(s). Deploy anyway?`,
@@ -168,10 +173,10 @@ export async function printPreflightIssues(
   });
 
   if (p.isCancel(confirmed) || !confirmed) {
-    return false;
+    return 'cancelled';
   }
 
-  return true;
+  return 'ok';
 }
 
 /* ------------------------------------------------------------------ */
