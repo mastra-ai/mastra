@@ -176,6 +176,47 @@ export const builderSettingsResponseSchema = z.object({
   modelPolicyWarnings: z.array(z.string()).optional(),
 });
 
+/**
+ * Infrastructure status response for Agent Builder admin diagnostics.
+ *
+ * Reports the Agent Builder-specific primitive configuration plus lightweight
+ * runtime resolution state where useful.
+ */
+export const infrastructureStatusResponseSchema = z.object({
+  channels: z.object({
+    providers: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        isConfigured: z.boolean(),
+        routeCount: z.number(),
+      }),
+    ),
+  }),
+  browser: z.object({
+    type: z.string().nullable(),
+    provider: z.string().nullable(),
+    env: z.string().nullable(),
+    registered: z.boolean(),
+    availableProviders: z.array(z.string()),
+    config: z.array(z.object({ key: z.string(), value: z.string() })),
+  }),
+  workspace: z.object({
+    type: z.string().nullable(),
+    workspaceId: z.string().nullable(),
+    name: z.string().nullable(),
+    source: z.string().nullable(),
+    registered: z.boolean(),
+    hasFilesystem: z.boolean(),
+    hasSandbox: z.boolean(),
+    filesystemProvider: z.string().nullable(),
+    sandboxProvider: z.string().nullable(),
+    config: z.array(z.object({ key: z.string(), value: z.string() })),
+  }),
+});
+
+export type InfrastructureStatus = z.infer<typeof infrastructureStatusResponseSchema>;
+
 export type AgentFeatures = z.infer<typeof agentFeaturesSchema>;
 export type AgentConfiguration = z.infer<typeof agentConfigurationSchema>;
 export type BuilderSettingsResponse = z.infer<typeof builderSettingsResponseSchema>;

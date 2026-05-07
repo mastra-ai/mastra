@@ -2839,3 +2839,39 @@ export interface BuilderPickerResponse {
   visibleAgents: string[] | null;
   visibleWorkflows: string[] | null;
 }
+
+/**
+ * Response from GET /editor/builder/infrastructure
+ *
+ * Agent Builder infrastructure configuration plus lightweight runtime resolution state.
+ */
+export interface InfrastructureStatusResponse {
+  channels: {
+    providers: Array<{
+      id: string;
+      name: string;
+      isConfigured: boolean;
+      routeCount: number;
+    }>;
+  };
+  browser: {
+    type: string | null;
+    provider: string | null;
+    env: string | null;
+    registered: boolean;
+    availableProviders: string[];
+    config: Array<{ key: string; value: string }>;
+  };
+  workspace: {
+    type: string | null;
+    workspaceId: string | null;
+    name: string | null;
+    source: string | null;
+    registered: boolean;
+    hasFilesystem: boolean;
+    hasSandbox: boolean;
+    filesystemProvider: string | null;
+    sandboxProvider: string | null;
+    config: Array<{ key: string; value: string }>;
+  };
+}
