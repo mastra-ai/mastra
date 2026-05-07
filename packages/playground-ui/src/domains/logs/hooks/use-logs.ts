@@ -51,7 +51,7 @@ export const useLogs = ({ filters }: LogsFilters = {}) => {
     getNextPageParam,
     select: selectLogs,
     retry: false,
-    refetchInterval: 3000,
+    refetchInterval: 10000,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
