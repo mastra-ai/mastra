@@ -1120,8 +1120,6 @@ export type ProviderModelsMap = {
     'glm-5.1',
     'kimi-k2.5',
     'kimi-k2.6',
-    'mimo-v2-omni',
-    'mimo-v2-pro',
     'mimo-v2.5',
     'mimo-v2.5-pro',
     'minimax-m2.5',
@@ -2852,6 +2850,20 @@ export type ProviderModelsMap = {
     'text-embedding-3-small',
     'text-embedding-ada-002',
   ];
+  readonly kiro: readonly [
+    'auto',
+    'claude-haiku-4.5',
+    'claude-opus-4.5',
+    'claude-opus-4.6',
+    'claude-opus-4.7',
+    'claude-sonnet-4',
+    'claude-sonnet-4.5',
+    'claude-sonnet-4.6',
+    'deepseek-3.2',
+    'minimax-m2.1',
+    'minimax-m2.5',
+    'qwen3-coder-next',
+  ];
   readonly requesty: readonly [
     'anthropic/claude-3-7-sonnet',
     'anthropic/claude-haiku-4-5',
@@ -2919,6 +2931,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'gte-large-en-v1.5',
     'kimi-k2.5',
+    'kimi-k2.6',
     'llama-4-maverick',
     'llama-guard-4-12b',
     'llama3.3-70b-instruct',

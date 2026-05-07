@@ -1,5 +1,5 @@
 import type { BackgroundTaskManager } from './manager';
-import type { BackgroundTaskHandle, CreateBackgroundTaskOptions } from './types';
+import type { BackgroundTaskHandle, CheckIfSuspendedPayload, CreateBackgroundTaskOptions } from './types';
 
 /**
  * Creates a self-contained background task handle.
@@ -45,6 +45,32 @@ export function createBackgroundTask(
       const result = await manager.enqueue(payload, context);
       taskId = result.task.id;
       return result;
+    },
+
+    async checkIfSuspended(args: CheckIfSuspendedPayload) {
+      const result = await manager.listTasks({
+        toolCallId: args.toolCallId,
+        runId: args.runId,
+        agentId: args.agentId,
+        threadId: args.threadId,
+        resourceId: args.resourceId,
+        toolName: args.toolName,
+        status: 'suspended',
+      });
+      if (result.total > 0) {
+        const task = result.tasks[0];
+        if (task) {
+          taskId = task.id;
+          return true;
+        }
+      }
+
+      return false;
+    },
+
+    async resume(resumeData?: unknown) {
+      if (!taskId) throw new Error('Task has not been dispatched yet');
+      return manager.resume(taskId, resumeData);
     },
 
     async cancel() {

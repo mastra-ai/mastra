@@ -1,5 +1,51 @@
 # mastracode
 
+## 0.18.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
+## 0.18.0-alpha.3
+
+### Minor Changes
+
+- You can now pass a `memory` option to `createMastraCode()` to override the default memory instance or factory. This gives you a supported way to plug in custom memory behavior without depending on Mastra Code's default setup. ([#13891](https://github.com/mastra-ai/mastra/pull/13891))
+
+  ```ts
+  import { createMastraCode } from 'mastracode';
+
+  const mastraCode = await createMastraCode({
+    memory: myCustomMemory,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed setup, settings, selectors, and non-chat configuration prompts so they open as neutral overlays with stable modal sizing, while keeping active chat interactions inline. ([#16274](https://github.com/mastra-ai/mastra/pull/16274))
+
+- Enabled `ProviderHistoryCompat` by default for MastraCode agents. MastraCode now applies provider-boundary prompt compatibility fixes before model requests and keeps the existing API-error recovery path for provider validation errors. ([#16176](https://github.com/mastra-ai/mastra/pull/16176))
+
+- Updated dependencies [[`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529)]:
+  - @mastra/core@1.33.0-alpha.2
+
+## 0.17.3-alpha.2
+
+### Patch Changes
+
+- Improve README by adding links and screenshots ([#16250](https://github.com/mastra-ai/mastra/pull/16250))
+
+- Updated dependencies [[`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d)]:
+  - @mastra/core@1.33.0-alpha.1
+
+## 0.17.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`0764baf`](https://github.com/mastra-ai/mastra/commit/0764baf9d67cfdb310391a93837511f454a74475)]:
+  - @mastra/memory@1.17.6-alpha.0
+
 ## 0.17.3-alpha.0
 
 ### Patch Changes
