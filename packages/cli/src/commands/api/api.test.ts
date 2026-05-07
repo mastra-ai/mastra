@@ -7,6 +7,7 @@ let stdout = '';
 let stderr = '';
 
 beforeEach(() => {
+  registerApiCommand(new Command());
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
   stdout = '';
