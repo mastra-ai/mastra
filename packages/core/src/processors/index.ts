@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
@@ -231,6 +231,41 @@ export type ProcessInputStepResult = {
 export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModel };
 
 /**
+ * Arguments for processLLMRequest method.
+ *
+ * Called *after* `MessageList` has been converted to the LLM-shaped prompt
+ * (`LanguageModelV2Prompt`) and *before* the prompt is forwarded to the
+ * provider. Mutations affect only what is sent to the model on this call —
+ * they are *not* persisted back to the message list, so reasoning,
+ * tool-result formats, etc. can be rewritten transiently without losing data
+ * in memory, UI, or future model swaps.
+ */
+export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
+  /** The LLM request prompt that will be sent to the provider on this call. Processors may return a modified copy. */
+  prompt: LanguageModelV2Prompt;
+  /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
+  model: MastraLanguageModel;
+  /** The current step number (0-indexed) within the agentic loop. */
+  stepNumber: number;
+  /** All completed steps so far. */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request. */
+  state: Record<string, unknown>;
+}
+
+/**
+ * Result from processLLMRequest method. Returning `undefined` (or `void`)
+ * indicates no changes — the original prompt is forwarded as-is.
+ */
+export type ProcessLLMRequestResult =
+  | {
+      /** The prompt to forward to the provider for this call. */
+      prompt?: LanguageModelV2Prompt;
+    }
+  | undefined
+  | void;
+
+/**
  * Arguments for processOutputStream method
  */
 export interface ProcessOutputStreamArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
@@ -394,6 +429,27 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
     | undefined;
 
   /**
+   * Process the LLM-shaped prompt after `MessageList` has been converted to
+   * `LanguageModelV2Prompt` and immediately before it is forwarded to the
+   * provider on this call.
+   *
+   * Unlike `processInputStep`, mutations made here are *not* persisted to the
+   * message list — they affect only what is sent to the model on this call.
+   * This makes the hook ideal for transient, model-aware rewrites such as:
+   *
+   * - Stripping fields a specific provider rejects (e.g. `reasoning_content`
+   *   on Cerebras) without losing reasoning traces in memory or UI.
+   * - Re-shaping tool-result formats when switching between providers mid-loop.
+   * - Trimming or coalescing roles to match per-provider input requirements.
+   *
+   * Return `{ prompt }` to forward your modified prompt, or `undefined`/`void`
+   * to pass the original prompt through unchanged.
+   */
+  processLLMRequest?(
+    args: ProcessLLMRequestArgs<TTripwireMetadata>,
+  ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult;
+
+  /**
    * Process output after each LLM response in the agentic loop, before tool execution.
    * Unlike processOutputResult which runs once at the end, this runs at every step.
    *
@@ -474,10 +530,12 @@ export abstract class BaseProcessor<TId extends string = string, TTripwireMetada
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
-// InputProcessor requires either processInput OR processInputStep (or both)
+// InputProcessor requires processInput, processInputStep, or processLLMRequest (or any combination)
 export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMRequest'> &
       Processor<string, TTripwireMetadata>);
 
 // OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
@@ -547,19 +605,20 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
     !('processOutputStream' in obj) &&
     !('processOutputResult' in obj) &&
     !('processOutputStep' in obj) &&
+    !('processLLMRequest' in obj) &&
     !('processAPIError' in obj)
   );
 }
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
   type StreamErrorRetryMatcher,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
-export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export * from './memory';

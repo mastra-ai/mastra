@@ -17,6 +17,7 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
+import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -120,10 +121,7 @@ export function handleToolApprovalRequired(
   };
 
   // Show the dialog as an overlay
-  state.ui.showOverlay(dialog, {
-    width: '70%',
-    anchor: 'center',
-  });
+  showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
   dialog.focused = true;
   state.ui.requestRender();
 }
@@ -249,6 +247,10 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   // task tools (they stream to or update the pinned TaskProgressComponent),
   // and ask_user (uses AskQuestionInlineComponent)
   if (toolName === 'ask_user') {
+    if (state.goalManager?.isActive()) {
+      return;
+    }
+
     const askComponent = AskQuestionInlineComponent.createStreaming(state.ui);
     ctx.addChildBeforeFollowUps(askComponent);
     state.lastAskUserComponent = askComponent;

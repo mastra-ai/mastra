@@ -1,5 +1,12 @@
 # @mastra/datadog
 
+## 1.1.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`00ef282`](https://github.com/mastra-ai/mastra/commit/00ef2826034d006b984b3f19cd33ba0bba14d6c6)]:
+  - @mastra/observability@1.12.0-alpha.0
+
 ## 1.1.1-alpha.0
 
 ### Patch Changes

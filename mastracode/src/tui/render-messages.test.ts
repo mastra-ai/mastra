@@ -29,6 +29,7 @@ function createState(): TUIState {
     allShellComponents: [],
     messageComponentsById: new Map(),
     followUpComponents: [],
+    quietMode: false,
     harness: {
       getDisplayState: () => displayState,
       setState: vi.fn().mockResolvedValue(undefined),
@@ -687,6 +688,95 @@ describe('renderExistingMessages task tools', () => {
 
     expect(state.chatContainer.children).toHaveLength(1);
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
+  });
+
+  it('keeps completed task replay expanded when quiet mode is disabled', async () => {
+    const completedTasks = Array.from({ length: 6 }, (_, index) => ({
+      id: `task-${index + 1}`,
+      content: `Task ${index + 1}`,
+      status: 'completed' as const,
+      activeForm: `Completing task ${index + 1}`,
+    }));
+    const messages: HarnessMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: [
+          {
+            type: 'tool_call',
+            id: 'tool-1',
+            name: 'task_write',
+            args: { tasks: completedTasks },
+          },
+          {
+            type: 'tool_result',
+            id: 'tool-1',
+            name: 'task_write',
+            result: { content: 'Tasks updated', tasks: completedTasks },
+            isError: false,
+          },
+        ],
+      },
+    ] as HarnessMessage[];
+    const state = createState();
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getDisplayState: () => ({ isRunning: false }),
+      setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    const rendered = (state.chatContainer.children[0] as any).render(80).join('\n');
+    expect(rendered).toContain('Task 6');
+    expect(rendered).not.toContain('more completed');
+  });
+
+  it('collapses completed task replay when quiet mode is enabled', async () => {
+    const completedTasks = Array.from({ length: 6 }, (_, index) => ({
+      id: `task-${index + 1}`,
+      content: `Task ${index + 1}`,
+      status: 'completed' as const,
+      activeForm: `Completing task ${index + 1}`,
+    }));
+    const messages: HarnessMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: [
+          {
+            type: 'tool_call',
+            id: 'tool-1',
+            name: 'task_write',
+            args: { tasks: completedTasks },
+          },
+          {
+            type: 'tool_result',
+            id: 'tool-1',
+            name: 'task_write',
+            result: { content: 'Tasks updated', tasks: completedTasks },
+            isError: false,
+          },
+        ],
+      },
+    ] as HarnessMessage[];
+    const state = createState();
+    state.quietMode = true;
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getDisplayState: () => ({ isRunning: false }),
+      setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    const rendered = (state.chatContainer.children[0] as any).render(80).join('\n');
+    expect(rendered).not.toContain('Task 6');
+    expect(rendered).toContain('2 more completed tasks');
   });
 
   it('clears the pinned task list when history has no active tasks', async () => {

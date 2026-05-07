@@ -15,6 +15,10 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
+  // Whether observations and reflections use the terse caveman-style instruction.
+  // Off by default — caveman style is opt-in via `/om` settings; observers and
+  // reflectors fall back to their built-in (prose) behavior unless enabled.
+  cavemanObservations: z.boolean().default(false),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort
