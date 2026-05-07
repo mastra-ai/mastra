@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { CheckIcon, XIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
+import { CodeBlock, CodeCopyButton } from '../Code/Code';
+import { Icon } from '../Icon/Icon';
+import { IconButton } from '../IconButton';
+import { AgentIcon } from '../Icons/AgentIcon';
 import { Entity, EntityTrigger, EntityContent, EntityTriggerClass, EntityCaret } from './Entity';
 import { Entry, EntryTitle } from './Entry';
-import { Icon } from '../Icon/Icon';
-import { AgentIcon } from '../Icons/AgentIcon';
-import { CodeBlock, CodeCopyButton } from '../Code/Code';
-import { EntityVariant } from './types';
 import {
   ToolApproval,
   ToolApprovalActions,
@@ -14,9 +15,7 @@ import {
   ToolApprovalHeader,
   ToolApprovalTitle,
 } from './ToolApproval';
-
-import { IconButton } from '../IconButton';
-import { CheckIcon, XIcon } from 'lucide-react';
+import type { EntityVariant } from './types';
 
 interface ComponentProps {
   className?: string;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ElementSelect } from '@/ds/components/SelectElement';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { cn } from '@/lib/utils';
 
 export type TimePickerProps = {
@@ -53,25 +53,47 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
 
   return (
     <div className={cn('flex gap-2 items-center', className)}>
-      <ElementSelect
-        name="hour"
-        value={hourOptions.indexOf(hour).toString()}
-        onChange={handleHourChange}
-        options={hourOptions}
-      />
+      <Select name="hour" value={hourOptions.indexOf(hour).toString()} onValueChange={handleHourChange}>
+        <SelectTrigger size="sm">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {hourOptions.map((option, idx) => (
+            <SelectItem key={option} value={`${idx}`}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       :
-      <ElementSelect
-        name="minute"
-        value={minuteOptions.indexOf(minute).toString()}
-        onChange={handleMinuteChange}
-        options={minuteOptions}
-      />
-      <ElementSelect
+      <Select name="minute" value={minuteOptions.indexOf(minute).toString()} onValueChange={handleMinuteChange}>
+        <SelectTrigger size="sm">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {minuteOptions.map((option, idx) => (
+            <SelectItem key={option} value={`${idx}`}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
         name="period"
         value={timePeriodOptions.indexOf(timePeriod).toString()}
-        onChange={handleTimePeriodChange}
-        options={timePeriodOptions}
-      />
+        onValueChange={handleTimePeriodChange}
+      >
+        <SelectTrigger size="sm">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {timePeriodOptions.map((option, idx) => (
+            <SelectItem key={option} value={`${idx}`}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

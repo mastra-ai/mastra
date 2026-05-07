@@ -145,6 +145,78 @@ describe('formatInput', () => {
       const result = formatInput({ query: 'search term', filters: { date: '2024' } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'user', content: '{"query":"search term","filters":{"date":"2024"}}' }]);
     });
+
+    it('normalizes Gemini content array to message format', () => {
+      const contents = [
+        { role: 'user', parts: [{ text: 'Hello' }] },
+        { role: 'model', parts: [{ text: 'Hi ' }, { text: 'there!' }] },
+      ];
+      const result = formatInput(contents, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([
+        { role: 'user', content: 'Hello' },
+        { role: 'model', content: 'Hi there!' },
+      ]);
+    });
+
+    it('unwraps Mastra { messages, schema } input wrapper', () => {
+      const input = {
+        messages: [
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: 'Hello' },
+        ],
+        schema: { type: 'object' },
+      };
+      const result = formatInput(input, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([
+        { role: 'system', content: 'You are helpful' },
+        { role: 'user', content: 'Hello' },
+      ]);
+    });
+
+    it('unwraps { messages } wrapper for MODEL_STEP spans too', () => {
+      const input = {
+        messages: [{ role: 'user', content: 'Hi' }],
+      };
+      const result = formatInput(input, SpanType.MODEL_STEP);
+      expect(result).toEqual([{ role: 'user', content: 'Hi' }]);
+    });
+
+    it('unwraps Gemini { contents } request body shape', () => {
+      const input = {
+        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+      };
+      const result = formatInput(input, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'user', content: 'Hello' }]);
+    });
+
+    it('stringifies multimodal content arrays into the message content field', () => {
+      const input = {
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      };
+      const result = formatInput(input, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'user', content: '[{"type":"text","text":"hi"}]' }]);
+    });
+
+    it('redacts binary data and summarizes tool calls in Gemini parts', () => {
+      const contents = [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Describe this image: ' },
+            { inlineData: { mimeType: 'image/png', data: 'iVBORw0KGgo...base64...' } },
+          ],
+        },
+        {
+          role: 'model',
+          parts: [{ functionCall: { name: 'analyze_image', args: { format: 'png' } } }],
+        },
+      ];
+      const result = formatInput(contents, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([
+        { role: 'user', content: 'Describe this image: [image/png]' },
+        { role: 'model', content: '[tool: analyze_image]' },
+      ]);
+    });
   });
 
   describe('non-LLM spans (TOOL_CALL)', () => {
@@ -187,6 +259,22 @@ describe('formatOutput', () => {
     it('stringifies object output without text property', () => {
       const result = formatOutput({ result: 'success' }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'assistant', content: '{"result":"success"}' }]);
+    });
+
+    it('summarizes tool-call-only outputs without burying them as escaped JSON', () => {
+      const result = formatOutput(
+        {
+          text: '',
+          toolCalls: [{ toolName: 'search', args: { q: 'mastra' } }, { toolName: 'fetch' }],
+        },
+        SpanType.MODEL_GENERATION,
+      );
+      expect(result).toEqual([{ role: 'assistant', content: '[tool: search][tool: fetch]' }]);
+    });
+
+    it('uses object payload when text is empty and an object result is present', () => {
+      const result = formatOutput({ text: '', object: { ok: true } }, SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'assistant', content: '{"ok":true}' }]);
     });
   });
 

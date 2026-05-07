@@ -24,6 +24,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -507,6 +508,51 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const collection = await this.getCollection(TABLE_SPANS);
+
+      const spans = await collection
+        .find(
+          { traceId },
+          {
+            projection: {
+              input: 0,
+              output: 0,
+              attributes: 0,
+              metadata: 0,
+              tags: 0,
+              links: 0,
+            },
+          },
+        )
+        .sort({ startedAt: 1 })
+        .toArray();
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map((span: any) => this.transformSpanFromMongo(span)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_TRACE_LIGHT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async updateSpan(args: UpdateSpanArgs): Promise<void> {
     const { traceId, spanId, updates } = args;
     try {
@@ -545,7 +591,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     try {
       const collection = await this.getCollection(TABLE_SPANS);
@@ -675,8 +722,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       }
 
       // Build sort
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction === 'ASC' ? 1 : -1;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = (orderBy?.direction ?? 'DESC') === 'ASC' ? 1 : -1;
 
       // hasChildError filter requires $lookup aggregation for efficiency
       // Instead of fetching all traceIds with errors (unbounded), we use $lookup

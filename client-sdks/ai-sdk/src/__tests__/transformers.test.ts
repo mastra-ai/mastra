@@ -454,6 +454,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(toolCallSuspendedChunk.type).toBe('data-tool-call-suspended');
       expect(toolCallSuspendedChunk.id).toBe('tool-call-1');
       expect(toolCallSuspendedChunk.data).toEqual({
+        state: 'data-tool-call-suspended',
         runId: 'agent-run-id',
         toolCallId: 'tool-call-1',
         toolName: 'suspendable-tool',
@@ -461,6 +462,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
           reason: 'Waiting for user approval',
           data: { value: 42 },
         },
+        resumeSchema: undefined,
       });
     });
 
@@ -739,7 +741,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(textDeltaChunks[0].delta).toBe('Here is my answer');
     });
 
-    it('should filter reasoning-delta chunks when sendReasoning is not set', async () => {
+    it('should filter all reasoning chunks when sendReasoning is not set', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
           controller.enqueue({
@@ -824,7 +826,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
         },
       });
 
-      // Default behavior (no sendReasoning) should filter reasoning-delta
+      // Default behavior (no sendReasoning) should filter reasoning chunks
       const transformedStream = mockStream.pipeThrough(
         WorkflowStreamToAISDKTransformer({ includeTextStreamParts: true }),
       );
@@ -834,20 +836,18 @@ describe('WorkflowStreamToAISDKTransformer', () => {
         chunks.push(chunk);
       }
 
-      // reasoning-delta should be filtered out (sendReasoning defaults to false)
+      // reasoning chunks should be filtered out (sendReasoning defaults to false)
       const reasoningDeltaChunks = chunks.filter(chunk => chunk.type === 'reasoning-delta');
       expect(reasoningDeltaChunks.length).toBe(0);
-
-      // reasoning-start and reasoning-end still pass through (matching agent stream behavior)
-      expect(chunks.find(chunk => chunk.type === 'reasoning-start')).toBeDefined();
-      expect(chunks.find(chunk => chunk.type === 'reasoning-end')).toBeDefined();
+      expect(chunks.find(chunk => chunk.type === 'reasoning-start')).toBeUndefined();
+      expect(chunks.find(chunk => chunk.type === 'reasoning-end')).toBeUndefined();
 
       // Text should still come through
       const textDeltaChunks = chunks.filter(chunk => chunk.type === 'text-delta');
       expect(textDeltaChunks.length).toBe(1);
     });
 
-    it('should filter reasoning-delta chunks when sendReasoning is explicitly false', async () => {
+    it('should filter all reasoning chunks when sendReasoning is explicitly false', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
           controller.enqueue({
@@ -1267,8 +1267,9 @@ describe('Network stream - core fix (text events from core)', () => {
 });
 
 describe('Network stream - fallback (no text events from core)', () => {
-  it('should emit text events via fallback when core does not send text events', async () => {
-    // This tests the fallback: no routing-agent-text-* events, text should come from step-finish result
+  it('should not emit text fallback when routing agent handles directly (none/none)', async () => {
+    // When routing agent handles directly (primitiveId/Type = "none"), the result text is internal
+    // routing reasoning, not user-facing content. Text should come from the validation step instead.
     const mockStream = new ReadableStream({
       start(controller) {
         controller.enqueue({
@@ -1342,11 +1343,81 @@ describe('Network stream - fallback (no text events from core)', () => {
     const lastNetworkChunk = dataNetworkChunks[dataNetworkChunks.length - 1];
     expect(lastNetworkChunk.data.output).toBe('I am a helpful assistant.');
 
-    // Fallback should emit text events
-    expect(textStartChunks.length).toBeGreaterThan(0);
-    expect(textDeltaChunks.length).toBeGreaterThan(0);
+    // When routing agent handles directly, the fallback should NOT emit text events.
+    // The selectionReason is routing logic, not user-facing content.
+    // Text events for the actual answer come from the validation step.
+    expect(textStartChunks.length).toBe(0);
+    expect(textDeltaChunks.length).toBe(0);
+  });
 
+  it('should emit text fallback when sub-agent delegation has no text events', async () => {
+    // The fallback should still work when a sub-agent was selected (not none/none)
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'routing-agent',
+            runId: 'step-run-1',
+            inputData: {
+              task: 'Search for something',
+              primitiveId: '',
+              primitiveType: 'none',
+              iteration: 0,
+              threadResourceId: 'Test Resource',
+              threadId: 'network-run-1',
+              isOneOff: false,
+            },
+          },
+        });
+        controller.enqueue({
+          type: 'routing-agent-end',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Search for something',
+            result: '',
+            primitiveId: 'search-agent',
+            primitiveType: 'agent',
+            prompt: 'Search for something',
+            isComplete: false,
+            selectionReason: 'Delegating to search agent.',
+            iteration: 0,
+            runId: 'step-run-1',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-step-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Search for something',
+            result: 'Here are the search results.',
+            isComplete: true,
+            iteration: 0,
+            runId: 'step-run-1',
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const transformedStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    const textDeltaChunks = chunks.filter(c => c.type === 'text-delta');
+
+    // Fallback SHOULD work for non-none routing (sub-agent delegation)
+    expect(textDeltaChunks.length).toBeGreaterThan(0);
     const textContent = textDeltaChunks.map(c => c.delta || '').join('');
-    expect(textContent).toContain('I am a helpful assistant');
+    expect(textContent).toContain('Here are the search results');
   });
 });

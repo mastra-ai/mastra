@@ -6,14 +6,19 @@ import { cn } from '@/lib/utils';
 export interface HeaderProps {
   children?: React.ReactNode;
   border?: boolean;
+  className?: string;
 }
 
-export const Header = ({ children, border = true }: HeaderProps) => {
+export const Header = ({ children, border = true, className }: HeaderProps) => {
   return (
     <header
-      className={cn('h-header-default z-50 flex w-full items-center gap-4 bg-transparent px-3', {
-        'border-b border-border1': border,
-      })}
+      className={cn(
+        'h-header-default z-50 flex w-full items-center gap-4 bg-transparent px-3',
+        {
+          'border-b border-border1': border,
+        },
+        className,
+      )}
     >
       {children}
     </header>
@@ -22,7 +27,7 @@ export const Header = ({ children, border = true }: HeaderProps) => {
 
 export const HeaderTitle = ({ children }: HeaderProps) => {
   return (
-    <Txt as="h1" variant="ui-md" className="text-white flex items-center gap-2">
+    <Txt as="h1" variant="ui-md" className="text-neutral6 flex items-center gap-2">
       {children}
     </Txt>
   );

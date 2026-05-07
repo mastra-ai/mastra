@@ -1,7 +1,6 @@
-import * as React from 'react';
 import { X } from 'lucide-react';
+import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import type { ConditionOperator } from '../types';
 
 import { RuleFieldSelect } from './rule-field-select';
@@ -10,7 +9,8 @@ import { RuleValueInput } from './rule-value-input';
 import { getFieldOptionAtPath } from './schema-utils';
 import type { RuleRowProps } from './types';
 
-import { IconButton } from '@/ds/components/IconButton';
+import { Button } from '@/ds/components/Button';
+import { cn } from '@/lib/utils';
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'integer']);
 
@@ -25,10 +25,11 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
   const isPrimitive = fieldType !== undefined && PRIMITIVE_TYPES.has(fieldType);
   const isArray = fieldType === 'array';
   const isArrayOperator = rule.operator === 'in' || rule.operator === 'not_in';
+  const isExistenceOperator = rule.operator === 'exists' || rule.operator === 'not_exists';
 
   // Show operator + value for primitive types, or for array types (restricted to in/not_in)
   const showComparator = isPrimitive || isArray;
-  const showValueInput = isPrimitive || (isArray && isArrayOperator);
+  const showValueInput = !isExistenceOperator && (isPrimitive || (isArray && isArrayOperator));
 
   const handleFieldChange = React.useCallback(
     (field: string) => {
@@ -39,6 +40,14 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
 
   const handleOperatorChange = React.useCallback(
     (operator: ConditionOperator) => {
+      const isNewExistence = operator === 'exists' || operator === 'not_exists';
+
+      // Existence operators don't need a value
+      if (isNewExistence) {
+        onChange({ ...rule, operator, value: undefined });
+        return;
+      }
+
       // Reset value when changing to/from array operators
       const isArrayOperator = operator === 'in' || operator === 'not_in';
       const wasArrayOperator = rule.operator === 'in' || rule.operator === 'not_in';
@@ -89,9 +98,9 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
         )}
       </div>
 
-      <IconButton type="button" onClick={onRemove} tooltip="Remove rule" size="sm" variant="ghost">
+      <Button type="button" onClick={onRemove} tooltip="Remove rule" size="icon-sm" variant="ghost">
         <X />
-      </IconButton>
+      </Button>
     </div>
   );
 };

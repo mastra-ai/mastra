@@ -233,3 +233,145 @@ createConfigValidationTests({
     },
   ],
 });
+
+// Index optimization tests (Issue #12792)
+if (!deploymentUrl || !adminKey) {
+  describe.skip('WorkflowsConvex - Index Optimization', () => {
+    it('requires CONVEX_TEST_URL and CONVEX_TEST_ADMIN_KEY to run index optimization tests', () => undefined);
+  });
+} else {
+  describe('WorkflowsConvex - Index Optimization', () => {
+    const workflowsDomain = new WorkflowsConvex({
+      deploymentUrl,
+      adminAuthToken: adminKey,
+      ...(storageFunction ? { storageFunction } : {}),
+    });
+
+    const createSnapshot = (status: 'running' | 'success' | 'waiting' | 'pending' | 'failed') => ({
+      status,
+      context: {},
+      activePaths: [],
+      activeStepsPath: {},
+      timestamp: Date.now(),
+      suspendedPaths: {},
+      resumeLabels: {},
+      serializedStepGraph: [],
+      value: {},
+      waitingPaths: {},
+      runId: '',
+    });
+
+    it('should filter by status after index-based query', async () => {
+      const testWorkflowName = `test-workflow-${Date.now()}`;
+
+      // Create test data
+      await workflowsDomain.persistWorkflowSnapshot({
+        workflowName: testWorkflowName,
+        runId: 'run-1',
+        snapshot: createSnapshot('running'),
+      });
+      await workflowsDomain.persistWorkflowSnapshot({
+        workflowName: testWorkflowName,
+        runId: 'run-2',
+        snapshot: createSnapshot('success'),
+      });
+      await workflowsDomain.persistWorkflowSnapshot({
+        workflowName: testWorkflowName,
+        runId: 'run-3',
+        snapshot: createSnapshot('running'),
+      });
+
+      const result = await workflowsDomain.listWorkflowRuns({
+        workflowName: testWorkflowName,
+        status: 'running',
+      });
+
+      expect(result.runs).toHaveLength(2);
+      expect(
+        result.runs.every(run => {
+          const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+          return snapshot.status === 'running';
+        }),
+      ).toBe(true);
+      expect(result.total).toBe(2);
+
+      // Cleanup
+      await workflowsDomain.deleteWorkflowRunById({ runId: 'run-1', workflowName: testWorkflowName });
+      await workflowsDomain.deleteWorkflowRunById({ runId: 'run-2', workflowName: testWorkflowName });
+      await workflowsDomain.deleteWorkflowRunById({ runId: 'run-3', workflowName: testWorkflowName });
+    });
+
+    it('should handle query for single workflow with many runs', async () => {
+      const testWorkflowName = `heavy-workflow-${Date.now()}`;
+
+      // Create 150 runs for a single workflow (smaller than 1000 for faster tests)
+      for (let i = 0; i < 150; i++) {
+        await workflowsDomain.persistWorkflowSnapshot({
+          workflowName: testWorkflowName,
+          runId: `run-${i}`,
+          snapshot: createSnapshot(i % 5 === 0 ? 'running' : 'success'),
+        });
+      }
+
+      // Should efficiently query using index
+      const result = await workflowsDomain.listWorkflowRuns({
+        workflowName: testWorkflowName,
+        status: 'running',
+      });
+
+      expect(result.runs.length).toBe(30); // 30 running runs
+      expect(result.total).toBe(30);
+
+      // Cleanup
+      for (let i = 0; i < 150; i++) {
+        await workflowsDomain.deleteWorkflowRunById({ runId: `run-${i}`, workflowName: testWorkflowName });
+      }
+    });
+
+    it('should handle pagination with index hints', async () => {
+      const testWorkflowName = `paginated-workflow-${Date.now()}`;
+
+      // Create 25 running runs
+      for (let i = 0; i < 25; i++) {
+        await workflowsDomain.persistWorkflowSnapshot({
+          workflowName: testWorkflowName,
+          runId: `run-${i}`,
+          snapshot: createSnapshot('running'),
+        });
+      }
+
+      // Get first page
+      const page1 = await workflowsDomain.listWorkflowRuns({
+        workflowName: testWorkflowName,
+        status: 'running',
+        perPage: 10,
+        page: 0,
+      });
+
+      expect(page1.runs.length).toBe(10);
+      expect(page1.total).toBe(25);
+
+      // Get second page
+      const page2 = await workflowsDomain.listWorkflowRuns({
+        workflowName: testWorkflowName,
+        status: 'running',
+        perPage: 10,
+        page: 1,
+      });
+
+      expect(page2.runs.length).toBe(10);
+      expect(page2.total).toBe(25);
+
+      // Verify no overlap
+      const page1Ids = new Set(page1.runs.map(r => r.runId));
+      const page2Ids = new Set(page2.runs.map(r => r.runId));
+      const intersection = [...page1Ids].filter(id => page2Ids.has(id));
+      expect(intersection).toHaveLength(0);
+
+      // Cleanup
+      for (let i = 0; i < 25; i++) {
+        await workflowsDomain.deleteWorkflowRunById({ runId: `run-${i}`, workflowName: testWorkflowName });
+      }
+    });
+  });
+}

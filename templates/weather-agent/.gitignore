@@ -6,3 +6,5 @@ dist
 .env
 *.db
 *.db-*
+.netlify
+.vercel

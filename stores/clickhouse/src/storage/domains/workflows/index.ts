@@ -28,6 +28,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     this.#db = new ClickhouseDB({ client, ttl });
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // ClickHouse is an OLAP database using ReplacingMergeTree for deduplication
+    // It doesn't support atomic read-modify-write operations needed for concurrent updates
+    return false;
+  }
+
   async init(): Promise<void> {
     const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
@@ -43,82 +49,26 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
+  async updateWorkflowResults(_args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    // Load existing snapshot
-    let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
-
-    if (!snapshot) {
-      // Create new snapshot if none exists
-      snapshot = {
-        context: {},
-        activePaths: [],
-        timestamp: Date.now(),
-        suspendedPaths: {},
-        activeStepsPath: {},
-        resumeLabels: {},
-        serializedStepGraph: [],
-        status: 'pending',
-        value: {},
-        waitingPaths: {},
-        runId: runId,
-        requestContext: {},
-      } as WorkflowRunState;
-    }
-
-    // Merge the new step result and request context
-    snapshot.context[stepId] = result;
-    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-    // Persist updated snapshot
-    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
-
-    return snapshot.context;
+    throw new Error(
+      'updateWorkflowResults is not implemented for ClickHouse storage. ClickHouse is an OLAP database and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
+  async updateWorkflowState(_args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    // Load existing snapshot
-    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
-
-    if (!snapshot) {
-      return undefined;
-    }
-
-    if (!snapshot.context) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'CONTEXT_MISSING'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: `Snapshot context is missing for runId ${runId}`,
-      });
-    }
-
-    // Merge the new options with the existing snapshot
-    const updatedSnapshot = { ...snapshot, ...opts };
-
-    // Persist updated snapshot
-    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
-
-    return updatedSnapshot;
+    throw new Error(
+      'updateWorkflowState is not implemented for ClickHouse storage. ClickHouse is an OLAP database and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot({

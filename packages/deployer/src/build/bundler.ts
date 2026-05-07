@@ -11,10 +11,11 @@ import type { analyzeBundle } from './analyze';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
+import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { slash } from './utils';
+import { getNodeResolveOptions, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
@@ -38,17 +39,7 @@ export async function getInputOptions(
     externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
-  // For 'neutral' platform (Bun), use similar settings to 'node' for module resolution
-  let nodeResolvePlugin =
-    platform === 'node' || platform === 'neutral'
-      ? nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        })
-      : nodeResolve({
-          preferBuiltins: false,
-          browser: true,
-        });
+  const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);
@@ -60,6 +51,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
+      protocolExternalResolver(),
       subpathExternalsResolver(externals),
       {
         name: 'alias-optimized-deps',

@@ -3,3 +3,6 @@
 node_modules
 .vercel
 .mastra.mastra
+database.sqlite
+.duckdb
+.duckdb.wal

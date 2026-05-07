@@ -1,5 +1,3 @@
-import { Link } from 'react-router';
-
 import {
   Crumb,
   Header,
@@ -11,10 +9,12 @@ import {
   ApiIcon,
   WorkflowIcon,
   DocsIcon,
-  WorkflowCombobox,
   Truncate,
 } from '@mastra/playground-ui';
-import { EyeIcon } from 'lucide-react';
+import { CalendarClockIcon, EyeIcon } from 'lucide-react';
+import { Link } from 'react-router';
+import { WorkflowCombobox } from './components/workflow-combobox';
+import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 
 export function WorkflowHeader({
   workflowName,
@@ -25,6 +25,14 @@ export function WorkflowHeader({
   workflowId: string;
   runId?: string;
 }) {
+  const { data: schedules } = useSchedules({ workflowId });
+  const scheduleCount = schedules?.length ?? 0;
+  const schedulesHref =
+    scheduleCount === 1
+      ? `/workflows/schedules/${encodeURIComponent(schedules![0].id)}`
+      : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
+  const isLeafCombobox = !runId;
+
   return (
     <div className="shrink-0">
       <Header>
@@ -35,7 +43,7 @@ export function WorkflowHeader({
             </Icon>
             Workflows
           </Crumb>
-          <Crumb as="span" to="" isCurrent={!runId}>
+          <Crumb as="span" to="" isCurrent={isLeafCombobox}>
             <WorkflowCombobox value={workflowId} variant="ghost" />
           </Crumb>
           {runId && (
@@ -48,6 +56,14 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
+          {scheduleCount > 0 && (
+            <Button as={Link} to={schedulesHref}>
+              <Icon>
+                <CalendarClockIcon />
+              </Icon>
+              Schedules ({scheduleCount})
+            </Button>
+          )}
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
             <Icon>
               <EyeIcon />
@@ -57,17 +73,13 @@ export function WorkflowHeader({
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} target="_blank" to="/swagger-ui">
-            <Icon>
-              <ApiIcon />
-            </Icon>
+          <Button as="a" target="_blank" href="/swagger-ui" variant="ghost" size="md">
+            <ApiIcon />
             API endpoints
           </Button>
 
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
             Workflows documentation
           </Button>
         </HeaderAction>

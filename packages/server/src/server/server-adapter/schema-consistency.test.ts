@@ -64,10 +64,17 @@ describe('Schema Consistency Across All Routes', () => {
           const pathParams = extractPathParams(route.path);
           const testData: Record<string, string> = {};
           pathParams.forEach(param => {
-            testData[param] = `test-${param}`;
+            if (param === 'datasetVersion') {
+              testData[param] = '1';
+            } else {
+              testData[param] = `test-${param}`;
+            }
           });
 
           const result = route.pathParamSchema.safeParse(testData);
+          if (!result.success) {
+            console.error(`Path param schema validation failed for route ${route.path}:`, result.error);
+          }
           expect(result.success).toBe(true);
         }
       });

@@ -33,43 +33,44 @@ export function splitTextOnTokens({ text, tokenizer }: { text: string; tokenizer
 
 export class TokenTransformer extends TextTransformer {
   private tokenizer: Tiktoken;
-  private allowedSpecial: Set<string> | 'all';
-  private disallowedSpecial: Set<string> | 'all';
+  private allowedArray: string[] | 'all';
+  private disallowedArray: string[] | 'all';
 
   constructor({
     encodingName = 'cl100k_base',
     modelName,
+    tokenizer: existingTokenizer,
     allowedSpecial = new Set(),
     disallowedSpecial = 'all',
     options = {},
   }: {
     encodingName?: TiktokenEncoding;
     modelName?: TiktokenModel;
+    tokenizer?: Tiktoken;
     allowedSpecial?: Set<string> | 'all';
     disallowedSpecial?: Set<string> | 'all';
     options: TokenChunkOptions;
   }) {
     super(options);
 
-    try {
-      this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
-    } catch {
-      throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
+    if (existingTokenizer) {
+      this.tokenizer = existingTokenizer;
+    } else {
+      try {
+        this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
+      } catch {
+        throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
+      }
     }
 
-    this.allowedSpecial = allowedSpecial;
-    this.disallowedSpecial = disallowedSpecial;
+    this.allowedArray = allowedSpecial === 'all' ? 'all' : Array.from(allowedSpecial);
+    this.disallowedArray = disallowedSpecial === 'all' ? 'all' : Array.from(disallowedSpecial);
   }
 
   splitText({ text }: { text: string }): string[] {
     const encode = (text: string): number[] => {
-      const allowed = this.allowedSpecial === 'all' ? 'all' : Array.from(this.allowedSpecial);
-
-      const disallowed = this.disallowedSpecial === 'all' ? 'all' : Array.from(this.disallowedSpecial);
-
-      // If stripWhitespace is enabled, trim the text before encoding
       const processedText = this.stripWhitespace ? text.trim() : text;
-      return Array.from(this.tokenizer.encode(processedText, allowed, disallowed));
+      return Array.from(this.tokenizer.encode(processedText, this.allowedArray, this.disallowedArray));
     };
 
     const decode = (tokens: number[]): string => {
@@ -125,6 +126,7 @@ export class TokenTransformer extends TextTransformer {
     return new TokenTransformer({
       encodingName,
       modelName,
+      tokenizer,
       allowedSpecial: options.allowedSpecial,
       disallowedSpecial: options.disallowedSpecial,
       options: {

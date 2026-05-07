@@ -10,7 +10,6 @@ import MDXPre from '@theme/MDXComponents/Pre'
 import MDXUl from '@theme/MDXComponents/Ul'
 import Mermaid from '@theme/Mermaid'
 import { type ComponentProps } from 'react'
-import { CardGrid, CardGridItem } from '@site/src/components/CardGrid'
 import GithubLink from '@site/src/components/GithubLink'
 import NetlifyLogo from '@site/src/components/NetlifyLogo'
 import OperatorsTable from '@site/src/components/OperatorsTable'
@@ -43,8 +42,6 @@ const MDXComponents: MDXComponentsObject = {
   OperatorsTable,
   ProviderModelsTable,
   PropertiesTable,
-  CardGrid,
-  CardGridItem,
   YouTube,
 }
 

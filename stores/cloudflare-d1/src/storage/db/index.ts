@@ -96,6 +96,9 @@ export class D1DB extends MastraBase {
   private binding?: D1Database;
   private tablePrefix: string;
 
+  /** Cache of actual table columns: tableName -> Promise<Set<columnName>> (stores in-flight promise to coalesce concurrent calls) */
+  private tableColumnsCache = new Map<string, Promise<Set<string>>>();
+
   constructor(config: D1DBConfig) {
     super({
       component: 'STORAGE',
@@ -218,6 +221,48 @@ export class D1DB extends MastraBase {
     }
   }
 
+  /**
+   * Gets the set of column names that actually exist in the database table.
+   * Results are cached; the cache is invalidated when alterTable() adds new columns.
+   */
+  private async getKnownColumnNames(tableName: string): Promise<Set<string>> {
+    const cached = this.tableColumnsCache.get(tableName);
+    if (cached) return cached;
+
+    // Store the in-flight promise so concurrent callers (e.g. Promise.all in batch ops) await the same query
+    const promise = this.getTableColumns(tableName).then(columns => {
+      const names = new Set(columns.map(c => c.name));
+      // If the query returned no columns, remove the cached promise so we retry next time
+      if (names.size === 0) {
+        this.tableColumnsCache.delete(tableName);
+      }
+      return names;
+    });
+    this.tableColumnsCache.set(tableName, promise);
+
+    return promise;
+  }
+
+  /**
+   * Filters a record to only include columns that exist in the actual database table.
+   * Unknown columns are silently dropped to ensure forward compatibility.
+   */
+  private async filterRecordToKnownColumns(
+    tableName: string,
+    record: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const knownColumns = await this.getKnownColumnNames(tableName);
+    if (knownColumns.size === 0) return record;
+
+    const filtered: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (knownColumns.has(key)) {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
+  }
+
   private async getTableColumns(tableName: string): Promise<{ name: string; type: string }[]> {
     try {
       const sql = `PRAGMA table_info(${tableName})`;
@@ -295,6 +340,7 @@ export class D1DB extends MastraBase {
       const { sql, params } = query.build();
       await this.executeQuery({ sql, params });
       this.logger.debug(`Created table ${fullTableName}`);
+      this.tableColumnsCache.delete(fullTableName);
     } catch (error) {
       throw new MastraError(
         {
@@ -329,8 +375,8 @@ export class D1DB extends MastraBase {
   }
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    const fullTableName = this.getTableName(tableName);
     try {
-      const fullTableName = this.getTableName(tableName);
       const sql = `DROP TABLE IF EXISTS ${fullTableName}`;
       await this.executeQuery({ sql });
       this.logger.debug(`Dropped table ${fullTableName}`);
@@ -344,6 +390,8 @@ export class D1DB extends MastraBase {
         },
         error,
       );
+    } finally {
+      this.tableColumnsCache.delete(fullTableName);
     }
   }
 
@@ -352,8 +400,9 @@ export class D1DB extends MastraBase {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
+    const fullTableName = this.getTableName(args.tableName);
+
     try {
-      const fullTableName = this.getTableName(args.tableName);
       const existingColumns = await this.getTableColumns(fullTableName);
       const existingColumnNames = new Set(existingColumns.map(col => col.name));
 
@@ -376,6 +425,9 @@ export class D1DB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(fullTableName);
     }
   }
 
@@ -383,8 +435,11 @@ export class D1DB extends MastraBase {
     try {
       const fullTableName = this.getTableName(tableName);
       const processedRecord = await this.processRecord(record);
-      const columns = Object.keys(processedRecord);
-      const values = Object.values(processedRecord);
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecord = await this.filterRecordToKnownColumns(fullTableName, processedRecord);
+      const columns = Object.keys(filteredRecord);
+      if (columns.length === 0) return; // No known columns after filtering - skip insert
+      const values = Object.values(filteredRecord);
 
       const query = createSqlBuilder().insert(fullTableName, columns, values);
       const { sql, params } = query.build();
@@ -409,10 +464,16 @@ export class D1DB extends MastraBase {
 
       const fullTableName = this.getTableName(tableName);
       const processedRecords = await Promise.all(records.map(record => this.processRecord(record)));
-      const columns = Object.keys(processedRecords[0] || {});
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecords = await Promise.all(
+        processedRecords.map(r => this.filterRecordToKnownColumns(fullTableName, r)),
+      );
 
       // For batch insert, we need to create multiple INSERT statements
-      for (const record of processedRecords) {
+      // Derive columns per-record and skip empty records
+      for (const record of filteredRecords) {
+        const columns = Object.keys(record);
+        if (columns.length === 0) continue; // Skip records with no known columns
         const values = Object.values(record);
         const query = createSqlBuilder().insert(fullTableName, columns, values);
         const { sql, params } = query.build();
@@ -505,19 +566,19 @@ export class D1DB extends MastraBase {
 
         const recordsToInsert = batch;
 
-        // For bulk insert, we need to determine the columns from the first record
+        // Filter out columns that don't exist in the actual database table
         if (recordsToInsert.length > 0) {
-          const firstRecord = recordsToInsert[0];
-          // Ensure firstRecord is not undefined before calling Object.keys
-          const columns = Object.keys(firstRecord || {});
+          const filteredRecords = await Promise.all(
+            recordsToInsert.map(r => this.filterRecordToKnownColumns(fullTableName, r || {})),
+          );
 
-          // Create a bulk insert statement
-          for (const record of recordsToInsert) {
-            // Use type-safe approach to extract values
+          // Create a bulk insert statement - derive columns per-record and skip empties
+          for (const record of filteredRecords) {
+            const columns = Object.keys(record);
+            if (columns.length === 0) continue; // Skip records with no known columns
+
             const values = columns.map(col => {
-              if (!record) return null;
-              // Safely access the record properties
-              const value = typeof col === 'string' ? record[col as keyof typeof record] : null;
+              const value = record[col];
               return this.serializeValue(value);
             });
 

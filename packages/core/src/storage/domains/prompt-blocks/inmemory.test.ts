@@ -12,12 +12,12 @@ describe('InMemoryPromptBlocksStorage', () => {
   });
 
   // ==========================================================================
-  // createPromptBlock
+  // create
   // ==========================================================================
 
-  describe('createPromptBlock', () => {
+  describe('create', () => {
     it('should create a block with status=draft and no activeVersionId', async () => {
-      const result = await storage.createPromptBlock({
+      const result = await storage.create({
         promptBlock: {
           id: 'block-1',
           name: 'Test Block',
@@ -33,7 +33,7 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should auto-create version 1 with initial config', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: {
           id: 'block-1',
           name: 'Test Block',
@@ -60,7 +60,7 @@ describe('InMemoryPromptBlocksStorage', () => {
         conditions: [{ field: 'user.role', operator: 'equals' as const, value: 'admin' }],
       };
 
-      const result = await storage.createPromptBlock({
+      const result = await storage.create({
         promptBlock: {
           id: 'block-2',
           name: 'Admin Block',
@@ -80,12 +80,12 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should throw if block with same ID already exists', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'dup', name: 'First', content: 'First' },
       });
 
       await expect(
-        storage.createPromptBlock({
+        storage.create({
           promptBlock: { id: 'dup', name: 'Second', content: 'Second' },
         }),
       ).rejects.toThrow('Prompt block with id dup already exists');
@@ -93,33 +93,33 @@ describe('InMemoryPromptBlocksStorage', () => {
   });
 
   // ==========================================================================
-  // getPromptBlockById
+  // getById
   // ==========================================================================
 
-  describe('getPromptBlockById', () => {
+  describe('getById', () => {
     it('should return thin record for existing block', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'Test', content: 'Content' },
       });
 
-      const block = await storage.getPromptBlockById({ id: 'block-1' });
+      const block = await storage.getById('block-1');
       expect(block).not.toBeNull();
       expect(block!.id).toBe('block-1');
       expect(block!.status).toBe('draft');
     });
 
     it('should return null for non-existent block', async () => {
-      const block = await storage.getPromptBlockById({ id: 'nonexistent' });
+      const block = await storage.getById('nonexistent');
       expect(block).toBeNull();
     });
 
     it('should return a deep copy (mutation safety)', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'Test', content: 'Content', metadata: { key: 'value' } },
       });
 
-      const block1 = await storage.getPromptBlockById({ id: 'block-1' });
-      const block2 = await storage.getPromptBlockById({ id: 'block-1' });
+      const block1 = await storage.getById('block-1');
+      const block2 = await storage.getById('block-1');
 
       block1!.metadata!['key'] = 'mutated';
       expect(block2!.metadata!['key']).toBe('value');
@@ -127,16 +127,16 @@ describe('InMemoryPromptBlocksStorage', () => {
   });
 
   // ==========================================================================
-  // getPromptBlockByIdResolved
+  // getByIdResolved
   // ==========================================================================
 
-  describe('getPromptBlockByIdResolved', () => {
+  describe('getByIdResolved', () => {
     it('should resolve latest version for block without activeVersionId', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'Test', content: 'Content v1' },
       });
 
-      const resolved = await storage.getPromptBlockByIdResolved({ id: 'block-1' });
+      const resolved = await storage.getByIdResolved('block-1');
       expect(resolved).not.toBeNull();
       expect(resolved!.id).toBe('block-1');
       expect(resolved!.name).toBe('Test');
@@ -145,7 +145,7 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should resolve the active version when activeVersionId is set', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'V1 Name', content: 'V1 Content' },
       });
 
@@ -162,47 +162,48 @@ describe('InMemoryPromptBlocksStorage', () => {
       });
 
       // Set active to version 2 (but latest is also v2)
-      await storage.updatePromptBlock({
+      await storage.update({
         id: 'block-1',
         activeVersionId: v2Id,
       });
 
-      const resolved = await storage.getPromptBlockByIdResolved({ id: 'block-1' });
+      const resolved = await storage.getByIdResolved('block-1');
       expect(resolved!.name).toBe('V2 Name');
       expect(resolved!.content).toBe('V2 Content');
-      expect(resolved!.status).toBe('published');
+      // Status remains 'draft' — auto-publish was removed from storage
+      expect(resolved!.status).toBe('draft');
     });
 
     it('should fall back to latest version when activeVersionId points to missing version', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'Test', content: 'Content' },
       });
 
       // Manually set an invalid activeVersionId
       db.promptBlocks.get('block-1')!.activeVersionId = 'nonexistent-version';
 
-      const resolved = await storage.getPromptBlockByIdResolved({ id: 'block-1' });
+      const resolved = await storage.getByIdResolved('block-1');
       expect(resolved).not.toBeNull();
       expect(resolved!.name).toBe('Test');
       expect(resolved!.content).toBe('Content');
     });
 
     it('should return null for non-existent block', async () => {
-      const resolved = await storage.getPromptBlockByIdResolved({ id: 'nonexistent' });
+      const resolved = await storage.getByIdResolved('nonexistent');
       expect(resolved).toBeNull();
     });
   });
 
   // ==========================================================================
-  // updatePromptBlock
+  // update
   // ==========================================================================
 
-  describe('updatePromptBlock', () => {
+  describe('update', () => {
     let blockId: string;
 
     beforeEach(async () => {
       blockId = 'update-block';
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: {
           id: blockId,
           name: 'Original Name',
@@ -217,7 +218,7 @@ describe('InMemoryPromptBlocksStorage', () => {
       const versionCountBefore = await storage.countVersions(blockId);
       expect(versionCountBefore).toBe(1);
 
-      const result = await storage.updatePromptBlock({
+      const result = await storage.update({
         id: blockId,
         metadata: { key2: 'updated', key3: 'val3' },
       });
@@ -234,27 +235,22 @@ describe('InMemoryPromptBlocksStorage', () => {
       expect(versionCountAfter).toBe(1);
     });
 
-    it('should create a new version when updating config fields', async () => {
+    it('should not create a new version when updating config fields', async () => {
       const versionCountBefore = await storage.countVersions(blockId);
       expect(versionCountBefore).toBe(1);
 
-      await storage.updatePromptBlock({
+      await storage.update({
         id: blockId,
         name: 'Updated Name',
         content: 'Updated content',
       });
 
-      // New version created
+      // No new version created — update() no longer creates versions
       const versionCountAfter = await storage.countVersions(blockId);
-      expect(versionCountAfter).toBe(2);
-
-      // Resolved should reflect new values
-      const resolved = await storage.getPromptBlockByIdResolved({ id: blockId });
-      expect(resolved!.name).toBe('Updated Name');
-      expect(resolved!.content).toBe('Updated content');
+      expect(versionCountAfter).toBe(1);
     });
 
-    it('should set status=published when activeVersionId is updated', async () => {
+    it('should not auto-publish when activeVersionId is updated (handler manages status)', async () => {
       // Create a second version
       const versionId = 'v2-id';
       await storage.createVersion({
@@ -266,51 +262,49 @@ describe('InMemoryPromptBlocksStorage', () => {
         changedFields: ['name', 'content'],
       });
 
-      const result = await storage.updatePromptBlock({
+      const result = await storage.update({
         id: blockId,
         activeVersionId: versionId,
       });
 
-      expect(result.status).toBe('published');
+      // Status remains 'draft' — auto-publish was removed from storage
+      expect(result.status).toBe('draft');
       expect(result.activeVersionId).toBe(versionId);
     });
 
-    it('should handle mixed metadata and config updates', async () => {
-      await storage.updatePromptBlock({
+    it('should handle mixed metadata and config updates without creating a version', async () => {
+      await storage.update({
         id: blockId,
         metadata: { key3: 'val3' },
         name: 'Mixed Update Name',
       });
 
-      // Should create a new version for config change
+      // No new version created — update() no longer creates versions
       const versionCount = await storage.countVersions(blockId);
-      expect(versionCount).toBe(2);
+      expect(versionCount).toBe(1);
 
-      const block = await storage.getPromptBlockById({ id: blockId });
+      const block = await storage.getById(blockId);
       expect(block!.metadata).toEqual({
         key1: 'val1',
         key2: 'val2',
         key3: 'val3',
       });
-
-      const resolved = await storage.getPromptBlockByIdResolved({ id: blockId });
-      expect(resolved!.name).toBe('Mixed Update Name');
     });
 
     it('should throw for non-existent block', async () => {
-      await expect(storage.updatePromptBlock({ id: 'nonexistent', name: 'Nope' })).rejects.toThrow(
+      await expect(storage.update({ id: 'nonexistent', name: 'Nope' })).rejects.toThrow(
         'Prompt block with id nonexistent not found',
       );
     });
   });
 
   // ==========================================================================
-  // deletePromptBlock
+  // delete
   // ==========================================================================
 
-  describe('deletePromptBlock', () => {
+  describe('delete', () => {
     it('should delete block and all its versions', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'del-block', name: 'To Delete', content: 'Content' },
       });
 
@@ -325,25 +319,25 @@ describe('InMemoryPromptBlocksStorage', () => {
 
       expect(await storage.countVersions('del-block')).toBe(2);
 
-      await storage.deletePromptBlock({ id: 'del-block' });
+      await storage.delete('del-block');
 
-      expect(await storage.getPromptBlockById({ id: 'del-block' })).toBeNull();
+      expect(await storage.getById('del-block')).toBeNull();
       expect(await storage.countVersions('del-block')).toBe(0);
     });
 
     it('should be idempotent (no error for non-existent block)', async () => {
-      await expect(storage.deletePromptBlock({ id: 'nonexistent' })).resolves.toBeUndefined();
+      await expect(storage.delete('nonexistent')).resolves.toBeUndefined();
     });
   });
 
   // ==========================================================================
-  // listPromptBlocks
+  // list
   // ==========================================================================
 
-  describe('listPromptBlocks', () => {
+  describe('list', () => {
     beforeEach(async () => {
       for (let i = 1; i <= 5; i++) {
-        await storage.createPromptBlock({
+        await storage.create({
           promptBlock: {
             id: `block-${i}`,
             name: `Block ${i}`,
@@ -358,29 +352,29 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should return all blocks with default pagination', async () => {
-      const result = await storage.listPromptBlocks();
+      const result = await storage.list({ status: 'draft' });
       expect(result.promptBlocks).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.page).toBe(0);
     });
 
     it('should support pagination', async () => {
-      const page0 = await storage.listPromptBlocks({ page: 0, perPage: 2 });
+      const page0 = await storage.list({ status: 'draft', page: 0, perPage: 2 });
       expect(page0.promptBlocks).toHaveLength(2);
       expect(page0.hasMore).toBe(true);
       expect(page0.total).toBe(5);
 
-      const page1 = await storage.listPromptBlocks({ page: 1, perPage: 2 });
+      const page1 = await storage.list({ status: 'draft', page: 1, perPage: 2 });
       expect(page1.promptBlocks).toHaveLength(2);
       expect(page1.hasMore).toBe(true);
 
-      const page2 = await storage.listPromptBlocks({ page: 2, perPage: 2 });
+      const page2 = await storage.list({ status: 'draft', page: 2, perPage: 2 });
       expect(page2.promptBlocks).toHaveLength(1);
       expect(page2.hasMore).toBe(false);
     });
 
     it('should filter by authorId', async () => {
-      const result = await storage.listPromptBlocks({ authorId: 'author-a' });
+      const result = await storage.list({ status: 'draft', authorId: 'author-a' });
       expect(result.promptBlocks).toHaveLength(3);
       result.promptBlocks.forEach(b => {
         expect(b.authorId).toBe('author-a');
@@ -388,13 +382,13 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should filter by metadata', async () => {
-      const result = await storage.listPromptBlocks({ metadata: { index: 3 } });
+      const result = await storage.list({ status: 'draft', metadata: { index: 3 } });
       expect(result.promptBlocks).toHaveLength(1);
       expect(result.promptBlocks[0]!.id).toBe('block-3');
     });
 
     it('should sort by createdAt DESC by default', async () => {
-      const result = await storage.listPromptBlocks();
+      const result = await storage.list({ status: 'draft' });
       const ids = result.promptBlocks.map(b => b.id);
       // DESC means newest first
       expect(ids[0]).toBe('block-5');
@@ -402,7 +396,8 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should sort by createdAt ASC when specified', async () => {
-      const result = await storage.listPromptBlocks({
+      const result = await storage.list({
+        status: 'draft',
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
       const ids = result.promptBlocks.map(b => b.id);
@@ -412,26 +407,26 @@ describe('InMemoryPromptBlocksStorage', () => {
 
     it('should return empty list when no blocks exist', async () => {
       db.promptBlocks.clear();
-      const result = await storage.listPromptBlocks();
+      const result = await storage.list();
       expect(result.promptBlocks).toHaveLength(0);
       expect(result.total).toBe(0);
     });
   });
 
   // ==========================================================================
-  // listPromptBlocksResolved
+  // listResolved
   // ==========================================================================
 
-  describe('listPromptBlocksResolved', () => {
+  describe('listResolved', () => {
     it('should return blocks with version config resolved', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'Block One', content: 'Content One' },
       });
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-2', name: 'Block Two', content: 'Content Two' },
       });
 
-      const result = await storage.listPromptBlocksResolved();
+      const result = await storage.listResolved({ status: 'draft' });
       expect(result.promptBlocks).toHaveLength(2);
 
       // Each resolved block should have both thin record fields and snapshot fields
@@ -452,7 +447,7 @@ describe('InMemoryPromptBlocksStorage', () => {
     const blockId = 'versioned-block';
 
     beforeEach(async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: blockId, name: 'V1', content: 'Content V1' },
       });
     });
@@ -624,7 +619,7 @@ describe('InMemoryPromptBlocksStorage', () => {
       });
 
       expect(await storage.countVersions(blockId)).toBe(2);
-      await storage.deleteVersionsByBlockId(blockId);
+      await storage.deleteVersionsByParentId(blockId);
       expect(await storage.countVersions(blockId)).toBe(0);
     });
 
@@ -650,10 +645,10 @@ describe('InMemoryPromptBlocksStorage', () => {
 
   describe('dangerouslyClearAll', () => {
     it('should clear all prompt blocks and versions', async () => {
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-1', name: 'B1', content: 'C1' },
       });
-      await storage.createPromptBlock({
+      await storage.create({
         promptBlock: { id: 'block-2', name: 'B2', content: 'C2' },
       });
 

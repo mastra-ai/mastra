@@ -1,57 +1,86 @@
-import { verifyJwks } from '@mastra/auth';
-import type { JwtPayload } from '@mastra/auth';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
-import { WorkOS } from '@workos-inc/node';
+/**
+ * @mastra/auth-workos
+ *
+ * Full WorkOS integration for Mastra, providing:
+ * - Enterprise SSO (SAML, OIDC) via AuthKit
+ * - User management with organization roles
+ * - Directory Sync (SCIM) for automated user provisioning
+ * - Audit log export to WorkOS for SIEM integration
+ * - Admin Portal for customer self-service configuration
+ *
+ * @example Basic setup with SSO and RBAC
+ * ```typescript
+ * import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
+ *
+ * const mastra = new Mastra({
+ *   server: {
+ *     auth: new MastraAuthWorkos({
+ *       apiKey: process.env.WORKOS_API_KEY,
+ *       clientId: process.env.WORKOS_CLIENT_ID,
+ *     }),
+ *     rbac: new MastraRBACWorkos({
+ *       apiKey: process.env.WORKOS_API_KEY,
+ *       clientId: process.env.WORKOS_CLIENT_ID,
+ *       roleMapping: {
+ *         'admin': ['*'],
+ *         'member': ['agents:read', 'workflows:*'],
+ *         '_default': [],
+ *       },
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @see https://workos.com/docs for WorkOS documentation
+ */
 
-type WorkosUser = JwtPayload;
+// Main auth provider
+export { MastraAuthWorkos } from './auth-provider';
 
-interface MastraAuthWorkosOptions extends MastraAuthProviderOptions<WorkosUser> {
-  apiKey?: string;
-  clientId?: string;
-}
+// RBAC provider for role mapping
+export { MastraRBACWorkos } from './rbac-provider';
 
-export class MastraAuthWorkos extends MastraAuthProvider<WorkosUser> {
-  protected workos: WorkOS;
+// FGA provider for fine-grained authorization
+export { MastraFGAWorkos, WorkOSFGAMembershipResolutionError, WorkOSFGAResourceNotFoundError } from './fga-provider';
 
-  constructor(options?: MastraAuthWorkosOptions) {
-    super({ name: options?.name ?? 'workos' });
+// Directory Sync (SCIM) webhook handler
+export { WorkOSDirectorySync } from './directory-sync';
 
-    const apiKey = options?.apiKey ?? process.env.WORKOS_API_KEY;
-    const clientId = options?.clientId ?? process.env.WORKOS_CLIENT_ID;
+// Admin Portal helper
+export { WorkOSAdminPortal } from './admin-portal';
 
-    if (!apiKey || !clientId) {
-      throw new Error(
-        'WorkOS API key and client ID are required, please provide them in the options or set the environment variables WORKOS_API_KEY and WORKOS_CLIENT_ID',
-      );
-    }
+// Session storage adapter for Web Request/Response
+export { WebSessionStorage } from './session-storage';
 
-    this.workos = new WorkOS(apiKey, {
-      clientId,
-    });
+// Re-export all types
+export type {
+  // User types
+  WorkOSUser,
 
-    this.registerOptions(options);
-  }
+  // Auth provider options
+  MastraAuthWorkosOptions,
+  WorkOSSSOConfig,
+  WorkOSSessionConfig,
+  WorkOSJwtClaimsConfig,
 
-  async authenticateToken(token: string): Promise<WorkosUser | null> {
-    const jwksUri = this.workos.userManagement.getJwksUrl(process.env.WORKOS_CLIENT_ID!);
-    const user = await verifyJwks(token, jwksUri);
-    return user;
-  }
+  // RBAC options
+  MastraRBACWorkosOptions,
+  PermissionCacheOptions,
 
-  async authorizeUser(user: WorkosUser) {
-    if (!user) {
-      return false;
-    }
+  // FGA options
+  MastraFGAWorkosOptions,
+  MastraFGAPermissionMapping,
 
-    const org = await this.workos.userManagement.listOrganizationMemberships({
-      userId: user.sub,
-    });
+  // Directory Sync types
+  DirectorySyncHandlers,
+  DirectorySyncUserData,
+  DirectorySyncGroupData,
+  WorkOSDirectorySyncOptions,
 
-    const roles = org.data.map(org => org.role);
+  // Admin Portal types
+  AdminPortalIntent,
+  WorkOSAdminPortalOptions,
+} from './types';
 
-    const isAdmin = roles.some(role => role.slug === 'admin');
-
-    return isAdmin;
-  }
-}
+// Re-export helper function
+export { mapWorkOSUserToEEUser } from './types';

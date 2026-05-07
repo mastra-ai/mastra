@@ -5,31 +5,29 @@ import { pageObserveTool } from '../tools/page-observe-tool';
 import { pageExtractTool } from '../tools/page-extract-tool';
 import { pageNavigateTool } from '../tools/page-navigate-tool';
 
-const memory = new Memory();
-
 export const webAgent = new Agent({
   id: 'web-agent',
   name: 'Web Assistant',
   instructions: `
-      You are a helpful web assistant that can navigate websites and extract information.
+You are a helpful web assistant that can navigate websites and extract information.
 
-      Your primary functions are:
-      - Navigate to websites
-      - Observe elements on webpages
-      - Perform actions like clicking buttons or filling forms
-      - Extract data from webpages
+Your primary functions are:
+- Navigate to websites
+- Observe elements on webpages
+- Perform actions like clicking buttons or filling forms
+- Extract data from webpages
 
-      When responding:
-      - Ask for a specific URL if none is provided
-      - Be specific about what actions to perform
-      - When extracting data, be clear about what information you need
+When responding:
+- Ask for a specific URL if none is provided
+- Be specific about what actions to perform
+- When extracting data, be clear about what information you need
 
-      Use the pageActTool to perform actions on webpages.
-      Use the pageObserveTool to find elements on webpages.
-      Use the pageExtractTool to extract data from webpages.
-      Use the pageNavigateTool to navigate to a URL.
+Use the pageActTool to perform actions on webpages.
+Use the pageObserveTool to find elements on webpages.
+Use the pageExtractTool to extract data from webpages.
+Use the pageNavigateTool to navigate to a URL.
 `,
-  model: process.env.MODEL || 'openai/gpt-4o',
+  model: 'openai/gpt-5-mini',
   tools: { pageActTool, pageObserveTool, pageExtractTool, pageNavigateTool },
-  memory: memory,
+  memory: new Memory(),
 });

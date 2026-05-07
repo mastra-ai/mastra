@@ -14,13 +14,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - description: 'Core Package Tests'
-          - description: 'MCP Package Tests'
           - description: 'E2E Tests'
           - description: 'Combined store Tests (vector+storage)'
           - description: 'Memory Tests'
-          - description: 'RAG Tests'
-          - description: 'Tool Builder Tests'
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
@@ -137,6 +137,55 @@ describe('processInputStep', () => {
       });
 
       expect(typeof runner.runProcessInputStep).toBe('function');
+    });
+
+    it('should rotate the active response message id for later processors and the final step result', async () => {
+      const seenMessageIds: string[] = [];
+      const rotateResponseMessageId = vi.fn(() => 'response-2');
+
+      const rotateProcessor: Processor = {
+        id: 'rotate-processor',
+        processInputStep: async ({ messageId, rotateResponseMessageId }) => {
+          if (messageId) {
+            seenMessageIds.push(messageId);
+          }
+          rotateResponseMessageId?.();
+          return {};
+        },
+      };
+
+      const observeProcessor: Processor = {
+        id: 'observe-processor',
+        processInputStep: async ({ messageId }) => {
+          if (messageId) {
+            seenMessageIds.push(messageId);
+          }
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [rotateProcessor, observeProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        messageId: 'response-1',
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(seenMessageIds).toEqual(['response-1', 'response-2']);
+      expect(result.messageId).toBe('response-2');
     });
 
     it('should be callable at each step with growing message history', async () => {

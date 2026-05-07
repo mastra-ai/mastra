@@ -20,12 +20,14 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'guides/',
     'docs/community/',
     'docs/getting-started/',
-    'docs/mastra-cloud/',
+    'docs/mastra-platform/',
     'docs/index.mdx',
     'models/',
     'docs/build-with-ai/skills.mdx',
+    'docs/studio/cloud.mdx',
   ],
-  packagePattern: /^@mastra\/[\w-]+$/,
+  // Allow for @mastra/* packages + mastra + create-mastra + mastracode
+  packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,
   concurrency: 50,
 }
 
@@ -82,7 +84,7 @@ function validatePackagesField(
     if (!config.packagePattern.test(pkg.value)) {
       errors.push({
         type: 'invalid_packages',
-        message: `invalid package name: "${pkg.value}" (must match @mastra/*)`,
+        message: `invalid package name: "${pkg.value}" (must match @mastra/*, mastra, or create-mastra)`,
         lineNumber: pkg.lineNumber,
       })
     }

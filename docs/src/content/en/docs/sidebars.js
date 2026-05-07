@@ -15,22 +15,16 @@
 const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
-    'index',
+    {
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Fundamentals',
       collapsed: false,
       items: [
-        {
-          type: 'doc',
-          id: 'getting-started/start',
-          label: 'Start',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/studio',
-          label: 'Studio',
-        },
         {
           type: 'doc',
           id: 'getting-started/project-structure',
@@ -50,6 +44,32 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Studio',
+      items: [
+        {
+          type: 'doc',
+          id: 'studio/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'studio/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'studio/auth',
+          label: 'Auth',
+        },
+        {
+          type: 'doc',
+          id: 'studio/observability',
+          label: 'Observability',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       items: [
         {
@@ -60,12 +80,11 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/using-tools',
-          label: 'Using Tools',
+          label: 'Tools',
         },
         {
-          type: 'doc',
-          id: 'agents/agent-memory',
-          label: 'Memory',
+          type: 'html',
+          value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
         {
           type: 'doc',
@@ -74,8 +93,19 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/networks',
-          label: 'Networks',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/background-tasks',
+          label: 'Background Tasks',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -94,13 +124,69 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/network-approval',
-          label: 'Network Approval',
+          id: 'agents/adding-voice',
+          label: 'Voice',
         },
         {
           type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/networks',
+          label: 'Networks',
+          customProps: {
+            tags: ['deprecated'],
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Memory',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'memory/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'memory/storage',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
+          id: 'memory/message-history',
+          label: 'Message History',
+        },
+        {
+          type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'memory/working-memory',
+          label: 'Working Memory',
+        },
+        {
+          type: 'doc',
+          id: 'memory/semantic-recall',
+          label: 'Semantic Recall',
+        },
+        {
+          type: 'doc',
+          id: 'memory/memory-processors',
+          label: 'Memory Processors',
         },
       ],
     },
@@ -153,6 +239,35 @@ const sidebars = {
           id: 'workflows/error-handling',
           label: 'Error Handling',
         },
+        {
+          type: 'doc',
+          id: 'workflows/scheduled-workflows',
+          label: 'Scheduled Workflows',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Editor',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'editor/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'editor/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'editor/prompts',
+          label: 'Prompts',
+        },
       ],
     },
     {
@@ -179,6 +294,14 @@ const sidebars = {
           id: 'streaming/workflow-streaming',
           label: 'Workflow Streaming',
         },
+        {
+          type: 'doc',
+          id: 'streaming/background-task-streaming',
+          label: 'Background Task Streaming',
+          customProps: {
+            tags: ['new'],
+          },
+        },
       ],
     },
     {
@@ -193,93 +316,14 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Memory',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'memory/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'memory/storage',
-          label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'memory/message-history',
-          label: 'Message History',
-        },
-        {
-          type: 'doc',
-          id: 'memory/working-memory',
-          label: 'Working Memory',
-        },
-        {
-          type: 'doc',
-          id: 'memory/semantic-recall',
-          label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'memory/memory-processors',
-          label: 'Memory Processors',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'RAG',
-      items: [
-        {
-          type: 'doc',
-          id: 'rag/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'rag/chunking-and-embedding',
-          label: 'Chunking and Embedding',
-        },
-        {
-          type: 'doc',
-          id: 'rag/vector-databases',
-          label: 'Vector Databases',
-        },
-        {
-          type: 'doc',
-          id: 'rag/retrieval',
-          label: 'Retrieval',
-        },
-        {
-          type: 'doc',
-          id: 'rag/graph-rag',
-          label: 'GraphRAG',
+          id: 'mcp/mcp-apps',
+          label: 'MCP Apps',
         },
       ],
     },
     {
       type: 'category',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -298,6 +342,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'workspace/lsp',
+          label: 'LSP Inspection',
+        },
+        {
+          type: 'doc',
           id: 'workspace/skills',
           label: 'Skills',
         },
@@ -305,6 +354,35 @@ const sidebars = {
           type: 'doc',
           id: 'workspace/search',
           label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Browser',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'browser/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'browser/agent-browser',
+          label: 'AgentBrowser',
+        },
+        {
+          type: 'doc',
+          id: 'browser/stagehand',
+          label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/browser-viewer',
+          label: 'BrowserViewer',
         },
       ],
     },
@@ -358,38 +436,18 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'server/auth/simple-auth',
-              label: 'Simple Auth',
+              id: 'server/auth/auth0',
+              label: 'Auth0',
             },
             {
               type: 'doc',
-              id: 'server/auth/jwt',
-              label: 'JSON Web Token',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
             },
             {
               type: 'doc',
               id: 'server/auth/clerk',
               label: 'Clerk',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/supabase',
-              label: 'Supabase',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/firebase',
-              label: 'Firebase',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/workos',
-              label: 'WorkOS',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/auth0',
-              label: 'Auth0',
             },
             {
               type: 'doc',
@@ -400,6 +458,41 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/custom-auth-provider',
               label: 'Custom Auth Provider',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/firebase',
+              label: 'Firebase',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/jwt',
+              label: 'JSON Web Token',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/okta',
+              label: 'Okta',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/simple-auth',
+              label: 'Simple Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/supabase',
+              label: 'Supabase',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/workos',
+              label: 'WorkOS',
             },
           ],
         },
@@ -443,40 +536,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
-      customProps: {
-        tags: ['beta'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-cloud/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Observability',
       items: [
         {
@@ -506,6 +565,11 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/bridges/otel',
                   label: 'OpenTelemetry',
                 },
@@ -529,6 +593,11 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/arize',
                   label: 'Arize',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/arthur',
+                  label: 'Arthur',
                 },
                 {
                   type: 'doc',
@@ -585,6 +654,17 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Metrics',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/overview',
+              label: 'Overview',
+            },
+          ],
+        },
       ],
     },
     {
@@ -610,6 +690,72 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'evals/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'evals/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Mastra Platform',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'RAG',
+      items: [
+        {
+          type: 'doc',
+          id: 'rag/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'rag/chunking-and-embedding',
+          label: 'Chunking and Embedding',
+        },
+        {
+          type: 'doc',
+          id: 'rag/vector-databases',
+          label: 'Vector Databases',
+        },
+        {
+          type: 'doc',
+          id: 'rag/retrieval',
+          label: 'Retrieval',
+        },
+        {
+          type: 'doc',
+          id: 'rag/graph-rag',
+          label: 'GraphRAG',
         },
       ],
     },

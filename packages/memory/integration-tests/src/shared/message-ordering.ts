@@ -11,9 +11,8 @@
  * 2. RAW STORAGE - Direct query to the database (listMessages)
  * 3. RECALL - The processed recall output from Memory
  *
- * Tests run with both OpenAI and Anthropic models to ensure provider-agnostic behavior.
+ * Tests run with OpenAI models.
  */
-
 import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
@@ -31,7 +30,6 @@ type OrderEntry = { type: string; content?: string };
 interface ModelConfig {
   name: string;
   model: MastraModelConfig;
-  envVar: string;
 }
 
 interface MessageOrderingTestConfig {
@@ -193,28 +191,19 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
   // Run tests for each model configuration
   for (const modelConfig of models) {
     describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
-      const dbFile = `file:ordering-test-${version}.db`;
+      const createMemory = () => {
+        const testId = randomUUID();
 
-      const createMemory = () =>
-        new Memory({
+        return new Memory({
           options: { lastMessages: 20 },
           storage: new LibSQLStore({
-            id: `ordering-test-${version}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            url: dbFile,
+            id: `ordering-test-${version}-${testId}`,
+            url: `file:ordering-test-${version}-${testId}.db`,
           }),
         });
-
-      const skipIfNoApiKey = () => {
-        if (!process.env[modelConfig.envVar]) {
-          console.info(`Skipping: ${modelConfig.envVar} not set`);
-          return true;
-        }
-        return false;
       };
 
       it('should preserve text ordering: stream -> raw storage -> recall', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -228,7 +217,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         });
 
         const threadId = randomUUID();
-        const resourceId = 'ordering-test-user';
+        const resourceId = `ordering-test-user-${randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name} ${version})`);
@@ -361,8 +350,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 90000);
 
       it('should preserve ordering with multiple tool calls', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createResearchTools();
 
@@ -376,7 +363,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         });
 
         const threadId = randomUUID();
-        const resourceId = 'multi-tool-test';
+        const resourceId = `multi-tool-test-${randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Multiple Tool Calls Ordering (${modelConfig.name} ${version})`);
@@ -460,8 +447,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 120000);
 
       it('should match stream order exactly in storage', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -475,7 +460,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         });
 
         const threadId = randomUUID();
-        const resourceId = 'exact-match-test';
+        const resourceId = `exact-match-test-${randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Exact Stream-Storage Match (${modelConfig.name} ${version})`);

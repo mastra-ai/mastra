@@ -23,13 +23,16 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "prompt": "Hello from workflow"
         },
         "output": {
-          "response": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+          "response": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          }
         }
       },
       "children": [
@@ -48,11 +51,17 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
             "input": {
               "prompt": "Hello from workflow"
             },
             "output": {
-              "response": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+              "response": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              }
             }
           },
           "children": [
@@ -72,11 +81,14 @@
                   "instructions": "You are a test agent"
                 },
                 "metadata": {
-                  "runId": "<runId-2>"
+                  "runId": "<runId-2>",
+                  "environment": "test"
                 },
                 "input": "Hello from workflow",
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "files": []
                 }
               },
@@ -97,20 +109,25 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {
-                        "temperature": 0
-                      },
+                      "parameters": {},
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
                       "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
-                        "outputTokens": 25
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
                       }
                     },
                     "metadata": {
-                      "runId": "<runId-2>"
+                      "runId": "<runId-2>",
+                      "environment": "test"
                     },
                     "input": {
                       "messages": [
@@ -133,7 +150,9 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      },
                       "warnings": []
                     }
                   },
@@ -155,21 +174,40 @@
                           "messageId": "<messageId-1>",
                           "usage": {
                             "inputTokens": 15,
-                            "outputTokens": 25
+                            "outputTokens": 25,
+                            "inputDetails": {
+                              "text": 15
+                            },
+                            "outputDetails": {
+                              "text": 25
+                            }
                           },
                           "isContinued": false,
                           "finishReason": "stop"
                         },
                         "metadata": {
+                          "runId": "<runId-2>",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
-                        "input": {},
+                        "input": [
+                          {
+                            "role": "system",
+                            "content": "You are a test agent"
+                          },
+                          {
+                            "role": "user",
+                            "content": "Hello from workflow"
+                          }
+                        ],
                         "output": {
-                          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                          "text": {
+                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                          },
                           "toolCalls": []
                         }
                       },
@@ -190,8 +228,14 @@
                               "chunkType": "text",
                               "sequenceNumber": 0
                             },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
                             "output": {
-                              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                              "text": {
+                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                              }
                             }
                           }
                         }

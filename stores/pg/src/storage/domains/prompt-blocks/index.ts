@@ -22,11 +22,12 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage/domains/prompt-blocks';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
-const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules'] as const;
+const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules', 'requestContextSchema'] as const;
 
 export class PromptBlocksPG extends PromptBlocksStorage {
   #db: PgDB;
@@ -45,15 +46,53 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     this.#indexes = indexes?.filter(idx => (PromptBlocksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  /**
+   * Returns default index definitions for the prompt blocks domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_prompt_block_versions_block_version',
+        name: `${schemaPrefix}idx_prompt_block_versions_block_version`,
         table: TABLE_PROMPT_BLOCK_VERSIONS,
         columns: ['blockId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Tables
+    for (const tableName of PromptBlocksPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    // Indexes
+    for (const idx of PromptBlocksPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return PromptBlocksPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {
@@ -74,6 +113,11 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     await this.#db.createTable({
       tableName: TABLE_PROMPT_BLOCK_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_PROMPT_BLOCK_VERSIONS],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_PROMPT_BLOCK_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_PROMPT_BLOCK_VERSIONS],
+      ifNotExists: ['requestContextSchema'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -101,7 +145,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   // Prompt Block CRUD Methods
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
@@ -112,6 +156,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseBlockRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_PROMPT_BLOCK_BY_ID', 'FAILED'),
@@ -124,11 +169,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -175,6 +217,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       // Best-effort cleanup
       try {
         const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
@@ -198,11 +241,12 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
 
-      const existingBlock = await this.getPromptBlockById({ id });
+      const existingBlock = await this.getById(id);
       if (!existingBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND'),
@@ -213,54 +257,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-      let versionCreated = false;
-
-      // Check if any snapshot config fields are present
-      const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
-
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NO_VERSIONS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.SYSTEM,
-            text: `No versions found for prompt block ${id}`,
-            details: { blockId: id },
-          });
-        }
-
-        const {
-          id: _versionId,
-          blockId: _blockId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = SNAPSHOT_FIELDS.filter(
-          field =>
-            field in configFields &&
-            configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
-        );
-
-        if (changedFields.length > 0) {
-          versionCreated = true;
-          const newVersionId = crypto.randomUUID();
-          await this.createVersion({
-            id: newVersionId,
-            blockId: id,
-            versionNumber: latestVersion.versionNumber + 1,
-            ...newConfig,
-            changedFields: [...changedFields],
-            changeMessage: `Updated ${changedFields.join(', ')}`,
-          });
-        }
-      }
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Update metadata fields on the block record
       const setClauses: string[] = [];
@@ -275,11 +272,6 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       if (activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
-        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
-        if (status === undefined) {
-          setClauses.push(`status = $${paramIndex++}`);
-          values.push('published');
-        }
       }
 
       if (status !== undefined) {
@@ -302,15 +294,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2 || versionCreated) {
-        // More than just updatedAt and updatedAtZ, or a new version was created
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      // Always update the record (at minimum updatedAt/updatedAtZ are set)
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedBlock = await this.getPromptBlockById({ id });
+      const updatedBlock = await this.getById(id);
       if (!updatedBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
@@ -335,12 +322,13 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-      await this.deleteVersionsByBlockId(id);
+      await this.deleteVersionsByParentId(id);
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK', 'FAILED'),
@@ -353,8 +341,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -379,6 +367,11 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       const conditions: string[] = [];
       const queryParams: any[] = [];
       let paramIdx = 1;
+
+      if (status) {
+        conditions.push(`status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
@@ -425,6 +418,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_PROMPT_BLOCKS', 'FAILED'),
@@ -452,10 +446,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, "blockId", "versionNumber",
-          name, description, content, rules,
+          name, description, content, rules, "requestContextSchema",
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           input.id,
           input.blockId,
@@ -464,6 +458,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
           input.description ?? null,
           input.content,
           input.rules ? JSON.stringify(input.rules) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -476,6 +471,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -502,6 +498,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -531,6 +528,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_PROMPT_BLOCK_VERSION_BY_NUMBER', 'FAILED'),
@@ -560,6 +558,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_LATEST_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -628,6 +627,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_PROMPT_BLOCK_VERSIONS', 'FAILED'),
@@ -648,6 +648,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -660,20 +661,21 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "blockId" = $1`, [blockId]);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "blockId" = $1`, [entityId]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { blockId },
+          details: { blockId: entityId },
         },
         error,
       );
@@ -691,6 +693,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       ]);
       return parseInt(result.count, 10);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'COUNT_PROMPT_BLOCK_VERSIONS', 'FAILED'),
@@ -755,6 +758,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       description: row.description as string | undefined,
       content: row.content as string,
       rules: this.parseJson(row.rules, 'rules'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),

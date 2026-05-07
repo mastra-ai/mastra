@@ -1,5 +1,5 @@
 import { it, describe, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MessageListInput } from '../../agent/message-list';
 import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
@@ -110,6 +110,7 @@ describe('getRoutingAgent', () => {
         getInputProcessors: vi.fn().mockResolvedValue([]),
         getOutputProcessors: vi.fn().mockResolvedValue([]),
       }),
+      getDefaultOptions: vi.fn().mockResolvedValue({}),
       // New methods for configured-only processors
       listConfiguredInputProcessors: vi.fn().mockResolvedValue(configuredInputProcessors),
       listConfiguredOutputProcessors: vi.fn().mockResolvedValue(configuredOutputProcessors),

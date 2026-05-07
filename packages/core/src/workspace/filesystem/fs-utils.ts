@@ -5,9 +5,26 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { FileNotFoundError } from '../errors';
+
+// =============================================================================
+// Tilde Expansion
+// =============================================================================
+
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Shell commands handle this automatically, but Node.js path APIs do not.
+ */
+export function expandTilde(p: string): string {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
 
 // =============================================================================
 // Types
@@ -166,6 +183,29 @@ const TEXT_EXTENSIONS = new Set([
 export function isTextFile(filename: string): boolean {
   const ext = path.extname(filename).toLowerCase();
   return TEXT_EXTENSIONS.has(ext);
+}
+
+// =============================================================================
+// Path Resolution
+// =============================================================================
+
+/**
+ * Resolve a path against a base directory.
+ *
+ * - Tilde (`~`) is expanded to the user's home directory.
+ * - Absolute paths are normalized and returned as-is.
+ * - Relative paths (including `../`) are resolved against `basePath`.
+ *
+ * @param basePath - The absolute base path to resolve against
+ * @param filePath - The path to resolve
+ * @returns The absolute resolved path
+ */
+export function resolveToBasePath(basePath: string, filePath: string): string {
+  const expanded = expandTilde(filePath);
+  if (path.isAbsolute(expanded)) {
+    return path.normalize(expanded);
+  }
+  return path.resolve(basePath, expanded);
 }
 
 // =============================================================================

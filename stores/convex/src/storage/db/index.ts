@@ -5,7 +5,7 @@ import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 
 import { ConvexAdminClient } from '../client';
-import type { EqualityFilter } from '../types';
+import type { EqualityFilter, IndexHint } from '../types';
 
 /**
  * Configuration for standalone domain usage.
@@ -132,11 +132,12 @@ export class ConvexDB extends MastraBase {
     return result;
   }
 
-  public async queryTable<R>(tableName: TABLE_NAMES, filters?: EqualityFilter[]): Promise<R[]> {
+  public async queryTable<R>(tableName: TABLE_NAMES, filters?: EqualityFilter[], indexHint?: IndexHint): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'queryTable',
       tableName,
       filters,
+      indexHint,
     });
   }
 

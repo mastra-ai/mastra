@@ -2,6 +2,7 @@ import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
   LanguageModelV2CallWarning,
+  LanguageModelV2Prompt,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
@@ -11,13 +12,13 @@ import type {
   LanguageModelRequestMetadata,
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
-import type { AIV5Type } from '../agent/message-list/types';
+import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -53,6 +54,34 @@ export type JSONArray = JSONValue[];
  * record is keyed by the provider-specific metadata key.
  */
 export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
+
+export type StreamTransport = {
+  type: 'openai-websocket';
+  close: () => void;
+  closeOnFinish: boolean;
+};
+
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
+
+export type StreamTransportRef = {
+  current?: StreamTransport;
+};
 
 interface BaseChunkType {
   runId: string;
@@ -210,6 +239,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
+  providerMetadata?: ProviderMetadata;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
@@ -238,6 +268,7 @@ export interface StepStartPayload {
     body?: string;
     [key: string]: unknown;
   };
+  inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
   [key: string]: unknown;
 }
@@ -340,6 +371,112 @@ interface TripwirePayload<TMetadata = unknown> {
   metadata?: TMetadata;
   /** The ID of the processor that triggered the tripwire */
   processorId?: string;
+}
+
+/**
+ * Payload for is-task-complete events emitted during stream/generate scoring.
+ */
+interface IsTaskCompletePayload {
+  /** Current iteration number */
+  iteration: number;
+  /** Whether all/any scorers passed based on strategy */
+  passed: boolean;
+  /** Individual scorer results */
+  results: ScorerResult[];
+  /** Total duration of all scoring checks */
+  duration: number;
+  /** Whether scoring timed out */
+  timedOut: boolean;
+  /** Reason from the relevant scorer */
+  reason?: string;
+  /** Whether the maximum iteration was reached */
+  maxIterationReached: boolean;
+  /** Whether to suppress the completion feedback message */
+  suppressFeedback: boolean;
+}
+
+export interface BackgroundTaskStartedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+}
+
+export interface BackgroundTaskResultPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  agentId: string;
+  result: unknown;
+  runId: string;
+  completedAt: Date;
+  isError?: boolean;
+}
+
+export interface BackgroundTaskFailedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  error: { message: string };
+  completedAt: Date;
+}
+
+export interface BackgroundTaskProgressPayload {
+  taskIds: string[];
+  runningCount: number;
+  elapsedMs: number;
+}
+
+export interface BackgroundTaskRunningPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
+export interface BackgroundTaskCancelledPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  completedAt: Date;
+}
+
+export interface BackgroundTaskOutputPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  payload: Extract<AgentChunkType, { type: 'tool-output' }>;
+}
+
+export interface BackgroundTaskSuspendedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  args: Record<string, unknown>;
+  /** Whatever the tool passed to `suspend(data)`. */
+  suspendPayload?: unknown;
+  /** When the task suspended. */
+  suspendedAt?: Date;
+}
+
+export interface BackgroundTaskResumedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
 }
 
 // Network-specific payload interfaces
@@ -533,6 +670,7 @@ interface NetworkValidationEndPayload {
   timedOut: boolean;
   reason?: string;
   maxIterationReached: boolean;
+  suppressFeedback: boolean;
 }
 
 interface RoutingAgentAbortPayload {
@@ -574,6 +712,8 @@ export type DataChunkType = {
   type: `data-${string}`;
   data: any;
   id?: string;
+  /** When true, the chunk is streamed to the client but not persisted to storage. */
+  transient?: boolean;
 };
 
 export type NetworkChunkType<OUTPUT = undefined> =
@@ -647,7 +787,44 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
-  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload });
+  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & {
+      type: 'background-task-started';
+      payload: BackgroundTaskStartedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-completed';
+      payload: BackgroundTaskResultPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-failed';
+      payload: BackgroundTaskFailedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-progress';
+      payload: BackgroundTaskProgressPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-running';
+      payload: BackgroundTaskRunningPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-cancelled';
+      payload: BackgroundTaskCancelledPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-output';
+      payload: BackgroundTaskOutputPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-suspended';
+      payload: BackgroundTaskSuspendedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-resumed';
+      payload: BackgroundTaskResumedPayload;
+    });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
@@ -720,6 +897,22 @@ export type WorkflowStreamEvent =
     })
   | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & {
+      type: 'workflow-step-progress';
+      payload: {
+        id: string;
+        /** Number of iterations completed so far */
+        completedCount: number;
+        /** Total number of iterations */
+        totalCount: number;
+        /** Index of the iteration that just completed */
+        currentIndex: number;
+        /** Status of the iteration that just completed */
+        iterationStatus: 'success' | 'failed' | 'suspended';
+        /** Output of the iteration that just completed (if successful) */
+        iterationOutput?: Record<string, any>;
+      };
+    })
+  | (BaseChunkType & {
       type: 'workflow-step-result';
       payload: {
         id: string;
@@ -770,6 +963,8 @@ export type ModelManagerModelConfig = {
   maxRetries: number;
   id: string;
   headers?: Record<string, string>;
+  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  providerOptions?: SharedProviderOptions;
 };
 
 /**
@@ -779,6 +974,7 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:
@@ -820,10 +1016,10 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
-  tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
-};
+  transportRef?: StreamTransportRef;
+} & Partial<ObservabilityContext>;
 
 /**
  * Tripwire data attached to a step when a processor triggers a tripwire.
@@ -869,6 +1065,7 @@ export type LLMStepResult<OUTPUT = undefined> = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
+    dbMessages?: MastraDBMessage[];
     uiMessages?: UIMessage<
       [OUTPUT] extends [undefined]
         ? undefined

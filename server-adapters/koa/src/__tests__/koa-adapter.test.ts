@@ -12,6 +12,8 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
@@ -82,8 +84,8 @@ describe('Koa Server Adapter', () => {
           },
         };
 
-        // Add body for POST/PUT/PATCH
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+        // Add body for POST/PUT/PATCH/DELETE
+        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 
@@ -99,7 +101,10 @@ describe('Koa Server Adapter', () => {
         // Check if stream response
         const contentType = response.headers.get('content-type') || '';
         const transferEncoding = response.headers.get('transfer-encoding') || '';
-        const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
+        const isStream =
+          contentType.includes('text/plain') ||
+          contentType.includes('text/event-stream') ||
+          transferEncoding === 'chunked';
 
         if (isStream && response.body) {
           // Return stream response
@@ -143,6 +148,207 @@ describe('Koa Server Adapter', () => {
         });
       }
     },
+  });
+
+  describe('Route dispatcher', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('registers a single dispatcher middleware for built-in routes', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      await adapter.init();
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+    });
+
+    it('preserves route registration order with static and parameterized paths', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/special',
+          responseType: 'json',
+          handler: async () => ({ route: 'static' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/:id',
+          responseType: 'json',
+          handler: async ({ id }) => ({ route: 'param', id }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const staticResponse = await fetch(`http://localhost:${port}/items/special`);
+      expect(staticResponse.status).toBe(200);
+      await expect(staticResponse.json()).resolves.toEqual({ route: 'static' });
+
+      const paramResponse = await fetch(`http://localhost:${port}/items/42`);
+      expect(paramResponse.status).toBe(200);
+      await expect(paramResponse.json()).resolves.toEqual({ route: 'param', id: '42' });
+    });
+
+    it('preserves middleware ordering when routes are registered around app.use calls', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/before',
+          responseType: 'json',
+          handler: async () => ({ route: 'before' }),
+        },
+        { prefix: '' },
+      );
+
+      app.use(async (ctx, next) => {
+        ctx.set('x-interleaved', 'true');
+        await next();
+      });
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/after',
+          responseType: 'json',
+          handler: async () => ({ route: 'after' }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(2);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const beforeResponse = await fetch(`http://localhost:${port}/before`);
+      expect(beforeResponse.status).toBe(200);
+      expect(beforeResponse.headers.get('x-interleaved')).toBeNull();
+      await expect(beforeResponse.json()).resolves.toEqual({ route: 'before' });
+
+      const afterResponse = await fetch(`http://localhost:${port}/after`);
+      expect(afterResponse.status).toBe(200);
+      expect(afterResponse.headers.get('x-interleaved')).toBe('true');
+      await expect(afterResponse.json()).resolves.toEqual({ route: 'after' });
+    });
+
+    it('reuses a dispatcher group when app.use wraps middleware functions', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const originalUse = app.use.bind(app);
+      app.use = ((middleware: Koa.Middleware) => {
+        const wrapped = async function wrappedMiddleware(ctx: Koa.Context, next: Koa.Next) {
+          return middleware(ctx, next);
+        };
+        return originalUse(wrapped);
+      }) as typeof app.use;
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/first',
+          responseType: 'json',
+          handler: async () => ({ route: 'first' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/second',
+          responseType: 'json',
+          handler: async () => ({ route: 'second' }),
+        },
+        { prefix: '' },
+      );
+
+      expect(app.middleware).toHaveLength(3);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const firstResponse = await fetch(`http://localhost:${port}/first`);
+      expect(firstResponse.status).toBe(200);
+      await expect(firstResponse.json()).resolves.toEqual({ route: 'first' });
+
+      const secondResponse = await fetch(`http://localhost:${port}/second`);
+      expect(secondResponse.status).toBe(200);
+      await expect(secondResponse.json()).resolves.toEqual({ route: 'second' });
+    });
   });
 
   describe('Stream Data Redaction', () => {
@@ -544,5 +750,170 @@ describe('Koa Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.use(middleware);
     },
+  });
+
+  describe('Custom API Routes (registerApiRoute)', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should register and respond to custom API routes added via registerApiRoute', async () => {
+      // This reproduces the bug reported by users: custom API routes registered via
+      // registerApiRoute() are silently ignored by non-Hono server adapters.
+      // They show up in the OpenAPI spec but return 404.
+      const customRoutes = [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Hello from custom route!' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      // Start server
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      // Request the custom route
+      const response = await fetch(`http://localhost:${port}/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('should register custom API routes with POST method', async () => {
+      const customRoutes = [
+        registerApiRoute('/echo', {
+          method: 'POST',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ echo: body });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/echo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ echo: { test: 'data' } });
+    });
+  });
+
+  describe('Custom route prefix validation', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => server!.close(() => resolve()));
+        server = null;
+      }
+    });
+
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const app = new Koa();
+      app.use(bodyParser());
+      const mastra = new Mastra({});
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const app = new Koa();
+      app.use(bodyParser());
+      const mastra = new Mastra({});
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
   });
 });

@@ -1,0 +1,43 @@
+{
+  "development": {
+    "environment": "development",
+    "userId": "dev-user-123",
+    "apiEndpoint": "https://dev-api.example.com",
+    "debugMode": true,
+    "logLevel": "debug"
+  },
+  "production": {
+    "environment": "production",
+    "userId": "prod-user-456",
+    "apiEndpoint": "https://api.example.com",
+    "debugMode": false,
+    "logLevel": "error"
+  },
+  "staging": {
+    "environment": "staging",
+    "userId": "staging-user-789",
+    "apiEndpoint": "https://staging-api.example.com",
+    "debugMode": true,
+    "logLevel": "info"
+  },
+  "admin-user": {
+    "role": "admin",
+    "userId": "admin-001",
+    "permissions": ["read", "write", "delete", "manage"],
+    "tenant": "main",
+    "features": {
+      "advancedTools": true,
+      "analytics": true
+    }
+  },
+  "guest-user": {
+    "role": "guest",
+    "userId": "guest-visitor",
+    "permissions": ["read"],
+    "tenant": "demo",
+    "features": {
+      "advancedTools": false,
+      "analytics": false
+    }
+  }
+}

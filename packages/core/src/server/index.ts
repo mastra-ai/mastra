@@ -5,7 +5,15 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
-export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
+export type {
+  MastraAuthConfig,
+  ContextWithMastra,
+  ApiRoute,
+  HttpLoggingConfig,
+  ValidationErrorContext,
+  ValidationErrorResponse,
+  ValidationErrorHook,
+} from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export { CompositeAuth } from './composite-auth';
@@ -54,6 +62,14 @@ type RegisterApiRouteOptions<P extends string> = {
    * When false, skips Mastra auth for this route (defaults to true)
    */
   requiresAuth?: boolean;
+  /**
+   * Explicit RBAC permission for the route.
+   */
+  requiresPermission?: ApiRoute['requiresPermission'];
+  /**
+   * Optional FGA configuration for resource-level authorization.
+   */
+  fga?: ApiRoute['fga'];
 };
 
 function validateOptions<P extends string>(
@@ -113,6 +129,8 @@ export function registerApiRoute<P extends string>(
     openapi: options.openapi,
     middleware: options.middleware,
     requiresAuth: options.requiresAuth,
+    requiresPermission: options.requiresPermission,
+    fga: options.fga,
   } as unknown as ValidatePath<P, ApiRoute>;
 }
 
