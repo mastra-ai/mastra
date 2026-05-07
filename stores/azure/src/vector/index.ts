@@ -87,6 +87,12 @@ type AzureAISearchDeleteVectorsParams = {
   filter?: AzureAISearchVectorFilter;
 };
 
+type IndexFieldCapabilities = {
+  type?: string;
+};
+
+const DEFAULT_DOCUMENT_FIELDS = new Set(['id', 'metadata', 'content']);
+
 /**
  * Extended index creation parameters for Azure AI Search specific features
  */
@@ -104,6 +110,8 @@ export interface AzureAISearchCreateIndexParams extends CreateIndexParams {
     facetable?: boolean;
     key?: boolean;
   }>;
+  /** Metadata keys that should also be created as explicit filterable Azure AI Search fields */
+  metadataIndexes?: string[];
   /** HNSW algorithm parameters */
   hnswParameters?: {
     m?: number;
@@ -294,6 +302,110 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     }
   }
 
+  private async getIndexFieldCapabilities(indexName: string): Promise<Map<string, IndexFieldCapabilities>> {
+    const index = await this.indexClient.getIndex(indexName);
+    const capabilities = new Map<string, IndexFieldCapabilities>();
+
+    for (const field of index.fields ?? []) {
+      capabilities.set((field as any).name, {
+        type: (field as any).type,
+      });
+    }
+
+    return capabilities;
+  }
+
+  private getMetadataIndexFields(
+    metadataIndexes: string[],
+    additionalFields: AzureAISearchCreateIndexParams['additionalFields'],
+  ) {
+    const reservedFieldNames = new Set(['id', 'metadata', 'content', 'vector']);
+    return metadataIndexes
+      .filter(fieldName => !reservedFieldNames.has(fieldName) && !additionalFields?.some(field => field.name === fieldName))
+      .map(fieldName => ({
+        name: fieldName,
+        type: 'Edm.String',
+        searchable: false,
+        filterable: true,
+        retrievable: true,
+        sortable: false,
+        facetable: false,
+      }));
+  }
+
+  private async ensureExistingIndexFields({
+    indexName,
+    fields,
+  }: {
+    indexName: string;
+    fields: Array<Record<string, any>>;
+  }): Promise<void> {
+    if (fields.length === 0) {
+      return;
+    }
+
+    const existingIndex = (await this.indexClient.getIndex(indexName)) as any;
+    const existingFieldNames = new Set((existingIndex.fields ?? []).map((field: any) => field.name));
+    const missingFields = fields.filter(field => !existingFieldNames.has(field.name));
+
+    if (missingFields.length === 0) {
+      return;
+    }
+
+    await (this.indexClient as any).createOrUpdateIndex({
+      ...existingIndex,
+      fields: [...(existingIndex.fields ?? []), ...missingFields],
+    });
+  }
+
+  private buildDocumentFromMetadata({
+    id,
+    vector,
+    vectorFieldName,
+    metadata = {},
+    fields,
+    writeMetadata = true,
+  }: {
+    id: string;
+    vector?: number[];
+    vectorFieldName: string;
+    metadata?: Record<string, any>;
+    fields: Map<string, IndexFieldCapabilities>;
+    writeMetadata?: boolean;
+  }): Record<string, any> {
+    const doc: Record<string, any> = { id };
+
+    if (writeMetadata) {
+      doc.metadata = JSON.stringify(metadata);
+    }
+
+    if (vector) {
+      doc[vectorFieldName] = vector;
+    }
+
+    if (typeof metadata.content === 'string') {
+      doc.content = metadata.content;
+    } else if (vector && writeMetadata) {
+      doc.content = '';
+    }
+
+    for (const [fieldName, field] of fields.entries()) {
+      if (DEFAULT_DOCUMENT_FIELDS.has(fieldName) || fieldName === vectorFieldName) {
+        continue;
+      }
+
+      if (field.type === 'Collection(Edm.Single)') {
+        continue;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(metadata, fieldName)) {
+        doc[fieldName] = metadata[fieldName];
+      }
+    }
+
+    return doc;
+  }
+
   /**
    * Creates a new vector search index with the specified configuration
    *
@@ -307,6 +419,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       metric = 'cosine',
       vectorField = 'vector',
       additionalFields = [],
+      metadataIndexes = [],
       hnswParameters = {},
       semanticConfig,
     } = params as AzureAISearchCreateIndexParams;
@@ -366,7 +479,12 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       // Merge default fields with additional fields (avoid duplicates)
       const existingFieldNames = new Set(defaultFields.map(f => f.name));
-      const allFields = [...defaultFields, ...additionalFields.filter(field => !existingFieldNames.has(field.name))];
+      const metadataIndexFields = this.getMetadataIndexFields(metadataIndexes, additionalFields);
+      const allFields = [
+        ...defaultFields,
+        ...metadataIndexFields,
+        ...additionalFields.filter(field => !existingFieldNames.has(field.name)),
+      ];
 
       // HNSW parameters with customizable values
       const hnswConfig = {
@@ -417,6 +535,10 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     } catch (error: any) {
       // Check if index already exists
       if (error?.statusCode === 409 || error?.message?.includes('already exists')) {
+        await this.ensureExistingIndexFields({
+          indexName,
+          fields: [...this.getMetadataIndexFields(metadataIndexes, additionalFields), ...additionalFields],
+        });
         // Index already exists, that's fine
         return;
       }
@@ -595,24 +717,25 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       // Detect vector field name
       const vectorFieldName = await this.getVectorFieldName(indexName);
+      const fields = await this.getIndexFieldCapabilities(indexName);
 
       // Generate IDs if not provided
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       // Prepare documents for upload using dynamic vector field
-      const documents = vectors.map((vector: number[], i: number) => {
-        const doc: any = {
-          id: vectorIds[i],
-          [vectorFieldName]: vector, // Dynamic vector field name
-          metadata: JSON.stringify(metadata[i] || {}),
-          content: metadata[i]?.content || '',
-        };
-        return doc;
-      });
+      const documents = vectors.map((vector: number[], i: number) =>
+        this.buildDocumentFromMetadata({
+          id: vectorIds[i]!,
+          vector,
+          vectorFieldName,
+          metadata: metadata[i] || {},
+          fields,
+        }),
+      );
 
       // Upload documents
       const searchClient = this.getSearchClient(indexName);
-      const uploadResult = await searchClient.uploadDocuments(documents);
+      const uploadResult = await searchClient.uploadDocuments(documents as any);
 
       // Check for failures
       const failures = uploadResult.results.filter(result => !result.succeeded);
@@ -721,7 +844,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Prepare primary vector query using dynamic field name
       const primaryVectorQuery: VectorizedQuery<any> = {
         kind: 'vector' as const,
-        vector: queryVector,
+        vector: queryVector as number[],
         kNearestNeighborsCount: topK,
         fields: [vectorFieldName],
         exhaustive: exhaustiveSearch,
@@ -908,6 +1031,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       // Get vector field name
       const vectorFieldName = await this.getVectorFieldName(indexName);
+      const fields = await this.getIndexFieldCapabilities(indexName);
 
       // Validate vector dimension if updating vector
       if (update.vector) {
@@ -935,22 +1059,19 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         return;
       }
 
-      const updatedDocs = targetIds.map(targetId => {
-        const updatedDoc: any = { id: targetId };
-        if (update.vector) {
-          updatedDoc[vectorFieldName] = update.vector;
-        }
-        if (update.metadata) {
-          updatedDoc.metadata = JSON.stringify(update.metadata);
-          if (typeof update.metadata.content === 'string') {
-            updatedDoc.content = update.metadata.content;
-          }
-        }
-        return updatedDoc;
-      });
+      const updatedDocs = targetIds.map(targetId =>
+        this.buildDocumentFromMetadata({
+          id: targetId,
+          vector: update.vector,
+          vectorFieldName,
+          metadata: update.metadata,
+          fields,
+          writeMetadata: Boolean(update.metadata),
+        }),
+      );
 
       // Merge documents (update operation)
-      const mergeResult = await searchClient.mergeDocuments(updatedDocs);
+      const mergeResult = await searchClient.mergeDocuments(updatedDocs as any);
 
       // Check for per-document failures
       const mergeFailures = mergeResult.results.filter(result => !result.succeeded);

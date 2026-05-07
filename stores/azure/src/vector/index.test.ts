@@ -36,6 +36,7 @@ describe('AzureAISearchVector Unit Tests', () => {
 
     mockIndexClient = {
       createIndex: vi.fn(),
+      createOrUpdateIndex: vi.fn(),
       listIndexes: vi.fn(),
       getIndex: vi.fn().mockResolvedValue({
         name: 'test-index',
@@ -60,6 +61,10 @@ describe('AzureAISearchVector Unit Tests', () => {
             name: 'metadata',
             type: 'Edm.String',
           },
+          { name: 'category', type: 'Edm.String', filterable: true },
+          { name: 'price', type: 'Edm.Double', filterable: true },
+          { name: 'thread_id', type: 'Edm.String', filterable: true },
+          { name: 'resource_id', type: 'Edm.String', filterable: true },
         ],
       }),
       deleteIndex: vi.fn(),
@@ -113,6 +118,25 @@ describe('AzureAISearchVector Unit Tests', () => {
       );
     });
 
+    it('should create metadata index fields as explicit filterable Azure fields', async () => {
+      mockIndexClient.createIndex.mockResolvedValue({ name: 'memory-messages' });
+
+      await azureVector.createIndex({
+        indexName: 'memory-messages',
+        dimension: 128,
+        metadataIndexes: ['thread_id', 'resource_id'],
+      });
+
+      expect(mockIndexClient.createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'thread_id', type: 'Edm.String', filterable: true }),
+            expect.objectContaining({ name: 'resource_id', type: 'Edm.String', filterable: true }),
+          ]),
+        }),
+      );
+    });
+
     it('should validate dimension parameter', async () => {
       await expect(
         azureVector.createIndex({
@@ -136,6 +160,36 @@ describe('AzureAISearchVector Unit Tests', () => {
       ).resolves.not.toThrow();
 
       expect(mockIndexClient.createIndex).toHaveBeenCalledTimes(1);
+    });
+
+    it('should add missing metadata index fields when an index already exists', async () => {
+      const error = new Error('Index already exists');
+      (error as any).statusCode = 409;
+      mockIndexClient.createIndex.mockRejectedValueOnce(error);
+      mockIndexClient.createOrUpdateIndex.mockResolvedValue({ name: 'test-index' });
+      mockIndexClient.getIndex.mockResolvedValue({
+        name: 'test-index',
+        fields: [
+          { name: 'id', type: 'Edm.String', key: true, filterable: true },
+          { name: 'vector', type: 'Collection(Edm.Single)', dimensions: 128 },
+          { name: 'metadata', type: 'Edm.String' },
+        ],
+      });
+
+      await azureVector.createIndex({
+        indexName: 'test-index',
+        dimension: 128,
+        metadataIndexes: ['thread_id', 'resource_id'],
+      });
+
+      expect(mockIndexClient.createOrUpdateIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'thread_id', type: 'Edm.String', filterable: true }),
+            expect.objectContaining({ name: 'resource_id', type: 'Edm.String', filterable: true }),
+          ]),
+        }),
+      );
     });
   });
 
@@ -214,7 +268,7 @@ describe('AzureAISearchVector Unit Tests', () => {
         [0.1, 0.2, 0.3],
         [0.4, 0.5, 0.6],
       ];
-      const metadata = [{ type: 'document' }, { type: 'document' }];
+      const metadata = [{ type: 'document', category: 'docs' }, { type: 'document', price: 99.99 }];
       const ids = ['doc1', 'doc2'];
 
       const result = await azureVector.upsert({
@@ -229,14 +283,16 @@ describe('AzureAISearchVector Unit Tests', () => {
         {
           id: 'doc1',
           vector: [0.1, 0.2, 0.3],
-          metadata: JSON.stringify({ type: 'document' }),
+          metadata: JSON.stringify({ type: 'document', category: 'docs' }),
           content: '',
+          category: 'docs',
         },
         {
           id: 'doc2',
           vector: [0.4, 0.5, 0.6],
-          metadata: JSON.stringify({ type: 'document' }),
+          metadata: JSON.stringify({ type: 'document', price: 99.99 }),
           content: '',
+          price: 99.99,
         },
       ]);
     });
@@ -345,6 +401,22 @@ describe('AzureAISearchVector Unit Tests', () => {
         }),
       );
     });
+
+    it('should query with flat metadata filters used by Memory semantic recall', async () => {
+      await azureVector.query({
+        indexName: 'test-index',
+        queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
+        topK: 5,
+        filter: { resource_id: 'resource-123' },
+      });
+
+      expect(mockSearchClientInstance.search).toHaveBeenCalledWith(
+        '*',
+        expect.objectContaining({
+          filter: "resource_id eq 'resource-123'",
+        }),
+      );
+    });
   });
 
   describe('updateVector', () => {
@@ -370,7 +442,20 @@ describe('AzureAISearchVector Unit Tests', () => {
           id: 'doc1',
           vector: newVector,
           metadata: JSON.stringify({ category: 'new' }),
+          category: 'new',
         }),
+      ]);
+    });
+
+    it('should update explicit index fields from metadata', async () => {
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: { metadata: { status: 'updated', category: 'docs' } },
+      });
+
+      expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
+        { id: 'doc1', metadata: JSON.stringify({ status: 'updated', category: 'docs' }), category: 'docs' },
       ]);
     });
 
@@ -389,8 +474,8 @@ describe('AzureAISearchVector Unit Tests', () => {
       });
 
       expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
-        { id: 'doc1', metadata: JSON.stringify({ category: 'new' }) },
-        { id: 'doc2', metadata: JSON.stringify({ category: 'new' }) },
+        { id: 'doc1', metadata: JSON.stringify({ category: 'new' }), category: 'new' },
+        { id: 'doc2', metadata: JSON.stringify({ category: 'new' }), category: 'new' },
       ]);
     });
   });
@@ -557,6 +642,13 @@ describe('AzureAISearchVector Unit Tests', () => {
           $and: [{ category: { $eq: 'books' } }, { price: { $gt: 10 } }],
         });
         expect(result).toBe("(category eq 'books' and price gt 10)");
+      });
+
+      it('should translate flat Mastra metadata filters to equality comparisons', () => {
+        expect(translator.translate({ resource_id: 'resource-123' })).toBe("resource_id eq 'resource-123'");
+        expect(translator.translate({ thread_id: 'thread-123', resource_id: 'resource-123' })).toBe(
+          "thread_id eq 'thread-123' and resource_id eq 'resource-123'",
+        );
       });
     });
   });

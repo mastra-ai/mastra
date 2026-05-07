@@ -200,6 +200,30 @@ await azureVector.createIndex({
 });
 ```
 
+Add explicit fields when you need Azure AI Search to filter on values that also live in Mastra metadata:
+
+```typescript
+await azureVector.createIndex({
+  indexName: 'products',
+  dimension: 1536,
+  additionalFields: [
+    { name: 'category', type: 'Edm.String', filterable: true },
+    { name: 'price', type: 'Edm.Double', filterable: true },
+    { name: 'inStock', type: 'Edm.Boolean', filterable: true },
+  ],
+});
+```
+
+Mastra Memory passes `metadataIndexes` when creating semantic recall indexes. This adapter maps those metadata indexes to filterable Azure AI Search string fields:
+
+```typescript
+await azureVector.createIndex({
+  indexName: 'memory_messages',
+  dimension: 1536,
+  metadataIndexes: ['thread_id', 'resource_id'],
+});
+```
+
 ### Inserting Vectors
 
 ```typescript
@@ -230,6 +254,8 @@ const vectorIds = await azureVector.upsert({
 console.log('Inserted vector IDs:', vectorIds);
 ```
 
+The full metadata object is stored in the `metadata` JSON string. Values with keys that match explicit Azure index fields are also written to those fields so they can be filtered by Azure AI Search.
+
 ### Searching Vectors
 
 #### Basic Vector Search
@@ -248,6 +274,8 @@ console.log('Search results:', results);
 
 #### Filtered Vector Search
 
+Filters only work on fields that are present in the Azure AI Search index.
+
 ```typescript
 // Using structured filter syntax
 const results = await azureVector.query({
@@ -261,6 +289,19 @@ const results = await azureVector.query({
       { contains: { content: 'camera' } }
     ]
   }
+});
+```
+
+Mastra Memory uses flat metadata filters for semantic recall:
+
+```typescript
+const results = await azureVector.query({
+  indexName: 'memory_messages',
+  queryVector: [0.1, 0.2, 0.3 /* ...1536 dimensions */],
+  topK: 5,
+  filter: {
+    resource_id: 'resource-123',
+  },
 });
 ```
 
