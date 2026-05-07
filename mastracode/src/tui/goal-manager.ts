@@ -154,7 +154,14 @@ export class GoalManager {
   resume(): GoalState | null {
     if (this.goal && this.goal.status === 'paused') {
       this.goal.status = 'active';
-      this.goal.turnsUsed = 0;
+    }
+    return this.goal;
+  }
+
+  updateJudgeDefaults(judgeModelId: string, maxTurns: number): GoalState | null {
+    if (this.goal) {
+      this.goal.judgeModelId = judgeModelId;
+      this.goal.maxTurns = maxTurns;
     }
     return this.goal;
   }

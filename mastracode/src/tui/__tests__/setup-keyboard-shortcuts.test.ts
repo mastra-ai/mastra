@@ -91,8 +91,11 @@ describe('setupKeyboardShortcuts', () => {
     autocompleteProviders.length = 0;
     const { state, editor } = createState(false);
     state.customSlashCommands = [
-      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '' },
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
       { name: 'ship', description: 'Ship release', template: '', sourcePath: '' },
+    ];
+    state.goalSkillCommands = [
+      { name: 'review', description: 'Review code', path: '/skills/review', metadata: { goal: true } },
     ];
     state.harness.listModes = vi.fn(() => ['default']);
 
@@ -109,7 +112,9 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
-    expect(commandNames.slice(-2)).toEqual(['/deploy', '/ship']);
+    expect(commandNames).toContain('goal/deploy');
+    expect(commandNames).toContain('goal/review');
+    expect(commandNames.slice(-4)).toEqual(['/deploy', 'goal/deploy', '/ship', 'goal/review']);
   });
 
   it('submits immediately on Enter when the harness is idle', () => {

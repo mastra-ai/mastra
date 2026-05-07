@@ -144,7 +144,8 @@ export function updateStatusLine(state: TUIState): void {
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalAttempt = goalState ? Math.min(goalState.turnsUsed + 1, goalState.maxTurns) : null;
-  const goalLabel = goalState?.status === 'active' ? `judge ${goalAttempt}/${goalState.maxTurns}` : null;
+  const goalLabel = goalState?.status === 'active' ? `goal attempt ${goalAttempt}/${goalState.maxTurns}` : null;
+  const shortGoalLabel = goalState?.status === 'active' ? `attempt ${goalAttempt}/${goalState.maxTurns}` : null;
   // Build progressively shorter directory strings for layout fallback
   // Only show branch when not showing thread title (thread title takes priority)
   const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
@@ -230,6 +231,7 @@ export function updateStatusLine(state: TUIState): void {
     dir?: string | null;
     badge?: 'full' | 'short';
     showQueue?: boolean;
+    compactGoal?: boolean;
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
@@ -276,10 +278,11 @@ export function updateStatusLine(state: TUIState): void {
         styled: theme.fg('warning', queuedLabel),
       });
     }
-    if (opts.showQueue && goalLabel) {
+    const renderedGoalLabel = opts.compactGoal ? shortGoalLabel : goalLabel;
+    if (opts.showQueue && renderedGoalLabel) {
       parts.push({
-        plain: goalLabel,
-        styled: theme.fg('accent', goalLabel),
+        plain: renderedGoalLabel,
+        styled: theme.fg('accent', renderedGoalLabel),
       });
     }
     // Directory / branch / thread title (lowest priority on line 1)
@@ -364,7 +367,9 @@ export function updateStatusLine(state: TUIState): void {
     buildLine({ modelId: tinyModelId, showDir: false, showQueue: true }) ??
     // 7. Short badge + short labels + queue count
     buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true }) ??
-    // 8. Short badge + fractions (drop buffer indicator, keep queue count)
+    // 8. Short badge + short labels + compact goal label
+    buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true, compactGoal: true }) ??
+    // 9. Short badge + fractions (drop buffer indicator, keep queue count)
     buildLine({
       modelId: tinyModelId,
       memCompact: 'noBuffer',
@@ -372,7 +377,16 @@ export function updateStatusLine(state: TUIState): void {
       badge: 'short',
       showQueue: true,
     }) ??
-    // 9. Full badge + percent only + queue count
+    // 10. Short badge + fractions + compact goal label
+    buildLine({
+      modelId: tinyModelId,
+      memCompact: 'noBuffer',
+      showDir: false,
+      badge: 'short',
+      showQueue: true,
+      compactGoal: true,
+    }) ??
+    // 11. Full badge + percent only + queue count
     buildLine({
       modelId: tinyModelId,
       memCompact: 'percentOnly',
@@ -380,7 +394,16 @@ export function updateStatusLine(state: TUIState): void {
       badge: 'full',
       showQueue: true,
     }) ??
-    // 10. Short badge + percent only + queue count
+    // 12. Full badge + percent only + compact goal label
+    buildLine({
+      modelId: tinyModelId,
+      memCompact: 'percentOnly',
+      showDir: false,
+      badge: 'full',
+      showQueue: true,
+      compactGoal: true,
+    }) ??
+    // 13. Short badge + percent only + queue count
     buildLine({
       modelId: tinyModelId,
       memCompact: 'percentOnly',
@@ -388,9 +411,20 @@ export function updateStatusLine(state: TUIState): void {
       badge: 'short',
       showQueue: true,
     }) ??
-    // 11. Model only + queue count
+    // 14. Short badge + percent only + compact goal label
+    buildLine({
+      modelId: tinyModelId,
+      memCompact: 'percentOnly',
+      showDir: false,
+      badge: 'short',
+      showQueue: true,
+      compactGoal: true,
+    }) ??
+    // 15. Model only + queue count
     buildLine({ modelId: tinyModelId, showDir: false, badge: undefined, showQueue: true }) ??
-    // 12. Badge only + queue count
+    // 16. Model only + compact goal label
+    buildLine({ modelId: tinyModelId, showDir: false, badge: undefined, showQueue: true, compactGoal: true }) ??
+    // 17. Badge only + queue count
     buildLine({ modelId: '', showDir: false, badge: 'short', showQueue: true }) ??
     // 13. Model only
     buildLine({ modelId: tinyModelId, showDir: false, badge: undefined }) ??

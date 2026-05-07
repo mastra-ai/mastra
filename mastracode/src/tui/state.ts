@@ -7,7 +7,7 @@
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
-import type { Workspace } from '@mastra/core/workspace';
+import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -183,6 +183,7 @@ export interface TUIState {
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
@@ -277,6 +278,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Input
     customSlashCommands: [],
+    goalSkillCommands: [],
     pendingImages: [],
 
     // Abort tracking

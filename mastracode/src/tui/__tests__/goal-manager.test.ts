@@ -43,6 +43,31 @@ describe('GoalManager', () => {
     mocks.agentConstructor.mockReset();
   });
 
+  it('preserves turn count when resuming a paused goal', () => {
+    const manager = new GoalManager();
+    const goal = manager.setGoal('finish the task', 'openai/gpt-5.5');
+    goal.turnsUsed = 3;
+    manager.pause();
+
+    manager.resume();
+
+    expect(manager.getGoal()).toMatchObject({ status: 'active', turnsUsed: 3 });
+  });
+
+  it('updates judge defaults on the current goal without resetting progress', () => {
+    const manager = new GoalManager();
+    const goal = manager.setGoal('finish the task', 'openai/gpt-5.5', 50);
+    goal.turnsUsed = 3;
+
+    manager.updateJudgeDefaults('anthropic/claude-sonnet-4-5', 25);
+
+    expect(manager.getGoal()).toMatchObject({
+      judgeModelId: 'anthropic/claude-sonnet-4-5',
+      maxTurns: 25,
+      turnsUsed: 3,
+    });
+  });
+
   it('pauses instead of continuing when no judge model is available', async () => {
     const manager = new GoalManager();
     manager.setGoal('finish the task', '');

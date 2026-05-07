@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
+  startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
   showInfo: vi.fn(),
 }));
@@ -59,6 +60,10 @@ vi.mock('../../utils/slash-command-processor.js', () => ({
   processSlashCommand: mocks.processSlashCommand,
 }));
 
+vi.mock('../commands/goal.js', () => ({
+  startGoalWithDefaults: mocks.startGoalWithDefaults,
+}));
+
 import { dispatchSlashCommand } from '../command-dispatch.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 
@@ -69,6 +74,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleGoalCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.processSlashCommand.mockClear();
+    mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
     mocks.showInfo.mockClear();
   });
@@ -116,6 +122,30 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
   });
 
+  it('routes multiline /goal objectives as a single goal argument', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/goal build the feature\nthen verify it', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledWith(ctx, ['build the feature\nthen verify it']);
+    expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
+  it('routes /goal objectives that start on the next line', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/goal\nbuild the feature', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledWith(ctx, ['build the feature']);
+    expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
   it('blocks slash commands while the goal judge is evaluating', async () => {
     const state = { customSlashCommands: [], activeGoalJudge: { modelId: 'openai/gpt-5.5' } } as any;
 
@@ -137,6 +167,63 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleGoalCommand).toHaveBeenNthCalledWith(1, ctx, ['pause']);
     expect(mocks.handleGoalCommand).toHaveBeenNthCalledWith(2, ctx, ['clear']);
     expect(mocks.showInfo).not.toHaveBeenCalled();
+  });
+
+  it('routes /goal/deploy through a goal-enabled custom command', async () => {
+    const state = {
+      customSlashCommands: [
+        { name: 'deploy', description: 'Deploy to prod', template: 'deploy $ARGUMENTS', sourcePath: '', goal: true },
+      ],
+      goalSkillCommands: [],
+    } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/goal/deploy staging now', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.processSlashCommand).toHaveBeenCalledWith(
+      state.customSlashCommands[0],
+      ['staging', 'now'],
+      process.cwd(),
+    );
+    expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(ctx, 'custom output');
+  });
+
+  it('rejects custom commands that are not goal-enabled under /goal', async () => {
+    const state = {
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+      goalSkillCommands: [],
+    } as any;
+
+    const handled = await dispatchSlashCommand('/goal/deploy', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(mocks.processSlashCommand).not.toHaveBeenCalled();
+    expect(mocks.startGoalWithDefaults).not.toHaveBeenCalled();
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown goal command: deploy');
+  });
+
+  it('routes /goal/review through a goal-enabled skill', async () => {
+    const state = {
+      customSlashCommands: [],
+      goalSkillCommands: [
+        { name: 'review', path: '/skills/review', description: 'Review code', metadata: { goal: true } },
+      ],
+    } as any;
+    const skill = {
+      name: 'review',
+      instructions: 'Review the code carefully.',
+      metadata: { goal: true },
+    };
+    const ctx = { getResolvedWorkspace: () => ({ skills: { get: vi.fn().mockResolvedValue(skill) } }) } as any;
+
+    const handled = await dispatchSlashCommand('/goal/review focus tests', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(
+      ctx,
+      '# Skill goal: review\n\nReview the code carefully.\n\nARGUMENTS: focus tests',
+    );
   });
 
   it('blocks custom slash commands while the goal judge is evaluating', async () => {

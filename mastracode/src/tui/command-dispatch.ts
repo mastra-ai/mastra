@@ -2,6 +2,7 @@
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
 import { processSlashCommand } from '../utils/slash-command-processor.js';
+import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
   handleCostCommand,
@@ -62,9 +63,13 @@ export async function dispatchSlashCommand(
 ): Promise<boolean> {
   const trimmedInput = input.trim();
 
-  const slashMatch = trimmedInput.match(/^(\/\/?)(.*)$/);
+  const slashMatch = trimmedInput.match(/^(\/\/?)([\s\S]*)$/);
   const slashPrefix = slashMatch?.[1] ?? '';
   const withoutSlashes = slashMatch?.[2] ?? trimmedInput;
+  const firstWhitespaceIndex = withoutSlashes.search(/\s/);
+  const commandText = firstWhitespaceIndex === -1 ? withoutSlashes : withoutSlashes.slice(0, firstWhitespaceIndex);
+  const rawArgsText = firstWhitespaceIndex === -1 ? '' : withoutSlashes.slice(firstWhitespaceIndex).trim();
+  const parsedArgs = rawArgsText ? rawArgsText.split(/\s+/) : [];
 
   if (slashPrefix === '//') {
     if (isGoalJudgeInputLocked(state)) {
@@ -72,7 +77,8 @@ export async function dispatchSlashCommand(
       return true;
     }
 
-    const [cmdName, ...cmdArgs] = withoutSlashes.split(' ');
+    const cmdName = commandText;
+    const cmdArgs = parsedArgs;
     const customCommand = state.customSlashCommands.find(cmd => cmd.name === cmdName);
     if (customCommand) {
       await handleCustomSlashCommand(state, customCommand, cmdArgs);
@@ -83,10 +89,19 @@ export async function dispatchSlashCommand(
     return true;
   }
 
-  const [command = '', ...args] = withoutSlashes.split(' ');
+  const command = commandText;
+  const goalSubcommands = new Set(['status', 'pause', 'resume', 'clear']);
+  const firstGoalArg = parsedArgs[0]?.toLowerCase();
+  const args =
+    command === 'goal' && rawArgsText && !goalSubcommands.has(firstGoalArg ?? '') ? [rawArgsText] : parsedArgs;
 
   if (isGoalJudgeInputLocked(state) && !canRunSlashCommandDuringGoalJudge(command, args)) {
     showGoalJudgeInputLockInfo(state);
+    return true;
+  }
+
+  if (command.startsWith('goal/')) {
+    await handleGoalSourceCommand(state, command.slice('goal/'.length), args, buildCtx());
     return true;
   }
 
@@ -220,6 +235,57 @@ export async function dispatchSlashCommand(
 /**
  * Handle a custom slash command by processing its template and adding to context.
  */
+async function handleGoalSourceCommand(
+  state: TUIState,
+  sourceName: string,
+  args: string[],
+  ctx: SlashCommandContext,
+): Promise<void> {
+  const customCommand = state.customSlashCommands.find(cmd => cmd.name === sourceName && cmd.goal === true);
+  if (customCommand) {
+    try {
+      const processedContent = await processSlashCommand(customCommand, args, process.cwd());
+      const objective = processedContent.trim();
+      if (!objective) {
+        showInfo(state, `Goal command /goal/${customCommand.name} produced no output.`);
+        return;
+      }
+      await startGoalWithDefaults(ctx, objective);
+    } catch (error) {
+      showError(
+        state,
+        `Error executing /goal/${sourceName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
+  }
+
+  const goalSkill = state.goalSkillCommands.find(skill => skill.name === sourceName);
+  if (goalSkill) {
+    try {
+      const workspace = ctx.getResolvedWorkspace();
+      const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
+      if (!skill || skill.metadata?.goal !== true) {
+        showError(state, `Unknown goal command: ${sourceName}`);
+        return;
+      }
+      const trimmedArgs = args.join(' ').trim();
+      const objective = `# Skill goal: ${skill.name}\n\n${skill.instructions}${
+        trimmedArgs ? `\n\nARGUMENTS: ${trimmedArgs}` : ''
+      }`;
+      await startGoalWithDefaults(ctx, objective);
+    } catch (error) {
+      showError(
+        state,
+        `Error executing /goal/${sourceName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
+  }
+
+  showError(state, `Unknown goal command: ${sourceName}`);
+}
+
 async function handleCustomSlashCommand(
   state: TUIState,
   command: { name: string; template: string; description?: string },

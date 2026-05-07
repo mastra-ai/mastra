@@ -32,6 +32,7 @@ import {
   runUpdate,
 } from '../utils/update-check.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
+import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -80,6 +81,18 @@ export type { MastraTUIOptions } from './state.js';
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
+
+export async function syncInitialThreadState(state: TUIState): Promise<void> {
+  const initThreadId = state.harness.getCurrentThreadId();
+  if (!initThreadId) return;
+
+  const initThreads = await state.harness.listThreads();
+  const initThread = initThreads.find(t => t.id === initThreadId);
+  if (initThread?.title) {
+    state.currentThreadTitle = initThread.title;
+  }
+  state.goalManager.loadFromThreadMetadata(initThread?.metadata as Record<string, unknown> | undefined);
+}
 
 function shouldUseCaffeinate(): boolean {
   return process.platform === 'darwin' && process.env.MASTRACODE_DISABLE_CAFFEINATE !== '1';
@@ -382,16 +395,9 @@ export class MastraTUI {
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
 
-    // Sync current thread title — the thread_changed event from
+    // Sync current thread metadata — the thread_changed event from
     // promptForThreadSelection fired before we subscribed above.
-    const initThreadId = this.state.harness.getCurrentThreadId();
-    if (initThreadId) {
-      const initThreads = await this.state.harness.listThreads();
-      const initThread = initThreads.find(t => t.id === initThreadId);
-      if (initThread?.title) {
-        this.state.currentThreadTitle = initThread.title;
-      }
-    }
+    await syncInitialThreadState(this.state);
 
     // Start the UI
     this.state.ui.start();
@@ -776,6 +782,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
+      startGoal: (objective, cancelMessage) =>
+        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => renderExistingMessages(this.state),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>

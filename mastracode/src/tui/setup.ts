@@ -332,6 +332,19 @@ export function setupAutocomplete(state: TUIState): void {
       name: `/${customCmd.name}`,
       description: customCmd.description || `Custom: ${customCmd.name}`,
     });
+    if (customCmd.goal) {
+      slashCommands.push({
+        name: `goal/${customCmd.name}`,
+        description: customCmd.description ? `Goal: ${customCmd.description}` : `Goal: ${customCmd.name}`,
+      });
+    }
+  }
+
+  for (const skill of state.goalSkillCommands) {
+    slashCommands.push({
+      name: `goal/${skill.name}`,
+      description: skill.description ? `Goal skill: ${skill.description}` : `Goal skill: ${skill.name}`,
+    });
   }
 
   const fdPath = detectFdPath();
@@ -365,6 +378,18 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
     state.customSlashCommands = Array.from(commandMap.values());
   } catch {
     state.customSlashCommands = [];
+  }
+
+  try {
+    const workspace = state.harness.getWorkspace() ?? state.workspace;
+    if (!workspace?.skills) {
+      state.goalSkillCommands = [];
+      return;
+    }
+    const skills = await workspace.skills.list();
+    state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
+  } catch {
+    state.goalSkillCommands = [];
   }
 }
 

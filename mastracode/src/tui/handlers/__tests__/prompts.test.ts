@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import type { TUIState } from '../../state.js';
-import { handleAskQuestion } from '../prompts.js';
+import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
@@ -65,5 +65,46 @@ describe('handleAskQuestion goal mode', () => {
     expect((ctx.addChildBeforeFollowUps as any).mock.calls[1][0]).toBeInstanceOf(AssistantMessageComponent);
     expect(state.streamingComponent).toBe((ctx.addChildBeforeFollowUps as any).mock.calls[1][0]);
     expect(state.streamingComponent).not.toBe(preQuestionStream);
+  });
+});
+
+describe('handlePlanApproval goal mode', () => {
+  it('approves the plan and starts a goal without sending the normal approval reminder', async () => {
+    const state = {
+      harness: {
+        setState: vi.fn().mockResolvedValue(undefined),
+        getResourceId: vi.fn(() => 'resource-1'),
+        respondToPlanApproval: vi.fn().mockResolvedValue(undefined),
+      },
+      chatContainer: {
+        children: [],
+        addChild: vi.fn(function (this: any, child: unknown) {
+          this.children.push(child);
+        }),
+        invalidate: vi.fn(),
+      },
+      ui: { requestRender: vi.fn() },
+    } as any;
+    const ctx = {
+      state,
+      notify: vi.fn(),
+      addUserMessage: vi.fn(),
+      fireMessage: vi.fn(),
+      startGoal: vi.fn().mockResolvedValue(undefined),
+    } as unknown as EventHandlerContext;
+
+    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const component = state.chatContainer.children[0];
+
+    await (component as any).onGoal();
+    await promise;
+
+    expect(state.harness.respondToPlanApproval).toHaveBeenCalledWith({
+      planId: 'plan-1',
+      response: { action: 'approved' },
+    });
+    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+    expect(ctx.addUserMessage).not.toHaveBeenCalled();
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
   });
 });

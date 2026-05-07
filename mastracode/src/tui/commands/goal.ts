@@ -68,7 +68,9 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     }
     goalManager.resume();
     await goalManager.saveToThread(state);
-    ctx.showInfo(`Goal resumed: "${goal.objective}" — turn counter reset. Sending continuation...`);
+    ctx.showInfo(
+      `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
+    );
 
     // Kick off the next turn
     try {
@@ -93,22 +95,40 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
 
   // /goal <text> — set a new goal using saved judge defaults, asking only once if needed.
   const objective = args.join(' ');
-  const defaults = getJudgeDefaults();
-  const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, 'Goal cancelled.'));
-  if (!judgeDefaults) return;
-
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
+  await startGoalWithDefaults(ctx, objective);
 }
 
 export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void> {
   const defaults = await promptForJudgeDefaults(ctx, 'Judge settings unchanged.');
   if (!defaults) return;
+
+  const activeGoal = ctx.state.goalManager.updateJudgeDefaults(defaults.judgeModelId, defaults.maxTurns);
+  if (activeGoal) {
+    await ctx.state.goalManager.saveToThread(ctx.state);
+    ctx.showInfo(
+      `Judge defaults set: ${defaults.judgeModelId}, ${defaults.maxTurns} max attempts. Current goal updated.`,
+    );
+    return;
+  }
+
   ctx.showInfo(`Judge defaults set: ${defaults.judgeModelId}, ${defaults.maxTurns} max attempts.`);
 }
 
 interface JudgeDefaults {
   judgeModelId: string;
   maxTurns: number;
+}
+
+export async function startGoalWithDefaults(
+  ctx: SlashCommandContext,
+  objective: string,
+  cancelMessage = 'Goal cancelled.',
+): Promise<void> {
+  const defaults = getJudgeDefaults();
+  const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
+  if (!judgeDefaults) return;
+
+  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
