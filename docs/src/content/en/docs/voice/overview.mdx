@@ -844,6 +844,12 @@ Each voice provider can be configured with different models and options. Below a
       sampleRateHertz: 48000,
       language: 'en-US',
     })
+
+    // Per-call options: `deliveryMode` is honored only by `inworld-tts-2`.
+    const audioStream = await voice.speak('Hello!', {
+      deliveryMode: 'BALANCED', // 'STABLE' | 'BALANCED' | 'CREATIVE'
+      language: 'en-US', // BCP-47 per-call override
+    })
     ```
 
     Visit the [Inworld Voice Reference](/reference/voice/inworld) for more information on the Inworld voice provider.
