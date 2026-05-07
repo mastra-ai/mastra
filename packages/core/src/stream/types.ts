@@ -61,6 +61,24 @@ export type StreamTransport = {
   closeOnFinish: boolean;
 };
 
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
+
 export type StreamTransportRef = {
   current?: StreamTransport;
 };

@@ -1,6 +1,7 @@
 import type { GlobalSettings } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { OMSettingsComponent } from '../components/om-settings.js';
+import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -113,11 +114,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       ctx.state.ui,
     );
 
-    ctx.state.ui.showOverlay(settings, {
-      width: '80%',
-      maxHeight: '70%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, settings, { widthPercent: 0.8, maxHeight: '70%' });
     settings.focused = true;
   });
 }

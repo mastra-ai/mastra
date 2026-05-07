@@ -9088,8 +9088,8 @@ export interface PostProcessorsProcessorIdExecute_RouteContract {
 export type PostV1Responses_Body = {
   /** Optional model identifier override, such as openai/gpt-5. When omitted, the agent default model is used. */
   model?: string | undefined;
-  /** Mastra agent ID for the request */
-  agent_id: string;
+  /** Mastra agent ID for the request. Required unless previous_response_id is provided. */
+  agent_id?: string | undefined;
   input:
     | string
     | {
@@ -9128,6 +9128,12 @@ export type PostV1Responses_Body = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9218,6 +9224,12 @@ export type PostV1Responses_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9340,6 +9352,12 @@ export type GetV1ResponsesResponseId_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -72113,6 +72131,58 @@ export interface GetSystemPackages_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /system/api-schema
+// ============================================================================
+export type GetSystemApiSchema_Response = {
+  version: 1;
+  routes: {
+    method: string;
+    path: string;
+    responseType: string;
+    pathParamSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    queryParamSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    bodySchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    responseSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    responseShape: {
+      kind: 'array' | 'record' | 'object-property' | 'single' | 'unknown';
+      listProperty?: string | undefined;
+      paginationProperty?: string | undefined;
+    };
+  }[];
+};
+
+export type GetSystemApiSchema_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSystemApiSchema_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetSystemApiSchema_Request;
+  response: GetSystemApiSchema_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /datasets
 // ============================================================================
 export type GetDatasets_QueryParams = {
@@ -75401,6 +75471,7 @@ export interface RouteTypes {
   'GET /processor-providers': GetProcessorProviders_RouteContract;
   'GET /processor-providers/:providerId': GetProcessorProvidersProviderId_RouteContract;
   'GET /system/packages': GetSystemPackages_RouteContract;
+  'GET /system/api-schema': GetSystemApiSchema_RouteContract;
   'GET /datasets': GetDatasets_RouteContract;
   'POST /datasets': PostDatasets_RouteContract;
   'GET /datasets/:datasetId': GetDatasetsDatasetId_RouteContract;
@@ -76103,6 +76174,9 @@ export interface Client {
     DELETE: DeleteStoredWorkspacesStoredWorkspaceId_RouteContract;
     GET: GetStoredWorkspacesStoredWorkspaceId_RouteContract;
     PATCH: PatchStoredWorkspacesStoredWorkspaceId_RouteContract;
+  };
+  '/system/api-schema': {
+    GET: GetSystemApiSchema_RouteContract;
   };
   '/system/packages': {
     GET: GetSystemPackages_RouteContract;

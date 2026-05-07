@@ -308,6 +308,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kiro',
+          label: 'Kiro',
+        },
+        {
+          type: 'doc',
           id: 'providers/kuae-cloud-coding-plan',
           label: 'KUAE Cloud Coding Plan',
         },
