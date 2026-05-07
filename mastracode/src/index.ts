@@ -113,6 +113,16 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /**
+   * Override the memory instance (or dynamic factory) passed to the Harness.
+   * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
+   * uses mastracode's built-in model resolution (Anthropic OAuth, OpenAI Codex,
+   * models.dev gateway).
+   *
+   * Use this when your models are served by a custom provider (e.g. Augment)
+   * that mastracode's `resolveModel` cannot resolve.
+   */
+  memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: MastraBrowser;
 }
@@ -308,7 +318,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
 
-  const memory = getDynamicMemory(storage, vectorStore);
+  const memory = config?.memory ?? getDynamicMemory(storage, vectorStore);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);

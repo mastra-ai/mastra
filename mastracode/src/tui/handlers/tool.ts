@@ -17,6 +17,7 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
+import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -103,10 +104,7 @@ export function handleToolApprovalRequired(
   };
 
   // Show the dialog as an overlay
-  state.ui.showOverlay(dialog, {
-    width: '70%',
-    anchor: 'center',
-  });
+  showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
   dialog.focused = true;
   state.ui.requestRender();
 }

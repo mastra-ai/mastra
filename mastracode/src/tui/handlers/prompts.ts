@@ -7,6 +7,7 @@ import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { showModalOverlay } from '../overlay.js';
 import type { TUIState } from '../state.js';
 import { getMarkdownTheme, theme } from '../theme.js';
 
@@ -172,7 +173,7 @@ export async function handleAskQuestion(
           resolve();
         },
       });
-      state.ui.showOverlay(dialog, { width: '70%', anchor: 'center' });
+      showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
       dialog.focused = true;
     }
 

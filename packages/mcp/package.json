@@ -57,7 +57,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^5.0.179",
+    "ai": "^5.0.183",
     "eslint": "^10.2.1",
     "hono": "^4.12.8",
     "hono-mcp-server-sse-transport": "0.0.7",
