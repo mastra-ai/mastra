@@ -3,4 +3,4 @@ export { LogsErrorContent, type LogsErrorContentProps } from './logs-error-conte
 export { LogsLayout, type LogsLayoutProps } from './logs-layout';
 export { LogsListView, type LogsListViewProps } from './logs-list-view';
 export { LogsToolbar, type LogsToolbarProps } from './logs-toolbar';
-export { NoLogsInfo } from './no-logs-info';
+export { NoLogsInfo, type NoLogsInfoProps } from './no-logs-info';

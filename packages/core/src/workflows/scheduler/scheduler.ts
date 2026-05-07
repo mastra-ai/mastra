@@ -193,7 +193,7 @@ export class WorkflowScheduler extends MastraBase {
       return;
     }
 
-    let triggerStatus: ScheduleTrigger['status'] = 'published';
+    let triggerStatus: ScheduleTrigger['outcome'] = 'published';
     let triggerError: string | undefined;
 
     try {
@@ -215,8 +215,9 @@ export class WorkflowScheduler extends MastraBase {
         runId,
         scheduledFireAt: schedule.nextFireAt,
         actualFireAt,
-        status: triggerStatus,
+        outcome: triggerStatus,
         error: triggerError,
+        triggerKind: 'schedule-fire',
       });
     } catch (err) {
       this.logger.error('Failed to record schedule trigger', {

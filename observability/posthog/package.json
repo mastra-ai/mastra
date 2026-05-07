@@ -1,6 +1,6 @@
 {
   "name": "@mastra/posthog",
-  "version": "1.0.23-alpha.0",
+  "version": "1.0.23",
   "description": "PostHog observability provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -46,7 +46,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.16.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

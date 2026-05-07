@@ -8,9 +8,10 @@ import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
+import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
- * Merges text parts that share the same OpenAI itemId.
+ * Merges text parts that share the same OpenAI-compatible itemId.
  *
  * When OpenAI streams a response with web search, it interleaves `source` chunks
  * with text-deltas. If the streaming pipeline flushes text on these source chunks,
@@ -21,45 +22,60 @@ import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
  * the request with: "Duplicate item found with id msg_*"
  *
  * This function merges consecutive text parts with the same itemId into a single part,
- * concatenating their text content and keeping the metadata from the first part.
+ * allowing source annotations between those text flushes, concatenating their text
+ * content, and keeping the metadata from the first part.
  */
+function isTextMergePassThroughPart(part: { type: string }): boolean {
+  // Only source annotations are transparent for text-item merging. Tool,
+  // reasoning, file, and step parts are merge boundaries.
+  return part.type.startsWith('source-');
+}
+
 function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
   const result: T[] = [];
 
   for (const part of parts) {
-    // Only process text parts with OpenAI itemId
+    // Only process text parts with OpenAI-compatible itemId
     if (part.type !== 'text') {
       result.push(part);
       continue;
     }
 
     const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
-    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
-      | string
-      | undefined;
+    const itemId = getResponseProviderItemKey(textPart.providerMetadata);
     if (!itemId) {
       result.push(part);
       continue;
     }
 
-    // Find an existing text part in result with the same itemId
-    const existingIndex = result.findIndex(p => {
-      if (p.type !== 'text') return false;
-      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
-      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
-      return existingItemId === itemId;
-    });
+    let merged = false;
+    for (let index = result.length - 1; index >= 0; index--) {
+      const previous = result[index]!;
+      if (previous.type === 'text') {
+        const previousTextPart = previous as T & { text: string; providerMetadata?: Record<string, unknown> };
+        const previousItemId = getResponseProviderItemKey(previousTextPart.providerMetadata);
 
-    if (existingIndex !== -1) {
-      // Merge: concatenate text into the existing part
-      const existing = result[existingIndex] as T & { text: string };
-      result[existingIndex] = {
-        ...existing,
-        text: existing.text + textPart.text,
-      };
-    } else {
-      result.push(part);
+        if (previousItemId === itemId) {
+          result[index] = {
+            ...previousTextPart,
+            text: previousTextPart.text + textPart.text,
+          };
+          merged = true;
+        }
+
+        break;
+      }
+
+      if (!isTextMergePassThroughPart(previous)) {
+        break;
+      }
     }
+
+    if (merged) {
+      continue;
+    }
+
+    result.push(part);
   }
 
   return result;
@@ -158,7 +174,7 @@ export function sanitizeV5UIMessages(
 
       if (!safeParts.length) return false;
 
-      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
+      // Merge text parts with duplicate OpenAI-compatible itemIds to prevent "Duplicate item found" errors.
       // This can happen when streaming flushes text multiple times for the same response
       // (e.g., when source citations are interleaved with text-deltas).
       const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arthur",
-  "version": "0.2.9-alpha.0",
+  "version": "0.2.9",
   "description": "Arthur AI observability provider for Mastra - exports traces using OpenInference semantic conventions",
   "type": "module",
   "main": "dist/index.js",
@@ -52,7 +52,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.16.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

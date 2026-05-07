@@ -10,6 +10,7 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
+import { checkRouteFGA } from '../server-adapter';
 import {
   LIST_AGENTS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
@@ -507,6 +508,27 @@ describe('Agent Handlers', () => {
   });
 
   describe('getAgentByIdHandler', () => {
+    it('should declare FGA for agent reads', async () => {
+      const fgaRequestContext = new RequestContext();
+      fgaRequestContext.set('user', { id: 'user-1' });
+      const check = vi.fn().mockResolvedValue(true);
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { check } } as any);
+
+      const result = await checkRouteFGA(mockMastra, GET_AGENT_BY_ID_ROUTE as any, fgaRequestContext as any, {
+        agentId: 'test-agent',
+      });
+
+      expect(result).toBeNull();
+      expect(check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:read',
+          context: { resourceId: 'test-agent', requestContext: fgaRequestContext },
+        },
+      );
+    });
+
     it('should return serialized agent', async () => {
       const firstStep = createStep({
         id: 'first',

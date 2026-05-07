@@ -25,6 +25,8 @@ function scheduleToDoc(schedule: Schedule): Record<string, any> {
     created_at: schedule.createdAt,
     updated_at: schedule.updatedAt,
     metadata: schedule.metadata ?? null,
+    owner_type: schedule.ownerType ?? null,
+    owner_id: schedule.ownerId ?? null,
   };
 }
 
@@ -46,29 +48,40 @@ function docToSchedule(doc: Record<string, any>): Schedule {
   if (doc.last_fire_at != null) schedule.lastFireAt = Number(doc.last_fire_at);
   if (doc.last_run_id != null) schedule.lastRunId = String(doc.last_run_id);
   if (doc.metadata != null) schedule.metadata = doc.metadata as Record<string, unknown>;
+  if (doc.owner_type != null) schedule.ownerType = String(doc.owner_type) as Schedule['ownerType'];
+  if (doc.owner_id != null) schedule.ownerId = String(doc.owner_id);
   return schedule;
 }
 
 function triggerToDoc(trigger: ScheduleTrigger): Record<string, any> {
   return {
+    id: trigger.id ?? crypto.randomUUID(),
     schedule_id: trigger.scheduleId,
     run_id: trigger.runId,
     scheduled_fire_at: trigger.scheduledFireAt,
     actual_fire_at: trigger.actualFireAt,
-    status: trigger.status,
+    outcome: trigger.outcome,
     error: trigger.error ?? null,
+    trigger_kind: trigger.triggerKind ?? 'schedule-fire',
+    parent_trigger_id: trigger.parentTriggerId ?? null,
+    metadata: trigger.metadata ?? null,
   };
 }
 
 function docToTrigger(doc: Record<string, any>): ScheduleTrigger {
   const trigger: ScheduleTrigger = {
+    id: doc.id != null ? String(doc.id) : undefined,
     scheduleId: String(doc.schedule_id),
-    runId: String(doc.run_id),
+    runId: doc.run_id != null ? String(doc.run_id) : null,
     scheduledFireAt: Number(doc.scheduled_fire_at),
     actualFireAt: Number(doc.actual_fire_at),
-    status: String(doc.status) as ScheduleTrigger['status'],
+    outcome: String(doc.outcome) as ScheduleTrigger['outcome'],
+    triggerKind:
+      doc.trigger_kind != null ? (String(doc.trigger_kind) as ScheduleTrigger['triggerKind']) : 'schedule-fire',
   };
   if (doc.error != null) trigger.error = String(doc.error);
+  if (doc.parent_trigger_id != null) trigger.parentTriggerId = String(doc.parent_trigger_id);
+  if (doc.metadata != null) trigger.metadata = doc.metadata as Record<string, unknown>;
   return trigger;
 }
 
@@ -101,8 +114,10 @@ export class SchedulesMongoDB extends SchedulesStorage {
       { collection: TABLE_SCHEDULES, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_SCHEDULES, keys: { status: 1, next_fire_at: 1 } },
       { collection: TABLE_SCHEDULES, keys: { 'target.workflowId': 1 } },
+      { collection: TABLE_SCHEDULES, keys: { owner_type: 1, owner_id: 1 } },
+      { collection: TABLE_SCHEDULE_TRIGGERS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_SCHEDULE_TRIGGERS, keys: { schedule_id: 1, actual_fire_at: -1 } },
-      { collection: TABLE_SCHEDULE_TRIGGERS, keys: { run_id: 1 }, options: { unique: true } },
+      { collection: TABLE_SCHEDULE_TRIGGERS, keys: { parent_trigger_id: 1 } },
     ];
   }
 
@@ -162,6 +177,12 @@ export class SchedulesMongoDB extends SchedulesStorage {
     const query: Record<string, any> = {};
     if (filter?.status) query.status = filter.status;
     if (filter?.workflowId) query['target.workflowId'] = filter.workflowId;
+    if (filter?.ownerType !== undefined) {
+      query.owner_type = filter.ownerType === null ? null : filter.ownerType;
+    }
+    if (filter?.ownerId !== undefined) {
+      query.owner_id = filter.ownerId === null ? null : filter.ownerId;
+    }
 
     const collection = await this.getSchedulesCollection();
     const docs = await collection.find(query).sort({ created_at: 1 }).toArray();
@@ -188,6 +209,8 @@ export class SchedulesMongoDB extends SchedulesStorage {
     if ('nextFireAt' in patch && patch.nextFireAt !== undefined) $set.next_fire_at = patch.nextFireAt;
     if ('target' in patch && patch.target !== undefined) $set.target = patch.target;
     if ('metadata' in patch) $set.metadata = patch.metadata ?? null;
+    if ('ownerType' in patch) $set.owner_type = (patch.ownerType as string | undefined) ?? null;
+    if ('ownerId' in patch) $set.owner_id = (patch.ownerId as string | undefined) ?? null;
 
     $set.updated_at = Date.now();
 

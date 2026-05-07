@@ -4,7 +4,6 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
@@ -34,13 +33,14 @@ import {
 import { dispatchSlashCommand } from './command-dispatch.js';
 
 import type { SlashCommandContext } from './commands/types.js';
-import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { askModalQuestion } from './modal-question.js';
+import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
@@ -806,11 +806,7 @@ export class MastraTUI {
         resolve();
       });
 
-      this.state.ui.showOverlay(dialog, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
+      showModalOverlay(this.state.ui, dialog, { widthPercent: 0.8, maxHeight: '60%' });
       dialog.focused = true;
 
       this.state
@@ -891,11 +887,13 @@ export class MastraTUI {
         previous,
         onComplete: async (result: OnboardingResult) => {
           this.state.activeOnboarding = undefined;
+          this.state.ui.hideOverlay();
           await this.applyOnboardingResult(result);
           resolve();
         },
         onCancel: () => {
           this.state.activeOnboarding = undefined;
+          this.state.ui.hideOverlay();
           const settings = loadSettings();
           if (!settings.onboarding.completedAt) {
             settings.onboarding.skippedAt = new Date().toISOString();
@@ -941,22 +939,15 @@ export class MastraTUI {
               },
             });
 
-            this.state.ui.showOverlay(selector, {
-              width: '80%',
-              maxHeight: '60%',
-              anchor: 'center',
-            });
+            showModalOverlay(this.state.ui, selector, { maxHeight: '75%' });
             selector.focused = true;
           });
         },
       });
 
       this.state.activeOnboarding = component;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(component);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
+      showModalOverlay(this.state.ui, component, { maxHeight: '80%' });
+      component.focused = true;
     });
   }
 
@@ -1106,9 +1097,9 @@ export class MastraTUI {
   }
 
   /**
-   * Show an inline Y/N prompt offering to auto-update.
+   * Show a Y/N prompt offering to auto-update.
    */
-  private showUpdatePrompt(
+  private async showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
@@ -1120,54 +1111,33 @@ export class MastraTUI {
     }
     question += `\n\nWould you like to update now?`;
 
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question,
-          options: [
-            { label: 'Yes', description: 'Update and restart' },
-            { label: 'No', description: 'Skip this version' },
-          ],
-          formatResult: answer => (answer === 'Yes' ? 'Updating…' : 'Update skipped.'),
-          onSubmit: async answer => {
-            this.state.activeInlineQuestion = undefined;
-            if (answer === 'Yes') {
-              showInfo(this.state, `Updating to v${latestVersion}…`);
-              const ok = await runUpdate(pm, latestVersion);
-              if (ok) {
-                showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
-                this.stop();
-                process.exit(0);
-              } else {
-                const cmd = getInstallCommand(pm, latestVersion);
-                showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
-              }
-            } else {
-              // User declined — save the dismissed version
-              const settings = loadSettings();
-              settings.updateDismissedVersion = latestVersion;
-              saveSettings(settings);
-              showInfo(this.state, `Update skipped. Run /update to update later.`);
-            }
-            resolve();
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            // Treat cancel (Esc / Ctrl+C) the same as "No"
-            const settings = loadSettings();
-            settings.updateDismissedVersion = latestVersion;
-            saveSettings(settings);
-            resolve();
-          },
-        },
-        this.state.ui,
-      );
-
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
+    const answer = await askModalQuestion(this.state.ui, {
+      question,
+      options: [
+        { label: 'Yes', description: 'Update and restart' },
+        { label: 'No', description: 'Skip this version' },
+      ],
     });
+
+    if (answer === 'Yes') {
+      showInfo(this.state, `Updating to v${latestVersion}…`);
+      const ok = await runUpdate(pm, latestVersion);
+      if (ok) {
+        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+        this.stop();
+        process.exit(0);
+      } else {
+        const cmd = getInstallCommand(pm, latestVersion);
+        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+      }
+    } else {
+      // User declined — save the dismissed version
+      const settings = loadSettings();
+      settings.updateDismissedVersion = latestVersion;
+      saveSettings(settings);
+      if (answer === 'No') {
+        showInfo(this.state, `Update skipped. Run /update to update later.`);
+      }
+    }
   }
 }

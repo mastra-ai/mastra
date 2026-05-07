@@ -1,4 +1,5 @@
 #! /usr/bin/env node
+import { coreFeatures } from '@mastra/core/features';
 import { Command } from 'commander';
 import pc from 'picocolors';
 import type { PackageJson } from 'type-fest';
@@ -16,18 +17,21 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
+import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
 import { envListAction, envSetAction, envUnsetAction, envImportAction, envPullAction } from './commands/server/env';
 import { serverPauseAction, serverRestartAction } from './commands/server/lifecycle';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
+import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
 
@@ -119,6 +123,8 @@ program
     parseMcp,
   )
   .action(initProject);
+
+registerApiCommand(program);
 
 program
   .command('lint')
@@ -212,6 +218,13 @@ deployCommand
   .option('--tail <n>', 'Number of recent log lines')
   .action(wrapAction(logsAction));
 
+if (coreFeatures.has('deploy-diagnosis')) {
+  deployCommand
+    .command('suggestions [deploy-id]')
+    .description('Show deploy suggestions for a failed deploy')
+    .action(wrapAction(suggestionsAction));
+}
+
 const studioProjects = studioCommand
   .command('projects')
   .description('Manage studio projects')
@@ -263,7 +276,7 @@ authTokens.command('revoke <token-id>').description('Revoke an API token').actio
 
 const serverCommand = program.command('server').description('Manage Mastra Server deployments');
 
-serverCommand
+const serverDeployCommand = serverCommand
   .command('deploy [dir]')
   .description('Deploy to Mastra Server')
   .option('--org <id>', 'Organization ID')
@@ -274,6 +287,14 @@ serverCommand
   .option('--skip-build', 'Skip the build step and deploy the existing .mastra/output directory')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));
+
+if (coreFeatures.has('deploy-diagnosis')) {
+  serverDeployCommand
+    .command('suggestions [deploy-id]')
+    .description('Show deploy suggestions for a failed deploy')
+    .option('--org <id>', 'Organization ID')
+    .action(wrapAction(serverSuggestionsAction));
+}
 
 serverCommand
   .command('pause')
