@@ -686,46 +686,80 @@ export class ModelSpanTracker {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          // Capture completion start time on first actual content (for time-to-first-token)
-          switch (chunk.type) {
-            case 'text-delta':
-            case 'tool-call-delta':
-            case 'reasoning-delta':
-              this.#captureCompletionStartTime();
-              break;
-          }
-
           controller.enqueue(chunk);
 
-          // Handle chunk span tracking based on chunk type
-          switch (chunk.type) {
-            case 'text-start':
+          const chunkType = chunk.type;
+
+          // Capture completion start time and handle chunk span tracking in single pass
+          // This avoids double type checking that was causing ~0.5s delay
+          switch (chunkType) {
             case 'text-delta':
+              this.#captureCompletionStartTime();
+              if (this.#currentChunkType !== 'text') {
+                this.#startChunkSpan('text');
+              }
+              this.#appendToAccumulator('text', chunk.payload.text);
+              break;
+            case 'text-start':
+              if (this.#currentChunkType !== 'text') {
+                this.#startChunkSpan('text');
+              }
+              break;
             case 'text-end':
-              this.#handleTextChunk(chunk);
+              this.#endChunkSpan();
               break;
 
-            case 'tool-call-input-streaming-start':
             case 'tool-call-delta':
-            case 'tool-call-input-streaming-end':
-            case 'tool-call':
-              this.#handleToolCallChunk(chunk);
+              this.#captureCompletionStartTime();
+              this.#appendToAccumulator('toolInput', chunk.payload.argsTextDelta);
               break;
+            case 'tool-call-input-streaming-start':
+              this.#startChunkSpan('tool-call', {
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+              });
+              break;
+            case 'tool-call-input-streaming-end':
+            case 'tool-call': {
+              const acc = this.#getAccumulator();
+              let toolInput;
+              try {
+                toolInput = acc.toolInput ? JSON.parse(acc.toolInput) : {};
+              } catch {
+                toolInput = acc.toolInput;
+              }
+              this.#endChunkSpan({
+                toolName: acc.toolName,
+                toolCallId: acc.toolCallId,
+                toolInput,
+              });
+              break;
+            }
 
-            case 'reasoning-start':
             case 'reasoning-delta':
+              this.#captureCompletionStartTime();
+              if (this.#currentChunkType !== 'reasoning') {
+                this.#startChunkSpan('reasoning');
+              }
+              this.#appendToAccumulator('text', chunk.payload.text);
+              break;
+            case 'reasoning-start':
+              this.#startChunkSpan('reasoning');
+              break;
             case 'reasoning-end':
-              this.#handleReasoningChunk(chunk);
+              this.#endChunkSpan();
               break;
 
             case 'object':
+              if (this.#currentChunkType !== 'object') {
+                this.#startChunkSpan('object');
+              }
+              break;
             case 'object-result':
-              this.#handleObjectChunk(chunk);
+              this.#endChunkSpan(chunk.object);
               break;
 
             case 'step-start':
-              // If step already started (via startStep()), just update with payload data
-              // Otherwise start a new step (for backwards compatibility)
               if (this.#currentStepSpan) {
                 this.updateStep(chunk.payload);
               } else {
@@ -735,48 +769,30 @@ export class ModelSpanTracker {
 
             case 'step-finish':
               if (this.#deferStepClose) {
-                // Durable mode: save payload for later, don't close the step
                 this.#pendingStepFinishPayload = chunk.payload;
               } else {
-                // Normal mode: close the step immediately
                 this.#endStepSpan(chunk.payload);
               }
               break;
 
-            // Infrastructure chunks - skip creating spans for these
-            // They are either redundant, metadata-only, or error/control flow
-            case 'raw': // Redundant raw data
-            case 'start': // Stream start marker
-            case 'finish': // Stream finish marker (step-finish already captures this)
-            case 'response-metadata': // Response metadata (not semantic content)
-            case 'source': // Source references (metadata)
-            case 'file': // Binary file data (too large/not semantic)
-            case 'error': // Error handling
-            case 'abort': // Abort signal
-            case 'tripwire': // Processor rejection
-            case 'watch': // Internal watch event
-            case 'tool-error': // Tool error handling
-            case 'tool-call-suspended': // Suspension (not content)
-            case 'reasoning-signature': // Signature metadata
-            case 'redacted-reasoning': // Redacted content metadata
-            case 'step-output': // Step output wrapper (content is nested)
-              // Don't create spans for these chunks
-              break;
-
-            case 'tool-call-approval': // Approval request - create span for debugging
-              this.#handleToolApprovalChunk(chunk);
-              break;
-
-            case 'tool-output':
-              // tool-output chunks are streaming progress from tools (e.g., sub-agents)
-              // No span created - the final tool-result event captures the result
+            case 'tool-call-approval':
+              if (!this.#currentStepSpan) {
+                this.startStep();
+              }
+              this.#currentStepSpan?.createEventSpan({
+                name: `chunk: 'tool-call-approval'`,
+                type: SpanType.MODEL_CHUNK,
+                attributes: {
+                  chunkType: 'tool-call-approval',
+                  sequenceNumber: this.#chunkSequence,
+                },
+                output: chunk.payload,
+              });
+              this.#chunkSequence++;
               break;
 
             case 'tool-result': {
-              // tool-result is always a point-in-time event span
-              // (tool execution duration is captured by the parent tool_call span)
               const {
-                // Metadata - tool call context (unique to tool-result chunks)
                 toolCallId,
                 toolName,
                 isError,

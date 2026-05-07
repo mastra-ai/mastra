@@ -290,13 +290,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
           const aborted = options.abortSignal?.aborted;
 
           if (!aborted) {
-            try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+            const outputText = messageList.get.all
+              .core()
+              .map(m => m.content)
+              .join('\n');
 
-              await capabilities.executeOnFinish({
+            capabilities
+              .executeOnFinish({
                 result: payload,
                 outputText,
                 thread: result.thread,
@@ -311,28 +311,55 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 threadExists: memoryData.threadExists,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
-              });
-            } catch (e) {
-              capabilities.logger.error('Error saving memory on finish', {
-                error: e,
-                runId,
-              });
+              })
+              .catch(e => {
+                capabilities.logger.error('Error saving memory on finish (first attempt)', {
+                  error: e,
+                  runId,
+                });
 
-              const spanError =
-                e instanceof Error
-                  ? e
-                  : new MastraError(
-                      {
-                        id: 'AGENT_ON_FINISH_ERROR',
-                        domain: ErrorDomain.AGENT,
-                        category: ErrorCategory.SYSTEM,
-                        details: { runId },
-                      },
-                      e,
-                    );
+                const spanError =
+                  e instanceof Error
+                    ? e
+                    : new MastraError(
+                        {
+                          id: 'AGENT_ON_FINISH_ERROR',
+                          domain: ErrorDomain.AGENT,
+                          category: ErrorCategory.SYSTEM,
+                          details: { runId },
+                        },
+                        e,
+                      );
 
-              agentSpan?.error({ error: spanError, endSpan: true });
-            }
+                agentSpan?.error({ error: spanError });
+
+                setTimeout(() => {
+                  capabilities
+                    .executeOnFinish({
+                      result: payload,
+                      outputText,
+                      thread: result.thread,
+                      threadId: result.threadId,
+                      readOnlyMemory: memoryConfig?.readOnly,
+                      resourceId,
+                      memoryConfig,
+                      requestContext,
+                      agentSpan,
+                      runId,
+                      messageList,
+                      threadExists: memoryData.threadExists,
+                      structuredOutput: !!options.structuredOutput?.schema,
+                      overrideScorers: options.scorers,
+                    })
+                    .catch(retryError => {
+                      capabilities.logger.error('Error saving memory on finish (retry failed)', {
+                        error: retryError,
+                        runId,
+                      });
+                      agentSpan?.error({ error: retryError, endSpan: true });
+                    });
+                }, 1000);
+              });
           } else {
             agentSpan?.end();
           }
