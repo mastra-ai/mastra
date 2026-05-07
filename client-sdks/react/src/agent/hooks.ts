@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import type { ModelSettings } from './types';
-import { toUIMessage } from '@/lib/ai-sdk';
+import { finishStreamingAssistantMessage, toUIMessage } from '@/lib/ai-sdk';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
@@ -22,6 +22,8 @@ export interface MastraChatProps {
   initialMessages?: MastraUIMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
+  onSignalSent?: (signalId: string, preview: string) => void;
+  onSignalEcho?: (signalId: string) => void;
 }
 
 interface SharedArgs {
@@ -56,6 +58,8 @@ export const useChat = ({
   resourceId,
   initialMessages,
   requestContext: propsRequestContext,
+  onSignalSent,
+  onSignalEcho,
 }: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
@@ -100,6 +104,26 @@ export const useChat = ({
     return coreUserMessages as MessageListInput;
   };
 
+  const getSignalPreview = (coreUserMessages: CoreUserMessage[]) => {
+    const preview = coreUserMessages
+      .flatMap(message => {
+        if (typeof message.content === 'string') {
+          return [message.content];
+        }
+
+        return message.content.map(part => {
+          if (part.type === 'text') return part.text;
+          if (part.type === 'image') return 'Image';
+          return part.filename ? `File: ${part.filename}` : 'File';
+        });
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return preview || 'Attachment';
+  };
+
   const closeThreadSubscription = useCallback(() => {
     _threadSubscriptionAbortRef.current?.abort();
     _threadSubscriptionAbortRef.current = null;
@@ -111,6 +135,10 @@ export const useChat = ({
 
   const processStreamChunk = async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
     setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+    if (chunk.type === 'data-user-message' && 'data' in chunk && typeof chunk.data?.id === 'string') {
+      onSignalEcho?.(chunk.data.id);
+    }
 
     if (chunk.type === 'start') {
       setIsRunning(true);
@@ -126,13 +154,7 @@ export const useChat = ({
     void (onChunk ?? _onChunk.current)?.(chunk);
   };
 
-  const ensureThreadSubscription = async ({
-    threadId,
-    resourceId,
-  }: {
-    threadId: string;
-    resourceId?: string;
-  }) => {
+  const ensureThreadSubscription = async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
     const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
     if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
       await _threadSubscriptionPromiseRef.current;
@@ -367,32 +389,40 @@ export const useChat = ({
 
     await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
-    await agent.sendSignal({
-      signal: {
-        id: signalId ?? uuid(),
-        type: 'user-message',
-        contents: getSignalContents(coreUserMessages),
-      },
-      resourceId: resourceId || agentId,
-      threadId,
-      streamOptions: {
-        maxSteps,
-        modelSettings: {
-          frequencyPenalty,
-          presencePenalty,
-          maxRetries,
-          maxOutputTokens: maxTokens,
-          temperature,
-          topK,
-          topP,
+    const resolvedSignalId = signalId ?? uuid();
+    onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
+
+    try {
+      await agent.sendSignal({
+        signal: {
+          id: resolvedSignalId,
+          type: 'user-message',
+          contents: getSignalContents(coreUserMessages),
         },
-        instructions,
-        requestContext: resolvedRequestContext,
-        providerOptions: providerOptions as any,
-        requireToolApproval,
-        tracingOptions,
-      },
-    });
+        resourceId: resourceId || agentId,
+        threadId,
+        streamOptions: {
+          maxSteps,
+          modelSettings: {
+            frequencyPenalty,
+            presencePenalty,
+            maxRetries,
+            maxOutputTokens: maxTokens,
+            temperature,
+            topK,
+            topP,
+          },
+          instructions,
+          requestContext: resolvedRequestContext,
+          providerOptions: providerOptions as any,
+          requireToolApproval,
+          tracingOptions,
+        },
+      });
+    } catch (error) {
+      onSignalEcho?.(resolvedSignalId);
+      throw error;
+    }
 
     if (_streamAbortRef.current === internalAbort) {
       _streamAbortRef.current = null;
@@ -462,6 +492,7 @@ export const useChat = ({
     _streamAbortRef.current?.abort();
     _streamAbortRef.current = null;
     closeThreadSubscription();
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
@@ -674,12 +705,15 @@ export const useChat = ({
     }
 
     const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
-    setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
+    const signalId = mode === 'stream' && args.threadId ? uiMessages[0]?.id : undefined;
+    if (!signalId) {
+      setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
+    }
 
     if (mode === 'generate') {
       await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages, signalId: uiMessages[0]?.id });
+      await stream({ ...args, coreUserMessages, signalId });
     } else if (mode === 'network') {
       await network({ ...args, coreUserMessages });
     }

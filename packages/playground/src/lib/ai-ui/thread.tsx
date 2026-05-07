@@ -125,7 +125,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
-  const { isStreaming } = useThreadRuntimeState();
+  const { isStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
   // Track IME composition state to prevent Enter from submitting during CJK input.
   // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
   // triggers form submission instead of completing the IME composition.
@@ -167,7 +167,22 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
       </div> */}
       {/* <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}> */}
       <ComposerPrimitive.Root>
-        <ComposerAttachments />
+        <div className="max-w-3xl w-full mx-auto pb-2">
+          <ComposerAttachments />
+          {hasPendingMessages ? (
+            <div
+              className="mt-2 flex flex-col gap-1 text-icon-xs leading-icon-xs text-neutral3"
+              data-testid="pending-signal-message"
+            >
+              {pendingSignals.map(signal => (
+                <div key={signal.id} className="flex min-w-0 items-center gap-1 animate-pulse">
+                  <span className="shrink-0">pending:</span>
+                  <span className="truncate">{signal.preview}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
 
         <div
           className="bg-surface3 rounded-[22px] border border-border1 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"

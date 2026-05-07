@@ -24,7 +24,14 @@ export class SlashCommandComponent extends Container {
   }
 
   matches(commandName: string, content: string): boolean {
-    return this.commandName === commandName && this.contentLines.join('\n') === content.split('\n').filter(l => l.trim()).join('\n');
+    return (
+      this.commandName === commandName &&
+      this.contentLines.join('\n') ===
+        content
+          .split('\n')
+          .filter(l => l.trim())
+          .join('\n')
+    );
   }
 
   setExpanded(expanded: boolean): void {

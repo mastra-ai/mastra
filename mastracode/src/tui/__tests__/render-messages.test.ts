@@ -56,7 +56,10 @@ describe('addUserMessage', () => {
     state.allSlashCommandComponents.push(slashComp);
     state.chatContainer.addChild(slashComp);
 
-    addUserMessage(state, createUserMessage('<slash-command name="deploy">\ncustom output\n</slash-command>', 'signal-slash'));
+    addUserMessage(
+      state,
+      createUserMessage('<slash-command name="deploy">\ncustom output\n</slash-command>', 'signal-slash'),
+    );
 
     expect(state.chatContainer.children).toEqual([slashComp]);
     expect(state.messageComponentsById.get('signal-slash')).toBe(slashComp);

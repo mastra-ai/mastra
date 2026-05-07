@@ -10,6 +10,30 @@ type StreamChunk = {
   from: 'AGENT' | 'WORKFLOW';
 };
 
+export const markStreamingPartsDone = (message: MastraUIMessage): MastraUIMessage => ({
+  ...message,
+  parts: message.parts.map(part => {
+    if (
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      'state' in part &&
+      part.state === 'streaming' &&
+      (part.type === 'text' || part.type === 'reasoning')
+    ) {
+      return { ...part, state: 'done' as const };
+    }
+    return part;
+  }),
+});
+
+export const finishStreamingAssistantMessage = (conversation: MastraUIMessage[]) => {
+  const lastMessage = conversation[conversation.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+
+  return [...conversation.slice(0, -1), markStreamingPartsDone(lastMessage)];
+};
+
 // Helper function to map workflow stream chunks to watch result format
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
@@ -123,7 +147,6 @@ export const mapWorkflowStreamChunkToWatchResult = (
 
   return prev;
 };
-
 
 function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessageMetadata): MastraUIMessage[] {
   if (typeof contents === 'string') {
@@ -885,33 +908,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       return [...result.slice(0, messageIndex), nextMessage, ...result.slice(messageIndex + 1)];
     }
 
-    case 'finish': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
-      // Mark streaming parts as done
-      const parts = lastMessage.parts.map(part => {
-        if (
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          'state' in part &&
-          part.state === 'streaming'
-        ) {
-          if (part.type === 'text' || part.type === 'reasoning') {
-            return { ...part, state: 'done' as const };
-          }
-        }
-        return part;
-      });
-
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          parts,
-        },
-      ];
+    case 'finish':
+    case 'abort': {
+      return finishStreamingAssistantMessage(result);
     }
 
     case 'error': {

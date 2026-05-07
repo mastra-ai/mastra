@@ -8,7 +8,7 @@ import { fileToBase64 } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
@@ -419,11 +419,21 @@ export function MastraRuntimeProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
+  const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
+
+  const addPendingSignal = useCallback((signalId: string, preview: string) => {
+    setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
+  }, []);
+
+  const removePendingSignal = useCallback((signalId: string) => {
+    setPendingSignals(prev => prev.filter(signal => signal.id !== signalId));
+  }, []);
 
   // Clear any persisted stream errors when switching threads or agents so they
   // don't leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
+    setPendingSignals([]);
   }, [agentId, threadId]);
 
   useEffect(() => {
@@ -455,6 +465,8 @@ export function MastraRuntimeProvider({
     agentId,
     initialMessages,
     requestContext: chatRequestContext,
+    onSignalSent: addPendingSignal,
+    onSignalEcho: removePendingSignal,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -1334,7 +1346,14 @@ export function MastraRuntimeProvider({
   });
 
   return (
-    <ThreadRuntimeStateProvider value={{ isStreaming: isRunningStream, cancelStream: onCancel }}>
+    <ThreadRuntimeStateProvider
+      value={{
+        isStreaming: isRunningStream,
+        cancelStream: onCancel,
+        pendingSignals,
+        hasPendingMessages: pendingSignals.length > 0,
+      }}
+    >
       <AssistantRuntimeProvider runtime={runtime}>
         {isReady ? (
           <ToolCallProvider

@@ -2098,6 +2098,36 @@ describe('toUIMessage', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('should mark streaming parts as done on abort', () => {
+      const chunk: ChunkType = {
+        type: 'abort',
+        payload: {},
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Partial response',
+              state: 'streaming',
+            },
+          ],
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'text',
+        state: 'done',
+      });
+    });
   });
 
   describe('toUIMessage - error chunk', () => {
