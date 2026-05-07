@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
@@ -49,7 +49,13 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: unknown;
+      args: unknown;
+      providerMetadata?: ProviderMetadata;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+    }
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
@@ -64,16 +70,21 @@ export function buildMessagesFromChunks({
   }
 
   // Metadata stashed by *-start events, applied when the ref is created on first delta.
-  const textMeta = new Map<string, Record<string, any> | undefined>();
-  const reasoningMeta = new Map<string, Record<string, any> | undefined>();
+  const textMeta = new Map<string, ProviderMetadata | undefined>();
+  const reasoningMeta = new Map<string, ProviderMetadata | undefined>();
 
   // Live references to parts already in the `parts` array, keyed by span ID.
   // Created and pushed on first delta — position reflects content arrival order (#15914).
-  const textRefs = new Map<string, { type: 'text'; text: string; providerMetadata?: Record<string, any> }>();
-  const reasoningRefs = new Map<
-    string,
-    { type: 'reasoning'; reasoning: string; details: any[]; providerMetadata?: Record<string, any> }
-  >();
+  type TextRef = { type: 'text'; text: string; providerMetadata?: ProviderMetadata };
+  type ReasoningDetail = { type: 'text'; text: string; signature?: string } | { type: 'redacted'; data: string };
+  type ReasoningRef = {
+    type: 'reasoning';
+    reasoning: string;
+    details: ReasoningDetail[];
+    providerMetadata?: ProviderMetadata;
+  };
+  const textRefs = new Map<string, TextRef>();
+  const reasoningRefs = new Map<string, ReasoningRef>();
 
   for (const chunk of chunks) {
     switch (chunk.type) {
@@ -93,7 +104,7 @@ export function buildMessagesFromChunks({
             providerMetadata: textMeta.get(chunk.payload.id) ?? chunk.payload.providerMetadata,
           };
           textRefs.set(chunk.payload.id, ref);
-          parts.push(ref as unknown as MastraMessagePart);
+          parts.push(ref as MastraMessagePart);
         }
         ref.text += chunk.payload.text;
         if (chunk.payload.providerMetadata) {
@@ -120,18 +131,18 @@ export function buildMessagesFromChunks({
 
       // ── Reasoning span ─────────────────────────────────────────
       case 'reasoning-start': {
-        const isRedacted = Object.values(chunk.payload.providerMetadata || {}).some((v: any) => v?.redactedData);
+        const isRedacted = Object.values(chunk.payload.providerMetadata || {}).some(v => v && 'redactedData' in v);
 
         // Redacted reasoning never receives deltas, so create and push immediately
         if (isRedacted) {
           const part = {
             type: 'reasoning' as const,
             reasoning: '',
-            details: [{ type: 'redacted', data: '' }],
+            details: [{ type: 'redacted' as const, data: '' }],
             providerMetadata: chunk.payload.providerMetadata,
           };
           reasoningRefs.set(chunk.payload.id, part);
-          parts.push(part as unknown as MastraMessagePart);
+          parts.push(part as MastraMessagePart);
         } else {
           // Non-redacted: just stash metadata, part is created on first delta
           reasoningMeta.set(chunk.payload.id, chunk.payload.providerMetadata);
@@ -145,11 +156,11 @@ export function buildMessagesFromChunks({
           ref = {
             type: 'reasoning' as const,
             reasoning: '',
-            details: [{ type: 'text', text: '' }],
+            details: [{ type: 'text' as const, text: '' }],
             providerMetadata: reasoningMeta.get(chunk.payload.id) ?? chunk.payload.providerMetadata,
           };
           reasoningRefs.set(chunk.payload.id, ref);
-          parts.push(ref as unknown as MastraMessagePart);
+          parts.push(ref as MastraMessagePart);
         }
         // Append to the text detail
         const detail = ref.details[0];
@@ -189,9 +200,9 @@ export function buildMessagesFromChunks({
         parts.push({
           type: 'reasoning' as const,
           reasoning: '',
-          details: [{ type: 'redacted', data: '' }],
+          details: [{ type: 'redacted' as const, data: '' }],
           providerMetadata: chunk.payload.providerMetadata,
-        } as MastraMessagePart);
+        } satisfies MastraMessagePart);
         break;
       }
 
@@ -206,7 +217,7 @@ export function buildMessagesFromChunks({
             title: chunk.payload.title,
             providerMetadata: chunk.payload.providerMetadata,
           },
-        } as MastraMessagePart);
+        } satisfies MastraMessagePart);
         break;
       }
 
@@ -217,7 +228,7 @@ export function buildMessagesFromChunks({
           data: chunk.payload.data as string,
           mimeType: chunk.payload.mimeType,
           ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
-        } as MastraMessagePart);
+        } satisfies MastraMessagePart);
         break;
       }
 
@@ -243,7 +254,7 @@ export function buildMessagesFromChunks({
             },
             providerMetadata: result.providerMetadata ?? chunk.payload.providerMetadata,
             providerExecuted: resultProviderExecuted,
-          } as MastraMessagePart);
+          } satisfies MastraMessagePart);
         } else {
           // No result yet — emit as 'call' state
           parts.push({
@@ -256,7 +267,7 @@ export function buildMessagesFromChunks({
             },
             providerMetadata: chunk.payload.providerMetadata,
             providerExecuted,
-          } as MastraMessagePart);
+          } satisfies MastraMessagePart);
         }
         break;
       }
@@ -292,7 +303,7 @@ export function buildMessagesFromChunks({
 
   // Remove text parts that ended up empty (e.g. spans where every delta was '').
   // Empty reasoning parts are kept intentionally (#9005) and are not filtered here.
-  const nonEmptyParts = parts.filter(p => !(p.type === 'text' && (p as any).text === ''));
+  const nonEmptyParts = parts.filter(p => !(p.type === 'text' && 'text' in p && p.text === ''));
 
   // Insert step-start markers between tool-invocation and subsequent text parts.
   // This matches the convention used by MessageMerger.pushNewPart when merging messages,
@@ -305,7 +316,7 @@ export function buildMessagesFromChunks({
       finalParts.length > 0 &&
       finalParts[finalParts.length - 1]?.type === 'tool-invocation'
     ) {
-      finalParts.push({ type: 'step-start' } as MastraMessagePart);
+      finalParts.push({ type: 'step-start' } satisfies MastraMessagePart);
     }
     finalParts.push(part);
   }
