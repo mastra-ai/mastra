@@ -2700,3 +2700,327 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(result).toBe(true);
   });
 });
+
+describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () => {
+  // This suite reproduces the reported symptom from the user:
+  //   "servers[mcpUrl].fetch() retries indefinitely (about once per second)
+  //    if `throw new Error('Failed to get auth token')` is triggered inside fetch.
+  //    The loop stops if I instead pass an empty token through."
+  //
+  // The relevant code lives in @modelcontextprotocol/sdk's StreamableHTTPClientTransport:
+  //  - After connect, the SDK opens a long-lived "standalone GET SSE listener" stream.
+  //  - When that stream ends or errors, _scheduleReconnection({...}, 0) fires.
+  //  - Reset-to-0 means whenever the GET round-trips successfully but the server then
+  //    closes the SSE body (or the stream completes naturally), reconnection counter
+  //    NEVER advances toward maxRetries=2 — so the SDK retries on a ~1Hz cadence forever.
+  //  - Throwing from user fetch on a *reconnect* attempt does increment the counter
+  //    (capped at maxRetries=2), but throwing on the *initial* fire-and-forget call is
+  //    silently swallowed (no schedule).
+  //
+  // What we test below:
+  //  1) Baseline: server closes the GET SSE stream cleanly => reconnects forever.
+  //  2) User-fetch fix: short-circuit GETs with a synthetic 405 Response => loop stops.
+  //  3) User-fetch fix: short-circuit GETs with a synthetic 401 Response (no authProvider)
+  //     => loop stops because UnauthorizedError is thrown and swallowed.
+
+  const VALID_TOKEN = 'valid-bearer-token';
+  let httpServer: HttpServer;
+  let baseUrl: URL;
+  let getRequestCount = 0;
+  let unauthorizedPostCount = 0;
+  // Per-test toggle: when true, the server gates POSTs (other than
+  // notifications/initialized) on a Bearer token. Defaults to false so the
+  // baseline / 405 / 401 tests don't need to attach credentials.
+  let requireAuth = false;
+
+  // Minimal MCP server that:
+  //  - accepts POST /mcp for handshake + tools/list + tools/call, gated on Bearer token
+  //  - on GET /mcp returns 200 + immediately closes an empty SSE body (loop trigger)
+  beforeEach(async () => {
+    getRequestCount = 0;
+    unauthorizedPostCount = 0;
+    requireAuth = false;
+    let sessionId: string | undefined;
+
+    httpServer = createServer(async (req, res) => {
+      if (req.method === 'GET') {
+        getRequestCount++;
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+          connection: 'keep-alive',
+        });
+        // Close the SSE body immediately. This triggers _handleSseStream's
+        // "done: true" branch which calls _scheduleReconnection({}, 0).
+        res.end();
+        return;
+      }
+
+      if (req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const bodyText = Buffer.concat(chunks).toString('utf8');
+        let body: any;
+        try {
+          body = JSON.parse(bodyText);
+        } catch {
+          res.writeHead(400).end();
+          return;
+        }
+
+        // notifications/initialized => 202, no body, no auth needed
+        if (body?.method === 'notifications/initialized') {
+          res.writeHead(202).end();
+          return;
+        }
+
+        // Auth check (gated by per-test flag): require Bearer token.
+        if (requireAuth) {
+          const authHeader = req.headers['authorization'];
+          if (authHeader !== `Bearer ${VALID_TOKEN}`) {
+            unauthorizedPostCount++;
+            res
+              .writeHead(401, { 'content-type': 'application/json' })
+              .end(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: body?.id ?? null,
+                  error: { code: -32001, message: 'unauthorized' },
+                }),
+              );
+            return;
+          }
+        }
+
+        if (body?.method === 'initialize') {
+          sessionId = randomUUID();
+          res.writeHead(200, {
+            'content-type': 'application/json',
+            'mcp-session-id': sessionId,
+          });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: body.id,
+              result: {
+                protocolVersion: body.params?.protocolVersion ?? '2024-11-05',
+                capabilities: { tools: {} },
+                serverInfo: { name: 'loop-repro-server', version: '0.0.1' },
+              },
+            }),
+          );
+          return;
+        }
+
+        if (body?.method === 'tools/list') {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: body.id,
+              result: {
+                tools: [
+                  {
+                    name: 'echo',
+                    description: 'Echo a message back',
+                    inputSchema: {
+                      type: 'object',
+                      properties: { message: { type: 'string' } },
+                      required: ['message'],
+                    },
+                  },
+                ],
+              },
+            }),
+          );
+          return;
+        }
+
+        if (body?.method === 'tools/call') {
+          const message = body.params?.arguments?.message ?? '';
+          res.writeHead(200, { 'content-type': 'application/json' }).end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: body.id,
+              result: { content: [{ type: 'text', text: `echo: ${message}` }] },
+            }),
+          );
+          return;
+        }
+
+        // Default: 202 ack
+        res.writeHead(202).end();
+        return;
+      }
+
+      res.writeHead(405).end();
+    });
+
+    baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+  });
+
+  let client: InternalMastraMCPClient;
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await new Promise<void>(resolve => httpServer.close(() => resolve()));
+  });
+
+  async function observeUserFetchGetCalls(
+    onGet: (url: string | URL, init?: RequestInit) => Response | Promise<Response> | never,
+    observationMs: number,
+  ) {
+    let userGetCallCount = 0;
+    const userFetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        userGetCallCount++;
+        return await onGet(url, init);
+      }
+      return globalThis.fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-failure-mode-test',
+      server: { url: baseUrl, fetch: userFetch },
+    });
+
+    await client.connect();
+    await client.tools();
+
+    await new Promise(resolve => setTimeout(resolve, observationMs));
+    return { userGetCallCount, userFetch };
+  }
+
+  it('baseline: server closes GET SSE => SDK retries the GET listener at ~1Hz forever', async () => {
+    // No user fetch override here — measure raw server-side GETs with default fetch.
+    client = new InternalMastraMCPClient({
+      name: 'baseline-loop',
+      server: { url: baseUrl },
+    });
+    await client.connect();
+    await client.tools();
+    await new Promise(resolve => setTimeout(resolve, 3500));
+
+    // initial GET + reconnects at ~1s, ~2.5s (1.5x backoff) within 3.5s window
+    // The reset-to-0 in _scheduleReconnection means it never gives up.
+    expect(getRequestCount).toBeGreaterThanOrEqual(3);
+  }, 20000);
+
+  it('user fetch returning a synthetic 405 stops the GET listener loop', async () => {
+    const { userGetCallCount } = await observeUserFetchGetCalls(
+      () => new Response(null, { status: 405, statusText: 'Method Not Allowed' }),
+      3500,
+    );
+    // 405 tells the SDK the server does not offer the standalone GET stream;
+    // _startOrAuthSse returns without scheduling a reconnect.
+    expect(userGetCallCount).toBe(1);
+    // And the SDK must not have hit the real server's GET endpoint.
+    expect(getRequestCount).toBe(0);
+  }, 20000);
+
+  it('user fetch returning a synthetic 401 (no authProvider) does not loop', async () => {
+    const { userGetCallCount } = await observeUserFetchGetCalls(
+      () => new Response('unauthorized', { status: 401, statusText: 'Unauthorized' }),
+      3500,
+    );
+    // Without authProvider, 401 throws StreamableHTTPError. On the *initial*
+    // fire-and-forget call it is swallowed (no schedule). It must not loop at 1Hz.
+    expect(userGetCallCount).toBeLessThanOrEqual(1);
+    expect(getRequestCount).toBe(0);
+  }, 20000);
+
+  it('recommended pattern: user fetch never throws, waits for token on POST, short-circuits GET with 405', async () => {
+    requireAuth = true;
+    // Simulates a deferred-token store: token starts unavailable, becomes available after 200ms.
+    let currentToken: string | null = null;
+    setTimeout(() => {
+      currentToken = VALID_TOKEN;
+    }, 200);
+
+    const tokenWaiters: Array<() => void> = [];
+    const waitForToken = async (timeoutMs: number): Promise<string | null> => {
+      if (currentToken) return currentToken;
+      return await new Promise<string | null>(resolve => {
+        const timer = setTimeout(() => resolve(currentToken), timeoutMs);
+        const tick = () => {
+          if (currentToken) {
+            clearTimeout(timer);
+            resolve(currentToken);
+          } else {
+            setTimeout(tick, 25);
+          }
+        };
+        tokenWaiters.push(() => clearTimeout(timer));
+        tick();
+      });
+    };
+
+    let userGetCallCount = 0;
+    let userPostCallCount = 0;
+    const userFetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+
+      // GET = standalone SSE listener. Don't throw, don't pass through —
+      // signal "no GET stream supported" with a synthetic 405. SDK stops retrying.
+      if (method === 'GET') {
+        userGetCallCount++;
+        return new Response(null, { status: 405, statusText: 'Method Not Allowed' });
+      }
+
+      userPostCallCount++;
+
+      // POST: wait up to 5s for a token. If still missing, surface a 401
+      // through a synthetic Response — never throw.
+      const token = await waitForToken(5000);
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'no token' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      const headers = new Headers(init?.headers);
+      headers.set('authorization', `Bearer ${token}`);
+      return globalThis.fetch(url, { ...init, headers });
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'recommended-pattern',
+      server: { url: baseUrl, fetch: userFetch },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toContain('echo');
+
+    const echoTool = tools['echo'];
+    const result = await echoTool!.execute({ message: 'hello world' }, {});
+    expect(result).toEqual({ content: [{ type: 'text', text: 'echo: hello world' }] });
+
+    // Confirm the auth-token wait actually happened: the token only became
+    // available 200ms after init, so at least one POST had to wait for it.
+    expect(userPostCallCount).toBeGreaterThan(0);
+
+    // userFetch must never have thrown — every call either returned a Response
+    // or resolved. Vitest's mock results expose 'throw' for thrown errors.
+    const threw = userFetch.mock.results.some(r => r.type === 'throw');
+    expect(threw).toBe(false);
+
+    // No loop: only the initial GET listener attempt, short-circuited at the
+    // user-fetch layer.
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    expect(userGetCallCount).toBe(1);
+    expect(getRequestCount).toBe(0);
+
+    // The server never received an unauthorized POST: the wait-for-token
+    // pattern means we only POSTed once we had auth, never with a stale/empty token.
+    expect(unauthorizedPostCount).toBe(0);
+
+    tokenWaiters.forEach(cancel => cancel());
+  }, 20000);
+});
