@@ -1,7 +1,7 @@
 ---
 '@mastra/core': minor
 'mastra': patch
-'@mastra/server': patch
+'@mastra/server': minor
 '@mastra/redis-streams': patch
 ---
 
@@ -54,3 +54,25 @@ Worker review fixes:
   rejections instead of `console.error`.
 - `BackgroundTaskWorker.start()` now throws if `init()` was not called,
   matching the contract of the other workers.
+
+Push-capable PubSub:
+
+- The `PubSub` abstract class now declares a `supportedModes` getter
+  (defaulting to `['pull']` for backward compatibility) so consumers can
+  tell whether a broker delivers events through a pull loop, an in-process
+  push, or an out-of-process HTTP push. `EventEmitterPubSub` reports
+  `['pull', 'push']` (EventEmitter dispatches synchronously and works for
+  either path), `@mastra/redis-streams` reports `['pull']`.
+- `Mastra` now exposes a public `handleWorkflowEvent(event)` method backed
+  by a shared `WorkflowEventProcessor`. It is the single entry point used
+  by the existing pull-mode `OrchestrationWorker`, by in-process push
+  pubsubs (auto-wired during `startWorkers()`), and by the new
+  `POST /api/workers/events` route which lets push-mode brokers (GCP
+  Pub/Sub push, SNS, EventBridge) deliver events over HTTP.
+- When the configured pubsub does not support `'pull'`, Mastra
+  automatically skips creating an `OrchestrationWorker` and
+  `OrchestrationWorker.init()` throws a clear error if it is constructed
+  against a push-only pubsub.
+- `WorkflowEventProcessor` gains a `handle(event)` method that returns a
+  structured `{ ok, retry }` result. The original `process(event, ack?)`
+  method is preserved as a thin wrapper for back-compat.

@@ -43,6 +43,17 @@ export class OrchestrationWorker extends MastraWorker {
       throw new Error('OrchestrationWorker requires Mastra instance');
     }
 
+    // OrchestrationWorker drives a pull subscription on the workflow topic.
+    // Push-only pubsubs (EventEmitter, GCP push subscriptions) deliver events
+    // through different paths and must not be paired with this worker.
+    const modes = deps.pubsub.supportedModes ?? ['pull'];
+    if (!modes.includes('pull')) {
+      throw new Error(
+        `OrchestrationWorker requires a pull-capable PubSub, but the configured pubsub only supports: ${modes.join(', ')}. ` +
+          `Either remove OrchestrationWorker from the workers list or use a pull-capable PubSub (e.g. Redis Streams).`,
+      );
+    }
+
     // If MASTRA_STEP_EXECUTION_URL is set, use HttpRemoteStrategy
     // (standalone worker calling back to the server for step execution).
     // The strategy reads MASTRA_WORKER_AUTH_TOKEN itself and forwards it
@@ -96,19 +107,26 @@ export class OrchestrationWorker extends MastraWorker {
       throw new Error('OrchestrationWorker not initialized');
     }
 
-    try {
-      await this.#processor.process(event, ack);
-    } catch (err) {
-      this.deps?.logger?.error('OrchestrationWorker: error processing event', {
-        type: event.type,
-        runId: event.runId,
-        error: err,
-      });
-      if (nack) {
-        await nack();
-      } else {
-        throw err;
+    // The local processor is used (rather than mastra.handleWorkflowEvent)
+    // because it carries the standalone-worker step-execution strategy
+    // (HttpRemoteStrategy when MASTRA_STEP_EXECUTION_URL is set), which the
+    // shared in-process handler doesn't have.
+    const result = await this.#processor.handle(event);
+    if (result.ok) {
+      try {
+        await ack?.();
+      } catch (e) {
+        this.deps?.logger?.error('OrchestrationWorker: error acking event', { error: e });
       }
+      return;
+    }
+
+    this.deps?.logger?.error('OrchestrationWorker: error processing event', {
+      type: event.type,
+      runId: event.runId,
+    });
+    if (nack) {
+      await nack();
     }
   }
 }

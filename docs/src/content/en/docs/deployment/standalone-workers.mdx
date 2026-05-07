@@ -11,6 +11,18 @@ Mastra runs workflow orchestration, scheduled triggers, and background tasks as 
 
 This page covers how to split workers across processes.
 
+## Transport modes
+
+Each `PubSub` implementation declares the delivery modes it supports through `supportedModes`. Mastra reads that list to decide whether a long-lived worker is needed at all:
+
+| Transport | Modes | Worker required? |
+| - | - | - |
+| `EventEmitterPubSub` (in-process default) | `pull`, `push` | Yes by default — `OrchestrationWorker` runs in-process and registers a listener. Push-only deployments may opt out by removing the worker; Mastra will wire `handleWorkflowEvent` directly to the pubsub. |
+| `@mastra/redis-streams` | `pull` | Yes — `OrchestrationWorker` runs an XREADGROUP loop. |
+| Push-mode brokers (GCP Pub/Sub push, SNS, EventBridge) | `push` | No — the broker POSTs to `/api/workers/events`. The push subscription itself is configured at the broker (gcloud, Terraform, AWS console), not by Mastra. |
+
+When the configured pubsub does not support `pull`, Mastra automatically skips creating an `OrchestrationWorker` even with the default `workers` configuration. The scheduler and background-task workers still run in-process and require their own deployment story for push-only setups.
+
 ## Default behaviour
 
 When you create a `Mastra` instance with no `workers` option, Mastra registers three default workers:

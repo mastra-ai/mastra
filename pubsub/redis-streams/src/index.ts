@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
-import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import type { Event, EventCallback, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
@@ -58,6 +58,12 @@ export interface RedisStreamsPubSubConfig {
 }
 
 export class RedisStreamsPubSub extends PubSub {
+  // Redis Streams is a pull transport: consumers issue XREADGROUP to read
+  // events. Mastra reads this to know an OrchestrationWorker is required.
+  override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['pull'];
+  }
+
   #writeClient: RedisClientType;
   #connectOptions: RedisClientOptions;
   #keyPrefix: string;

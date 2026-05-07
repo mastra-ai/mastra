@@ -16,7 +16,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
-import type { Event } from '../events/types';
+import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -50,6 +50,7 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
+import type { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
@@ -540,6 +541,13 @@ export class Mastra<
   #environment?: string;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
+  // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
+  // pull-mode workers (OrchestrationWorker) and push-mode entry points
+  // (in-process EventEmitter listener, the /api/workers/events HTTP route).
+  #workflowEventProcessor?: WorkflowEventProcessor;
+  // Callback registered against the pubsub when running in push mode so we can
+  // unsubscribe it cleanly during stopWorkers().
+  #pushSubscription?: { topic: string; cb: EventCallback };
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -916,8 +924,18 @@ export class Mastra<
         w.__registerMastra(this);
       }
     } else {
-      // Default: auto-create workers based on config
-      const defaultWorkers: MastraWorker[] = [new OrchestrationWorker(), new SchedulerWorker(config?.scheduler)];
+      // Default: auto-create workers based on config.
+      //
+      // Skip OrchestrationWorker when the configured pubsub doesn't support
+      // pull delivery (e.g. EventEmitter, GCP Pub/Sub push) — those transports
+      // don't have a read loop to drive a worker, and Mastra wires
+      // `handleWorkflowEvent` directly to the pubsub during startWorkers().
+      const pubsubModes = this.#pubsub.supportedModes ?? ['pull'];
+      const defaultWorkers: MastraWorker[] = [];
+      if (pubsubModes.includes('pull')) {
+        defaultWorkers.push(new OrchestrationWorker());
+      }
+      defaultWorkers.push(new SchedulerWorker(config?.scheduler));
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
@@ -3854,6 +3872,24 @@ export class Mastra<
   }
 
   /**
+   * Process a single workflow event. Shared entry point used by:
+   * - pull-mode workers (OrchestrationWorker)
+   * - in-process push pubsubs (EventEmitterPubSub) wired during startWorkers()
+   * - HTTP push delivered to `POST /api/workers/events`
+   *
+   * Returns `{ ok: true }` on success; the caller should ack/return 2xx.
+   * Returns `{ ok: false, retry: true }` on transient failure; the caller
+   * should nack/return 5xx so the broker retries.
+   */
+  public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    if (!this.#workflowEventProcessor) {
+      const { WorkflowEventProcessor } = await import('../workflows/evented/workflow-event-processor');
+      this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+    }
+    return this.#workflowEventProcessor.handle(event);
+  }
+
+  /**
    * Initialize and start workers. If `name` is provided, starts only
    * that worker. Otherwise starts all registered workers and subscribes
    * user-defined event listeners.
@@ -3888,6 +3924,27 @@ export class Mastra<
       await worker.start();
     }
 
+    // For push-mode pubsubs (e.g. EventEmitterPubSub) there is no
+    // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
+    // to the pubsub so workflow events still get processed in-process.
+    if (!name) {
+      const modes = this.#pubsub.supportedModes ?? ['pull'];
+      const pushOnly = modes.includes('push') && !modes.includes('pull');
+      if (pushOnly && !this.#pushSubscription) {
+        const cb: EventCallback = (event, ack) => {
+          void this.handleWorkflowEvent(event).then(result => {
+            if (result.ok && ack) {
+              return ack().catch(err => this.#logger?.error?.('Error acking workflow event in push subscription', err));
+            }
+            // Push transports without nack semantics (EventEmitter) treat
+            // a non-ack as a failure signal; we already logged inside handle().
+          });
+        };
+        await this.#pubsub.subscribe('workflows', cb);
+        this.#pushSubscription = { topic: 'workflows', cb };
+      }
+    }
+
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
     // Only when starting all workers (not when targeting a specific one)
     if (!name) {
@@ -3913,6 +3970,12 @@ export class Mastra<
       if (worker.isRunning) {
         await worker.stop();
       }
+    }
+
+    // Tear down the in-process push subscription wired during startWorkers().
+    if (this.#pushSubscription) {
+      await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
+      this.#pushSubscription = undefined;
     }
 
     // Unsubscribe user-defined event listeners

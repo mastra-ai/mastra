@@ -1900,7 +1900,46 @@ export class WorkflowEventProcessor extends EventProcessor {
     return snapshot;
   }
 
+  /**
+   * Result of handling a single workflow event.
+   *
+   * - `ok: true` — event was processed; the transport should ack.
+   * - `ok: false, retry: true` — transient failure, the transport should
+   *   nack/redeliver (or, for HTTP push, return 5xx so the broker retries).
+   * - `ok: false, retry: false` — terminal/poison failure, the transport
+   *   should drop the event (or return 4xx for HTTP push).
+   */
+  async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    try {
+      await this.#dispatch(event);
+      return { ok: true };
+    } catch (err) {
+      this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
+        type: event.type,
+        runId: event.runId,
+        error: err,
+      });
+      return { ok: false, retry: true };
+    }
+  }
+
+  /**
+   * @deprecated prefer {@link WorkflowEventProcessor.handle}, which returns a
+   * structured result instead of relying on an ack callback. Kept as a thin
+   * wrapper so existing pull-mode call sites continue to work.
+   */
   async process(event: Event, ack?: () => Promise<void>) {
+    const result = await this.handle(event);
+    if (result.ok) {
+      try {
+        await ack?.();
+      } catch (e) {
+        this.mastra.getLogger()?.error('Error acking event', e);
+      }
+    }
+  }
+
+  async #dispatch(event: Event) {
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
@@ -2015,12 +2054,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         break;
       default:
         break;
-    }
-
-    try {
-      await ack?.();
-    } catch (e) {
-      this.mastra.getLogger()?.error('Error acking event', e);
     }
   }
 }
