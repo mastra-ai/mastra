@@ -5846,6 +5846,176 @@ export interface PostAgentsAgentIdDeclineNetworkToolCall_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/resume-stream-until-idle
+// ============================================================================
+export type PostAgentsAgentIdResumeStreamUntilIdle_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
+  instructions?: (string | string[] | any | any[]) | undefined;
+  system?: (string | string[] | any | any[]) | undefined;
+  context?: any[] | undefined;
+  memory?:
+    | {
+        thread:
+          | string
+          | {
+              id: string;
+              [x: string]: unknown;
+            };
+        resource: string;
+        options?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        readOnly?: boolean | undefined;
+      }
+    | undefined;
+  runId: string;
+  savePerStep?: boolean | undefined;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
+  maxSteps?: number | undefined;
+  stopWhen?: any | undefined;
+  providerOptions?:
+    | {
+        anthropic?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        google?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        openai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        xai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+      }
+    | undefined;
+  modelSettings?: any | undefined;
+  activeTools?: string[] | undefined;
+  toolsets?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  clientTools?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolChoice?:
+    | (
+        | ('auto' | 'none' | 'required')
+        | {
+            type: 'tool';
+            toolName: string;
+          }
+      )
+    | undefined;
+  requireToolApproval?: boolean | undefined;
+  scorers?:
+    | (
+        | {
+            [key: string]: any;
+          }
+        | {
+            [key: string]: {
+              scorer: string;
+              sampling?: any | undefined;
+            };
+          }
+      )
+    | undefined;
+  returnScorerData?: boolean | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  output?: any | undefined;
+  structuredOutput?:
+    | {
+        schema: {
+          [x: string]: unknown;
+        };
+        model?: (string | any) | undefined;
+        instructions?: string | undefined;
+        jsonPromptInjection?: boolean | undefined;
+        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+        fallbackValue?: any | undefined;
+      }
+    | undefined;
+  resumeData: unknown;
+  toolCallId?: string | undefined;
+  maxIdleMs?: number | undefined;
+  [x: string]: unknown;
+};
+
+export type PostAgentsAgentIdResumeStreamUntilIdle_Response = any;
+
+export type PostAgentsAgentIdResumeStreamUntilIdle_Request = Simplify<
+  (PostAgentsAgentIdResumeStreamUntilIdle_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdResumeStreamUntilIdle_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdResumeStreamUntilIdle_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdResumeStreamUntilIdle_Body
+        ? { body?: PostAgentsAgentIdResumeStreamUntilIdle_Body }
+        : { body: PostAgentsAgentIdResumeStreamUntilIdle_Body })
+>;
+
+export interface PostAgentsAgentIdResumeStreamUntilIdle_RouteContract {
+  pathParams: PostAgentsAgentIdResumeStreamUntilIdle_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdResumeStreamUntilIdle_Body;
+  request: PostAgentsAgentIdResumeStreamUntilIdle_Request;
+  response: PostAgentsAgentIdResumeStreamUntilIdle_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/network
 // ============================================================================
 export type PostAgentsAgentIdNetwork_PathParams = {
@@ -8918,8 +9088,8 @@ export interface PostProcessorsProcessorIdExecute_RouteContract {
 export type PostV1Responses_Body = {
   /** Optional model identifier override, such as openai/gpt-5. When omitted, the agent default model is used. */
   model?: string | undefined;
-  /** Mastra agent ID for the request */
-  agent_id: string;
+  /** Mastra agent ID for the request. Required unless previous_response_id is provided. */
+  agent_id?: string | undefined;
   input:
     | string
     | {
@@ -8958,6 +9128,12 @@ export type PostV1Responses_Body = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9048,6 +9224,12 @@ export type PostV1Responses_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9170,6 +9352,12 @@ export type GetV1ResponsesResponseId_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -12536,6 +12724,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
       | (
           | 'AGENT'
           | 'WORKFLOW'
+          | 'TRAJECTORY'
+          | 'STEP'
           | 'agent_run'
           | 'scorer_run'
           | 'scorer_step'
@@ -14866,7 +15056,7 @@ export type PostObservabilityMetricsAggregate_Body = {
   name: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
-  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
   distinctColumn?:
     | (
         | 'entityType'
@@ -14881,6 +15071,8 @@ export type PostObservabilityMetricsAggregate_Body = {
         | 'environment'
         | 'executionSource'
         | 'serviceName'
+        | 'threadId'
+        | 'resourceId'
       )
     | undefined;
   filters?:
@@ -15033,7 +15225,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
   groupBy: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
-  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
   distinctColumn?:
     | (
         | 'entityType'
@@ -15048,6 +15240,8 @@ export type PostObservabilityMetricsBreakdown_Body = {
         | 'environment'
         | 'executionSource'
         | 'serviceName'
+        | 'threadId'
+        | 'resourceId'
       )
     | undefined;
   filters?:
@@ -15201,7 +15395,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
-  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
   distinctColumn?:
     | (
         | 'entityType'
@@ -15216,6 +15410,8 @@ export type PostObservabilityMetricsTimeseries_Body = {
         | 'environment'
         | 'executionSource'
         | 'serviceName'
+        | 'threadId'
+        | 'resourceId'
       )
     | undefined;
   filters?:
@@ -16225,6 +16421,17 @@ export type GetWellKnownAgentIdAgentCardJson_Response = {
   defaultInputModes: string[];
   defaultOutputModes: string[];
   supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
   skills: {
     id: string;
     name: string;
@@ -19201,6 +19408,11 @@ export type GetMcpServerIdTools_Response = {
     inputSchema: unknown;
     outputSchema?: unknown | undefined;
     toolType?: string | undefined;
+    _meta?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
   }[];
 };
 
@@ -19235,6 +19447,11 @@ export type GetMcpServerIdToolsToolId_Response = {
   inputSchema: unknown;
   outputSchema?: unknown | undefined;
   toolType?: string | undefined;
+  _meta?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type GetMcpServerIdToolsToolId_Request = Simplify<
@@ -19288,6 +19505,83 @@ export interface PostMcpServerIdToolsToolIdExecute_RouteContract {
   body: PostMcpServerIdToolsToolIdExecute_Body;
   request: PostMcpServerIdToolsToolIdExecute_Request;
   response: PostMcpServerIdToolsToolIdExecute_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /mcp/:serverId/resources
+// ============================================================================
+export type GetMcpServerIdResources_PathParams = {
+  /** MCP server ID */
+  serverId: string;
+};
+
+export type GetMcpServerIdResources_Response = {
+  resources: {
+    uri: string;
+    name: string;
+    description?: string | undefined;
+    mimeType?: string | undefined;
+    _meta?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+  }[];
+};
+
+export type GetMcpServerIdResources_Request = Simplify<
+  (GetMcpServerIdResources_PathParams extends never ? {} : { params: GetMcpServerIdResources_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMcpServerIdResources_RouteContract {
+  pathParams: GetMcpServerIdResources_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetMcpServerIdResources_Request;
+  response: GetMcpServerIdResources_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /mcp/:serverId/resources/read
+// ============================================================================
+export type PostMcpServerIdResourcesRead_PathParams = {
+  /** MCP server ID */
+  serverId: string;
+};
+
+export type PostMcpServerIdResourcesRead_Body = {
+  /** Resource URI to read */
+  uri: string;
+};
+
+export type PostMcpServerIdResourcesRead_Response = {
+  contents: {
+    uri: string;
+    text?: string | undefined;
+    blob?: string | undefined;
+  }[];
+};
+
+export type PostMcpServerIdResourcesRead_Request = Simplify<
+  (PostMcpServerIdResourcesRead_PathParams extends never ? {} : { params: PostMcpServerIdResourcesRead_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostMcpServerIdResourcesRead_Body extends never
+      ? {}
+      : {} extends PostMcpServerIdResourcesRead_Body
+        ? { body?: PostMcpServerIdResourcesRead_Body }
+        : { body: PostMcpServerIdResourcesRead_Body })
+>;
+
+export interface PostMcpServerIdResourcesRead_RouteContract {
+  pathParams: PostMcpServerIdResourcesRead_PathParams;
+  queryParams: never;
+  body: PostMcpServerIdResourcesRead_Body;
+  request: PostMcpServerIdResourcesRead_Request;
+  response: PostMcpServerIdResourcesRead_Response;
   responseType: 'json';
 }
 
@@ -71854,6 +72148,58 @@ export interface GetSystemPackages_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /system/api-schema
+// ============================================================================
+export type GetSystemApiSchema_Response = {
+  version: 1;
+  routes: {
+    method: string;
+    path: string;
+    responseType: string;
+    pathParamSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    queryParamSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    bodySchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    responseSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    responseShape: {
+      kind: 'array' | 'record' | 'object-property' | 'single' | 'unknown';
+      listProperty?: string | undefined;
+      paginationProperty?: string | undefined;
+    };
+  }[];
+};
+
+export type GetSystemApiSchema_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSystemApiSchema_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetSystemApiSchema_Request;
+  response: GetSystemApiSchema_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /datasets
 // ============================================================================
 export type GetDatasets_QueryParams = {
@@ -74205,14 +74551,16 @@ export interface GetBackgroundTasksStream_RouteContract {
 // ============================================================================
 export type GetBackgroundTasks_QueryParams = {
   agentId?: string | undefined;
-  status?: ('pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out') | undefined;
+  status?: ('pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out') | undefined;
   runId?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
+  toolName?: string | undefined;
+  toolCallId?: string | undefined;
   fromDate?: Date | undefined;
   toDate?: Date | undefined;
-  dateFilterBy?: ('createdAt' | 'startedAt' | 'completedAt') | undefined;
-  orderBy?: ('createdAt' | 'startedAt' | 'completedAt') | undefined;
+  dateFilterBy?: ('createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt') | undefined;
+  orderBy?: ('createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt') | undefined;
   orderDirection?: ('asc' | 'desc') | undefined;
   page?: number | undefined;
   perPage?: number | undefined;
@@ -74221,7 +74569,7 @@ export type GetBackgroundTasks_QueryParams = {
 export type GetBackgroundTasks_Response = {
   tasks: {
     id: string;
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+    status: 'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
     toolName: string;
     toolCallId: string;
     args: {
@@ -74244,6 +74592,7 @@ export type GetBackgroundTasks_Response = {
     retryCount: number;
     maxRetries: number;
     timeoutMs: number;
+    suspendPayload?: unknown | undefined;
   }[];
   total: number;
 };
@@ -74276,7 +74625,7 @@ export type GetBackgroundTasksBackgroundTaskId_PathParams = {
 
 export type GetBackgroundTasksBackgroundTaskId_Response = {
   id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+  status: 'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
   toolName: string;
   toolCallId: string;
   args: {
@@ -74299,6 +74648,7 @@ export type GetBackgroundTasksBackgroundTaskId_Response = {
   retryCount: number;
   maxRetries: number;
   timeoutMs: number;
+  suspendPayload?: unknown | undefined;
 };
 
 export type GetBackgroundTasksBackgroundTaskId_Request = Simplify<
@@ -74883,6 +75233,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
   'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
   'POST /agents/:agentId/decline-network-tool-call': PostAgentsAgentIdDeclineNetworkToolCall_RouteContract;
+  'POST /agents/:agentId/resume-stream-until-idle': PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
   'POST /agents/:agentId/network': PostAgentsAgentIdNetwork_RouteContract;
   'POST /agents/:agentId/model': PostAgentsAgentIdModel_RouteContract;
   'POST /agents/:agentId/model/reset': PostAgentsAgentIdModelReset_RouteContract;
@@ -75065,6 +75416,8 @@ export interface RouteTypes {
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
   'GET /mcp/:serverId/tools/:toolId': GetMcpServerIdToolsToolId_RouteContract;
   'POST /mcp/:serverId/tools/:toolId/execute': PostMcpServerIdToolsToolIdExecute_RouteContract;
+  'GET /mcp/:serverId/resources': GetMcpServerIdResources_RouteContract;
+  'POST /mcp/:serverId/resources/read': PostMcpServerIdResourcesRead_RouteContract;
   'ALL /mcp/:serverId/mcp': AllMcpServerIdMcp_RouteContract;
   'ALL /mcp/:serverId/sse': AllMcpServerIdSse_RouteContract;
   'POST /mcp/:serverId/messages': PostMcpServerIdMessages_RouteContract;
@@ -75135,6 +75488,7 @@ export interface RouteTypes {
   'GET /processor-providers': GetProcessorProviders_RouteContract;
   'GET /processor-providers/:providerId': GetProcessorProvidersProviderId_RouteContract;
   'GET /system/packages': GetSystemPackages_RouteContract;
+  'GET /system/api-schema': GetSystemApiSchema_RouteContract;
   'GET /datasets': GetDatasets_RouteContract;
   'POST /datasets': PostDatasets_RouteContract;
   'GET /datasets/:datasetId': GetDatasetsDatasetId_RouteContract;
@@ -75299,6 +75653,9 @@ export interface Client {
   };
   '/agents/:agentId/resume-stream': {
     POST: PostAgentsAgentIdResumeStream_RouteContract;
+  };
+  '/agents/:agentId/resume-stream-until-idle': {
+    POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
   };
   '/agents/:agentId/skills/:skillName': {
     GET: GetAgentsAgentIdSkillsSkillName_RouteContract;
@@ -75472,6 +75829,12 @@ export interface Client {
   };
   '/mcp/:serverId/messages': {
     POST: PostMcpServerIdMessages_RouteContract;
+  };
+  '/mcp/:serverId/resources': {
+    GET: GetMcpServerIdResources_RouteContract;
+  };
+  '/mcp/:serverId/resources/read': {
+    POST: PostMcpServerIdResourcesRead_RouteContract;
   };
   '/mcp/:serverId/sse': {
     ALL: AllMcpServerIdSse_RouteContract;
@@ -75828,6 +76191,9 @@ export interface Client {
     DELETE: DeleteStoredWorkspacesStoredWorkspaceId_RouteContract;
     GET: GetStoredWorkspacesStoredWorkspaceId_RouteContract;
     PATCH: PatchStoredWorkspacesStoredWorkspaceId_RouteContract;
+  };
+  '/system/api-schema': {
+    GET: GetSystemApiSchema_RouteContract;
   };
   '/system/packages': {
     GET: GetSystemPackages_RouteContract;

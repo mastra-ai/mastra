@@ -18,9 +18,42 @@ import {
   dynamicToolsAgent,
   schemaValidatedAgent,
   requestContextDemoAgent,
+  mcpAppsAgent,
   slackDemoAgent,
 } from './agents/index';
-import { myMcpServer, myMcpServerTwo } from './mcp/server';
+import { MCPClient } from '@mastra/mcp';
+import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
+
+// Non-Mastra MCP server — uses @modelcontextprotocol/sdk directly via stdio.
+// toMCPServerProxies() wraps each MCPClient connection as an MCPServerBase so
+// it appears in Studio alongside native MCPServer instances.
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+
+// Resolve the project root reliably even when running from the bundled output.
+// Walk up from the bundled file's directory, skipping the .mastra output tree.
+function findProjectRoot(startDir: string): string {
+  let dir = startDir;
+  while (dir !== dirname(dir)) {
+    const hasPackageJson = existsSync(resolve(dir, 'package.json'));
+    const isInsideMastraOutput = dir.includes('.mastra');
+    if (hasPackageJson && !isInsideMastraOutput) return dir;
+    dir = dirname(dir);
+  }
+  return startDir;
+}
+const projectRoot = findProjectRoot(dirname(fileURLToPath(import.meta.url)));
+
+const externalMcpClient = new MCPClient({
+  servers: {
+    'external-mcp-apps': {
+      command: 'npx',
+      args: ['tsx', resolve(projectRoot, 'src', 'mastra', 'mcp', 'external-app-server.ts')],
+      cwd: projectRoot,
+    },
+  },
+});
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
@@ -77,6 +110,7 @@ export const mastra = new Mastra({
     evalAgent,
     schemaValidatedAgent,
     requestContextDemoAgent,
+    mcpAppsAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
@@ -103,6 +137,8 @@ export const mastra = new Mastra({
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,
+    mcpAppsServer,
+    ...externalMcpClient.toMCPServerProxies(),
   },
   workflows: {
     myWorkflow,

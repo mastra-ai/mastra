@@ -1,3 +1,4 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
@@ -9,6 +10,7 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
+import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -1240,6 +1242,75 @@ export class ProcessorRunner {
     }
 
     return stepInput;
+  }
+
+  /**
+   * Run processLLMRequest for all processors that implement it.
+   *
+   * Called *after* `MessageList` has been converted to `LanguageModelV2Prompt`
+   * and immediately *before* the prompt is forwarded to the provider.
+   * Mutations are scoped to this single call — they do not affect the
+   * persisted message list, memory, UI, or future model swaps.
+   */
+  async runProcessLLMRequest(args: {
+    prompt: LanguageModelV2Prompt;
+    model: unknown;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    requestContext?: RequestContext;
+    retryCount?: number;
+    abortSignal?: AbortSignal;
+    tracingContext?: TracingContext;
+    writer?: ProcessorStreamWriter;
+  }): Promise<{ prompt: LanguageModelV2Prompt }> {
+    const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
+
+    let currentPrompt = args.prompt;
+
+    for (const processorOrWorkflow of this.inputProcessors) {
+      // Workflows do not currently participate in processLLMRequest.
+      if (isProcessorWorkflow(processorOrWorkflow)) continue;
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processLLMRequest?.bind(processor);
+      if (!processMethod) continue;
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      try {
+        const processorState = this.getProcessorState(processor.id);
+
+        const result = await processMethod({
+          prompt: currentPrompt,
+          // The Processor interface types `model` as `MastraLanguageModel`, but
+          // the runner accepts the looser `unknown` to match other call paths
+          // (e.g. unresolved string ids or function-typed dynamic models).
+          model: args.model as never,
+          stepNumber: args.stepNumber,
+          steps: args.steps,
+          state: processorState.customState,
+          retryCount: args.retryCount ?? 0,
+          requestContext: args.requestContext,
+          abort,
+          abortSignal: args.abortSignal,
+          writer: args.writer,
+          ...createObservabilityContext(args.tracingContext),
+        });
+
+        if (result && typeof result === 'object' && result.prompt) {
+          currentPrompt = result.prompt;
+        }
+      } catch (error) {
+        if (error instanceof TripWire) {
+          await invokeOnViolation(processor, error);
+        }
+        throw error;
+      }
+    }
+
+    void observabilityContext;
+    return { prompt: currentPrompt };
   }
 
   /**

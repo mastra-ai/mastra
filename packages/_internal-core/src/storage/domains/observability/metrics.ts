@@ -230,6 +230,8 @@ export const METRIC_DISTINCT_COLUMNS = [
   'environment',
   'executionSource',
   'serviceName',
+  'threadId',
+  'resourceId',
 ] as const;
 
 export type MetricDistinctColumn = (typeof METRIC_DISTINCT_COLUMNS)[number];
@@ -238,7 +240,7 @@ export const distinctColumnSchema = z
   .enum(METRIC_DISTINCT_COLUMNS)
   .optional()
   .describe(
-    "Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed.",
+    "Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions.",
   );
 
 // --- getMetricAggregate ---

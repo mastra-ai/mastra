@@ -1,8 +1,8 @@
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
