@@ -422,6 +422,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'server/a2a',
+          label: 'A2A Protocol',
+        },
+        {
+          type: 'doc',
           id: 'server/mastra-client',
           label: 'Mastra Client',
         },
