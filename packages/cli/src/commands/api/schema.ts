@@ -1,12 +1,7 @@
 import { fetchSchemaManifest } from './client.js';
-import type { ApiCommandDescriptor } from './commands.js';
 import { ApiCliError } from './errors.js';
 import type { ResolvedTarget } from './target.js';
-
-interface CliSchemaExample {
-  description: string;
-  command: string;
-}
+import type { ApiCommandDescriptor, ApiCommandExample } from './types.js';
 
 export async function getCommandSchema(descriptor: ApiCommandDescriptor, target: ResolvedTarget): Promise<unknown> {
   if (!descriptor.acceptsInput) {
@@ -93,153 +88,15 @@ function buildPositionals(descriptor: ApiCommandDescriptor, pathParamSchema: any
   }));
 }
 
-export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchemaExample[] {
-  const command = `mastra api ${descriptor.name}`;
-
-  switch (descriptor.key) {
-    case 'agentList':
-      return [{ description: 'List available agents', command }];
-    case 'agentRun':
-      return [
-        {
-          description: 'Run an agent with a text prompt',
-          command: `${command} weather-agent '{"messages":"What is the weather in London?"}'`,
-        },
-        {
-          description: 'Run an agent and persist messages to a thread',
-          command: `${command} weather-agent '{"messages":"What is the weather in London?","memory":{"thread":"thread_abc123","resource":"user_123"}}'`,
-        },
-      ];
-    case 'toolExecute':
-      return [
-        {
-          description: 'Execute a tool with raw tool input. The CLI sends this as the route data field.',
-          command: `${command} get-weather '{"location":"San Francisco"}'`,
-        },
-        {
-          description: 'Execute a tool with an explicit data wrapper',
-          command: `${command} get-weather '{"data":{"location":"San Francisco"}}'`,
-        },
-      ];
-    case 'mcpToolExecute':
-      return [
-        {
-          description: 'Execute an MCP tool with raw tool input. The CLI sends this as the route data field.',
-          command: `${command} my-server calculator '{"num1":2,"num2":3,"operation":"add"}'`,
-        },
-        {
-          description: 'Execute an MCP tool with an explicit data wrapper',
-          command: `${command} my-server calculator '{"data":{"num1":2,"num2":3,"operation":"add"}}'`,
-        },
-      ];
-    case 'workflowRunStart':
-      return [
-        {
-          description: 'Start a workflow run',
-          command: `${command} data-pipeline '{"inputData":{"source":"s3://bucket/data.csv"}}'`,
-        },
-      ];
-    case 'workflowRunResume':
-      return [
-        {
-          description: 'Resume a suspended workflow run. The run must currently be suspended.',
-          command: `${command} data-pipeline run_123 '{"resumeData":{"approved":true}}'`,
-        },
-      ];
-    case 'memorySearch':
-      return [
-        {
-          description: 'Search long-term memory',
-          command: `${command} '{"agentId":"weather-agent","resourceId":"user_123","searchQuery":"caching strategy","limit":10}'`,
-        },
-      ];
-    case 'memoryCurrentGet':
-      return [
-        {
-          description: 'Read current working memory',
-          command: `${command} '{"threadId":"thread_abc123","agentId":"code-reviewer"}'`,
-        },
-      ];
-    case 'memoryCurrentUpdate':
-      return [
-        {
-          description: 'Update current working memory. Requires working memory to be enabled for the memory instance.',
-          command: `${command} '{"threadId":"thread_abc123","agentId":"code-reviewer","workingMemory":"Remember the user prefers concise responses."}'`,
-        },
-      ];
-    case 'memoryStatus':
-      return [
-        {
-          description: 'Get memory status for an agent',
-          command: `${command} '{"agentId":"weather-agent"}'`,
-        },
-        {
-          description: 'Get memory status for an agent, resource, and thread',
-          command: `${command} '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123"}'`,
-        },
-      ];
-    case 'logList':
-      return [
-        {
-          description: 'List recent logs',
-          command,
-        },
-        {
-          description: 'List info logs with pagination',
-          command: `${command} '{"level":"info","page":0,"perPage":50}'`,
-        },
-      ];
-    case 'threadCreate':
-      return [
-        {
-          description: 'Create a memory thread',
-          command: `${command} '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'`,
-        },
-      ];
-    case 'threadUpdate':
-      return [
-        {
-          description: 'Update a memory thread',
-          command: `${command} thread_abc123 '{"agentId":"weather-agent","title":"Updated title"}'`,
-        },
-      ];
-    case 'threadDelete':
-      return [
-        {
-          description: 'Delete a memory thread',
-          command: `${command} thread_abc123 '{"agentId":"weather-agent","resourceId":"user_123"}'`,
-        },
-      ];
-    case 'scoreCreate':
-      return [
-        {
-          description: 'Create an observability score',
-          command: `${command} '{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'`,
-        },
-      ];
-    case 'scoreList':
-      return [
-        {
-          description: 'List observability scores with pagination',
-          command: `${command} '{"page":0,"perPage":50}'`,
-        },
-        {
-          description: 'List observability scores for a run',
-          command: `${command} '{"runId":"run_123","page":0,"perPage":50}'`,
-        },
-      ];
-    case 'scoreGet':
-      return [{ description: 'Get an observability score by ID', command: `${command} score_123` }];
-    case 'datasetCreate':
-      return [{ description: 'Create a dataset', command: `${command} '{"name":"weather-eval"}'` }];
-    case 'experimentRun':
-      return [{ description: 'Run a dataset experiment', command: `${command} dataset_123 '{"name":"baseline"}'` }];
-    default:
-      return buildGenericExamples(descriptor, command);
+export function buildCommandExamples(descriptor: ApiCommandDescriptor): ApiCommandExample[] {
+  if (descriptor.examples && descriptor.examples.length > 0) {
+    return descriptor.examples;
   }
+
+  return buildGenericExamples(descriptor, `mastra api ${descriptor.name}`);
 }
 
-function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string): CliSchemaExample[] {
+function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string): ApiCommandExample[] {
   if (descriptor.list) {
     return [
       {

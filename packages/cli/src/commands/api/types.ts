@@ -28,10 +28,13 @@ export interface ApiCommandDescriptor {
   examples?: ApiCommandExample[];
 }
 
+export type ApiCommandInputMode = 'none' | 'optional' | 'required';
+
 export interface ApiCommandActionOptions {
   description: string;
-  inputRequired?: boolean;
+  input?: ApiCommandInputMode;
   list?: boolean;
+  positionals?: string[];
   pathParamsFromInput?: string[];
   defaultTimeoutMs?: number;
   examples?: ApiCommandExample[];
