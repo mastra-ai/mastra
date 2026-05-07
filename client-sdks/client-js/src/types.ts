@@ -2836,8 +2836,7 @@ export interface BuilderPickerResponse {
 /**
  * Response from GET /editor/builder/infrastructure
  *
- * Admin-only snapshot of the runtime state of Mastra-opinionated primitives
- * (channels, browser, workspaces). Used by the Studio Settings page.
+ * Agent Builder infrastructure configuration plus lightweight runtime resolution state.
  */
 export interface InfrastructureStatusResponse {
   channels: {
@@ -2845,19 +2844,27 @@ export interface InfrastructureStatusResponse {
       id: string;
       name: string;
       isConfigured: boolean;
+      routeCount: number;
     }>;
   };
   browser: {
+    type: string | null;
     provider: string | null;
     env: string | null;
     registered: boolean;
+    availableProviders: string[];
+    config: Array<{ key: string; value: string }>;
   };
-  workspaces: Array<{
-    id: string;
-    source: string;
-    agentId?: string;
-    agentName?: string;
+  workspace: {
+    type: string | null;
+    workspaceId: string | null;
+    name: string | null;
+    source: string | null;
+    registered: boolean;
     hasFilesystem: boolean;
     hasSandbox: boolean;
-  }>;
+    filesystemProvider: string | null;
+    sandboxProvider: string | null;
+    config: Array<{ key: string; value: string }>;
+  };
 }

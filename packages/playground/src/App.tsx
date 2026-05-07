@@ -35,6 +35,7 @@ import AgentBuilderCreate from './pages/agent-builder/agents/create';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import AgentBuilderFavorite from './pages/agent-builder/favorite';
+import AgentBuilderInfrastructure from './pages/agent-builder/infrastructure';
 import AgentBuilderLibrary from './pages/agent-builder/library';
 import AgentBuilderSkills from './pages/agent-builder/skills';
 import Agents from './pages/agents';
@@ -245,6 +246,16 @@ const routes = [
           {
             index: true,
             element: <AgentBuilderSkills />,
+          },
+        ],
+      },
+      {
+        path: 'infrastructure',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderInfrastructure />,
           },
         ],
       },

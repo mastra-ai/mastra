@@ -380,18 +380,29 @@ describe('GET /editor/builder/infrastructure', () => {
       getEditor: () => opts.editor,
     }) as any;
 
-  it('returns empty primitives when nothing is registered', async () => {
+  it('returns empty primitives when nothing is configured', async () => {
     const mastra = createInfraMastra({});
     const result = await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any);
 
     expect(result).toEqual({
       channels: { providers: [] },
-      browser: { provider: null, env: null, registered: false },
-      workspaces: [],
+      browser: { type: null, provider: null, env: null, registered: false, availableProviders: [], config: [] },
+      workspace: {
+        type: null,
+        workspaceId: null,
+        name: null,
+        source: null,
+        registered: false,
+        hasFilesystem: false,
+        hasSandbox: false,
+        filesystemProvider: null,
+        sandboxProvider: null,
+        config: [],
+      },
     });
   });
 
-  it('reports channel provider info', async () => {
+  it('reports configured channel provider info', async () => {
     const slack = {
       getInfo: () => ({ id: 'slack', name: 'Slack', isConfigured: true }),
     };
@@ -402,25 +413,27 @@ describe('GET /editor/builder/infrastructure', () => {
 
     const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
 
-    expect(result.channels.providers).toEqual([
-      { id: 'slack', name: 'Slack', isConfigured: true },
-      { id: 'discord', name: 'Discord', isConfigured: false },
-    ]);
+    expect(result.channels.providers).toEqual([{ id: 'slack', name: 'Slack', isConfigured: true, routeCount: 0 }]);
   });
 
-  it('falls back to map key when getInfo() is missing', async () => {
+  it('omits channel providers when getInfo() is missing', async () => {
     const provider = {}; // no getInfo
     const mastra = createInfraMastra({ channelProviders: { custom: provider } });
 
     const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
 
-    expect(result.channels.providers).toEqual([{ id: 'custom', name: 'custom', isConfigured: false }]);
+    expect(result.channels.providers).toEqual([]);
   });
 
   it('reports browser provider id, env, and registration', async () => {
     const builder = {
       getConfiguration: () => ({
-        agent: { browser: { type: 'inline', config: { provider: 'stagehand', env: 'BROWSERBASE' } } },
+        agent: {
+          browser: {
+            type: 'inline',
+            config: { provider: 'stagehand', env: 'BROWSERBASE', headless: false, timeout: 30000 },
+          },
+        },
       }),
     };
     const editor = {
@@ -431,7 +444,18 @@ describe('GET /editor/builder/infrastructure', () => {
 
     const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
 
-    expect(result.browser).toEqual({ provider: 'stagehand', env: 'BROWSERBASE', registered: true });
+    expect(result.browser).toEqual({
+      type: 'inline',
+      provider: 'stagehand',
+      env: 'BROWSERBASE',
+      registered: true,
+      availableProviders: ['stagehand'],
+      config: [
+        { key: 'env', value: 'BROWSERBASE' },
+        { key: 'headless', value: 'false' },
+        { key: 'timeout', value: '30000' },
+      ],
+    });
   });
 
   it('marks browser as not registered when provider id missing from __browsers', async () => {
@@ -448,13 +472,66 @@ describe('GET /editor/builder/infrastructure', () => {
 
     const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
 
-    expect(result.browser).toEqual({ provider: 'puppeteer', env: null, registered: false });
+    expect(result.browser).toEqual({
+      type: 'inline',
+      provider: 'puppeteer',
+      env: null,
+      registered: false,
+      availableProviders: [],
+      config: [],
+    });
   });
 
-  it('lists registered workspaces with filesystem and sandbox flags', async () => {
+  it('reports inline Agent Builder workspace provider config', async () => {
+    const builder = {
+      getConfiguration: () => ({
+        agent: {
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'builder-workspace',
+              filesystem: { provider: 'local', config: { basePath: '.mastra/workspace' } },
+              sandbox: { provider: 'daytona', config: {} },
+            },
+          },
+        },
+      }),
+    };
+    const editor = {
+      __browsers: new Map(),
+      resolveBuilder: vi.fn().mockResolvedValue(builder),
+    };
+    const mastra = createInfraMastra({ editor });
+
+    const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
+
+    expect(result.workspace).toEqual({
+      type: 'inline',
+      workspaceId: null,
+      name: 'builder-workspace',
+      source: null,
+      registered: false,
+      hasFilesystem: true,
+      hasSandbox: true,
+      filesystemProvider: 'local',
+      sandboxProvider: 'daytona',
+      config: [{ key: 'filesystem.basePath', value: '.mastra/workspace' }],
+    });
+  });
+
+  it('reports only the configured Agent Builder workspace', async () => {
+    const builder = {
+      getConfiguration: () => ({
+        agent: { workspace: { type: 'id', workspaceId: 'builder-workspace' } },
+      }),
+    };
+    const editor = {
+      __browsers: new Map(),
+      resolveBuilder: vi.fn().mockResolvedValue(builder),
+    };
     const workspaces = {
       'builder-workspace': {
-        workspace: { filesystem: {}, sandbox: {} },
+        workspace: { name: 'Builder Workspace', filesystem: {}, sandbox: {} },
         source: 'mastra',
       },
       'agent-ws': {
@@ -464,21 +541,22 @@ describe('GET /editor/builder/infrastructure', () => {
         agentName: 'Helper',
       },
     };
-    const mastra = createInfraMastra({ workspaces });
+    const mastra = createInfraMastra({ editor, workspaces });
 
     const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
 
-    expect(result.workspaces).toEqual([
-      { id: 'builder-workspace', source: 'mastra', hasFilesystem: true, hasSandbox: true },
-      {
-        id: 'agent-ws',
-        source: 'agent',
-        agentId: 'agent-1',
-        agentName: 'Helper',
-        hasFilesystem: true,
-        hasSandbox: false,
-      },
-    ]);
+    expect(result.workspace).toEqual({
+      type: 'id',
+      workspaceId: 'builder-workspace',
+      name: 'Builder Workspace',
+      source: 'mastra',
+      registered: true,
+      hasFilesystem: true,
+      hasSandbox: true,
+      filesystemProvider: 'configured',
+      sandboxProvider: 'configured',
+      config: [],
+    });
   });
 });
 

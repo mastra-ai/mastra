@@ -177,12 +177,10 @@ export const builderSettingsResponseSchema = z.object({
 });
 
 /**
- * Infrastructure status response for the admin Settings page.
+ * Infrastructure status response for Agent Builder admin diagnostics.
  *
- * Reports the runtime state of Mastra-opinionated primitives (channels,
- * browser, workspaces) so admins can sanity-check what's wired up.
- *
- * Returned by `GET /editor/builder/infrastructure`. Admin-only (`*`).
+ * Reports the Agent Builder-specific primitive configuration plus lightweight
+ * runtime resolution state where useful.
  */
 export const infrastructureStatusResponseSchema = z.object({
   channels: z.object({
@@ -191,24 +189,30 @@ export const infrastructureStatusResponseSchema = z.object({
         id: z.string(),
         name: z.string(),
         isConfigured: z.boolean(),
+        routeCount: z.number(),
       }),
     ),
   }),
   browser: z.object({
+    type: z.string().nullable(),
     provider: z.string().nullable(),
     env: z.string().nullable(),
     registered: z.boolean(),
+    availableProviders: z.array(z.string()),
+    config: z.array(z.object({ key: z.string(), value: z.string() })),
   }),
-  workspaces: z.array(
-    z.object({
-      id: z.string(),
-      source: z.string(),
-      agentId: z.string().optional(),
-      agentName: z.string().optional(),
-      hasFilesystem: z.boolean(),
-      hasSandbox: z.boolean(),
-    }),
-  ),
+  workspace: z.object({
+    type: z.string().nullable(),
+    workspaceId: z.string().nullable(),
+    name: z.string().nullable(),
+    source: z.string().nullable(),
+    registered: z.boolean(),
+    hasFilesystem: z.boolean(),
+    hasSandbox: z.boolean(),
+    filesystemProvider: z.string().nullable(),
+    sandboxProvider: z.string().nullable(),
+    config: z.array(z.object({ key: z.string(), value: z.string() })),
+  }),
 });
 
 export type InfrastructureStatus = z.infer<typeof infrastructureStatusResponseSchema>;

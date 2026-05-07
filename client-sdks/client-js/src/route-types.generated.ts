@@ -75876,21 +75876,35 @@ export type GetEditorBuilderInfrastructure_Response = {
       id: string;
       name: string;
       isConfigured: boolean;
+      routeCount: number;
     }[];
   };
   browser: {
+    type: string | null;
     provider: string | null;
     env: string | null;
     registered: boolean;
+    availableProviders: string[];
+    config: {
+      key: string;
+      value: string;
+    }[];
   };
-  workspaces: {
-    id: string;
-    source: string;
-    agentId?: string | undefined;
-    agentName?: string | undefined;
+  workspace: {
+    type: string | null;
+    workspaceId: string | null;
+    name: string | null;
+    source: string | null;
+    registered: boolean;
     hasFilesystem: boolean;
     hasSandbox: boolean;
-  }[];
+    filesystemProvider: string | null;
+    sandboxProvider: string | null;
+    config: {
+      key: string;
+      value: string;
+    }[];
+  };
 };
 
 export type GetEditorBuilderInfrastructure_Request = Simplify<

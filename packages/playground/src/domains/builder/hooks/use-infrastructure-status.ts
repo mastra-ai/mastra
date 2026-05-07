@@ -6,8 +6,8 @@ interface UseInfrastructureStatusOptions {
 }
 
 /**
- * Fetches runtime infrastructure status (channels, browser, workspaces) from
- * the server. Admin-only — the server requires the `*` permission.
+ * Fetches Agent Builder infrastructure configuration and resolution status from
+ * the server. Admin-only by default — the server requires `infrastructure:read`.
  */
 export const useInfrastructureStatus = (options?: UseInfrastructureStatusOptions) => {
   const client = useMastraClient();

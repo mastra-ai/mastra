@@ -181,64 +181,135 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
   responseType: 'json',
   responseSchema: infrastructureStatusResponseSchema,
   summary: 'Get infrastructure status',
-  description: 'Admin-only summary of channels, browser, and workspaces wired into the running Mastra server.',
+  description: 'Agent Builder infrastructure configuration and lightweight runtime status.',
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'infrastructure:read',
   handler: async ({ mastra }) => {
     try {
+      const formatConfigValue = (value: unknown): string => {
+        if (value === null || value === undefined) return 'not set';
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+        if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
+        return value.constructor?.name && value.constructor.name !== 'Object' ? value.constructor.name : 'configured';
+      };
+
+      const getProviderName = (value: unknown): string | null => {
+        if (!value) return null;
+        if (typeof value === 'object' && 'provider' in value && typeof value.provider === 'string')
+          return value.provider;
+        if (typeof value === 'object' && 'constructor' in value) {
+          const name = (value as { constructor?: { name?: string } }).constructor?.name;
+          return name && name !== 'Object' ? name : 'configured';
+        }
+        return null;
+      };
+
+      const getConfigEntries = (config: Record<string, unknown>, omittedKeys: string[] = []) =>
+        Object.entries(config)
+          .filter(([key]) => !omittedKeys.includes(key))
+          .map(([key, value]) => ({ key, value: formatConfigValue(value) }));
+
       const channelProviders = mastra.getChannelProviders() ?? {};
       const channels: InfrastructureStatus['channels'] = {
-        providers: Object.entries(channelProviders).map(([id, provider]) => {
-          const info = provider.getInfo?.();
-          return {
-            id: info?.id ?? id,
-            name: info?.name ?? id,
-            isConfigured: info?.isConfigured ?? false,
-          };
-        }),
+        providers: Object.entries(channelProviders)
+          .map(([id, provider]) => {
+            const info = provider.getInfo?.();
+            const routes = provider.getRoutes?.() ?? [];
+            return {
+              id: info?.id ?? id,
+              name: info?.name ?? id,
+              isConfigured: info?.isConfigured ?? false,
+              routeCount: routes.length,
+            };
+          })
+          .filter(provider => provider.isConfigured),
       };
 
       const editor = mastra.getEditor();
-      let browser: InfrastructureStatus['browser'] = { provider: null, env: null, registered: false };
-      if (editor) {
+      let browser: InfrastructureStatus['browser'] = {
+        type: null,
+        provider: null,
+        env: null,
+        registered: false,
+        availableProviders: [],
+        config: [],
+      };
+      let workspace: InfrastructureStatus['workspace'] = {
+        type: null,
+        workspaceId: null,
+        name: null,
+        source: null,
+        registered: false,
+        hasFilesystem: false,
+        hasSandbox: false,
+        filesystemProvider: null,
+        sandboxProvider: null,
+        config: [],
+      };
+
+      if (editor?.resolveBuilder) {
         const browsers = (editor as unknown as { __browsers?: Map<string, unknown> }).__browsers;
-        let providerId: string | null = null;
-        let env: string | null = null;
-        if (typeof editor.resolveBuilder === 'function') {
-          try {
-            const builder = await editor.resolveBuilder();
-            const browserRef = builder?.getConfiguration?.()?.agent?.browser as
-              | { type?: string; config?: { provider?: string; env?: string } }
-              | undefined;
-            if (browserRef?.type === 'inline' && browserRef.config) {
-              providerId = browserRef.config.provider ?? null;
-              env = browserRef.config.env ?? null;
+        const builder = await editor.resolveBuilder();
+        const configuration = builder?.getConfiguration?.()?.agent as
+          | {
+              browser?: { type?: string; config?: { provider?: string; env?: string } };
+              workspace?: {
+                type?: string;
+                workspaceId?: string;
+                config?: { name?: string; filesystem?: unknown; sandbox?: unknown };
+              };
             }
-          } catch {
-            // Builder not configured — leave provider/env as null.
-          }
-        }
+          | undefined;
+
+        const browserRef = configuration?.browser;
+        const browserConfig = browserRef?.config ?? {};
+        const providerId = browserConfig.provider ?? null;
         browser = {
+          type: browserRef?.type ?? null,
           provider: providerId,
-          env,
+          env: browserConfig.env ?? null,
           registered: providerId ? !!browsers?.has(providerId) : false,
+          availableProviders: browsers ? Array.from(browsers.keys()) : [],
+          config: getConfigEntries(browserConfig, ['provider']),
+        };
+
+        const workspaceRef = configuration?.workspace;
+        const workspaceConfig = workspaceRef?.config ?? {};
+        const registeredWorkspaces = mastra.listWorkspaces();
+        const registeredWorkspace = workspaceRef?.workspaceId
+          ? registeredWorkspaces[workspaceRef.workspaceId]
+          : undefined;
+        const filesystem = registeredWorkspace?.workspace.filesystem ?? workspaceConfig.filesystem;
+        const sandbox = registeredWorkspace?.workspace.sandbox ?? workspaceConfig.sandbox;
+        const filesystemConfig =
+          typeof workspaceConfig.filesystem === 'object' &&
+          workspaceConfig.filesystem &&
+          'config' in workspaceConfig.filesystem
+            ? (workspaceConfig.filesystem.config as Record<string, unknown>)
+            : {};
+        const sandboxConfig =
+          typeof workspaceConfig.sandbox === 'object' && workspaceConfig.sandbox && 'config' in workspaceConfig.sandbox
+            ? (workspaceConfig.sandbox.config as Record<string, unknown>)
+            : {};
+        workspace = {
+          type: workspaceRef?.type ?? null,
+          workspaceId: workspaceRef?.workspaceId ?? null,
+          name: workspaceConfig.name ?? registeredWorkspace?.workspace.name ?? null,
+          source: registeredWorkspace?.source ?? null,
+          registered: !!registeredWorkspace,
+          hasFilesystem: !!filesystem,
+          hasSandbox: !!sandbox,
+          filesystemProvider: getProviderName(filesystem),
+          sandboxProvider: getProviderName(sandbox),
+          config: [
+            ...getConfigEntries(filesystemConfig).map(entry => ({ ...entry, key: `filesystem.${entry.key}` })),
+            ...getConfigEntries(sandboxConfig).map(entry => ({ ...entry, key: `sandbox.${entry.key}` })),
+          ],
         };
       }
 
-      const registeredWorkspaces = mastra.listWorkspaces();
-      const workspaces: InfrastructureStatus['workspaces'] = Object.entries(registeredWorkspaces).map(
-        ([id, registered]) => ({
-          id,
-          source: registered.source,
-          ...(registered.agentId ? { agentId: registered.agentId } : {}),
-          ...(registered.agentName ? { agentName: registered.agentName } : {}),
-          hasFilesystem: !!registered.workspace.filesystem,
-          hasSandbox: !!registered.workspace.sandbox,
-        }),
-      );
-
-      return { channels, browser, workspaces };
+      return { channels, browser, workspace };
     } catch (error) {
       return handleError(error, 'Error getting infrastructure status');
     }

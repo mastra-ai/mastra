@@ -1552,8 +1552,8 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves runtime infrastructure status (channels, browser, workspaces).
-   * Admin-only — requires the `*` permission.
+   * Retrieves Agent Builder infrastructure configuration and resolution status.
+   * Requires `infrastructure:read` permission.
    * @returns Promise containing infrastructure status
    */
   public getInfrastructureStatus(): Promise<InfrastructureStatusResponse> {
