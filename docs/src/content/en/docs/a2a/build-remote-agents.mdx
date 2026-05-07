@@ -1,16 +1,16 @@
 ---
-title: "Build remote A2A agents | A2A"
+title: "Remote agents | A2A"
 description: "Expose a Mastra agent over A2A so other agents and services can discover it and send work to it."
 packages:
   - "@mastra/core"
   - "@mastra/server"
 ---
 
-# Build remote A2A agents
+# Remote agents
 
 Use A2A on the remote side when you want a Mastra agent to be callable from another agent or service over a standard protocol. Mastra handles the A2A routes for you once the agent is registered on your server.
 
-## When to use build remote A2A agents
+## When to use remote agents
 
 Use this pattern when your Mastra app owns the remote agent and you want another system to discover it through an agent card and call it through the A2A execution endpoint.
 
