@@ -9,3 +9,27 @@ export { useLatencyMetrics, type LatencyPoint } from './use-latency-metrics';
 export { useTraceVolumeMetrics, type VolumeRow } from './use-trace-volume-metrics';
 export { useScoresMetrics, type ScorerSummary, type ScoresOverTimePoint } from './use-scores-metrics';
 export { useTokenUsageByAgentMetrics, type TokenUsageByAgentRow } from './use-token-usage-by-agent-metrics';
+export { useActiveThreadsKpiMetrics } from './use-active-threads-kpi-metrics';
+export { useActiveResourcesKpiMetrics } from './use-active-resources-kpi-metrics';
+export { useTopActiveThreadsMetrics, type ActiveThreadRow } from './use-top-active-threads-metrics';
+export { useTopResourcesByThreadsMetrics, type ResourceThreadsRow } from './use-top-resources-by-threads-metrics';
+export { useDrilldown } from './use-drilldown';
+export {
+  buildLogsDrilldownUrl,
+  buildTracesDrilldownUrl,
+  narrowWindowToBucket,
+  type DrilldownScope,
+  type DrilldownWindow,
+} from '../drilldown';
+export {
+  applyMetricsPropertyFilterTokens,
+  buildMetricsDimensionalFilter,
+  clearSavedMetricsFilters,
+  createMetricsPropertyFilterFields,
+  getMetricsPropertyFilterTokens,
+  hasAnyMetricsFilterParams,
+  loadMetricsFiltersFromStorage,
+  saveMetricsFiltersToStorage,
+  type MetricsDimensionalFilter,
+  type MetricsPropertyFilterFieldId,
+} from '../metrics-filters';

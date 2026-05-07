@@ -1,5 +1,99 @@
 # @mastra/core
 
+## 1.33.0-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#16126](https://github.com/mastra-ai/mastra/pull/16126))
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v5@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v5/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)
+
+- Added A2A Agent Card signing config types for server configuration. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const mastra = new Mastra({
+    server: {
+      a2a: {
+        agentCardSigning: {
+          privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
+          protectedHeader: {
+            alg: 'ES256',
+            kid: 'agent-card-key',
+          },
+        },
+      },
+    },
+  });
+  ```
+
+- Fixed TokenLimiterProcessor crashing when counting text that contains special token strings. ([#16302](https://github.com/mastra-ai/mastra/pull/16302))
+
+- Fix nested loops in evented workflow ([#16312](https://github.com/mastra-ai/mastra/pull/16312))
+
+- Background tasks now run as evented workflows. Each task is dispatched as a workflow run that owns executor invocation, retries, and suspend/resume; pubsub topics, lifecycle event shapes, concurrency gating, and the `BackgroundTaskManager.stream()` contract are unchanged. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+  Add suspend/resume to background tasks. Tools can call `ctx.agent.suspend(data)` from `execute` to pause a task and release the concurrency slot; resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)` or `agent.resumeStreamUntilIdle(resumeData, { runId, toolCallId })`. Surfaces `background-task-suspended` / `background-task-resumed` chunks on `backgroundTaskManager.stream()` and `agent.streamUntilIdle().fullStream`.
+
+- Fixed message part ordering in agent streaming responses. Message parts (text, reasoning, tool calls) now appear in the correct order they arrived in the stream, preventing incorrect step sequencing and agent loop behavior issues. ([#16073](https://github.com/mastra-ai/mastra/pull/16073))
+
+## 1.33.0-alpha.3
+
+### Minor Changes
+
+- Added Azure OpenAI Responses API and v1 routing controls. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  Use `useResponsesAPI: true` to resolve Azure deployments through the Responses API with the Azure v1 route by default:
+
+  ```ts
+  new AzureOpenAIGateway({
+    resourceName: 'my-openai-resource',
+    apiKey: process.env.AZURE_API_KEY!,
+    useResponsesAPI: true,
+    deployments: ['my-gpt-5-4-deployment'],
+  });
+  ```
+
+  When `useDeploymentBasedUrls: false` is used directly, the gateway now defaults `apiVersion` to `"v1"` to match the AI SDK Azure provider's v1 URL route. Passing `apiVersion: "v1"` by itself keeps the existing deployment-based URL default for compatibility.
+
+- Added Azure OpenAI Responses WebSocket transport support for streaming agent and tool loops. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  Configure the Azure gateway with `useResponsesAPI: true`, then opt into WebSocket streaming per request:
+
+  ```ts
+  const stream = await agent.stream('Review this task', {
+    providerOptions: {
+      azure: {
+        transport: 'websocket',
+        websocket: { closeOnFinish: false },
+      },
+    },
+  });
+  ```
+
+  Responses WebSocket streams now preserve transport handles through agent loops, reuse explicit API-key router connections safely, clean up cancelled streams, and reject overlapping `previous_response_id` continuations on the same connection.
+
+- Fixed Azure and OpenAI Responses item handling so multi-step reasoning and tool-call histories round-trip correctly without item ID collisions. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  Added provider-neutral response item helpers to `@mastra/core/agent/message-list`. Existing in-memory message cache entries are regenerated after upgrade.
+
+## 1.33.0-alpha.2
+
+### Minor Changes
+
+- Added `processLLMRequest`, a processor hook that runs after messages are converted to the provider-facing prompt and before the model request is sent. The hook lets processors make temporary, model-aware prompt changes without mutating stored message history, memory, UI history, or later provider calls. ([#16176](https://github.com/mastra-ai/mastra/pull/16176))
+
+  `ProviderHistoryCompat` now uses this hook to prevent reasoning-history incompatibilities when switching providers. It strips reasoning parts from Cerebras-bound prompts that would otherwise be sent as rejected `reasoning_content`, and strips non-Anthropic reasoning from Anthropic-bound prompts while preserving Anthropic-native thinking blocks.
+
+### Patch Changes
+
+- Fixed a Harness issue where reopening a thread could apply the wrong model for ([#16278](https://github.com/mastra-ai/mastra/pull/16278))
+  the saved mode. Threads now reopen with the correct model for that mode,
+  including when no explicit per-mode model was selected.
+
 ## 1.33.0-alpha.1
 
 ### Patch Changes

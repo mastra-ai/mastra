@@ -631,10 +631,62 @@ async function prepareCreateResponseRequest({
   requestContext: RequestContext;
 }): Promise<PreparedCreateResponseRequest> {
   const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
-  const agent = await resolveResponseAgent({
-    mastra,
-    agentId: body.agent_id,
-  });
+  let previousResponseTurnRecord: ResponseTurnRecord | null = null;
+  let resolvedAgent: Agent<any, any, any, any> | null = null;
+
+  if (body.previous_response_id) {
+    if (body.agent_id) {
+      resolvedAgent = await resolveResponseAgent({ mastra, agentId: body.agent_id });
+      previousResponseTurnRecord = await findResponseTurnRecord({
+        agent: resolvedAgent,
+        responseId: body.previous_response_id,
+        requestContext,
+      });
+
+      if (!previousResponseTurnRecord) {
+        const owningResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
+          mastra,
+          responseId: body.previous_response_id,
+          requestContext,
+        });
+
+        if (owningResponseTurnRecord) {
+          if (owningResponseTurnRecord.metadata.agentId === body.agent_id) {
+            previousResponseTurnRecord = owningResponseTurnRecord;
+          } else {
+            throw new HTTPException(400, {
+              message: `Stored response ${body.previous_response_id} belongs to agent ${owningResponseTurnRecord.metadata.agentId}, not ${body.agent_id}`,
+            });
+          }
+        }
+
+        if (!previousResponseTurnRecord) {
+          throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+        }
+      }
+    } else {
+      if (!mastra) {
+        throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
+      }
+
+      previousResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
+        mastra,
+        responseId: body.previous_response_id,
+        requestContext,
+      });
+
+      if (!previousResponseTurnRecord) {
+        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+      }
+    }
+  }
+
+  const agent =
+    resolvedAgent ??
+    (await resolveResponseAgent({
+      mastra,
+      agentId: body.agent_id ?? previousResponseTurnRecord?.metadata.agentId,
+    }));
   const resolvedModel = await agent.getModel({
     requestContext,
     modelConfig: body.model,
@@ -670,14 +722,6 @@ async function prepareCreateResponseRequest({
             : 'conversation_id requires the target agent to have memory storage configured',
       })
     : null;
-  const previousResponseTurnRecord = body.previous_response_id
-    ? await findResponseTurnRecord({ agent, responseId: body.previous_response_id, requestContext })
-    : null;
-
-  if (body.previous_response_id && !previousResponseTurnRecord) {
-    throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
-  }
-
   const configuredTools = mapMastraToolsToResponseTools(
     (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
   );

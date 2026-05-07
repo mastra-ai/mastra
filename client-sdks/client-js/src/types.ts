@@ -2656,7 +2656,14 @@ export interface DeletePromptBlockVersionResponse {
   message: string;
 }
 
-export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+export type BackgroundTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
