@@ -463,6 +463,7 @@ export function MastraRuntimeProvider({
     networkToolCallApprovals,
   } = useChat({
     agentId,
+    threadId,
     initialMessages,
     requestContext: chatRequestContext,
     onSignalSent: addPendingSignal,

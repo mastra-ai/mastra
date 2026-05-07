@@ -19,6 +19,7 @@ import { useMastraClient } from '@/mastra-client-context';
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
+  threadId?: string;
   initialMessages?: MastraUIMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
@@ -56,6 +57,7 @@ export type NetworkArgs = SharedArgs & {
 export const useChat = ({
   agentId,
   resourceId,
+  threadId,
   initialMessages,
   requestContext: propsRequestContext,
   onSignalSent,
@@ -131,78 +133,94 @@ export const useChat = ({
     _threadSubscriptionPromiseRef.current = null;
   }, []);
 
-  useEffect(() => closeThreadSubscription, [agentId, resourceId, closeThreadSubscription]);
+  const processStreamChunk = useCallback(
+    async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+      setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-  const processStreamChunk = async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
-    setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-    if (chunk.type === 'data-user-message' && 'data' in chunk && typeof chunk.data?.id === 'string') {
-      onSignalEcho?.(chunk.data.id);
-    }
-
-    if (chunk.type === 'start') {
-      setIsRunning(true);
-      if ('runId' in chunk && typeof chunk.runId === 'string') {
-        _currentRunId.current = chunk.runId;
+      if (chunk.type === 'data-user-message' && 'data' in chunk && typeof chunk.data?.id === 'string') {
+        onSignalEcho?.(chunk.data.id);
       }
-    }
 
-    if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
-      setIsRunning(false);
-    }
-
-    void (onChunk ?? _onChunk.current)?.(chunk);
-  };
-
-  const ensureThreadSubscription = async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
-    const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
-    if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
-      await _threadSubscriptionPromiseRef.current;
-      return;
-    }
-
-    _threadSubscriptionAbortRef.current?.abort();
-    const subscriptionAbort = new AbortController();
-    _threadSubscriptionAbortRef.current = subscriptionAbort;
-    _threadSubscriptionKeyRef.current = subscriptionKey;
-
-    const clientWithAbort = new MastraClient({
-      ...baseClient!.options,
-      abortSignal: subscriptionAbort.signal,
-    });
-    const subscriptionAgent = clientWithAbort.getAgent(agentId);
-
-    _threadSubscriptionPromiseRef.current = subscriptionAgent
-      .subscribeToThread({ resourceId, threadId })
-      .then(response => {
-        void response
-          .processDataStream({
-            onChunk: chunk => processStreamChunk(chunk),
-          })
-          .catch(error => {
-            if ((error as { name?: string }).name !== 'AbortError') {
-              console.error('[useChat] Thread subscription failed', error);
-              setIsRunning(false);
-            }
-          })
-          .finally(() => {
-            if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-              _threadSubscriptionAbortRef.current = null;
-              _threadSubscriptionKeyRef.current = undefined;
-              _threadSubscriptionPromiseRef.current = null;
-            }
-          });
-      })
-      .catch(error => {
-        if ((error as { name?: string }).name !== 'AbortError') {
-          console.error('[useChat] Thread subscription failed', error);
-          setIsRunning(false);
+      if (chunk.type === 'start') {
+        setIsRunning(true);
+        if ('runId' in chunk && typeof chunk.runId === 'string') {
+          _currentRunId.current = chunk.runId;
         }
-        throw error;
-      });
+      }
 
-    await _threadSubscriptionPromiseRef.current;
-  };
+      if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+        setIsRunning(false);
+      }
+
+      void (onChunk ?? _onChunk.current)?.(chunk);
+    },
+    [onSignalEcho],
+  );
+
+  const ensureThreadSubscription = useCallback(
+    async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
+      if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
+        await _threadSubscriptionPromiseRef.current;
+        return;
+      }
+
+      _threadSubscriptionAbortRef.current?.abort();
+      const subscriptionAbort = new AbortController();
+      _threadSubscriptionAbortRef.current = subscriptionAbort;
+      _threadSubscriptionKeyRef.current = subscriptionKey;
+
+      const clientWithAbort = new MastraClient({
+        ...baseClient!.options,
+        abortSignal: subscriptionAbort.signal,
+      });
+      const subscriptionAgent = clientWithAbort.getAgent(agentId);
+
+      _threadSubscriptionPromiseRef.current = subscriptionAgent
+        .subscribeToThread({ resourceId, threadId })
+        .then(response => {
+          void response
+            .processDataStream({
+              onChunk: chunk => processStreamChunk(chunk),
+            })
+            .catch(error => {
+              if ((error as { name?: string }).name !== 'AbortError') {
+                console.error('[useChat] Thread subscription failed', error);
+                setIsRunning(false);
+              }
+            })
+            .finally(() => {
+              if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+                _threadSubscriptionAbortRef.current = null;
+                _threadSubscriptionKeyRef.current = undefined;
+                _threadSubscriptionPromiseRef.current = null;
+              }
+            });
+        })
+        .catch(error => {
+          if ((error as { name?: string }).name !== 'AbortError') {
+            console.error('[useChat] Thread subscription failed', error);
+            setIsRunning(false);
+          }
+          throw error;
+        });
+
+      await _threadSubscriptionPromiseRef.current;
+    },
+    [agentId, baseClient, processStreamChunk],
+  );
+
+  useEffect(() => closeThreadSubscription, [agentId, resourceId, threadId, closeThreadSubscription]);
+
+  useEffect(() => {
+    if (!threadId) return;
+
+    void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
+      if ((error as { name?: string }).name !== 'AbortError') {
+        console.error('[useChat] Thread subscription failed', error);
+      }
+    });
+  }, [agentId, ensureThreadSubscription, resourceId, threadId]);
 
   const generate = async ({
     coreUserMessages,

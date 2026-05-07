@@ -34,6 +34,19 @@ export const finishStreamingAssistantMessage = (conversation: MastraUIMessage[])
   return [...conversation.slice(0, -1), markStreamingPartsDone(lastMessage)];
 };
 
+const appendAssistantMessage = (
+  conversation: MastraUIMessage[],
+  message: Omit<MastraUIMessage, 'role' | 'metadata'>,
+  metadata: MastraUIMessageMetadata,
+): MastraUIMessage[] => [
+  ...conversation,
+  {
+    ...message,
+    role: 'assistant',
+    metadata,
+  },
+];
+
 // Helper function to map workflow stream chunks to watch result format
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
@@ -332,8 +345,6 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'text-start': {
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
       const textId = chunk.payload.id || `text-${Date.now()}`;
 
       const newTextPart: MastraExtendedTextPart = {
@@ -344,15 +355,13 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         providerMetadata: chunk.payload.providerMetadata,
       };
 
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(result, { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] }, metadata);
+      }
+
       // If the last message is a completion/isTaskComplete result message, start a new assistant message
       if (lastMessage.metadata?.completionResult) {
-        const newMessage: MastraUIMessage = {
-          id: `start-${chunk.runId}-${Date.now()}`,
-          role: 'assistant',
-          parts: [newTextPart],
-          metadata,
-        };
-        return [...result, newMessage];
+        return appendAssistantMessage(result, { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] }, metadata);
       }
 
       const parts = [...lastMessage.parts];
@@ -386,10 +395,20 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      const textId = chunk.payload.id;
+
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        const newTextPart: MastraExtendedTextPart = {
+          type: 'text',
+          text: chunk.payload.text,
+          state: 'streaming',
+          textId: textId,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        return appendAssistantMessage(result, { id: `text-${chunk.runId}-${Date.now()}`, parts: [newTextPart] }, metadata);
+      }
 
       const parts = [...lastMessage.parts];
-      const textId = chunk.payload.id;
 
       let textPartIndex = textId
         ? parts.findLastIndex(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)

@@ -784,7 +784,7 @@ describe('toUIMessage', () => {
       });
     });
 
-    it('should return unchanged if no assistant message for text chunks', () => {
+    it('should create an assistant message for text chunks after a user message', () => {
       const chunk: ChunkType = {
         type: 'text-delta',
         payload: {
@@ -805,10 +805,23 @@ describe('toUIMessage', () => {
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
-      expect(result).toEqual(conversation);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(conversation[0]);
+      expect(result[1]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'Hello',
+            state: 'streaming',
+            textId: 'text-1',
+          },
+        ],
+        metadata: baseMetadata,
+      });
     });
 
-    it('should return unchanged for empty conversation', () => {
+    it('should create an assistant message for text chunks in an empty conversation', () => {
       const chunk: ChunkType = {
         type: 'text-delta',
         payload: {
@@ -823,7 +836,64 @@ describe('toUIMessage', () => {
 
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
-      expect(result).toEqual([]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'Hello',
+            state: 'streaming',
+            textId: 'text-1',
+          },
+        ],
+        metadata: baseMetadata,
+      });
+    });
+
+    it('should append assistant text below echoed signal user messages', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'assistant-before-signal',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Before signal', state: 'streaming', textId: 'text-1' } as MastraExtendedTextPart],
+          metadata: baseMetadata,
+        },
+        {
+          id: 'signal-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'follow up' }],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: {
+          type: 'text-delta',
+          payload: {
+            id: 'text-2',
+            text: 'After signal',
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result.map(message => message.role)).toEqual(['assistant', 'user', 'assistant']);
+      expect(result[0].parts).toEqual(conversation[0].parts);
+      expect(result[2]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'After signal',
+            state: 'streaming',
+            textId: 'text-2',
+          },
+        ],
+      });
     });
   });
 
