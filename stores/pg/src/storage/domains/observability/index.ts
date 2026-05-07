@@ -250,89 +250,151 @@ export class ObservabilityPG extends ObservabilityStorage {
   }
 
   async getEntityTypes(_args: GetEntityTypesArgs): Promise<GetEntityTypesResponse> {
-    const tableName = getTableName({
-      indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.#schema),
-    });
-    const rows = await this.#db.client.manyOrNone<{ entityType: string }>(
-      `SELECT DISTINCT "entityType" FROM ${tableName} WHERE "entityType" IS NOT NULL ORDER BY "entityType"`,
-    );
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const rows = await this.#db.client.manyOrNone<{ entityType: string }>(
+        `SELECT DISTINCT "entityType" FROM ${tableName} WHERE "entityType" IS NOT NULL ORDER BY "entityType"`,
+      );
 
-    const validTypes = new Set(Object.values(EntityType));
-    const entityTypes = rows
-      .map(row => row.entityType)
-      .filter((entityType): entityType is EntityType => validTypes.has(entityType as EntityType));
+      const validTypes = new Set(Object.values(EntityType));
+      const entityTypes = rows
+        .map(row => row.entityType)
+        .filter((entityType): entityType is EntityType => validTypes.has(entityType as EntityType));
 
-    return { entityTypes };
+      return { entityTypes };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_ENTITY_TYPES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Failed to fetch entityTypes from storage',
+        },
+        error,
+      );
+    }
   }
 
   async getEntityNames(args: GetEntityNamesArgs): Promise<GetEntityNamesResponse> {
-    const tableName = getTableName({
-      indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.#schema),
-    });
-    const conditions = [`"entityName" IS NOT NULL`];
-    const params: string[] = [];
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const conditions = [`"entityName" IS NOT NULL`];
+      const params: string[] = [];
 
-    if (args.entityType) {
-      params.push(args.entityType);
-      conditions.push(`"entityType" = $${params.length}`);
+      if (args.entityType) {
+        params.push(args.entityType);
+        conditions.push(`"entityType" = $${params.length}`);
+      }
+
+      const rows = await this.#db.client.manyOrNone<{ entityName: string }>(
+        `SELECT DISTINCT "entityName" FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "entityName"`,
+        params,
+      );
+
+      return { names: rows.map(row => row.entityName) };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_ENTITY_NAMES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Failed to fetch entityNames from storage',
+          ...(args.entityType ? { details: { entityType: args.entityType } } : {}),
+        },
+        error,
+      );
     }
-
-    const rows = await this.#db.client.manyOrNone<{ entityName: string }>(
-      `SELECT DISTINCT "entityName" FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "entityName"`,
-      params,
-    );
-
-    return { names: rows.map(row => row.entityName) };
   }
 
   async getServiceNames(_args: GetServiceNamesArgs): Promise<GetServiceNamesResponse> {
-    const tableName = getTableName({
-      indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.#schema),
-    });
-    const rows = await this.#db.client.manyOrNone<{ serviceName: string }>(
-      `SELECT DISTINCT "serviceName" FROM ${tableName} WHERE "serviceName" IS NOT NULL ORDER BY "serviceName"`,
-    );
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const rows = await this.#db.client.manyOrNone<{ serviceName: string }>(
+        `SELECT DISTINCT "serviceName" FROM ${tableName} WHERE "serviceName" IS NOT NULL ORDER BY "serviceName"`,
+      );
 
-    return { serviceNames: rows.map(row => row.serviceName) };
+      return { serviceNames: rows.map(row => row.serviceName) };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_SERVICE_NAMES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Failed to fetch serviceNames from storage',
+        },
+        error,
+      );
+    }
   }
 
   async getEnvironments(_args: GetEnvironmentsArgs): Promise<GetEnvironmentsResponse> {
-    const tableName = getTableName({
-      indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.#schema),
-    });
-    const rows = await this.#db.client.manyOrNone<{ environment: string }>(
-      `SELECT DISTINCT "environment" FROM ${tableName} WHERE "environment" IS NOT NULL ORDER BY "environment"`,
-    );
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const rows = await this.#db.client.manyOrNone<{ environment: string }>(
+        `SELECT DISTINCT "environment" FROM ${tableName} WHERE "environment" IS NOT NULL ORDER BY "environment"`,
+      );
 
-    return { environments: rows.map(row => row.environment) };
+      return { environments: rows.map(row => row.environment) };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_ENVIRONMENTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Failed to fetch environments from storage',
+        },
+        error,
+      );
+    }
   }
 
   async getTags(args: GetTagsArgs): Promise<GetTagsResponse> {
-    const tableName = getTableName({
-      indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.#schema),
-    });
-    const conditions = [`"tags" IS NOT NULL`, `jsonb_typeof("tags") = 'array'`];
-    const params: string[] = [];
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const conditions = [`"tags" IS NOT NULL`, `jsonb_typeof("tags") = 'array'`];
+      const params: string[] = [];
 
-    if (args.entityType) {
-      params.push(args.entityType);
-      conditions.push(`"entityType" = $${params.length}`);
+      if (args.entityType) {
+        params.push(args.entityType);
+        conditions.push(`"entityType" = $${params.length}`);
+      }
+
+      const rows = await this.#db.client.manyOrNone<{ tag: string }>(
+        `SELECT DISTINCT jsonb_array_elements_text("tags") AS tag
+        FROM ${tableName}
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY tag`,
+        params,
+      );
+
+      return { tags: rows.map(row => row.tag) };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_TAGS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Failed to fetch tags from storage',
+          ...(args.entityType ? { details: { entityType: args.entityType } } : {}),
+        },
+        error,
+      );
     }
-
-    const rows = await this.#db.client.manyOrNone<{ tag: string }>(
-      `SELECT DISTINCT jsonb_array_elements_text("tags") AS tag
-      FROM ${tableName}
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY tag`,
-      params,
-    );
-
-    return { tags: rows.map(row => row.tag) };
   }
 
   public override get tracingStrategy(): {
