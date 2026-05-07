@@ -1,4 +1,4 @@
-export { AgentChannels } from './agent-channels';
+export { AgentChannels, type ChannelWebhookEventOptions } from './agent-channels';
 export type {
   ChannelAdapterConfig,
   ChannelConfig,

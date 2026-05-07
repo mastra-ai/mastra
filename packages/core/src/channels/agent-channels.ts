@@ -1,4 +1,5 @@
 import type { Chat, Adapter, CardElement, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -115,6 +116,21 @@ export interface ChannelHandlers {
    */
   onSubscribedMessage?: ChannelHandlerConfig;
 }
+
+/** Options for {@link AgentChannels.handleWebhookEvent}. */
+export interface ChannelWebhookEventOptions {
+  waitUntil?: (p: Promise<unknown>) => void;
+  /**
+   * Agent that handles this webhook (streaming, tools). Defaults to the channels owner.
+   * Stored on the Mastra thread so tool approvals and later messages resolve the same agent
+   * when this option is omitted.
+   */
+  agent?: Agent<any, any, any, any>;
+}
+
+const CHANNEL_THREAD_AGENT_ID_KEY = 'channel_agentId';
+
+const channelWebhookAgentOverride = new AsyncLocalStorage<Agent<any, any, any, any>>();
 
 /** Configuration for agent chat channels. */
 export interface ChannelConfig {
@@ -566,6 +582,9 @@ export class AgentChannels {
             mastra,
           });
 
+          const actionAgent = this.resolveAgentForChannel(mastra, mastraThread);
+          await this.persistChannelAgentThreadMetadata(mastra, mastraThread, platform, actionAgent.id);
+
           // Find the runId from pendingToolApprovals in message history
           const storage = mastra.getStorage();
           const memoryStore = storage ? await storage.getStore('memory') : undefined;
@@ -651,7 +670,7 @@ export class AgentChannels {
           } satisfies ChannelContext);
           // Resume the agent stream BEFORE editing the card —
           // if the snapshot is gone (e.g. duplicate click), we bail without mangling the card
-          const resumedStream = await this.agent.approveToolCall({
+          const resumedStream = await actionAgent.approveToolCall({
             runId,
             toolCallId,
             requestContext,
@@ -782,13 +801,13 @@ export class AgentChannels {
    *
    * @param platform - The platform name (e.g., 'slack')
    * @param request - The raw HTTP request
-   * @param options - Optional execution context for serverless environments
+   * @param options - Optional execution context and per-request agent override
    * @returns The response from the Chat SDK webhook handler
    */
   async handleWebhookEvent(
     platform: string,
     request: Request,
-    options?: { waitUntil?: (p: Promise<unknown>) => void },
+    options?: ChannelWebhookEventOptions,
   ): Promise<Response> {
     // Ensure initialization is complete
     if (this.initPromise) {
@@ -819,7 +838,12 @@ export class AgentChannels {
       });
     }
 
-    return webhookHandler(request, options);
+    const { agent: agentOverride, waitUntil } = options ?? {};
+    const handlerOptions = waitUntil ? { waitUntil } : undefined;
+    if (agentOverride) {
+      return channelWebhookAgentOverride.run(agentOverride, () => webhookHandler(request, handlerOptions));
+    }
+    return webhookHandler(request, handlerOptions);
   }
 
   /**
@@ -844,6 +868,48 @@ export class AgentChannels {
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
+
+  private resolveAgentForChannel(mastra: Mastra, mastraThread: StorageThreadType): Agent<any, any, any, any> {
+    const fromWebhook = channelWebhookAgentOverride.getStore();
+    if (fromWebhook) return fromWebhook;
+
+    const storedId = mastraThread.metadata?.[CHANNEL_THREAD_AGENT_ID_KEY];
+    if (typeof storedId === 'string' && storedId.length > 0) {
+      try {
+        return mastra.getAgentById(storedId as any);
+      } catch {
+        // Stale or unknown id — use the channels owner.
+      }
+    }
+    return this.agent;
+  }
+
+  private async persistChannelAgentThreadMetadata(
+    mastra: Mastra,
+    mastraThread: StorageThreadType,
+    platform: string,
+    agentId: string,
+  ): Promise<void> {
+    if (mastraThread.metadata?.[CHANNEL_THREAD_AGENT_ID_KEY] === agentId) return;
+
+    const storage = mastra.getStorage();
+    if (!storage) return;
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) return;
+
+    await memoryStore.updateThread({
+      id: mastraThread.id,
+      title: mastraThread.title ?? `${platform} conversation`,
+      metadata: {
+        ...mastraThread.metadata,
+        [CHANNEL_THREAD_AGENT_ID_KEY]: agentId,
+      },
+    });
+    mastraThread.metadata = {
+      ...mastraThread.metadata,
+      [CHANNEL_THREAD_AGENT_ID_KEY]: agentId,
+    };
+  }
 
   /**
    * Resolve the adapter for the current conversation from request context.
@@ -888,7 +954,6 @@ export class AgentChannels {
   }
 
   private async processChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
-    const agent = this.agent;
     const platform = sdkThread.adapter.name;
 
     // Map to a Mastra thread for memory/history
@@ -901,6 +966,9 @@ export class AgentChannels {
       resourceId: `${platform}:${message.author.userId}`,
       mastra,
     });
+
+    const agent = this.resolveAgentForChannel(mastra, mastraThread);
+    await this.persistChannelAgentThreadMetadata(mastra, mastraThread, platform, agent.id);
 
     // Use the thread's resourceId for memory, not the current message author.
     // In multi-user threads (e.g. Slack channels), the thread is owned by whoever
