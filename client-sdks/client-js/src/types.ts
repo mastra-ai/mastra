@@ -624,6 +624,11 @@ export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
+  /**
+   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
+   * to `getMemoryThread({ threadId, agentId })` is used.
+   */
+  agentId?: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -648,6 +653,11 @@ export interface CloneMemoryThreadParams {
       messageIds?: string[];
     };
   };
+  /**
+   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
+   * to `getMemoryThread({ threadId, agentId })` is used.
+   */
+  agentId?: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 

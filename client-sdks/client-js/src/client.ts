@@ -349,15 +349,21 @@ export class MastraClient extends BaseResource {
 
   public deleteThread(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts:
+      | { agentId: string; networkId?: never; requestContext?: RequestContext | Record<string, any> }
+      | { networkId: string; agentId?: never; requestContext?: RequestContext | Record<string, any> },
   ): Promise<{ success: boolean; message: string }> {
-    let url = '';
-
-    if (opts.agentId) {
-      url = `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+    if (!opts || (!opts.agentId && !opts.networkId)) {
+      throw new Error(
+        'MastraClient.deleteThread() requires either an agentId or a networkId. ' +
+          'The server cannot resolve which memory store owns the thread without one.',
+      );
     }
+
+    const url = opts.agentId
+      ? `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`
+      : `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+
     return this.request(url, { method: 'DELETE' });
   }
 
