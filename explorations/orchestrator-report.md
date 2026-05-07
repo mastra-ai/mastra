@@ -1,5 +1,106 @@
 # Mastra Orchestrator: Architecture Analysis
 
+> **Status: historical exploration (May 2026).** This document was the design
+> exploration that preceded the standalone-worker / push-capable-PubSub work
+> on the `mastra-orchestrator` branch. It is preserved here as a record of the
+> reasoning. The shipped implementation diverged from this plan in several
+> places — see [Implementation Status](#implementation-status-may-2026) below
+> before treating any later section as current truth.
+
+---
+
+## Implementation Status (May 2026)
+
+What actually shipped on `mastra-orchestrator` vs. what this report proposed.
+
+### Shipped
+
+- **`MastraWorker` base class + concrete workers** (`packages/core/src/worker/`)
+  - `OrchestrationWorker` — wraps `WorkflowEventProcessor`, subscribes to the
+    `workflows` topic via `PullTransport`.
+  - `SchedulerWorker` — wraps `WorkflowScheduler`.
+  - `BackgroundTaskWorker` — reuses Mastra's `BackgroundTaskManager`; wires
+    static tool executors so a remote worker can resolve tool implementations
+    by name.
+- **`MASTRA_WORKERS` env filter + `Mastra.startWorkers(name?)`** — workers are
+  always constructed but only started when the filter (env or arg) admits them.
+  `MASTRA_WORKERS=false` disables all event processing.
+- **Step-execution strategies** (`packages/core/src/worker/strategies/`)
+  - `InProcessStrategy` — used inside the server process.
+  - `HttpRemoteStrategy` — used by standalone orchestrator workers when
+    `MASTRA_STEP_EXECUTION_URL` is set; auth via `MASTRA_WORKER_AUTH_TOKEN`
+    forwarded through the framework's existing auth provider.
+- **Server step-execution endpoint** —
+  `POST /api/workflows/:workflowId/runs/:runId/steps/execute` in
+  `packages/server/src/server/handlers/workflows.ts`. Uses a per-`Mastra`
+  cached `InProcessStrategy`.
+- **Push-capable PubSub** (replaces "Hook mode" — see Diverged below)
+  - `PubSub.supportedModes: ('pull' | 'push')[]` (default `['pull']`).
+  - `Mastra.handleWorkflowEvent(event)` public entrypoint.
+  - `POST /api/workflows/events` route in
+    `packages/server/src/server/handlers/workflows.ts` for brokers that push
+    over HTTP.
+  - For push-only PubSub, `Mastra` skips auto-creating `OrchestrationWorker`
+    and instead subscribes `handleWorkflowEvent` directly.
+- **Redis Streams PubSub** (`pubsub/redis-streams/`)
+  - Pull-only. Late-join consumer groups anchor at `'0'`. `XAUTOCLAIM`-based
+    reclaim loop. Configurable `maxDeliveryAttempts` (with `0`/`Infinity`
+    semantics). `MAXLEN ~` trim on publish. Per-topic unsubscribe.
+- **Cross-process integration tests** (`pubsub/redis-streams/src/*.test.ts`)
+  driven through the real CLI deployment shape: the test fixture is a
+  `cli-project/src/mastra/index.ts` that mirrors what users write, plus two
+  generic entry files (`app.server.entry.ts`, `app.worker.entry.ts`) that
+  mirror `BuildBundler` / `WorkerBundler` output. There are no per-role
+  hand-written entry files.
+- **CLI** — `mastra worker` command, `WorkerBundler`, with role selection via
+  `--name` / `MASTRA_WORKERS`.
+- **Background-task cross-process execution** —
+  `BackgroundTaskManager.staticExecutors` registry resolves tool
+  implementations by name on a worker that did not produce the task. The
+  internal `__background-task` workflow's `executeStep` falls back to
+  `manager.getStaticExecutor(task.toolName)` when the per-task closure is
+  unavailable.
+
+### Diverged from the report
+
+- **No `WorkerSubsystem` abstraction.** The report proposed one `MastraWorker`
+  containing pluggable subsystems (Orchestration, Scheduler, BackgroundTask).
+  The shipped design instead has **three concrete `MastraWorker` subclasses**.
+  Each is independently deployable; composition happens in the `Mastra`
+  constructor and via `MASTRA_WORKERS`. The "subsystem" layer was dropped as
+  unnecessary indirection.
+- **No "Hook mode" / `PushTransport` / `StateManager` / `JoinTracker`.** The
+  report's serverless story was a stateless HTTP webhook that loaded full run
+  state per invocation. That was abandoned in favor of letting push-capable
+  brokers (in-process emitter, GCP Pub/Sub push) deliver events to a normal
+  HTTP route that calls `Mastra.handleWorkflowEvent`. The orchestrator state
+  machine continues to live inside the process that handles the event;
+  serverless deployments simply scale that process.
+- **No `@mastra/orchestrator` package.** Worker abstractions live in
+  `@mastra/core/worker`. Standalone deployment is a CLI mode of the user's
+  existing Mastra app, not a separate package.
+- **Worker-to-server auth uses the framework's existing auth provider** rather
+  than a dedicated worker-secret machinery. An earlier iteration shipped a
+  `MASTRA_WORKER_SECRET` pathway; it was removed because it duplicated the
+  existing `experimental_auth` flow.
+
+### Still future / not shipped here
+
+- **Phase 5 — durable timers.** `setTimeout`-based sleeps in evented workflows
+  are unchanged.
+- **Cloud-specific PubSub adapters** (GCP Pub/Sub package, SNS/EventBridge,
+  SQS). The push-capable interface is in place, but no new broker package
+  ships in this branch beyond Redis Streams.
+- **`mastra worker temporal`** as a unified abstraction. `@mastra/temporal`
+  remains a thin library; the user owns the Temporal worker process. The
+  symmetry between `OrchestrationWorker` and a hypothetical `TemporalWorker`
+  was judged aesthetic rather than real (Temporal owns its own scheduling and
+  durability).
+- **Operational features** listed in the original "What This Does NOT Cover"
+  section (multi-tenancy, versioning, blue/green, autoscaling, DLQs, etc.).
+
+---
+
 ## What Are We Trying to Do?
 
 Decouple **workflow orchestration** (deciding what step runs next) from **step execution** (actually running the step). Today both happen in-process inside the Mastra Server. The diagram moves orchestration into a separate, independently scalable component — the **Orchestrator** — that coordinates via PubSub and delegates step execution back to the Server via HTTP.
