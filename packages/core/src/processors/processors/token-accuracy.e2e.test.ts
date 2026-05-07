@@ -134,7 +134,9 @@ describe('TokenLimiterProcessor', () => {
   async function expectTokenEstimate(
     config: Parameters<typeof generateConversationHistory>[0],
     agent: Agent,
-    accuracyMargin: number = 2,
+    // tokenx is ~96% accurate vs the model's actual BPE count, so the default margin is wider than
+    // it was when this suite ran against js-tiktoken. Heavy tool-call cases use a higher override.
+    accuracyMargin: number = 8,
   ) {
     const { messagesV2, fakeCore } = generateConversationHistory(config);
 
@@ -165,7 +167,7 @@ describe('TokenLimiterProcessor', () => {
     tools: { calculatorTool },
   });
 
-  describe.concurrent(`98% accuracy`, () => {
+  describe.concurrent(`tokenx accuracy vs model promptTokens`, () => {
     it(
       `20 messages, no tools`,
       {
@@ -263,7 +265,7 @@ describe('TokenLimiterProcessor', () => {
             threadId: '5',
           },
           agent,
-          12, // Higher margin due to LLM token counting variability with many tool calls
+          20, // Higher margin: many tool calls + tokenx's heuristic estimation amplify variance
         );
       },
     );
