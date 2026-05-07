@@ -1,4 +1,4 @@
-import type { ApiCommandDescriptor } from './commands.js';
+import type { ApiCommandDescriptor } from './types.js';
 
 const WORKFLOW_STATUS_MAP: Record<string, string> = {
   completed: 'success',

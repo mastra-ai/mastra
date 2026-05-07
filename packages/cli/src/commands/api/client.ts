@@ -1,5 +1,5 @@
-import type { ApiCommandDescriptor } from './commands.js';
 import { ApiCliError, toApiCliError } from './errors.js';
+import type { ApiCommandDescriptor } from './types.js';
 
 export interface ApiRequestOptions {
   baseUrl: string;
