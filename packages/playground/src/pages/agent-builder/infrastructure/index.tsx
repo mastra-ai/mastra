@@ -146,22 +146,17 @@ export const AgentBuilderInfrastructure = () => {
                         <Txt variant="ui-sm" className="font-medium">
                           {titleCase(data.browser.provider)}
                         </Txt>
-                        <Txt variant="ui-xs" className="text-neutral3">
-                          Browser provider selected for Agent Builder automation.
-                        </Txt>
                       </div>
                       <StatusBadge
                         ok={data.browser.registered}
                         label={data.browser.registered ? 'Provider available' : 'Provider missing'}
                       />
                     </div>
-                    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
-                      <Detail label="Config type" value={titleCase(data.browser.type)} />
-                      <Detail
-                        label="Environment"
-                        value={data.browser.env ? titleCase(data.browser.env) : 'Provider default'}
-                      />
-                    </div>
+                    {data.browser.env ? (
+                      <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
+                        <Detail label="Environment" value={titleCase(data.browser.env)} />
+                      </div>
+                    ) : null}
                     <ConfigDetails entries={data.browser.config} />
                   </div>
                 )}
@@ -185,9 +180,6 @@ export const AgentBuilderInfrastructure = () => {
                       <div className="flex flex-col gap-1">
                         <Txt variant="ui-sm" className="font-medium">
                           {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
-                        </Txt>
-                        <Txt variant="ui-xs" className="text-neutral3">
-                          Type: {titleCase(data.workspace.type)}
                         </Txt>
                       </div>
                       <div className="flex gap-2">
