@@ -207,6 +207,7 @@ function MetricsContent() {
       if (field.kind === 'pick-multi') {
         return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
       }
+      if (field.kind === 'multi-select') return { fieldId: token.fieldId, value: [] };
       return token;
     });
     setFilterTokens(neutralTokens);

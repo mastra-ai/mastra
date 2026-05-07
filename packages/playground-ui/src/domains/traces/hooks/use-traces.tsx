@@ -1,16 +1,10 @@
-import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type { ListBranchesArgs, ListBranchesResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
-
-type ListBranchesArgs = ListTracesArgs;
-type ListBranchesResponse = Omit<ListTracesResponse, 'spans'> & {
-  branches?: ListTracesResponse['spans'];
-  spans?: never;
-};
 
 const fetchTracesFn = async ({
   client,
@@ -32,9 +26,7 @@ const fetchTracesFn = async ({
   };
 
   if (listMode === 'branches') {
-    return (
-      client as unknown as { listBranches: (args: ListBranchesArgs) => Promise<ListBranchesResponse> }
-    ).listBranches(params as ListBranchesArgs);
+    return client.listBranches(params as ListBranchesArgs);
   }
 
   return client.listTraces(params as ListTracesArgs);
