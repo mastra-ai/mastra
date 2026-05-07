@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 1.33.0-alpha.3
+
+### Minor Changes
+
+- Added Azure OpenAI Responses API and v1 routing controls. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  Use `useResponsesAPI: true` to resolve Azure deployments through the Responses API with the Azure v1 route by default:
+
+  ```ts
+  new AzureOpenAIGateway({
+    resourceName: 'my-openai-resource',
+    apiKey: process.env.AZURE_API_KEY!,
+    useResponsesAPI: true,
+    deployments: ['my-gpt-5-4-deployment'],
+  });
+  ```
+
+  When `useDeploymentBasedUrls: false` is used directly, the gateway now defaults `apiVersion` to `"v1"` to match the AI SDK Azure provider's v1 URL route. Passing `apiVersion: "v1"` by itself keeps the existing deployment-based URL default for compatibility.
+
+- Added Azure OpenAI Responses WebSocket transport support for streaming agent and tool loops. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  Configure the Azure gateway with `useResponsesAPI: true`, then opt into WebSocket streaming per request:
+
+  ```ts
+  const stream = await agent.stream('Review this task', {
+    providerOptions: {
+      azure: {
+        transport: 'websocket',
+        websocket: { closeOnFinish: false },
+      },
+    },
+  });
+  ```
+
+  Responses WebSocket streams now preserve transport handles through agent loops, reuse explicit API-key router connections safely, clean up cancelled streams, and reject overlapping `previous_response_id` continuations on the same connection.
+
+- Fixed Azure and OpenAI Responses item handling so multi-step reasoning and tool-call histories round-trip correctly without item ID collisions. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  Added provider-neutral response item helpers to `@mastra/core/agent/message-list`. Existing in-memory message cache entries are regenerated after upgrade.
+
 ## 1.33.0-alpha.2
 
 ### Minor Changes

@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
-
-import { API_COMMANDS } from './commands.js';
+import { Command } from 'commander';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { normalizeData } from './normalizers.js';
+import { API_COMMANDS, registerApiCommand } from './index.js';
+
+beforeEach(() => {
+  registerApiCommand(new Command());
+});
 
 describe('normalizeData', () => {
   it('keeps agent run output to stable fields without duplicating the raw response', () => {

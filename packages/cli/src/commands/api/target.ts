@@ -20,7 +20,7 @@ export interface ResolvedTarget {
   timeoutMs: number;
 }
 
-export async function resolveTarget(options: ApiGlobalOptions): Promise<ResolvedTarget> {
+export async function resolveTarget(options: ApiGlobalOptions, fetchFn: typeof fetch = fetch): Promise<ResolvedTarget> {
   const timeoutMs = parseTimeout(options.timeout);
   const customHeaders = parseHeaders(options.header);
 
@@ -28,7 +28,7 @@ export async function resolveTarget(options: ApiGlobalOptions): Promise<Resolved
     return { baseUrl: options.url, headers: customHeaders, timeoutMs };
   }
 
-  if (await canReachLocal(timeoutMs)) {
+  if (await canReachLocal(timeoutMs, fetchFn)) {
     return { baseUrl: LOCAL_URL, headers: customHeaders, timeoutMs };
   }
 
@@ -72,11 +72,11 @@ function parseTimeout(timeout?: string): number {
   return parsed;
 }
 
-async function canReachLocal(timeoutMs: number): Promise<boolean> {
+async function canReachLocal(timeoutMs: number, fetchFn: typeof fetch): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.min(timeoutMs, 1_000));
   try {
-    const response = await fetch(`${LOCAL_URL}/api/system/api-schema`, { method: 'GET', signal: controller.signal });
+    const response = await fetchFn(`${LOCAL_URL}/api/system/api-schema`, { method: 'GET', signal: controller.signal });
     await response.body?.cancel();
     return response.ok;
   } catch {

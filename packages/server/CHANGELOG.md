@@ -1,5 +1,26 @@
 # @mastra/server
 
+## 1.33.0-alpha.3
+
+### Minor Changes
+
+- Allow stored Responses API follow-up requests to use `previous_response_id` without also passing `agent_id`. ([#16246](https://github.com/mastra-ai/mastra/pull/16246))
+
+  When callers pass both `previous_response_id` and an explicit `agent_id`, mismatched agents now return a clear 400 response instead of looking like a missing stored response.
+
+  The create-response schema now also rejects empty `agent_id` and `previous_response_id` strings.
+
+- Added `mastra api`, a machine-readable runtime CLI for calling Mastra server resources with JSON input and output. ([#16128](https://github.com/mastra-ai/mastra/pull/16128))
+
+  The new API CLI supports agents, workflows, tools, MCP servers, memory threads, working memory, observability traces/logs/scores, datasets, and experiments. It includes schema-aware request handling so a single JSON input is split into path, query, and body fields based on server route contracts, plus ergonomic raw-input wrapping for tool execution.
+
+  Exposed a route-derived server API schema manifest at runtime and generated CLI route metadata from it, enabling `--schema` output, response-shape-aware normalization, and server-aligned pagination output.
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
 ## 1.33.0-alpha.2
 
 ### Patch Changes

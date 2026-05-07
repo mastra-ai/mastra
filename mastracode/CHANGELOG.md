@@ -1,5 +1,12 @@
 # mastracode
 
+## 0.18.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
 ## 0.18.0-alpha.3
 
 ### Minor Changes

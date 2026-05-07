@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { resolveTarget } from './target';
+import type { ApiGlobalOptions } from './target';
 
 const mocks = vi.hoisted(() => ({
   getToken: vi.fn(),
@@ -21,11 +20,15 @@ vi.mock('../studio/project-config.js', () => ({
 }));
 
 const fetchMock = vi.fn();
-const options = (overrides: Partial<Parameters<typeof resolveTarget>[0]> = {}) => ({
+const options = (overrides: Partial<ApiGlobalOptions> = {}): ApiGlobalOptions => ({
   header: [],
   pretty: false,
   ...overrides,
 });
+const resolveTarget = async (opts: ApiGlobalOptions, fetchFn?: typeof fetch) => {
+  const target = await import('./target.js');
+  return target.resolveTarget(opts, fetchFn);
+};
 const linkedProject = {
   projectId: 'project-1',
   projectName: 'Project One',
@@ -35,7 +38,7 @@ const linkedProject = {
 
 describe('resolveTarget', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', fetchMock);
+    vi.resetModules();
     vi.clearAllMocks();
     fetchMock.mockRejectedValue(new Error('local unavailable'));
     mocks.getToken.mockResolvedValue('platform-token');
@@ -71,7 +74,9 @@ describe('resolveTarget', () => {
     const cancel = vi.fn();
     fetchMock.mockResolvedValueOnce({ ok: true, body: { cancel } });
 
-    await expect(resolveTarget(options({ header: ['X-Test: yes'], timeout: '5000' }))).resolves.toEqual({
+    await expect(
+      resolveTarget(options({ header: ['X-Test: yes'], timeout: '5000' }), fetchMock as typeof fetch),
+    ).resolves.toEqual({
       baseUrl: 'http://localhost:4111',
       headers: { 'X-Test': 'yes' },
       timeoutMs: 5000,
@@ -97,12 +102,14 @@ describe('resolveTarget', () => {
       ])
       .mockResolvedValueOnce([{ id: 'project-1', slug: 'project-one', instanceUrl: 'https://slug.example.com' }]);
 
-    await expect(resolveTarget(options({ header: ['X-Test: yes'] }))).resolves.toEqual({
+    await expect(resolveTarget(options({ header: ['X-Test: yes'] }), fetchMock as typeof fetch)).resolves.toEqual({
       baseUrl: 'https://project.example.com',
       headers: { Authorization: 'Bearer platform-token', 'X-Test': 'yes' },
       timeoutMs: 30_000,
     });
-    await expect(resolveTarget(options())).resolves.toMatchObject({ baseUrl: 'https://slug.example.com' });
+    await expect(resolveTarget(options(), fetchMock as typeof fetch)).resolves.toMatchObject({
+      baseUrl: 'https://slug.example.com',
+    });
 
     expect(mocks.loadProjectConfig).toHaveBeenCalledWith(process.cwd());
     expect(mocks.getToken).toHaveBeenCalledTimes(2);
@@ -117,7 +124,7 @@ describe('resolveTarget', () => {
       { id: 'project-1', slug: 'project-one', instanceUrl: 'https://project.example.com' },
     ]);
 
-    await expect(resolveTarget(options())).resolves.toMatchObject({
+    await expect(resolveTarget(options(), fetchMock as typeof fetch)).resolves.toMatchObject({
       baseUrl: 'https://project.example.com',
     });
 
@@ -127,20 +134,20 @@ describe('resolveTarget', () => {
   });
 
   it('throws target resolution errors for missing local/project/platform URL cases', async () => {
-    await expect(resolveTarget(options())).rejects.toMatchObject({
+    await expect(resolveTarget(options(), fetchMock as typeof fetch)).rejects.toMatchObject({
       code: 'SERVER_UNREACHABLE',
       message: 'Could not connect to target server',
     });
 
     mocks.loadProjectConfig.mockResolvedValue(linkedProject);
     mocks.fetchServerProjects.mockResolvedValue([{ id: 'project-1', slug: 'project-one' }]);
-    await expect(resolveTarget(options())).rejects.toMatchObject({
+    await expect(resolveTarget(options(), fetchMock as typeof fetch)).rejects.toMatchObject({
       code: 'PLATFORM_RESOLUTION_FAILED',
       details: { projectId: 'project-1', projectSlug: 'project-one' },
     });
 
     mocks.fetchServerProjects.mockRejectedValue(new Error('platform down'));
-    await expect(resolveTarget(options())).rejects.toMatchObject({
+    await expect(resolveTarget(options(), fetchMock as typeof fetch)).rejects.toMatchObject({
       code: 'PLATFORM_RESOLUTION_FAILED',
       details: { message: 'platform down' },
     });

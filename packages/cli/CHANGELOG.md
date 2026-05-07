@@ -1,5 +1,21 @@
 # mastra
 
+## 1.9.0-alpha.3
+
+### Minor Changes
+
+- Added `mastra api`, a machine-readable runtime CLI for calling Mastra server resources with JSON input and output. ([#16128](https://github.com/mastra-ai/mastra/pull/16128))
+
+  The new API CLI supports agents, workflows, tools, MCP servers, memory threads, working memory, observability traces/logs/scores, datasets, and experiments. It includes schema-aware request handling so a single JSON input is split into path, query, and body fields based on server route contracts, plus ergonomic raw-input wrapping for tool execution.
+
+  Exposed a route-derived server API schema manifest at runtime and generated CLI route metadata from it, enabling `--schema` output, response-shape-aware normalization, and server-aligned pagination output.
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+  - @mastra/deployer@1.33.0-alpha.3
+
 ## 1.8.2-alpha.2
 
 ### Patch Changes

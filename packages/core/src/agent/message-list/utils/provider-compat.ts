@@ -3,6 +3,8 @@ import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
 
 import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
+import { getResponseProviderItemId } from './response-item-metadata';
+import type { ResponseItemIdProvider } from './response-item-metadata';
 
 /**
  * Tool result with input field (Anthropic requirement)
@@ -105,13 +107,13 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
 }
 
 // ============================================================================
-// OpenAI Compatibility
+// OpenAI-compatible Responses Compatibility
 // ============================================================================
 
 /**
- * Checks if a message part has OpenAI reasoning itemId
+ * Checks if a message part has an OpenAI reasoning itemId.
  *
- * OpenAI reasoning items are tracked via `providerMetadata.openai.itemId` (e.g., `rs_...`).
+ * OpenAI Responses reasoning items are tracked via `providerMetadata.openai.itemId`.
  * Each reasoning item has a unique itemId that must be preserved for proper deduplication.
  *
  * @param part - A message part to check
@@ -120,32 +122,46 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
  * @see https://github.com/mastra-ai/mastra/issues/9005 - OpenAI reasoning items filtering
  */
 export function hasOpenAIReasoningItemId(part: unknown): boolean {
-  if (!part || typeof part !== 'object') return false;
-  const partAny = part as Record<string, unknown>;
-
-  if (!('providerMetadata' in partAny) || !partAny.providerMetadata) return false;
-  const metadata = partAny.providerMetadata as Record<string, unknown>;
-
-  if (!('openai' in metadata) || !metadata.openai) return false;
-  const openai = metadata.openai as Record<string, unknown>;
-
-  return 'itemId' in openai && typeof openai.itemId === 'string';
+  return Boolean(getOpenAIReasoningItemId(part));
 }
 
 /**
- * Extracts the OpenAI itemId from a message part if present
+ * Checks if a message part has an OpenAI-compatible Responses itemId.
+ *
+ * Provider-neutral Responses item IDs are tracked via provider metadata or
+ * provider options fields such as `openai.itemId` or `azure.itemId`.
+ */
+export function hasResponseProviderItemId(part: unknown): boolean {
+  return Boolean(getResponseProviderItemIdFromPart(part));
+}
+
+/**
+ * Extracts an OpenAI itemId from a message part if present.
+ *
+ * This only inspects `providerMetadata.openai.itemId`; use
+ * `getResponseProviderItemIdFromPart` for provider-aware Azure/OpenAI lookups.
  *
  * @param part - A message part to extract from
  * @returns The itemId string or undefined if not present
  */
 export function getOpenAIReasoningItemId(part: unknown): string | undefined {
-  if (!hasOpenAIReasoningItemId(part)) return undefined;
-
+  if (!part || typeof part !== 'object') return undefined;
   const partAny = part as Record<string, unknown>;
-  const metadata = partAny.providerMetadata as Record<string, unknown>;
-  const openai = metadata.openai as Record<string, unknown>;
+  const providerMetadata = partAny.providerMetadata as Record<string, unknown> | undefined;
+  const openaiMetadata = providerMetadata?.openai as Record<string, unknown> | undefined;
+  return typeof openaiMetadata?.itemId === 'string' ? openaiMetadata.itemId : undefined;
+}
 
-  return openai.itemId as string;
+export function getResponseProviderItemIdFromPart(
+  part: unknown,
+): { provider: ResponseItemIdProvider; itemId: string } | undefined {
+  if (!part || typeof part !== 'object') return undefined;
+  const partAny = part as Record<string, unknown>;
+
+  return (
+    getResponseProviderItemId(partAny.providerMetadata as Record<string, unknown> | undefined) ||
+    getResponseProviderItemId(partAny.providerOptions as Record<string, unknown> | undefined)
+  );
 }
 
 // ============================================================================
