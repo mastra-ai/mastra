@@ -23,6 +23,14 @@ const EmptyRow = ({ message }: { message: string }) => (
   </Txt>
 );
 
+const titleCase = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined) return value;
+  return String(value)
+    .split(/([\s-]+)/)
+    .map(part => (/^[\s-]+$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join('');
+};
+
 const Detail = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
   <div className="flex flex-col gap-0.5">
     <Txt variant="ui-xs" className="text-neutral4">
@@ -40,7 +48,7 @@ const ConfigDetails = ({ entries }: { entries: Array<{ key: string; value: strin
   return (
     <div className="grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
       {entries.map(entry => (
-        <Detail key={entry.key} label={`Config: ${entry.key}`} value={entry.value} />
+        <Detail key={entry.key} label={`Config: ${entry.key}`} value={titleCase(entry.value)} />
       ))}
     </div>
   );
@@ -98,7 +106,7 @@ export const AgentBuilderInfrastructure = () => {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex flex-col gap-1">
                             <Txt variant="ui-sm" className="font-medium">
-                              {provider.name}
+                              {titleCase(provider.name)}
                             </Txt>
                             <Txt variant="ui-xs" className="text-neutral3">
                               Provider ID: {provider.id}
@@ -110,7 +118,7 @@ export const AgentBuilderInfrastructure = () => {
                           />
                         </div>
                         <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
-                          <Detail label="Registered by" value={`${provider.name} provider`} />
+                          <Detail label="Registered by" value={`${titleCase(provider.name)} provider`} />
                           <Detail label="Provider routes" value={provider.routeCount} />
                         </div>
                       </li>
@@ -136,21 +144,23 @@ export const AgentBuilderInfrastructure = () => {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex flex-col gap-1">
                         <Txt variant="ui-sm" className="font-medium">
-                          {data.browser.provider}
+                          {titleCase(data.browser.provider)}
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
-                          {data.browser.env ? `Environment: ${data.browser.env}` : 'Environment: provider default'}
-                          {data.browser.type ? ` · Type: ${data.browser.type}` : ''}
+                          Browser provider selected for Agent Builder automation.
                         </Txt>
                       </div>
                       <StatusBadge
                         ok={data.browser.registered}
-                        label={data.browser.registered ? 'Registered' : 'Not registered'}
+                        label={data.browser.registered ? 'Provider available' : 'Provider missing'}
                       />
                     </div>
                     <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
-                      <Detail label="Config type" value={data.browser.type} />
-                      <Detail label="Environment" value={data.browser.env ?? 'Provider default'} />
+                      <Detail label="Config type" value={titleCase(data.browser.type)} />
+                      <Detail
+                        label="Environment"
+                        value={data.browser.env ? titleCase(data.browser.env) : 'Provider default'}
+                      />
                     </div>
                     <ConfigDetails entries={data.browser.config} />
                   </div>
@@ -177,7 +187,7 @@ export const AgentBuilderInfrastructure = () => {
                           {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
-                          Type: {data.workspace.type}
+                          Type: {titleCase(data.workspace.type)}
                         </Txt>
                       </div>
                       <div className="flex gap-2">
@@ -190,12 +200,8 @@ export const AgentBuilderInfrastructure = () => {
                         <Detail label="Workspace ID" value={data.workspace.workspaceId} />
                       ) : null}
                       <Detail label="Name" value={data.workspace.name} />
-                      {data.workspace.source ? <Detail label="Source" value={data.workspace.source} /> : null}
-                      {data.workspace.workspaceId ? (
-                        <Detail label="Registered" value={data.workspace.registered ? 'Yes' : 'No'} />
-                      ) : null}
-                      <Detail label="Filesystem provider" value={data.workspace.filesystemProvider} />
-                      <Detail label="Sandbox provider" value={data.workspace.sandboxProvider} />
+                      <Detail label="Filesystem provider" value={titleCase(data.workspace.filesystemProvider)} />
+                      <Detail label="Sandbox provider" value={titleCase(data.workspace.sandboxProvider)} />
                     </div>
                     <ConfigDetails entries={data.workspace.config} />
                   </div>
