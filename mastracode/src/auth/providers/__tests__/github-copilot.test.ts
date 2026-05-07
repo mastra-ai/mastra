@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   COPILOT_HEADERS,
+  fetchCopilotModels,
   getGitHubCopilotBaseUrl,
   githubCopilotOAuthProvider,
   loginGitHubCopilot,
@@ -398,6 +399,177 @@ describe('GitHub Copilot OAuth device flow', () => {
     await vi.advanceTimersByTimeAsync(0);
     controller.abort();
     await rejection;
+  });
+});
+
+describe('fetchCopilotModels', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function modelEntry(overrides: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: 'claude-sonnet-4.5',
+      name: 'Claude Sonnet 4.5',
+      vendor: 'Anthropic',
+      model_picker_enabled: true,
+      capabilities: {
+        family: 'claude',
+        limits: { max_context_window_tokens: 200000, max_prompt_tokens: 90000, max_output_tokens: 16384 },
+        supports: { streaming: true, tool_calls: true, vision: true },
+      },
+      ...overrides,
+    };
+  }
+
+  it('hits ${baseUrl}/models with the bearer token and Copilot headers', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit): Promise<Response> => {
+      expect(getUrl(input)).toBe('https://api.individual.githubcopilot.com/models');
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer copilot-bearer');
+      // Copilot expects the same VS Code-like headers as chat completions.
+      for (const [key, value] of Object.entries(COPILOT_HEADERS)) {
+        expect(headers[key]).toBe(value);
+      }
+      return jsonResponse({ data: [modelEntry({})] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const models = await fetchCopilotModels({
+      baseUrl: 'https://api.individual.githubcopilot.com',
+      bearerToken: 'copilot-bearer',
+    });
+
+    expect(models).toHaveLength(1);
+    expect(models[0]).toMatchObject({
+      id: 'claude-sonnet-4.5',
+      name: 'Claude Sonnet 4.5',
+      vendor: 'Anthropic',
+      supportsVision: true,
+      supportsToolCalls: true,
+    });
+  });
+
+  it('strips a trailing slash from the base URL', async () => {
+    const fetchMock = vi.fn(async (input: unknown): Promise<Response> => {
+      expect(getUrl(input)).toBe('https://api.individual.githubcopilot.com/models');
+      return jsonResponse({ data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchCopilotModels({
+      baseUrl: 'https://api.individual.githubcopilot.com/',
+      bearerToken: 'copilot-bearer',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters out entries where model_picker_enabled is not true', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          data: [
+            modelEntry({ id: 'visible', model_picker_enabled: true }),
+            modelEntry({ id: 'hidden-false', model_picker_enabled: false }),
+            modelEntry({ id: 'hidden-missing', model_picker_enabled: undefined }),
+          ],
+        }),
+      ),
+    );
+
+    const models = await fetchCopilotModels({
+      baseUrl: 'https://api.individual.githubcopilot.com',
+      bearerToken: 'copilot-bearer',
+    });
+
+    expect(models.map(m => m.id)).toEqual(['visible']);
+  });
+
+  it('filters out entries with policy.state === "disabled" but keeps unconfigured/missing policies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          data: [
+            modelEntry({ id: 'allowed' }),
+            modelEntry({ id: 'unconfigured', policy: { state: 'unconfigured' } }),
+            modelEntry({ id: 'enabled', policy: { state: 'enabled' } }),
+            modelEntry({ id: 'disabled', policy: { state: 'disabled' } }),
+          ],
+        }),
+      ),
+    );
+
+    const models = await fetchCopilotModels({
+      baseUrl: 'https://api.individual.githubcopilot.com',
+      bearerToken: 'copilot-bearer',
+    });
+
+    expect(models.map(m => m.id).sort()).toEqual(['allowed', 'enabled', 'unconfigured']);
+  });
+
+  it('marks /v1/messages-shaped models as Anthropic-shaped', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          data: [
+            modelEntry({ id: 'gpt-4.1', supported_endpoints: ['/chat/completions'] }),
+            modelEntry({ id: 'claude-sonnet-4.5', supported_endpoints: ['/chat/completions', '/v1/messages'] }),
+          ],
+        }),
+      ),
+    );
+
+    const models = await fetchCopilotModels({
+      baseUrl: 'https://api.individual.githubcopilot.com',
+      bearerToken: 'copilot-bearer',
+    });
+
+    const byId = Object.fromEntries(models.map(m => [m.id, m]));
+    expect(byId['gpt-4.1']?.isAnthropicShaped).toBe(false);
+    expect(byId['claude-sonnet-4.5']?.isAnthropicShaped).toBe(true);
+  });
+
+  it('throws when the API returns a non-2xx status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('forbidden', { status: 403, statusText: 'Forbidden' })),
+    );
+
+    await expect(
+      fetchCopilotModels({ baseUrl: 'https://api.individual.githubcopilot.com', bearerToken: 'copilot-bearer' }),
+    ).rejects.toThrow(/403 Forbidden/);
+  });
+
+  it('throws when the response is missing a `data` array', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ models: [] })),
+    );
+
+    await expect(
+      fetchCopilotModels({ baseUrl: 'https://api.individual.githubcopilot.com', bearerToken: 'copilot-bearer' }),
+    ).rejects.toThrow(/missing `data` array/);
+  });
+
+  it('forwards the AbortSignal to fetch', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit): Promise<Response> => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return jsonResponse({ data: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    await fetchCopilotModels({
+      baseUrl: 'https://api.individual.githubcopilot.com',
+      bearerToken: 'copilot-bearer',
+      signal: controller.signal,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

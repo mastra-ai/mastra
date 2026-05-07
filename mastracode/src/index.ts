@@ -53,7 +53,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
-import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
+import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
@@ -588,7 +588,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         console.error('Failed to persist model usage count', error);
       }
     },
-    customModelCatalogProvider: () => {
+    customModelCatalogProvider: async () => {
       const settings = loadSettings();
       const customModels: CustomAvailableModel[] = [];
       for (const provider of settings.customProviders) {
@@ -603,6 +603,26 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           });
         }
       }
+
+      // GitHub Copilot exposes its model list dynamically via `/models` since the
+      // available models depend on the user's subscription tier and any org policies.
+      // The catalog is cached + refreshed in the background, so steady-state cost is
+      // a single Map lookup.
+      try {
+        const copilotModels = await getCopilotModelCatalog({ authStorage });
+        for (const m of copilotModels) {
+          customModels.push({
+            id: `github-copilot/${m.id}`,
+            provider: 'github-copilot',
+            modelName: m.id,
+            hasApiKey: true,
+            apiKeyEnvVar: undefined,
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to load GitHub Copilot model catalog:', error);
+      }
+
       return customModels;
     },
     threadLock: {

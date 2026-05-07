@@ -8,3 +8,5 @@ A new **GitHub Copilot** mode pack is selectable from the onboarding wizard and 
 
 - _build_ / _plan_: `github-copilot/claude-sonnet-4.5` (1x premium request)
 - _fast_: `github-copilot/gpt-4.1` (0x — included with all paid Copilot plans)
+
+After login, the available Copilot models are fetched live from the `/models` endpoint (filtered to picker-enabled, non-policy-disabled entries), so `/models` shows exactly what your subscription can use — including additional models added by GitHub or your org over time. The catalog is cached for 10 minutes and falls back to a small built-in list if the network request fails.

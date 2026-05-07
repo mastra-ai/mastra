@@ -353,6 +353,101 @@ export async function loginGitHubCopilot(options: {
   return refreshGitHubCopilotToken(githubAccessToken, enterpriseDomain ?? undefined, options.signal);
 }
 
+/**
+ * Filtered, normalized entry from the Copilot `/models` API.
+ *
+ * The full API payload includes a lot of capability metadata; we only keep the bits
+ * we need to expose models in `listAvailableModels()` and route requests sensibly.
+ */
+export type CopilotModelEntry = {
+  /** Stable model id (e.g. `claude-sonnet-4.5`, `gpt-4.1`). */
+  id: string;
+  /** Human-readable display name (e.g. `Claude Sonnet 4.5`). */
+  name: string;
+  /** Vendor field from the API (e.g. `Anthropic`, `OpenAI`). */
+  vendor: string;
+  /** True when `supported_endpoints` includes `/v1/messages` (Anthropic-shaped Copilot model). */
+  isAnthropicShaped: boolean;
+  /** True when `capabilities.supports.vision` is true. */
+  supportsVision: boolean;
+  /** True when the model supports tool calling. */
+  supportsToolCalls: boolean;
+};
+
+/**
+ * Fetch the Copilot model list available to the current subscription.
+ *
+ * Hits `${baseURL}/models` with the Copilot bearer token, filters to
+ * `model_picker_enabled === true && policy.state !== 'disabled'`, and returns
+ * a normalized list. Mirrors opencode's filtering rules.
+ *
+ * Inspired by:
+ *   - opencode: https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/plugin/github-copilot/models.ts
+ */
+export async function fetchCopilotModels(opts: {
+  baseUrl: string;
+  bearerToken: string;
+  signal?: AbortSignal;
+}): Promise<CopilotModelEntry[]> {
+  const url = `${opts.baseUrl.replace(/\/$/, '')}/models`;
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${opts.bearerToken}`,
+      ...COPILOT_HEADERS,
+    },
+    signal: opts.signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Failed to fetch Copilot models: ${response.status} ${response.statusText}: ${text}`);
+  }
+
+  const json = await response.json().catch(() => null);
+  if (!json || typeof json !== 'object' || !Array.isArray((json as { data?: unknown }).data)) {
+    throw new Error('Invalid Copilot models response: missing `data` array');
+  }
+
+  const data = (json as { data: unknown[] }).data;
+  const result: CopilotModelEntry[] = [];
+
+  for (const item of data) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+
+    if (obj.model_picker_enabled !== true) continue;
+
+    const policy = obj.policy as Record<string, unknown> | undefined;
+    if (policy && policy.state === 'disabled') continue;
+
+    const id = obj.id;
+    if (typeof id !== 'string' || !id) continue;
+
+    const name = typeof obj.name === 'string' ? obj.name : id;
+    const vendor = typeof obj.vendor === 'string' ? obj.vendor : '';
+
+    const capabilities = obj.capabilities as Record<string, unknown> | undefined;
+    const supports = capabilities?.supports as Record<string, unknown> | undefined;
+    const supportsVision = supports?.vision === true;
+    const supportsToolCalls = supports?.tool_calls === true;
+
+    const supportedEndpoints = obj.supported_endpoints;
+    const isAnthropicShaped = Array.isArray(supportedEndpoints) && supportedEndpoints.includes('/v1/messages');
+
+    result.push({
+      id,
+      name,
+      vendor,
+      isAnthropicShaped,
+      supportsVision,
+      supportsToolCalls,
+    });
+  }
+
+  return result;
+}
+
 export const githubCopilotOAuthProvider: OAuthProviderInterface = {
   id: 'github-copilot',
   name: 'GitHub Copilot',

@@ -15,8 +15,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { COPILOT_HEADERS, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
-import type { GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
+import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
+import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
 
 const COPILOT_PROVIDER_ID = 'github-copilot';
@@ -252,4 +252,122 @@ export function githubCopilotProvider(
     model: openai.chat(modelId),
     middleware: [copilotMiddleware],
   });
+}
+
+// ---------------------------------------------------------------------------
+// Live model catalog
+// ---------------------------------------------------------------------------
+
+/**
+ * Hard-coded fallback advertised when the live `/models` request fails (network
+ * down, expired token, etc.). Both are widely available across paid Copilot
+ * tiers, so the user can still pick a model without a live API call.
+ */
+const COPILOT_FALLBACK_MODELS: CopilotModelEntry[] = [
+  {
+    id: 'claude-sonnet-4.5',
+    name: 'Claude Sonnet 4.5',
+    vendor: 'Anthropic',
+    isAnthropicShaped: false,
+    supportsVision: true,
+    supportsToolCalls: true,
+  },
+  {
+    id: 'gpt-4.1',
+    name: 'GPT-4.1',
+    vendor: 'OpenAI',
+    isAnthropicShaped: false,
+    supportsVision: true,
+    supportsToolCalls: true,
+  },
+];
+
+const CATALOG_TTL_MS = 10 * 60 * 1000;
+const CATALOG_FAILURE_TTL_MS = 60 * 1000;
+const CATALOG_FETCH_TIMEOUT_MS = 5_000;
+
+interface CatalogCacheEntry {
+  fetchedAt: number;
+  ttl: number;
+  models: CopilotModelEntry[];
+}
+
+let catalogCache: CatalogCacheEntry | null = null;
+let inflightFetch: Promise<CopilotModelEntry[]> | null = null;
+
+/** Reset the in-process Copilot catalog cache (test seam, also useful after logout). */
+export function clearCopilotCatalogCache(): void {
+  catalogCache = null;
+  inflightFetch = null;
+}
+
+/**
+ * Return the user's currently-available Copilot models.
+ *
+ * - Returns `[]` when the user is not logged in to GitHub Copilot.
+ * - Returns the cached list when a recent fetch succeeded.
+ * - On the cache-miss / expired path, fetches `/models` with a 5s timeout, filters
+ *   to picker-enabled and non-policy-disabled models, then caches for 10 minutes.
+ * - On fetch failure, returns a small hard-coded fallback (so packs still work
+ *   offline) and caches that for 1 minute to avoid hammering the API.
+ *
+ * Concurrent calls during a fetch share the inflight promise.
+ */
+export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage } = {}): Promise<CopilotModelEntry[]> {
+  const storage = opts.authStorage ?? getAuthStorage();
+  storage.reload();
+
+  const cred = storage.get(COPILOT_PROVIDER_ID);
+  if (!cred || cred.type !== 'oauth') {
+    return [];
+  }
+
+  const now = Date.now();
+  if (catalogCache && now - catalogCache.fetchedAt < catalogCache.ttl) {
+    return catalogCache.models;
+  }
+
+  if (inflightFetch) return inflightFetch;
+
+  inflightFetch = (async (): Promise<CopilotModelEntry[]> => {
+    try {
+      // getApiKey() refreshes the Copilot bearer if it has expired.
+      const accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
+      if (!accessToken) throw new Error('No Copilot bearer token');
+      storage.reload();
+
+      const refreshed = storage.get(COPILOT_PROVIDER_ID);
+      const enterpriseUrl = (refreshed as GitHubCopilotCredentials | undefined)?.enterpriseUrl;
+      const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CATALOG_FETCH_TIMEOUT_MS);
+      try {
+        const models = await fetchCopilotModels({
+          baseUrl,
+          bearerToken: accessToken,
+          signal: controller.signal,
+        });
+        catalogCache = { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models };
+        return models;
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (error) {
+      catalogCache = {
+        fetchedAt: Date.now(),
+        ttl: CATALOG_FAILURE_TTL_MS,
+        models: COPILOT_FALLBACK_MODELS,
+      };
+      console.warn(
+        'Failed to fetch live GitHub Copilot models, using fallback list:',
+        error instanceof Error ? error.message : error,
+      );
+      return COPILOT_FALLBACK_MODELS;
+    } finally {
+      inflightFetch = null;
+    }
+  })();
+
+  return inflightFetch;
 }
