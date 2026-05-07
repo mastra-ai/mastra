@@ -177,17 +177,19 @@ export const AgentBuilderInfrastructure = () => {
                 ) : (
                   <div className="rounded-md border border-border1 px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex flex-col gap-1">
-                        <Txt variant="ui-sm" className="font-medium">
-                          {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
-                        </Txt>
-                      </div>
+                      <Txt variant="ui-sm" className="font-medium">
+                        {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
+                      </Txt>
                       <div className="flex gap-2">
                         <StatusBadge ok={data.workspace.hasFilesystem} label="Filesystem" />
                         <StatusBadge ok={data.workspace.hasSandbox} label="Sandbox" />
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
+                      <Detail
+                        label="Config type"
+                        value={data.workspace.type === 'id' ? 'Registered workspace' : 'Inline config'}
+                      />
                       {data.workspace.workspaceId ? (
                         <Detail label="Workspace ID" value={data.workspace.workspaceId} />
                       ) : null}

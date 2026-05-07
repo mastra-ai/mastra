@@ -451,7 +451,6 @@ describe('GET /editor/builder/infrastructure', () => {
       registered: true,
       availableProviders: ['stagehand'],
       config: [
-        { key: 'env', value: 'BROWSERBASE' },
         { key: 'headless', value: 'false' },
         { key: 'timeout', value: '30000' },
       ],

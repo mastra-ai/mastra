@@ -207,7 +207,7 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
 
       const getConfigEntries = (config: Record<string, unknown>, omittedKeys: string[] = []) =>
         Object.entries(config)
-          .filter(([key]) => !omittedKeys.includes(key))
+          .filter(([key, value]) => !omittedKeys.includes(key) && value !== undefined && value !== null)
           .map(([key, value]) => ({ key, value: formatConfigValue(value) }));
 
       const channelProviders = mastra.getChannelProviders() ?? {};
@@ -271,7 +271,7 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
           env: browserConfig.env ?? null,
           registered: providerId ? !!browsers?.has(providerId) : false,
           availableProviders: browsers ? Array.from(browsers.keys()) : [],
-          config: getConfigEntries(browserConfig, ['provider']),
+          config: getConfigEntries(browserConfig, ['provider', 'env']),
         };
 
         const workspaceRef = configuration?.workspace;

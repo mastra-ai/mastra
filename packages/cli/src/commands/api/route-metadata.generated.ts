@@ -411,6 +411,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /auth/roles/:roleId/permissions": {
+    "method": "GET",
+    "path": "/auth/roles/:roleId/permissions",
+    "pathParams": [
+      "roleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "permissions"
+    }
+  },
   "GET /workflows": {
     "method": "GET",
     "path": "/workflows",
@@ -3141,7 +3156,9 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "perPage",
-      "status"
+      "starredOnly",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -3191,6 +3208,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "defaultOptions",
       "description",
       "id",
@@ -3207,6 +3225,7 @@ export const API_ROUTE_METADATA = {
       "scorers",
       "skills",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3226,6 +3245,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "changeMessage",
       "defaultOptions",
       "description",
@@ -3242,6 +3262,7 @@ export const API_ROUTE_METADATA = {
       "scorers",
       "skills",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3369,6 +3390,34 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "agentId",
       "versionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/agents/:storedAgentId/star": {
+    "method": "PUT",
+    "path": "/stored/agents/:storedAgentId/star",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/agents/:storedAgentId/star": {
+    "method": "DELETE",
+    "path": "/stored/agents/:storedAgentId/star",
+    "pathParams": [
+      "storedAgentId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -4111,7 +4160,10 @@ export const API_ROUTE_METADATA = {
       "metadata",
       "orderBy",
       "page",
-      "perPage"
+      "perPage",
+      "starredOnly",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -4146,6 +4198,7 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "id",
       "instructions",
       "license",
@@ -4153,7 +4206,8 @@ export const API_ROUTE_METADATA = {
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4173,13 +4227,15 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "instructions",
       "license",
       "metadata",
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4213,6 +4269,34 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/skills/:storedSkillId/star": {
+    "method": "PUT",
+    "path": "/stored/skills/:storedSkillId/star",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/skills/:storedSkillId/star": {
+    "method": "DELETE",
+    "path": "/stored/skills/:storedSkillId/star",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -4820,6 +4904,30 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "backgroundTaskId"
     ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/settings": {
+    "method": "GET",
+    "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/infrastructure": {
+    "method": "GET",
+    "path": "/editor/builder/infrastructure",
+    "pathParams": [],
     "queryParams": [],
     "bodyParams": [],
     "hasQuery": false,
