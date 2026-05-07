@@ -28,7 +28,8 @@ export type TracesListViewTrace = {
   threadId?: string | null;
 };
 
-const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) auto auto';
+// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
+const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;

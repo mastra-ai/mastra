@@ -17,8 +17,22 @@ function getNextPageParam(lastPage: ListLogsResponse | undefined, _allPages: unk
   return undefined;
 }
 
+/** Deduplicates logs across loaded pages. Offset-based pagination duplicates rows at the page
+ *  boundary whenever new logs are inserted between sequential `fetchNextPage` calls — without
+ *  this filter the duplicates produce duplicate React keys and chaotic virtualizer offsets. */
 function selectLogs(data: { pages: ListLogsResponse[] }) {
-  return data.pages.flatMap(page => page.logs ?? []);
+  const seen = new Set<string>();
+  const result = [];
+  for (const page of data.pages) {
+    for (const log of page.logs ?? []) {
+      const ts = log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp;
+      const key = log.logId ?? `${ts}|${log.message ?? ''}|${log.data ? JSON.stringify(log.data) : ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(log);
+    }
+  }
+  return result;
 }
 
 export const useLogs = ({ filters }: LogsFilters = {}) => {

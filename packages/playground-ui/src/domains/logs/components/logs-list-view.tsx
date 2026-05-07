@@ -4,7 +4,8 @@ import type { LogRecord } from '../types';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 import { cn } from '@/lib/utils';
 
-const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) minmax(5rem,1fr)';
+// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
+const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
