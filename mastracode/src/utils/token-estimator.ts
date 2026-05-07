@@ -15,7 +15,7 @@ export function truncateStringForTokenEstimate(text: string, desiredTokenCount: 
   const sanitized = sanitizeInput(text);
   const totalTokens = estimateTokenCount(sanitized);
 
-  if (totalTokens <= desiredTokenCount) return text;
+  if (totalTokens <= desiredTokenCount) return sanitized;
 
   const kept = fromEnd ? sliceByTokens(sanitized, -desiredTokenCount) : sliceByTokens(sanitized, 0, desiredTokenCount);
 

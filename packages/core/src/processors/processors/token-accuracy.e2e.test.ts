@@ -136,6 +136,7 @@ describe('TokenLimiterProcessor', () => {
     agent: Agent,
     // tokenx is ~96% accurate vs the model's actual BPE count, so the default margin is wider than
     // it was when this suite ran against js-tiktoken. Heavy tool-call cases use a higher override.
+    // revisit if tokenx updates significantly change heuristic accuracy.
     accuracyMargin: number = 8,
   ) {
     const { messagesV2, fakeCore } = generateConversationHistory(config);
