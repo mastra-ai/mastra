@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { MastraCache } from '../cache';
-import type { FullOutput } from '../stream/base/output';
-import type { ChunkType } from '../stream/types';
-import type { AgentInstructions } from './types';
 
 /**
  * Configuration for the agent response cache.
@@ -11,15 +9,15 @@ import type { AgentInstructions } from './types';
  * `agent.stream()` / `agent.generate()`. Per-call options override agent-level
  * defaults.
  *
- * Cache hits replay both `generate()` and `stream()` results without making
- * an LLM call. The cache key is derived from the request shape (model, model
- * settings, provider options, system prompt, instructions, tools, structured
- * output schema, and the input messages) so config changes automatically
- * invalidate stale entries — see {@link buildAgentResponseCacheKey}.
+ * Cache hits replay the per-step LLM response without making a model call.
+ * The cache key is derived from the exact prompt the model would receive
+ * (post memory load, post input processors), the model identity, and an
+ * optional scope (defaulting to `memory.resource` for multi-tenant
+ * isolation). See {@link buildAgentResponseCacheKey}.
  *
  * @see https://openrouter.ai/announcements/response-caching for the design
- *   inspiration. Mastra's implementation is local to the Agent rather than the
- *   provider, so it works with any model.
+ *   inspiration. Mastra's implementation runs as a processor on the
+ *   provider-boundary `processLLMRequest` hook so it works with any model.
  */
 export interface AgentResponseCacheOptions {
   /**
@@ -27,8 +25,8 @@ export interface AgentResponseCacheOptions {
    *
    * - A string: used verbatim. None of the request shape is hashed into the
    *   key. Useful when you want to share a cached response across requests
-   *   that differ in irrelevant ways (e.g. formatting), or to manually
-   *   invalidate a cached entry by changing the key.
+   *   that differ in irrelevant ways, or to manually invalidate a cached
+   *   entry by changing the key.
    * - A function: receives the same {@link AgentResponseCacheKeyInputs}
    *   Mastra would have hashed and returns a string (or `Promise<string>`).
    *   Use this when you only care about a subset of the inputs (e.g. cache
@@ -47,8 +45,8 @@ export interface AgentResponseCacheOptions {
 
   /**
    * Optional scope appended to the auto-derived cache key for multi-tenant
-   * isolation. When omitted, the key falls back to `memory.resource` (when
-   * memory is configured) so per-user data is isolated automatically.
+   * isolation. When omitted, the agent falls back to `memory.resource`
+   * (when memory is configured) so per-user data is isolated automatically.
    *
    * Set to `null` to opt out of all scoping (cache shared across all callers
    * of this agent).
@@ -79,6 +77,35 @@ export interface AgentResponseCacheOptions {
 export type AgentResponseCacheKeyFn = (inputs: AgentResponseCacheKeyInputs) => string | Promise<string>;
 
 /**
+ * Inputs that contribute to the auto-derived cache key.
+ *
+ * The key is derived inside the `processLLMRequest` processor hook, so the
+ * `prompt` field is the exact `LanguageModelV2Prompt` the provider would
+ * receive (post memory + input processors). This eliminates the cross-user
+ * leak risk of hashing only the user's raw input — different users with
+ * different memory contexts produce different prompts and therefore
+ * different cache keys.
+ *
+ * @internal
+ */
+export interface AgentResponseCacheKeyInputs {
+  /** The owning agent's id. */
+  agentId: string;
+  /** Per-tenant scope, or `null` to opt out entirely. */
+  scope?: string | null;
+  /** Provider/model identity. Different models produce different responses. */
+  model: { provider?: string; modelId?: string; specVersion?: string };
+  /**
+   * The exact prompt the provider would receive, post memory load and post
+   * any prompt-modifying input processors. Source of truth for what the
+   * model would generate.
+   */
+  prompt: LanguageModelV2Prompt;
+  /** 0-indexed step number within the agentic loop (>0 for tool steps). */
+  stepNumber: number;
+}
+
+/**
  * Resolved (per-call) response cache config — never `boolean | undefined`.
  *
  * @internal
@@ -91,22 +118,6 @@ export type ResolvedResponseCacheConfig = {
   scope?: string | null;
   bust: boolean;
 };
-
-/**
- * The shape stored in the cache for each agent response.
- *
- * `chunks` is populated for `methodType: 'stream'` so cache hits can replay
- * the original `fullStream` chunk-for-chunk. `fullOutput` is the result of
- * `MastraModelOutput.getFullOutput()` and is returned directly on cache hits
- * for `agent.generate()`.
- *
- * @internal
- */
-export interface CachedAgentResponse<OUTPUT = unknown> {
-  chunks: ChunkType<OUTPUT>[];
-  fullOutput: FullOutput<OUTPUT>;
-  cachedAt: number;
-}
 
 /**
  * Per-call options accepted on `agent.stream()` / `agent.generate()`. `true`
@@ -153,34 +164,12 @@ export function resolveResponseCacheConfig(
 }
 
 /**
- * Inputs that contribute to the auto-derived cache key.
- *
- * @internal
- */
-export interface AgentResponseCacheKeyInputs {
-  agentId: string;
-  methodType: 'stream' | 'generate';
-  scope?: string | null;
-  model: { provider?: string; modelId?: string; specVersion?: string };
-  instructions: AgentInstructions | undefined;
-  system?: unknown;
-  messages: unknown;
-  modelSettings?: unknown;
-  providerOptions?: unknown;
-  toolChoice?: unknown;
-  tools?: unknown;
-  structuredOutputSchema?: unknown;
-  context?: unknown;
-}
-
-/**
  * Build a deterministic cache key from the request shape.
  *
- * The key incorporates everything that can change the LLM's response so
- * config changes automatically invalidate stale entries (matches OpenRouter's
- * "model + request body + streaming mode" cache key strategy, but extended
- * with Mastra-specific fields like instructions, tools, structured output
- * schema, and an explicit per-tenant scope).
+ * The key incorporates the prompt the model will see (post memory + input
+ * processors), the model identity, and an optional per-tenant scope.
+ * Different prompts/models/scopes produce different keys, so config changes
+ * automatically invalidate stale entries.
  *
  * @internal
  */
@@ -190,24 +179,45 @@ export function buildAgentResponseCacheKey(inputs: AgentResponseCacheKeyInputs):
 
   const payload = {
     agent: inputs.agentId,
-    method: inputs.methodType,
+    step: inputs.stepNumber,
     scope,
     model: modelTag,
-    instructions: normalizeForHash(inputs.instructions),
-    system: normalizeForHash(inputs.system),
-    messages: normalizeForHash(inputs.messages),
-    modelSettings: normalizeForHash(inputs.modelSettings),
-    providerOptions: normalizeForHash(inputs.providerOptions),
-    toolChoice: normalizeForHash(inputs.toolChoice),
-    tools: normalizeForHash(inputs.tools),
-    structuredOutputSchema: normalizeForHash(inputs.structuredOutputSchema),
-    context: normalizeForHash(inputs.context),
+    prompt: normalizeForHash(stripMastraInternalMetadata(inputs.prompt)),
   };
 
   const serialized = stableStringify(payload);
   const hash = createHash('sha256').update(serialized).digest('hex').slice(0, 32);
   const scopeTag = scope ? `:${createHash('sha256').update(scope).digest('hex').slice(0, 8)}` : '';
-  return `mastra:agent-response:${inputs.agentId}:${inputs.methodType}${scopeTag}:${hash}`;
+  return `mastra:agent-response:${inputs.agentId}${scopeTag}:${hash}`;
+}
+
+/**
+ * Strip `providerOptions.mastra.*` from any prompt-shaped value before
+ * hashing. Mastra's internal metadata (e.g. `createdAt` timestamps) doesn't
+ * change what the model would generate, but it does change between calls,
+ * so leaving it in the key would defeat caching.
+ *
+ * @internal
+ */
+function stripMastraInternalMetadata(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(stripMastraInternalMetadata);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (k === 'providerOptions' && v && typeof v === 'object' && !Array.isArray(v)) {
+      const filtered: Record<string, unknown> = {};
+      for (const [pk, pv] of Object.entries(v as Record<string, unknown>)) {
+        if (pk === 'mastra') continue;
+        filtered[pk] = stripMastraInternalMetadata(pv);
+      }
+      // Drop empty providerOptions entirely so its presence/absence doesn't
+      // change the hash.
+      if (Object.keys(filtered).length > 0) out[k] = filtered;
+      continue;
+    }
+    out[k] = stripMastraInternalMetadata(v);
+  }
+  return out;
 }
 
 /**
@@ -254,27 +264,4 @@ function stableStringify(value: unknown): string {
     }
     return val;
   });
-}
-
-/**
- * Extract a serializable summary of a tools input record for use in cache
- * keys. Only includes the fields that influence the LLM's response: tool id,
- * description, and input schema. Function references and runtime state are
- * dropped.
- *
- * @internal
- */
-export function summarizeToolsForCacheKey(tools: Record<string, unknown> | undefined | null): unknown {
-  if (!tools || typeof tools !== 'object') return null;
-  const out: Record<string, unknown> = {};
-  for (const id of Object.keys(tools).sort()) {
-    const tool = tools[id] as Record<string, unknown> | null | undefined;
-    if (!tool || typeof tool !== 'object') continue;
-    out[id] = {
-      description: tool.description ?? null,
-      inputSchema: tool.inputSchema ?? tool.parameters ?? null,
-      outputSchema: tool.outputSchema ?? null,
-    };
-  }
-  return out;
 }

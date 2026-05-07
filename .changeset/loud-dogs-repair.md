@@ -45,10 +45,10 @@ await agent.generate(prompt, { responseCache: false });
 ```ts
 await agent.stream(prompt, {
   responseCache: {
-    key: ({ model, messages }) =>
-      `qa:${model.modelId}:${JSON.stringify(messages).slice(-200)}`,
+    key: ({ model, prompt }) =>
+      `qa:${model.modelId}:${JSON.stringify(prompt).slice(-200)}`,
   },
 });
 ```
 
-The auto-derived cache key includes model identity, model settings, system prompt, instructions, tools, structured output schema, and input messages, so any change automatically invalidates the cache. Cache writes happen after the response completes, and failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.
+Caching is implemented as a `ResponseCache` input processor that runs on the new `processLLMRequest` / `processLLMResponse` hooks. The cache key is derived from the *resolved* `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. *after* memory loading and earlier input processors have run — so cached entries don't leak context across users. Each step in an agentic tool loop is independently cached. Cache writes happen after the response completes, and failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.

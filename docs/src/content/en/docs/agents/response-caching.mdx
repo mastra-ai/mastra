@@ -91,9 +91,15 @@ export const agent = new Agent({
 })
 ```
 
+## How caching is implemented
+
+Response caching runs as a `ResponseCache` input processor that hooks into the new `processLLMRequest` and `processLLMResponse` hooks. When `responseCache` is enabled (per-call or on the agent), Mastra auto-registers the processor for you unless you have already added a `ResponseCache` to your `inputProcessors`. You can also wire the processor manually if you need fine-grained control over its position in the pipeline.
+
+This means the cache key is derived from the _resolved_ `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. _after_ memory has loaded and earlier input processors have run — and each step in an agentic tool loop is independently cached.
+
 ## What's in the cache key
 
-When you don't supply `key`, Mastra derives one deterministically from inputs that change the LLM's response: `agentId`, `methodType` (`stream` vs `generate`), `scope`, model identity (`provider`, `modelId`, spec version), `modelSettings`, `providerOptions`, `toolChoice`, system prompt + instructions, tool definitions (id, description, schemas), structured output schema, input messages, and request `context`. Any change to these inputs automatically invalidates the cache.
+When you don't supply `key`, Mastra derives one deterministically from the inputs that change the LLM's response at this step: `agentId`, `stepNumber` (so each step in a tool loop has its own cache entry), `scope`, model identity (`provider`, `modelId`, spec version), and the resolved `prompt` (post-memory + post-processors). Any change to these inputs automatically invalidates the cache.
 
 ### Customize the cache key
 
@@ -102,27 +108,27 @@ Pass `key` as a function to derive your own cache key from any subset of those i
 ```typescript title="src/example.ts"
 import { buildAgentResponseCacheKey } from '@mastra/core/agent'
 
-await agent.stream(prompt, {
+await agent.stream(input, {
   responseCache: {
-    // Cache only on the model id and the latest user message — ignore
-    // history, tools, structured output, etc.
-    key: ({ model, messages }) => `qa:${model.modelId}:${JSON.stringify(messages).slice(-200)}`,
+    // Cache only on the model id and the resolved prompt tail — ignore
+    // step number, scope, etc.
+    key: ({ model, prompt }) => `qa:${model.modelId}:${JSON.stringify(prompt).slice(-200)}`,
   },
 })
 
 // Or reuse Mastra's hashing helper while overriding individual fields:
-await agent.stream(prompt, {
+await agent.stream(input, {
   responseCache: {
-    key: inputs => buildAgentResponseCacheKey({ ...inputs, tools: undefined }),
+    key: inputs => buildAgentResponseCacheKey({ ...inputs, scope: 'global' }),
   },
 })
 ```
 
-If the function throws, Mastra logs a warning and falls back to the default key derivation so the call still benefits from caching.
+If the function throws, Mastra falls back to the default key derivation so the call still benefits from caching.
 
 ## How cache hits work
 
-`agent.generate()` returns the cached `FullOutput` directly. `agent.stream()` returns a `MastraModelOutput` whose chunks are replayed from the cached buffer through the same pipeline, so consumers iterating `fullStream` or awaiting `text`, `usage`, and `finishReason` see the cached values.
+When the processor finds a cache hit, it short-circuits the LLM call by returning the cached chunks from `processLLMRequest`. The agentic loop synthesizes a stream from those chunks instead of calling the model. `agent.generate()` collects them into a `FullOutput`; `agent.stream()` returns a `MastraModelOutput` whose chunks come from the cached buffer, so consumers iterating `fullStream` or awaiting `text`, `usage`, and `finishReason` see the cached values.
 
 Cache writes happen after the response completes. Failed runs (errors, tripwire activations) are not cached, so the next call retries cleanly.
 

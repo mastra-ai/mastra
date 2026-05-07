@@ -12,7 +12,6 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { createMastraCacheFromServerCache } from '../cache';
-import type { MastraCache } from '../cache';
 import { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -61,6 +60,7 @@ import type {
   Processor,
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
+import { ResponseCache } from '../processors/processors/response-cache';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
@@ -71,7 +71,6 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
-import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
@@ -100,9 +99,8 @@ import type {
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
-import { buildAgentResponseCacheKey, resolveResponseCacheConfig, summarizeToolsForCacheKey } from './response-cache';
-import type { AgentResponseCacheKeyInputs, AgentResponseCacheOption, CachedAgentResponse } from './response-cache';
-import { replayCachedAgentResponse } from './response-cache-replay';
+import { resolveResponseCacheConfig } from './response-cache';
+import type { AgentResponseCacheOption } from './response-cache';
 import { SaveQueueManager } from './save-queue';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
@@ -5057,37 +5055,54 @@ export class Agent<
   }
 
   /**
-   * Build a cache lookup descriptor for a `stream()` / `generate()` call from
-   * already-resolved request inputs. Returns `undefined` if response caching
-   * is disabled or if there's no usable cache (no custom cache + no Mastra
-   * server cache).
-   *
-   * The cache key incorporates everything that can change the LLM's response
-   * (model identity, model settings, provider options, system prompt,
-   * instructions, tool definitions, structured output schema, input messages,
-   * `methodType`) plus an optional scope for multi-tenant isolation. See
-   * {@link buildAgentResponseCacheKey} for details.
+   * Resolve the user-configured input processors only (without the
+   * memory/workspace/skills/channel/browser auto-derived ones). Used when
+   * we need to append a synthetic processor (e.g. {@link ResponseCache})
+   * without double-resolving the auto-derived layer in the loop.
    *
    * @internal
    */
-  async #resolveResponseCacheLookup(args: {
-    methodType: 'stream' | 'generate';
+  async #resolveUserInputProcessors(
+    requestContext?: RequestContext,
+    perCallOverride?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    if (perCallOverride !== undefined) return perCallOverride;
+    if (!this.#inputProcessors) return [];
+    if (typeof this.#inputProcessors === 'function') {
+      return await this.#inputProcessors({
+        requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+      });
+    }
+    return this.#inputProcessors;
+  }
+
+  /**
+   * Resolve the {@link ResponseCache} processor that should be auto-registered
+   * for a call (if any). Returns `undefined` when:
+   *
+   * - response caching is disabled,
+   * - no usable cache is available (no custom cache + no Mastra server cache),
+   * - the user has manually added a `ResponseCache` to their input
+   *   processors (we leave manual setups alone and just log a debug skip).
+   *
+   * @internal
+   */
+  async #resolveAutoResponseCacheProcessor(args: {
     perCallOption: AgentResponseCacheOption | undefined;
     requestContext?: RequestContext;
-    modelInfo: { provider?: string; modelId?: string; specificationVersion?: string };
-    messages: MessageListInput;
     mergedOptions: Record<string, unknown>;
-  }): Promise<
-    | undefined
-    | {
-        cache: MastraCache;
-        cacheKey: string;
-        ttl?: number;
-        bust: boolean;
-      }
-  > {
+    inputProcessors: InputProcessorOrWorkflow[];
+  }): Promise<ResponseCache | undefined> {
     const config = resolveResponseCacheConfig(this.#responseCache, args.perCallOption);
     if (!config.enabled) return undefined;
+
+    const hasManual = args.inputProcessors.some(p => p instanceof ResponseCache);
+    if (hasManual) {
+      this.logger.debug(
+        `[Agent:${this.name}] responseCache requested but a ResponseCache processor is already registered — leaving the user's setup alone`,
+      );
+      return undefined;
+    }
 
     let cache = config.cache;
     if (!cache) {
@@ -5104,121 +5119,19 @@ export class Agent<
       return undefined;
     }
 
-    let cacheKey: string;
-    if (typeof config.key === 'string') {
-      // String key — used verbatim, request shape isn't hashed.
-      cacheKey = config.key;
-    } else {
-      // Build the inputs once — either to hash via buildAgentResponseCacheKey
-      // (default) or to hand to a user-supplied key function.
-      const memoryOption = (args.mergedOptions.memory ?? undefined) as AgentMemoryOption | undefined;
-      const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
+    // Default scope to memory.resource (when memory is configured) for
+    // multi-tenant isolation. `scope: null` opts out explicitly.
+    const memoryOption = (args.mergedOptions.memory ?? undefined) as AgentMemoryOption | undefined;
+    const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
 
-      let agentTools: ToolsInput | undefined;
-      try {
-        agentTools = (await this.listTools({ requestContext: args.requestContext })) as unknown as ToolsInput;
-      } catch {
-        // Dynamic tool resolution can throw — fall back to skipping tools in
-        // the key. Cache hits are still safe because tool definitions are
-        // deterministic per request anyway, and `responseCache.key` is the
-        // documented escape hatch.
-      }
-
-      const toolsets = args.mergedOptions.toolsets as Record<string, ToolsInput> | undefined;
-      const clientTools = args.mergedOptions.clientTools as ToolsInput | undefined;
-      let instructions: AgentInstructions | undefined;
-      try {
-        instructions = await this.getInstructions({ requestContext: args.requestContext });
-      } catch {
-        // Same fallback rationale as tools.
-      }
-
-      const keyInputs: AgentResponseCacheKeyInputs = {
-        agentId: this.id,
-        methodType: args.methodType,
-        scope,
-        model: {
-          provider: args.modelInfo.provider,
-          modelId: args.modelInfo.modelId,
-          specVersion: args.modelInfo.specificationVersion,
-        },
-        instructions,
-        system: args.mergedOptions.system,
-        messages: args.messages,
-        modelSettings: args.mergedOptions.modelSettings,
-        providerOptions: args.mergedOptions.providerOptions,
-        toolChoice: args.mergedOptions.toolChoice,
-        tools: {
-          agent: summarizeToolsForCacheKey(agentTools as Record<string, unknown> | undefined),
-          toolsets: toolsets
-            ? Object.fromEntries(
-                Object.entries(toolsets).map(([k, v]) => [
-                  k,
-                  summarizeToolsForCacheKey(v as Record<string, unknown> | undefined),
-                ]),
-              )
-            : undefined,
-          clientTools: summarizeToolsForCacheKey(clientTools as Record<string, unknown> | undefined),
-        },
-        structuredOutputSchema:
-          (args.mergedOptions.structuredOutput as { schema?: unknown } | undefined)?.schema ??
-          (args.mergedOptions.experimental_output as { jsonSchema?: unknown } | undefined)?.jsonSchema,
-        context: args.mergedOptions.context,
-      };
-
-      if (typeof config.key === 'function') {
-        try {
-          cacheKey = await config.key(keyInputs);
-        } catch (err) {
-          this.logger.warn(
-            `[Agent:${this.name}] responseCache.key function threw — falling back to default key derivation: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          cacheKey = buildAgentResponseCacheKey(keyInputs);
-        }
-      } else {
-        cacheKey = buildAgentResponseCacheKey(keyInputs);
-      }
-    }
-
-    return { cache, cacheKey, ttl: config.ttl, bust: config.bust };
-  }
-
-  /**
-   * Fire-and-forget cache write for a completed agent response. Captures
-   * post-processor chunks via `output.fullStream` (which replays the buffered
-   * chunks because the stream has already finished) and stores them alongside
-   * the `FullOutput` so future cache hits can replay either form.
-   *
-   * @internal
-   */
-  #writeResponseCache<OUTPUT>(
-    lookup: { cache: MastraCache; cacheKey: string; ttl?: number },
-    output: MastraModelOutput<OUTPUT>,
-    fullOutput: FullOutput<OUTPUT>,
-  ): void {
-    void (async () => {
-      try {
-        if (fullOutput.tripwire || fullOutput.error) {
-          // Don't cache failed runs — replaying an error is not what users
-          // expect from a cache hit.
-          return;
-        }
-        const chunks: ChunkType<OUTPUT>[] = [];
-        for await (const chunk of output.fullStream) {
-          chunks.push(chunk);
-        }
-        const cached: CachedAgentResponse<OUTPUT> = {
-          chunks,
-          fullOutput,
-          cachedAt: Date.now(),
-        };
-        await lookup.cache.set(lookup.cacheKey, cached, lookup.ttl);
-      } catch (err) {
-        this.logger.warn(`[Agent:${this.name}] responseCache write failed`, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    })();
+    return new ResponseCache({
+      cache,
+      key: config.key,
+      ttl: config.ttl,
+      scope,
+      bust: config.bust,
+      agentId: this.id,
+    });
   }
 
   /**
@@ -5966,31 +5879,30 @@ export class Agent<
       });
     }
 
-    const responseCacheLookup = await this.#resolveResponseCacheLookup({
-      methodType: 'generate',
+    // Auto-register a ResponseCache processor for this call if response
+    // caching is enabled and the user hasn't manually registered one.
+    // Caching now happens *inside* the agentic loop on the
+    // `processLLMRequest` hook so the cache key includes memory + input
+    // processor effects (preventing cross-user context leaks) and so each
+    // step in a tool loop is independently cacheable.
+    const generateUserInputProcessors = await this.#resolveUserInputProcessors(
+      mergedOptions.requestContext,
+      mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined,
+    );
+    const generateResponseCacheProcessor = await this.#resolveAutoResponseCacheProcessor({
       perCallOption: options?.responseCache,
       requestContext: mergedOptions.requestContext,
-      modelInfo,
-      messages,
       mergedOptions: mergedOptions as unknown as Record<string, unknown>,
+      inputProcessors: generateUserInputProcessors,
     });
 
-    if (responseCacheLookup && !responseCacheLookup.bust) {
-      try {
-        const cached = await responseCacheLookup.cache.get<CachedAgentResponse<OUTPUT>>(responseCacheLookup.cacheKey);
-        if (cached?.fullOutput) {
-          this.logger.debug(`[Agent:${this.name}] responseCache HIT (generate)`, { key: responseCacheLookup.cacheKey });
-          return cached.fullOutput;
-        }
-      } catch (err) {
-        this.logger.warn(`[Agent:${this.name}] responseCache read failed`, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
+    const generateInputProcessorOverrides = generateResponseCacheProcessor
+      ? [...generateUserInputProcessors, generateResponseCacheProcessor]
+      : (mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined);
 
     const executeOptions = {
       ...mergedOptions,
+      inputProcessors: generateInputProcessorOverrides,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6033,10 +5945,6 @@ export class Agent<
 
     if (error) {
       throw error;
-    }
-
-    if (responseCacheLookup) {
-      this.#writeResponseCache(responseCacheLookup, result.result, fullOutput);
     }
 
     return fullOutput;
@@ -6125,42 +6033,27 @@ export class Agent<
       });
     }
 
-    const responseCacheLookup = await this.#resolveResponseCacheLookup({
-      methodType: 'stream',
+    // Auto-register a ResponseCache processor for this call. See
+    // generate() above for details on why caching now lives inside the
+    // agentic loop instead of at the top of stream/generate.
+    const streamUserInputProcessors = await this.#resolveUserInputProcessors(
+      mergedOptions.requestContext,
+      mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined,
+    );
+    const streamResponseCacheProcessor = await this.#resolveAutoResponseCacheProcessor({
       perCallOption: streamOptions?.responseCache,
       requestContext: mergedOptions.requestContext,
-      modelInfo,
-      messages,
       mergedOptions: mergedOptions as unknown as Record<string, unknown>,
+      inputProcessors: streamUserInputProcessors,
     });
 
-    if (responseCacheLookup && !responseCacheLookup.bust) {
-      try {
-        const cached = await responseCacheLookup.cache.get<CachedAgentResponse<OUTPUT>>(responseCacheLookup.cacheKey);
-        if (cached?.fullOutput) {
-          this.logger.debug(`[Agent:${this.name}] responseCache HIT (stream)`, { key: responseCacheLookup.cacheKey });
-          return replayCachedAgentResponse({
-            cached,
-            modelInfo: {
-              provider: modelInfo.provider,
-              modelId: modelInfo.modelId,
-              specVersion: modelInfo.specificationVersion,
-            },
-            threadId:
-              typeof mergedOptions.memory?.thread === 'string'
-                ? mergedOptions.memory.thread
-                : mergedOptions.memory?.thread?.id,
-          });
-        }
-      } catch (err) {
-        this.logger.warn(`[Agent:${this.name}] responseCache read failed`, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
+    const streamInputProcessorOverrides = streamResponseCacheProcessor
+      ? [...streamUserInputProcessors, streamResponseCacheProcessor]
+      : (mergedOptions.inputProcessors as InputProcessorOrWorkflow[] | undefined);
 
     const executeOptions = {
       ...mergedOptions,
+      inputProcessors: streamInputProcessorOverrides,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6195,20 +6088,6 @@ export class Agent<
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
       });
-    }
-
-    if (responseCacheLookup) {
-      const stream = result.result;
-      void (async () => {
-        try {
-          const fullOutput = await stream.getFullOutput();
-          this.#writeResponseCache(responseCacheLookup, stream, fullOutput);
-        } catch (err) {
-          this.logger.warn(`[Agent:${this.name}] responseCache write skipped (stream finalize failed)`, {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      })();
     }
 
     return result.result;

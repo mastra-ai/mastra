@@ -49,4 +49,4 @@ export type {
   AgentResponseCacheKeyFn,
   AgentResponseCacheKeyInputs,
 } from './response-cache';
-export { buildAgentResponseCacheKey, summarizeToolsForCacheKey } from './response-cache';
+export { buildAgentResponseCacheKey } from './response-cache';

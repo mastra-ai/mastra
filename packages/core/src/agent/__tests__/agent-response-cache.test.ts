@@ -150,12 +150,18 @@ describe('Agent response cache', () => {
       expect(keyFn).toHaveBeenCalledTimes(2);
       expect(second.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
-      // Inputs include the agentId, model, and messages so users can derive
-      // partial keys from any subset of them.
-      const firstInputs = seenInputs[0] as { agentId: string; model: { modelId?: string }; messages: unknown };
+      // Inputs include the agentId, model, prompt, and stepNumber so users
+      // can derive partial keys from any subset of them.
+      const firstInputs = seenInputs[0] as {
+        agentId: string;
+        model: { modelId?: string };
+        prompt: unknown;
+        stepNumber: number;
+      };
       expect(firstInputs.agentId).toBe('response-cache-agent');
       expect(firstInputs.model.modelId).toBeDefined();
-      expect(firstInputs.messages).toBeDefined();
+      expect(firstInputs.prompt).toBeDefined();
+      expect(firstInputs.stepNumber).toBe(0);
     });
 
     it('falls back to default key derivation when key function throws', async () => {
