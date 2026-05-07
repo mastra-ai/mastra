@@ -41,9 +41,11 @@ See the [Observability Configuration](#observability-configuration) section for 
 npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server
 
 docker run --rm -p 8288:8288 \
-  inngest/inngest \
+  inngest/inngest:v1.18.0 \
   inngest dev -u http://host.docker.internal:3000/inngest/api
 ```
+
+> Requires `inngest@^4` and Inngest Dev Server `v1.18.0` or later. Realtime is built into the SDK in v4, so `@inngest/realtime` and `realtimeMiddleware` are no longer used.
 
 Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
 
@@ -356,14 +358,13 @@ import { PinoLogger } from '@mastra/loggers';
 import { Inngest } from 'inngest';
 import { activityPlanningWorkflow } from './workflows/inngest-workflow';
 import { planningAgent } from './agents/planning-agent';
-import { realtimeMiddleware } from '@inngest/realtime/middleware';
 
 // Create an Inngest instance for workflow orchestration and event handling
+// Realtime is built into the SDK in v4, so no middleware is needed.
 const inngest = new Inngest({
   id: 'mastra',
   baseUrl: `http://localhost:8288`, // URL of your local Inngest server
   isDev: true,
-  middleware: [realtimeMiddleware()], // Enable real-time updates in the Inngest dashboard
 });
 
 // Create and configure the main Mastra instance
@@ -378,7 +379,7 @@ export const mastra = new Mastra({
     host: '0.0.0.0',
     apiRoutes: [
       {
-        path: '/api/inngest', // API endpoint for Inngest to send events to
+        path: '/inngest/api', // API endpoint for Inngest to send events to
         method: 'ALL',
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },

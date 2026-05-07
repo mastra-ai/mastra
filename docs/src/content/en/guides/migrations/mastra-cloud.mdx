@@ -267,7 +267,33 @@ mastra studio deploy
 
 The CLI builds your project, uploads the artifact, and deploys it. On first deploy, a `.mastra-project.json` file is created to link your local project to the platform. Commit this file to your repository.
 
+The deploy requires a `.env` or `.env.*` file in the project directory. If none exists the CLI errors with `No env file found for deploy.` after the build completes — add at least an empty `.env` before running the command.
+
+To create a new platform project in one non-interactive step (instead of running `mastra studio projects create` separately), pass a name with `--project` and accept defaults with `--yes`:
+
+```bash
+mastra studio deploy --project "my-new-project" --yes
+```
+
 See [Studio deployment](/docs/studio/deployment#mastra-platform) for details.
+
+### Multiple environments
+
+Mastra platform projects do not have a built-in concept of named environments (for example `staging` vs `production`). To deploy the same codebase to multiple environments, create one project per environment and pair each deploy with the matching env file using `--env-file`.
+
+The pattern below uses one `.env.<env>` file per environment, deploys to a project named `my-app-<env>`, and overrides `.mastra-project.json` per deploy with `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID`:
+
+```bash
+# First deploy of each environment — creates the project
+mastra studio deploy --project "my-app-staging" --env-file .env.staging --yes
+mastra studio deploy --project "my-app-production" --env-file .env.production --yes
+
+# Subsequent deploys (CI/CD) — target the existing project
+MASTRA_PROJECT_ID="<staging-id>" mastra studio deploy --env-file .env.staging --yes
+MASTRA_PROJECT_ID="<production-id>" mastra studio deploy --env-file .env.production --yes
+```
+
+Each environment ends up with its own Studio URL and its own observability data. Send `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` per environment so `CloudExporter` routes traces to the correct project.
 
 ## Deploy Server (optional)
 

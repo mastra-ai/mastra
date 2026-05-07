@@ -238,13 +238,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/firmware',
-          label: 'Firmware',
+          id: 'providers/friendli',
+          label: 'Friendli',
         },
         {
           type: 'doc',
-          id: 'providers/friendli',
-          label: 'Friendli',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
         },
         {
           type: 'doc',
@@ -305,6 +305,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kiro',
+          label: 'Kiro',
         },
         {
           type: 'doc',

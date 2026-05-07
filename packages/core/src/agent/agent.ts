@@ -6,6 +6,7 @@ import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -97,7 +98,7 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { runStreamUntilIdle } from './stream-until-idle';
+import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -897,11 +898,10 @@ export class Agent<
   }
 
   /**
-   * Resolves and returns input processors from agent configuration.
-   * All processors are combined into a single workflow for consistency.
+   * Resolves input processors from agent configuration in execution order.
    * @internal
    */
-  private async listResolvedInputProcessors(
+  private async resolveInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
   ): Promise<InputProcessorOrWorkflow[]> {
@@ -935,14 +935,13 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
-    // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run last to allow customization
-    const allProcessors = [
+    return [
       ...memoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
@@ -950,7 +949,31 @@ export class Agent<
       ...browserProcessors,
       ...configuredProcessors,
     ];
-    return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
+  }
+
+  /**
+   * Resolves and returns input processors from agent configuration.
+   * All processors are combined into a single workflow for consistency.
+   * @internal
+   */
+  private async listResolvedInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    return this.combineProcessorsIntoWorkflow(processors, `${this.id}-input-processor`);
+  }
+
+  /**
+   * Resolves and returns input processors for the provider-boundary LLM request hook.
+   * These processors stay uncombined because processLLMRequest runs after conversion to model prompt format.
+   * @internal
+   */
+  private async listResolvedLLMRequestProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
   }
 
   /**
@@ -4248,14 +4271,8 @@ export class Agent<
           backgroundConfig: subAgentBackgroundConfig,
         };
 
-        // Mark the wrapper tool so tool-call-step picks up the background config
-        if (subAgentBackgroundConfig) {
-          (toolObj as any).backgroundConfig = subAgentBackgroundConfig;
-        }
-
-        // TODO; fix recursion type
         convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
-          toolObj as any,
+          toolObj,
           options,
           undefined,
           autoResumeSuspendedTools,
@@ -5230,6 +5247,13 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
       }) => this.listResolvedInputProcessors(requestContext, overrides),
+      llmRequestInputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
       outputProcessors: async ({
         requestContext,
         overrides,
@@ -5713,6 +5737,21 @@ export class Agent<
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
 
+    // FGA authorization check
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = options?.requestContext?.get('user');
+      if (user) {
+        const { checkFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'agent', id: this.id },
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        });
+      }
+    }
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -5829,6 +5868,21 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
+
+    // FGA authorization check
+    const streamFgaProvider = this.#mastra?.getServer()?.fga;
+    if (streamFgaProvider) {
+      const user = streamOptions?.requestContext?.get('user');
+      if (user) {
+        const { checkFGA } = await import('../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider: streamFgaProvider,
+          user,
+          resource: { type: 'agent', id: this.id },
+          permission: MastraFGAPermissions.AGENTS_EXECUTE,
+        });
+      }
+    }
 
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
@@ -5980,6 +6034,71 @@ export class Agent<
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
+      activeStreams: this.#activeStreamUntilIdle,
+      bgManager: this.#mastra?.backgroundTaskManager,
+    });
+  }
+
+  /**
+   * Resume-flavored counterpart to {@link streamUntilIdle}. Resumes a
+   * previously suspended stream identified by `streamOptions.runId`, then
+   * keeps the outer stream open across any continuations that background
+   * task completions trigger — same idle-loop semantics as `streamUntilIdle`.
+   *
+   * Use this when (a) the suspended run produced a background task whose
+   * completion should drive a follow-up turn, or (b) a tool dispatched as a
+   * background task from inside the resume itself needs the outer stream to
+   * stay open until it finishes.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.resumeStreamUntilIdle(
+   *   { approved: true },
+   *   { runId: 'previous-run-id', memory: { thread: 't1', resource: 'u1' } },
+   * );
+   *
+   * for await (const chunk of stream.fullStream) {
+   *   // chunks from the resumed turn AND any continuation turns
+   * }
+   * ```
+   */
+  async resumeStreamUntilIdle<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    resumeData: any,
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      toolCallId?: string;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<T>>;
+  async resumeStreamUntilIdle<OUTPUT extends {}>(
+    resumeData: any,
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      toolCallId?: string;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async resumeStreamUntilIdle(
+    resumeData: any,
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      toolCallId?: string;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<TOutput>>;
+  async resumeStreamUntilIdle<OUTPUT = TOutput>(
+    resumeData: any,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      toolCallId?: string;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return runResumeStreamUntilIdle<OUTPUT>(this, resumeData, streamOptions, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
     });

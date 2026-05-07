@@ -4,6 +4,8 @@ import {
   LIST_MCP_SERVER_TOOLS_ROUTE,
   GET_MCP_SERVER_TOOL_DETAIL_ROUTE,
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
+  LIST_MCP_SERVER_RESOURCES_ROUTE,
+  READ_MCP_SERVER_RESOURCE_ROUTE,
   MCP_HTTP_TRANSPORT_ROUTE,
   MCP_SSE_TRANSPORT_ROUTE,
   MCP_SSE_MESSAGES_ROUTE,
@@ -28,6 +30,12 @@ export const MCP_ROUTES = [
   LIST_MCP_SERVER_TOOLS_ROUTE,
   GET_MCP_SERVER_TOOL_DETAIL_ROUTE,
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
+
+  // ============================================================================
+  // MCP Server Resource Routes
+  // ============================================================================
+  LIST_MCP_SERVER_RESOURCES_ROUTE,
+  READ_MCP_SERVER_RESOURCE_ROUTE,
 
   // ============================================================================
   // MCP Transport Routes (handled by adapters)

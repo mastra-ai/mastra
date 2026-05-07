@@ -19,7 +19,7 @@ const MCPServerToolExecutor = () => {
   if (!mcpTool) return null;
 
   return (
-    <div className="h-full w-full bg-surface2 overflow-y-hidden">
+    <div className="h-full w-full bg-surface2 overflow-y-auto">
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/mcps`}>

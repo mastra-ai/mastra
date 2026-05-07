@@ -208,10 +208,10 @@ html.light {
   --leading-header-xl: 129%;
 
   --radius-none: 0px;
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 12px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
@@ -343,8 +343,11 @@ html.light {
   --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
+  /* Inset top highlight (gloss) instead of outer 1px ring — outer ring stacked with the
+     explicit `border` on every consumer (Dialog, Select/Dropdown content, etc.) and read as
+     a duplicated outline. */
   --shadow-dialog:
-    0 0 0 1px oklch(0 0 0 / 0.04), 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
+    inset 0 1px 0 0 oklch(1 0 0 / 0.04), 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);

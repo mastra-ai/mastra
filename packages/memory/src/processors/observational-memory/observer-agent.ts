@@ -695,6 +695,89 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart | undefined {
+  if (!isRecord(block) || typeof block.type !== 'string') {
+    return undefined;
+  }
+
+  const mediaType = typeof block.mediaType === 'string' ? block.mediaType : undefined;
+  const filename = typeof block.filename === 'string' ? block.filename : undefined;
+
+  switch (block.type) {
+    case 'image-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const image = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'image', image, mimeType: mediaType };
+    }
+
+    case 'image-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'image', image: url, mimeType: mediaType };
+    }
+
+    case 'media': {
+      const data = block.data;
+      if (typeof data !== 'string' || !mediaType) return undefined;
+      const dataUri = `data:${mediaType};base64,${data}`;
+      if (mediaType.toLowerCase().startsWith('image/')) {
+        return { type: 'image', image: dataUri, mimeType: mediaType };
+      }
+      return { type: 'file', data: dataUri, mimeType: mediaType };
+    }
+
+    case 'file-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const dataUri = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'file', data: dataUri, mimeType: mediaType, filename };
+    }
+
+    case 'file-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'file', data: url, mimeType: mediaType, filename };
+    }
+
+    default:
+      return undefined;
+  }
+}
+
+function extractToolResultAttachments(
+  result: unknown,
+  counter: ObserverAttachmentCounter,
+): { resultWithoutAttachments: unknown; attachments: ObserverInputAttachmentPart[] } {
+  if (!isRecord(result) || result.type !== 'content' || !Array.isArray(result.value)) {
+    return { resultWithoutAttachments: result, attachments: [] };
+  }
+
+  const record = result;
+
+  const attachments: ObserverInputAttachmentPart[] = [];
+  const newValue = (record.value as unknown[]).map(block => {
+    const attachment = mapToolResultBlockToAttachment(block);
+    if (!attachment) {
+      return block;
+    }
+
+    attachments.push(toObserverInputAttachmentPart(attachment));
+    const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
+    return { type: isRecord(block) ? block.type : undefined, placeholder };
+  });
+
+  if (attachments.length === 0) {
+    return { resultWithoutAttachments: result, attachments };
+  }
+
+  return { resultWithoutAttachments: { ...record, value: newValue }, attachments };
+}
+
 function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
   const timeLabel = time && time !== previousTime ? `(${time})` : '';
 
@@ -823,9 +906,19 @@ function formatObserverMessage(
             part as { providerMetadata?: Record<string, any> },
             inv.result,
           );
+          const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(
+            resultForObserver,
+            counter,
+          );
+          if (extractedAttachments.length > 0) {
+            attachments.push(...extractedAttachments);
+          }
           pushLine(
             `Tool Result ${inv.toolName}`,
-            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            maybeTruncate(
+              formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
+              maxLen,
+            ),
             partCreatedAt,
           );
           return;

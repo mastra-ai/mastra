@@ -161,6 +161,10 @@ export interface GlobalSettings {
     omReflectionThreshold: number | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
+    /** Default judge model for /goal. */
+    goalJudgeModel: string | null;
+    /** Default max attempts for /goal. */
+    goalMaxTurns: number | null;
   };
   // Global behavior preferences
   preferences: {
@@ -232,6 +236,8 @@ const DEFAULTS: GlobalSettings = {
     omObservationThreshold: null,
     omReflectionThreshold: null,
     subagentModels: {},
+    goalJudgeModel: null,
+    goalMaxTurns: null,
   },
   preferences: {
     yolo: null,

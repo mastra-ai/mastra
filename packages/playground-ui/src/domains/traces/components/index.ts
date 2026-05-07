@@ -20,3 +20,4 @@ export { TraceDetailsView, type TraceDetailsViewProps } from './trace-details-vi
 export { TracesLayout, type TracesLayoutProps } from './traces-layout';
 export { TracesListView, type TracesListViewProps, type TracesListViewTrace } from './traces-list-view';
 export { TracesErrorContent, type TracesErrorContentProps } from './traces-error-content';
+export { NoTracesInfo, type NoTracesInfoProps } from './no-traces-info';
