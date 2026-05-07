@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { API_COMMANDS } from './commands.js';
 import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input.js';
+import { API_COMMANDS } from './index.js';
 
 describe('parseInput', () => {
   it('ignores input for commands without JSON input and allows omitted optional input', () => {

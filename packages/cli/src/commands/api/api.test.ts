@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { API_COMMANDS } from './commands';
-import { executeDescriptor, registerApiCommand } from './index';
+import { API_COMMANDS, executeDescriptor, registerApiCommand } from './index';
 
 const fetchMock = vi.fn();
 let stdout = '';

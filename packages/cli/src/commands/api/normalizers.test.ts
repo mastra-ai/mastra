@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-
-import { API_COMMANDS } from './commands.js';
 import { normalizeData } from './normalizers.js';
+import { API_COMMANDS } from './index.js';
 
 describe('normalizeData', () => {
   it('keeps agent run output to stable fields without duplicating the raw response', () => {

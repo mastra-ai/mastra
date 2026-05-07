@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { API_COMMANDS } from './commands.js';
 import { buildCommandExamples, buildCommandUsage, getCommandSchema } from './schema.js';
+import { API_COMMANDS } from './index.js';
 
 const commands = (key: keyof typeof API_COMMANDS) =>
   buildCommandExamples(API_COMMANDS[key]).map(example => example.command);

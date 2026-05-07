@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildUrl, fetchSchemaManifest, requestApi, splitInput } from './client';
-import type { ApiCommandDescriptor } from './commands';
+import type { ApiCommandDescriptor } from './types';
 
 const fetchMock = vi.fn();
 
