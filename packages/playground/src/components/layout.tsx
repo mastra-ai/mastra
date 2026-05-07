@@ -47,20 +47,16 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <NavigationCommand />
       <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
         {shouldShowSidebar && <AppSidebar />}
-        {shouldShowSidebar ? (
-          <div className="flex flex-col h-full min-h-0">
-            <MobileNavbar />
-            <div className="flex-1 min-h-0 bg-transparent overflow-y-auto">{content}</div>
-          </div>
-        ) : (
+        <div className="flex flex-col h-full min-h-0">
+          {shouldShowSidebar && <MobileNavbar />}
           <div
-            className={cn('bg-transparent overflow-y-auto', {
-              'h-[calc(100%-1.5rem)]': shouldHideSidebar,
+            className={cn('flex-1 min-h-0 bg-transparent overflow-y-auto', {
+              'h-[calc(100%-1.5rem)]': !shouldShowSidebar && shouldHideSidebar,
             })}
           >
             {content}
           </div>
-        )}
+        </div>
       </div>
     </>
   );

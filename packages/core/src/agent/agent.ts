@@ -898,11 +898,10 @@ export class Agent<
   }
 
   /**
-   * Resolves and returns input processors from agent configuration.
-   * All processors are combined into a single workflow for consistency.
+   * Resolves input processors from agent configuration in execution order.
    * @internal
    */
-  private async listResolvedInputProcessors(
+  private async resolveInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
   ): Promise<InputProcessorOrWorkflow[]> {
@@ -936,14 +935,13 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
-    // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run last to allow customization
-    const allProcessors = [
+    return [
       ...memoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
@@ -951,7 +949,31 @@ export class Agent<
       ...browserProcessors,
       ...configuredProcessors,
     ];
-    return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
+  }
+
+  /**
+   * Resolves and returns input processors from agent configuration.
+   * All processors are combined into a single workflow for consistency.
+   * @internal
+   */
+  private async listResolvedInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    return this.combineProcessorsIntoWorkflow(processors, `${this.id}-input-processor`);
+  }
+
+  /**
+   * Resolves and returns input processors for the provider-boundary LLM request hook.
+   * These processors stay uncombined because processLLMRequest runs after conversion to model prompt format.
+   * @internal
+   */
+  private async listResolvedLLMRequestProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
   }
 
   /**
@@ -5225,6 +5247,13 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
       }) => this.listResolvedInputProcessors(requestContext, overrides),
+      llmRequestInputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
       outputProcessors: async ({
         requestContext,
         overrides,
