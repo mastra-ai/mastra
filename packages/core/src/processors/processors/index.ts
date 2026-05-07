@@ -70,6 +70,11 @@ export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOpti
 export {
   ResponseCache,
   DEFAULT_RESPONSE_CACHE_TTL_SECONDS,
+  RESPONSE_CACHE_CONTEXT_KEY,
+  buildResponseCacheKey,
   type ResponseCacheOptions,
+  type ResponseCacheContextOptions,
+  type ResponseCacheKeyFn,
+  type ResponseCacheKeyInputs,
   type CachedLLMStepResponse,
 } from './response-cache';

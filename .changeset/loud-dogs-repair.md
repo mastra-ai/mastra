@@ -2,53 +2,67 @@
 '@mastra/core': minor
 ---
 
-**Added agent-level response caching**
+**Added `ResponseCache` input processor**
 
-Cache identical agent calls to skip the LLM and replay a previously cached response. Useful for prompt templates, suggested-prompt buttons, agentic search re-asks, or guardrail LLMs that classify the same input over and over.
+Cache identical LLM steps to skip the model call and replay a previously cached response. Useful for prompt templates, suggested-prompt buttons, agentic search re-asks, or guardrail LLMs that classify the same input over and over.
+
+Caching is opt-in: register `ResponseCache` explicitly on `inputProcessors`. There is no agent-level option — this keeps the surface small while we collect feedback on the processor API. Per-call overrides flow through `RequestContext`.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
+import { InMemoryServerCache, createMastraCacheFromServerCache } from '@mastra/core/cache';
+import { ResponseCache } from '@mastra/core/processors';
+
+const cache = createMastraCacheFromServerCache(new InMemoryServerCache());
 
 const agent = new Agent({
   name: 'Search Agent',
   instructions: 'You answer questions concisely.',
   model: 'openai/gpt-5',
-  responseCache: { ttl: 600 },
+  inputProcessors: [new ResponseCache({ cache, ttl: 600 })],
 });
 
 // First call: cache miss → LLM call
 await agent.generate('What is the capital of France?');
 
-// Second call: cache HIT → no LLM call
+// Second identical call: cache hit → no LLM call
 await agent.generate('What is the capital of France?');
 ```
 
-Per-call options override agent-level defaults:
+Per-call overrides via `RequestContext`:
 
 ```ts
+import { ResponseCache } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
+
+// Force a fresh call but still update the cache.
 await agent.stream(prompt, {
-  responseCache: {
-    key, // override the auto-derived cache key
-    ttl, // per-entry TTL in seconds
-    scope, // tenant/user scope
-    cache, // custom MastraCache implementation
-    bust, // bypass any existing entry
-  },
+  requestContext: ResponseCache.context({ bust: true }),
 });
 
-// Opt out for a single call
-await agent.generate(prompt, { responseCache: false });
+// Or merge into an existing context.
+const ctx = new RequestContext();
+ResponseCache.applyContext(ctx, { key: 'custom-key' });
+await agent.stream(prompt, { requestContext: ctx });
 ```
 
-`key` may also be a function that receives the same inputs Mastra would have hashed and returns a custom cache key string (or `Promise<string>`), so you can derive cache keys from any subset of those inputs (e.g. cache only on the model id and the latest user message):
+Three fields are overridable per call: `key`, `scope`, `bust`. `cache`, `ttl`, and `agentId` stay on the constructor.
+
+A `key` function receives `{ agentId, scope, model, prompt, stepNumber }` and returns a string (or `Promise<string>`):
 
 ```ts
 await agent.stream(prompt, {
-  responseCache: {
+  requestContext: ResponseCache.context({
     key: ({ model, prompt }) =>
       `qa:${model.modelId}:${JSON.stringify(prompt).slice(-200)}`,
-  },
+  }),
 });
 ```
 
-Caching is implemented as a `ResponseCache` input processor that runs on the new `processLLMRequest` / `processLLMResponse` hooks. The cache key is derived from the *resolved* `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. *after* memory loading and earlier input processors have run — so cached entries don't leak context across users. Each step in an agentic tool loop is independently cached. Cache writes happen after the response completes, and failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.
+The processor hooks into `processLLMRequest` (lookup; short-circuits on hit) and `processLLMResponse` (write on completion). The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. _after_ memory loading and earlier input processors have run — so cached entries don't leak context across users. Each step in an agentic tool loop is independently cached. By default, the cache scope falls back to `MASTRA_RESOURCE_ID_KEY` from the request context for automatic per-user isolation. Cache writes happen after the response completes, and failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.
+
+Also adds:
+
+- `MastraCache` interface and `InMemoryServerCache` (in `@mastra/core/cache`) for plugging in custom backends.
+- `createMastraCacheFromServerCache` adapter that turns any `MastraServerCache` (e.g. `RedisCache` from `@mastra/redis`) into a `MastraCache`.
+- New paired processor hooks `processLLMRequest` and `processLLMResponse`. `ProcessLLMRequestResult` may now return `{ response }` to short-circuit the LLM call with a cached payload.

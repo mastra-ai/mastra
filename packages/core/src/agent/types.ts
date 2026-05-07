@@ -50,7 +50,6 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { AgentResponseCacheOption } from './response-cache';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -420,19 +419,6 @@ export interface AgentConfig<
    * Controls which tools can run in the background and their behavior.
    */
   backgroundTasks?: AgentBackgroundConfig;
-  /**
-   * Default response cache configuration for `agent.stream()` /
-   * `agent.generate()`. Set to `true` to use the Mastra instance's server
-   * cache with sensible defaults, or pass an options object to customize the
-   * TTL, scope, custom cache, etc.
-   *
-   * Per-call options (`agent.stream(prompt, { responseCache })`) override
-   * any agent-level defaults set here. Pass `responseCache: false` per call
-   * to opt out for a single request.
-   *
-   * @see {@link AgentResponseCacheOption}
-   */
-  responseCache?: AgentResponseCacheOption;
 }
 
 export type AgentMemoryOption = {

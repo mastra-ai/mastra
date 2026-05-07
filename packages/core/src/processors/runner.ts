@@ -1302,8 +1302,11 @@ export class ProcessorRunner {
         });
 
         if (result && typeof result === 'object') {
-          if (result.prompt) {
-            currentPrompt = result.prompt;
+          // Use property presence (not truthiness) so a processor can
+          // intentionally pass an empty prompt without it being silently
+          // ignored.
+          if (Object.prototype.hasOwnProperty.call(result, 'prompt')) {
+            currentPrompt = result.prompt as LanguageModelV2Prompt;
           }
           if (result.response && !cachedResponse) {
             // First processor to short-circuit wins. Subsequent processors

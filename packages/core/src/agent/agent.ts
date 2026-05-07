@@ -11,7 +11,6 @@ import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
-import { createMastraCacheFromServerCache } from '../cache';
 import { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -60,7 +59,6 @@ import type {
   Processor,
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
-import { ResponseCache } from '../processors/processors/response-cache';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
@@ -99,15 +97,12 @@ import type {
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
-import { resolveResponseCacheConfig } from './response-cache';
-import type { AgentResponseCacheOption } from './response-cache';
 import { SaveQueueManager } from './save-queue';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
   AgentGenerateOptions,
-  AgentMemoryOption,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -139,20 +134,6 @@ type ModelFallbacks = {
 }[];
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
-
-/**
- * Per-call options consumed by {@link Agent.resolveInputProcessors} when
- * deciding whether to auto-register synthetic processors (currently only
- * {@link ResponseCache}). These mirror the values from the per-call options
- * bag that aren't already encoded in `configuredProcessorOverrides` /
- * `requestContext`.
- *
- * @internal
- */
-type ResolveInputProcessorsPerCallOptions = {
-  responseCache?: AgentResponseCacheOption;
-  memory?: AgentMemoryOption;
-};
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
@@ -280,7 +261,6 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
-  #responseCache?: AgentResponseCacheOption;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -478,10 +458,6 @@ export class Agent<
       this.#backgroundTasks = config.backgroundTasks;
     }
 
-    if (config.responseCache !== undefined) {
-      this.#responseCache = config.responseCache;
-    }
-
     // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
@@ -668,70 +644,6 @@ export class Agent<
 
     // Create new SkillsProcessor using workspace
     return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
-  }
-
-  /**
-   * Gets the {@link ResponseCache} processor to add when response caching
-   * is enabled (via agent constructor or per-call options) and no manual
-   * `ResponseCache` is already registered. Mirrors the shape of the other
-   * auto-derived `getXxxProcessors` helpers (memory, workspace, skills,
-   * channels, browser).
-   *
-   * Returns `[]` when:
-   * - response caching is disabled,
-   * - the user already added a `ResponseCache` (we leave their setup alone),
-   * - or no usable cache is available (no custom cache + no Mastra server cache).
-   *
-   * @internal
-   */
-  private async getResponseCacheProcessors(
-    configuredProcessors: InputProcessorOrWorkflow[],
-    _requestContext?: RequestContext,
-    perCallOptions?: ResolveInputProcessorsPerCallOptions,
-  ): Promise<InputProcessorOrWorkflow[]> {
-    const config = resolveResponseCacheConfig(this.#responseCache, perCallOptions?.responseCache);
-    if (!config.enabled) return [];
-
-    // De-dupe like the other patterns: skip auto-registration when the user
-    // already registered a ResponseCache manually.
-    const hasManual = configuredProcessors.some(p => !isProcessorWorkflow(p) && p instanceof ResponseCache);
-    if (hasManual) {
-      this.logger.debug(
-        `[Agent:${this.name}] responseCache requested but a ResponseCache processor is already registered — leaving the user's setup alone`,
-      );
-      return [];
-    }
-
-    let cache = config.cache;
-    if (!cache) {
-      const serverCache = this.#mastra?.getServerCache();
-      if (serverCache) {
-        cache = createMastraCacheFromServerCache(serverCache);
-      }
-    }
-
-    if (!cache) {
-      this.logger.debug(
-        `[Agent:${this.name}] responseCache requested but no cache available — pass responseCache.cache or register the agent with a Mastra instance`,
-      );
-      return [];
-    }
-
-    // Default scope to memory.resource (when memory is configured) for
-    // multi-tenant isolation. `scope: null` opts out explicitly.
-    const memoryOption = perCallOptions?.memory;
-    const scope = config.scope === null ? null : (config.scope ?? memoryOption?.resource ?? undefined);
-
-    return [
-      new ResponseCache({
-        cache,
-        key: config.key,
-        ttl: config.ttl,
-        scope,
-        bust: config.bust,
-        agentId: this.id,
-      }),
-    ];
   }
 
   /**
@@ -992,7 +904,6 @@ export class Agent<
   private async resolveInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
-    perCallOptions?: ResolveInputProcessorsPerCallOptions,
   ): Promise<InputProcessorOrWorkflow[]> {
     // Get configured input processors - use overrides if provided (from generate/stream options),
     // otherwise use agent constructor processors
@@ -1024,22 +935,12 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
-    // Get the auto-registered ResponseCache (with deduplication). Appended
-    // *after* configuredProcessors so the cache key reflects every prompt
-    // mutation from earlier processors.
-    const responseCacheProcessors = await this.getResponseCacheProcessors(
-      configuredProcessors,
-      requestContext,
-      perCallOptions,
-    );
-
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run after auto-derived layers to allow customization
-    // Response cache runs last so its key includes every prompt-mutating effect above
     return [
       ...memoryProcessors,
       ...workspaceProcessors,
@@ -1047,7 +948,6 @@ export class Agent<
       ...channelProcessors,
       ...browserProcessors,
       ...configuredProcessors,
-      ...responseCacheProcessors,
     ];
   }
 
@@ -1059,9 +959,8 @@ export class Agent<
   private async listResolvedInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
-    perCallOptions?: ResolveInputProcessorsPerCallOptions,
   ): Promise<InputProcessorOrWorkflow[]> {
-    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides, perCallOptions);
+    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
     return this.combineProcessorsIntoWorkflow(processors, `${this.id}-input-processor`);
   }
 
@@ -1073,9 +972,8 @@ export class Agent<
   private async listResolvedLLMRequestProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
-    perCallOptions?: ResolveInputProcessorsPerCallOptions,
   ): Promise<InputProcessorOrWorkflow[]> {
-    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides, perCallOptions);
+    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
   }
 
   /**
@@ -5348,22 +5246,14 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) =>
-        this.listResolvedInputProcessors(requestContext, overrides, {
-          responseCache: options.responseCache,
-          memory: options.memory,
-        }),
+      }) => this.listResolvedInputProcessors(requestContext, overrides),
       llmRequestInputProcessors: async ({
         requestContext,
         overrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) =>
-        this.listResolvedLLMRequestProcessors(requestContext, overrides, {
-          responseCache: options.responseCache,
-          memory: options.memory,
-        }),
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
       outputProcessors: async ({
         requestContext,
         overrides,
@@ -5899,14 +5789,6 @@ export class Agent<
       });
     }
 
-    // Response caching (when enabled via agent constructor or per-call
-    // `responseCache` option) is auto-registered as a ResponseCache
-    // processor inside resolveInputProcessors, the same way memory /
-    // workspace / skills / channel / browser processors are. Caching
-    // happens on the `processLLMRequest` hook inside the agentic loop so
-    // the cache key includes memory + input-processor effects (preventing
-    // cross-user context leaks) and so each step in a tool loop is
-    // independently cacheable.
     const executeOptions = {
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput
@@ -6039,8 +5921,6 @@ export class Agent<
       });
     }
 
-    // Response caching is auto-registered as a ResponseCache processor
-    // inside resolveInputProcessors. See generate() for the full rationale.
     const executeOptions = {
       ...mergedOptions,
       structuredOutput: mergedOptions.structuredOutput

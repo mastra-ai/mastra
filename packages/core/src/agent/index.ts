@@ -42,11 +42,3 @@ export type {
 } from './agent.types';
 
 export type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';
-
-export type {
-  AgentResponseCacheOption,
-  AgentResponseCacheOptions,
-  AgentResponseCacheKeyFn,
-  AgentResponseCacheKeyInputs,
-} from './response-cache';
-export { buildAgentResponseCacheKey } from './response-cache';

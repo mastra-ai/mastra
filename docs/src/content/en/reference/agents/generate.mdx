@@ -831,13 +831,6 @@ const response = await agent.generate('Help me organize my day', {
             description: 'Request Context containing dynamic configuration and state.',
           },
           {
-            name: 'responseCache',
-            type: 'boolean | { key?: string | ((inputs) => string | Promise<string>); ttl?: number; scope?: string | null; cache?: MastraCache; bust?: boolean }',
-            isOptional: true,
-            description:
-              'Cache the response so identical subsequent requests skip the LLM call and return the cached output. Pass `true` to use the agent-level default, `false` to opt out for this call, or an options object to customize TTL (seconds), scope, custom cache, or bust behavior. Caching runs as an auto-registered `ResponseCache` input processor on the new `processLLMRequest` / `processLLMResponse` hooks, so the cache key includes the resolved `LanguageModelV2Prompt` (post-memory + post-processors) and each step in a tool loop is independently cached. See [Response caching](/docs/agents/response-caching).',
-          },
-          {
             name: 'tracingContext',
             type: 'TracingContext',
             isOptional: true,

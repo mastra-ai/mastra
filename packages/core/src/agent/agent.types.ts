@@ -11,7 +11,6 @@ import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcesso
 import type { RequestContext } from '../request-context';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
-import type { AgentResponseCacheOption } from './response-cache';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -631,23 +630,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * `agent.streamUntilIdle`, which drives continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
-
-  /**
-   * Cache the response so identical subsequent requests skip the LLM call
-   * and return the cached output. Pass `true` to use the agent-level default
-   * (or fall back to defaults across the board), `false` to opt out for this
-   * call, or an options object to customize TTL, scope, custom cache, etc.
-   *
-   * The cache key is derived from the request shape (model identity, model
-   * settings, provider options, system prompt + instructions, tools,
-   * structured output schema, input messages, and `methodType`) so config
-   * changes automatically invalidate stale entries. Provide
-   * `responseCache.scope` (or rely on `memory.resource` as the default) for
-   * multi-tenant isolation.
-   *
-   * @see {@link AgentResponseCacheOption}
-   */
-  responseCache?: AgentResponseCacheOption;
 } & Partial<ObservabilityContext>;
 
 /**

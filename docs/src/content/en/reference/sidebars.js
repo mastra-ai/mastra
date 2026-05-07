@@ -389,6 +389,7 @@ const sidebars = {
         },
         { type: 'doc', id: 'processors/provider-history-compat', label: 'ProviderHistoryCompat' },
         { type: 'doc', id: 'processors/regex-filter-processor', label: 'RegexFilterProcessor' },
+        { type: 'doc', id: 'processors/response-cache', label: 'ResponseCache' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
         { type: 'doc', id: 'processors/stream-error-retry-processor', label: 'StreamErrorRetryProcessor' },

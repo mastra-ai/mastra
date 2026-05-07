@@ -1,8 +1,8 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { InMemoryServerCache } from '../../cache';
 import type { MastraCache } from '../../cache';
-import { Mastra } from '../../mastra';
+import { ResponseCache } from '../../processors/processors/response-cache';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createRecordingModel(modelId: string, responseText: string) {
@@ -34,12 +34,19 @@ function createRecordingModel(modelId: string, responseText: string) {
   });
 }
 
-function createMemoryCache(): MastraCache & { store: Map<string, unknown>; sets: number; gets: number } {
+function createMemoryCache(): MastraCache & {
+  store: Map<string, unknown>;
+  sets: number;
+  gets: number;
+  ttls: Array<number | undefined>;
+} {
   const store = new Map<string, unknown>();
+  const ttls: Array<number | undefined> = [];
   let sets = 0;
   let gets = 0;
   return {
     store,
+    ttls,
     get sets() {
       return sets;
     },
@@ -50,28 +57,51 @@ function createMemoryCache(): MastraCache & { store: Map<string, unknown>; sets:
       gets++;
       return store.get(key) as T | undefined;
     },
-    async set<T>(key: string, value: T): Promise<void> {
+    async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
       sets++;
+      ttls.push(ttlSeconds);
       store.set(key, value);
     },
   };
 }
 
-describe('Agent response cache', () => {
-  let model: ReturnType<typeof createRecordingModel>;
+function createAgent(args: {
+  cache: MastraCache;
+  agentId?: string;
+  ttl?: number;
+  scope?: string | null;
+  modelId?: string;
+  responseText?: string;
+}) {
+  const model = createRecordingModel(args.modelId ?? 'test-model', args.responseText ?? 'Cached response text');
+  const agentId = args.agentId ?? 'response-cache-agent';
+  const agent = new Agent({
+    id: agentId,
+    name: 'Response Cache Agent',
+    instructions: 'You are a test agent',
+    model,
+    inputProcessors: [
+      new ResponseCache({
+        cache: args.cache,
+        agentId,
+        ttl: args.ttl,
+        scope: args.scope,
+      }),
+    ],
+  });
+  return { agent, model };
+}
+
+describe('ResponseCache processor (integration via Agent)', () => {
   let cache: ReturnType<typeof createMemoryCache>;
   let agent: Agent;
+  let model: ReturnType<typeof createRecordingModel>;
 
   beforeEach(() => {
-    model = createRecordingModel('test-model', 'Cached response text');
     cache = createMemoryCache();
-    agent = new Agent({
-      id: 'response-cache-agent',
-      name: 'Response Cache Agent',
-      instructions: 'You are a test agent',
-      model,
-      responseCache: { cache },
-    });
+    const built = createAgent({ cache });
+    agent = built.agent;
+    model = built.model;
   });
 
   describe('generate()', () => {
@@ -90,15 +120,6 @@ describe('Agent response cache', () => {
       expect(model.doGenerateCalls).toHaveLength(1);
     });
 
-    it('does not cache when responseCache is opted out per call', async () => {
-      await agent.generate('Hello', { responseCache: false });
-      await new Promise(resolve => setTimeout(resolve, 10));
-      expect(cache.sets).toBe(0);
-
-      await agent.generate('Hello', { responseCache: false });
-      expect(model.doGenerateCalls).toHaveLength(2);
-    });
-
     it('different prompts produce different cache entries', async () => {
       await agent.generate('Hello');
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -109,25 +130,73 @@ describe('Agent response cache', () => {
       expect(model.doGenerateCalls).toHaveLength(2);
     });
 
-    it('bust=true forces a fresh LLM call but still updates the cache', async () => {
+    it('does not cache failed runs (errors are not replayed)', async () => {
+      const failingModel = new MockLanguageModelV2({
+        modelId: 'failing',
+        doGenerate: async () => {
+          throw new Error('boom');
+        },
+      });
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'Failing',
+        instructions: 'fail',
+        model: failingModel,
+        inputProcessors: [new ResponseCache({ cache, agentId: 'failing-agent' })],
+      });
+
+      await expect(failingAgent.generate('please')).rejects.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(cache.sets).toBe(0);
+    });
+
+    it('writes the configured TTL on cache writes', async () => {
+      const ttlAgent = createAgent({ cache, ttl: 999, agentId: 'ttl-agent' });
+      await ttlAgent.agent.generate('Hi');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(cache.ttls).toEqual([999]);
+    });
+  });
+
+  describe('per-call overrides via RequestContext', () => {
+    it('ResponseCache.context() bust forces a fresh LLM call but still updates the cache', async () => {
       await agent.generate('Hello');
       await new Promise(resolve => setTimeout(resolve, 10));
       expect(model.doGenerateCalls).toHaveLength(1);
       expect(cache.sets).toBe(1);
 
-      await agent.generate('Hello', { responseCache: { bust: true } });
+      await agent.generate('Hello', {
+        requestContext: ResponseCache.context({ bust: true }),
+      });
       await new Promise(resolve => setTimeout(resolve, 10));
       expect(model.doGenerateCalls).toHaveLength(2);
       expect(cache.sets).toBe(2);
     });
 
-    it('per-call key override shares cache across different prompts', async () => {
-      const sharedKey = 'manual-shared-key';
-      await agent.generate('first prompt', { responseCache: { key: sharedKey } });
+    it('ResponseCache.applyContext() merges into an existing RequestContext', async () => {
+      const ctx = new RequestContext();
+      ctx.set('caller-meta', { foo: 'bar' });
+      ResponseCache.applyContext(ctx, { key: 'shared-key' });
+
+      await agent.generate('first prompt', { requestContext: ctx });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const ctx2 = new RequestContext();
+      ResponseCache.applyContext(ctx2, { key: 'shared-key' });
+      const second = await agent.generate('totally different prompt', { requestContext: ctx2 });
+
+      expect(second.text).toBe('Cached response text');
+      expect(model.doGenerateCalls).toHaveLength(1);
+    });
+
+    it('per-call key string is used verbatim across different prompts', async () => {
+      await agent.generate('first prompt', {
+        requestContext: ResponseCache.context({ key: 'manual-shared-key' }),
+      });
       await new Promise(resolve => setTimeout(resolve, 10));
 
       const second = await agent.generate('totally different prompt', {
-        responseCache: { key: sharedKey },
+        requestContext: ResponseCache.context({ key: 'manual-shared-key' }),
       });
 
       expect(second.text).toBe('Cached response text');
@@ -141,17 +210,17 @@ describe('Agent response cache', () => {
         return 'fn-derived-key';
       });
 
-      await agent.generate('first', { responseCache: { key: keyFn } });
+      await agent.generate('first', {
+        requestContext: ResponseCache.context({ key: keyFn }),
+      });
       await new Promise(resolve => setTimeout(resolve, 10));
       const second = await agent.generate('second different prompt', {
-        responseCache: { key: keyFn },
+        requestContext: ResponseCache.context({ key: keyFn }),
       });
 
       expect(keyFn).toHaveBeenCalledTimes(2);
       expect(second.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
-      // Inputs include the agentId, model, prompt, and stepNumber so users
-      // can derive partial keys from any subset of them.
       const firstInputs = seenInputs[0] as {
         agentId: string;
         model: { modelId?: string };
@@ -173,10 +242,10 @@ describe('Agent response cache', () => {
       const throwing = vi.fn(() => {
         throw new Error('intentional');
       });
-      const second = await agent.generate('Hello', { responseCache: { key: throwing } });
+      const second = await agent.generate('Hello', {
+        requestContext: ResponseCache.context({ key: throwing }),
+      });
 
-      // Even though the key fn threw, the call still benefits from caching
-      // because we fell back to the default key, which matches the first call.
       expect(throwing).toHaveBeenCalledOnce();
       expect(second.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(generateCallsBefore);
@@ -188,33 +257,72 @@ describe('Agent response cache', () => {
         return 'async-derived-key';
       });
 
-      await agent.generate('first', { responseCache: { key: keyFn } });
+      await agent.generate('first', {
+        requestContext: ResponseCache.context({ key: keyFn }),
+      });
       await new Promise(resolve => setTimeout(resolve, 10));
-      const second = await agent.generate('second', { responseCache: { key: keyFn } });
+      const second = await agent.generate('second', {
+        requestContext: ResponseCache.context({ key: keyFn }),
+      });
 
       expect(keyFn).toHaveBeenCalledTimes(2);
       expect(second.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
     });
 
-    it('does not cache failed runs (errors are not replayed)', async () => {
-      const failingModel = new MockLanguageModelV2({
-        modelId: 'failing',
-        doGenerate: async () => {
-          throw new Error('boom');
-        },
+    it('per-call scope override changes the cache key', async () => {
+      const scopedAgent = createAgent({ cache, scope: null, agentId: 'scope-agent' });
+
+      await scopedAgent.agent.generate('Hello', {
+        requestContext: ResponseCache.context({ scope: 'tenant-a' }),
       });
-      const failingAgent = new Agent({
-        id: 'failing-agent',
-        name: 'Failing',
-        instructions: 'fail',
-        model: failingModel,
-        responseCache: { cache },
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Different scope = different key, so the second call still hits the model.
+      await scopedAgent.agent.generate('Hello', {
+        requestContext: ResponseCache.context({ scope: 'tenant-b' }),
       });
 
-      await expect(failingAgent.generate('please')).rejects.toThrow();
+      expect(scopedAgent.model.doGenerateCalls).toHaveLength(2);
+      expect(cache.store.size).toBe(2);
+    });
+  });
+
+  describe('default scope from request context', () => {
+    it('uses MASTRA_RESOURCE_ID_KEY from request context as default scope', async () => {
+      const scopedAgent = createAgent({ cache, agentId: 'multi-tenant' });
+
+      const ctxA = new RequestContext();
+      ctxA.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
+      await scopedAgent.agent.generate('shared prompt', { requestContext: ctxA });
       await new Promise(resolve => setTimeout(resolve, 10));
-      expect(cache.sets).toBe(0);
+
+      // Different resource id -> different scope -> different cache key.
+      const ctxB = new RequestContext();
+      ctxB.set(MASTRA_RESOURCE_ID_KEY, 'user-b');
+      const second = await scopedAgent.agent.generate('shared prompt', { requestContext: ctxB });
+
+      expect(second.text).toBe('Cached response text');
+      expect(scopedAgent.model.doGenerateCalls).toHaveLength(2);
+      expect(cache.store.size).toBe(2);
+    });
+
+    it('explicit scope: null disables scoping even when MASTRA_RESOURCE_ID_KEY is set', async () => {
+      const noScopeAgent = createAgent({ cache, scope: null, agentId: 'no-scope' });
+
+      const ctxA = new RequestContext();
+      ctxA.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
+      await noScopeAgent.agent.generate('shared prompt', { requestContext: ctxA });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // scope: null on the constructor opts out of all scoping, so the second
+      // call hits the cache regardless of the resource id in context.
+      const ctxB = new RequestContext();
+      ctxB.set(MASTRA_RESOURCE_ID_KEY, 'user-b');
+      const second = await noScopeAgent.agent.generate('shared prompt', { requestContext: ctxB });
+
+      expect(second.text).toBe('Cached response text');
+      expect(noScopeAgent.model.doGenerateCalls).toHaveLength(1);
     });
   });
 
@@ -254,88 +362,25 @@ describe('Agent response cache', () => {
       expect(usage).toMatchObject({ inputTokens: 5, outputTokens: 10, totalTokens: 15 });
     });
   });
+});
 
-  describe('agent default vs per-call', () => {
-    it('per-call false overrides agent-level default true', async () => {
-      const noCacheModel = createRecordingModel('always-fresh', 'fresh');
-      const cacheByDefault = new Agent({
-        id: 'cached-default',
-        name: 'Cached Default',
-        instructions: 'You are a test agent',
-        model: noCacheModel,
-        responseCache: { cache },
-      });
-
-      await cacheByDefault.generate('Hello', { responseCache: false });
-      await new Promise(resolve => setTimeout(resolve, 10));
-      await cacheByDefault.generate('Hello', { responseCache: false });
-
-      expect(noCacheModel.doGenerateCalls).toHaveLength(2);
-      expect(cache.sets).toBe(0);
-    });
-
-    it('per-call ttl overrides agent-level ttl', async () => {
-      let lastTtl: number | undefined;
-      const ttlCache: MastraCache = {
-        async get() {
-          return undefined;
-        },
-        async set(_key, _value, ttlSeconds) {
-          lastTtl = ttlSeconds;
-        },
-      };
-      const a = new Agent({
-        id: 'ttl-agent',
-        name: 'TTL',
-        instructions: 'You are a test agent',
-        model: createRecordingModel('ttl-model', 'hi'),
-        responseCache: { cache: ttlCache, ttl: 60 },
-      });
-
-      await a.generate('Hi', { responseCache: { ttl: 999 } });
-      await new Promise(resolve => setTimeout(resolve, 10));
-      expect(lastTtl).toBe(999);
-    });
+describe('ResponseCache.context() / applyContext()', () => {
+  it('context() returns a fresh RequestContext with the override set', () => {
+    const ctx = ResponseCache.context({ bust: true });
+    expect(ctx).toBeInstanceOf(RequestContext);
+    expect(ctx.get('mastra__response_cache_context')).toEqual({ bust: true });
   });
 
-  describe('Mastra server cache fallback', () => {
-    it('uses the Mastra instance server cache when no custom cache is configured', async () => {
-      const serverCache = new InMemoryServerCache();
-      const recording = createRecordingModel('server-cache-model', 'shared');
-      const a = new Agent({
-        id: 'server-cache-agent',
-        name: 'Server Cache Agent',
-        instructions: 'You are a test agent',
-        model: recording,
-        responseCache: true,
-      });
-      new Mastra({ agents: { a }, cache: serverCache });
+  it('applyContext() returns the same context for chaining', () => {
+    const ctx = new RequestContext();
+    const returned = ResponseCache.applyContext(ctx, { key: 'k' });
+    expect(returned).toBe(ctx);
+    expect(ctx.get('mastra__response_cache_context')).toEqual({ key: 'k' });
+  });
 
-      await a.generate('shared prompt');
-      await new Promise(resolve => setTimeout(resolve, 10));
-      const second = await a.generate('shared prompt');
-
-      expect(second.text).toBe('shared');
-      expect(recording.doGenerateCalls).toHaveLength(1);
-    });
-
-    it('disables caching gracefully when no cache is available', async () => {
-      const recording = createRecordingModel('no-cache-model', 'still works');
-      // Standalone agent (no Mastra instance, no custom cache).
-      const a = new Agent({
-        id: 'no-cache-agent',
-        name: 'No Cache Agent',
-        instructions: 'You are a test agent',
-        model: recording,
-        responseCache: true,
-      });
-
-      const result = await a.generate('hello');
-      expect(result.text).toBe('still works');
-      expect(recording.doGenerateCalls).toHaveLength(1);
-      // Second call also hits the model since caching couldn't initialize.
-      await a.generate('hello');
-      expect(recording.doGenerateCalls).toHaveLength(2);
-    });
+  it('applyContext() overwrites a previous override', () => {
+    const ctx = ResponseCache.context({ key: 'first' });
+    ResponseCache.applyContext(ctx, { key: 'second' });
+    expect(ctx.get('mastra__response_cache_context')).toEqual({ key: 'second' });
   });
 });

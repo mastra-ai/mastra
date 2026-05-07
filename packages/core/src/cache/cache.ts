@@ -1,12 +1,13 @@
 import type { MastraServerCache } from './base';
 
 /**
- * Lightweight cache interface used by agent-level response caching and other
- * higher-level features that only need a typed get/set with optional TTL.
+ * Lightweight cache interface consumed by the {@link ResponseCache} input
+ * processor and other higher-level features that only need a typed get/set
+ * with optional TTL.
  *
- * Plug in a custom implementation via the `responseCache.cache` option on an
- * agent, or rely on the Mastra instance's `MastraServerCache` (which is
- * automatically adapted into this interface when `responseCache: true`).
+ * Wire a `MastraServerCache` (e.g. the in-memory default or
+ * `@mastra/redis`) using {@link createMastraCacheFromServerCache}, or
+ * implement the interface directly for custom backends.
  *
  * @example
  * ```typescript
@@ -19,7 +20,9 @@ import type { MastraServerCache } from './base';
  *
  * const agent = new Agent({
  *   ...,
- *   responseCache: { cache: customCache, ttl: 600 },
+ *   inputProcessors: [
+ *     new ResponseCache({ cache: customCache, ttl: 600 }),
+ *   ],
  * });
  * ```
  */
