@@ -12,6 +12,7 @@ import {
   useTopResourcesByThreadsMetrics,
 } from '@mastra/playground-ui';
 import { useState } from 'react';
+import { useLinkComponent } from '@/lib/framework';
 
 type ThreadRow = {
   key: string;
@@ -41,6 +42,7 @@ export function MemoryCard() {
   const threads = useTopActiveThreadsMetrics();
   const resources = useTopResourcesByThreadsMetrics();
   const { getTracesHref } = useDrilldown();
+  const { Link } = useLinkComponent();
 
   const threadRows: ThreadRow[] =
     threads.data?.map(r => ({
@@ -112,6 +114,7 @@ export function MemoryCard() {
                     { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—') },
                   ]}
                   data={threadRows}
+                  LinkComponent={Link}
                   getRowHref={row =>
                     getTracesHref({
                       threadId: row.threadIdFull,
@@ -133,6 +136,7 @@ export function MemoryCard() {
                     { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—') },
                   ]}
                   data={resourceRows}
+                  LinkComponent={Link}
                   getRowHref={row => getTracesHref({ resourceId: row.resourceIdFull })}
                 />
               ) : (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ElementType, ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
@@ -12,13 +12,16 @@ function VolumeBars({
   data,
   rowHrefs,
   errorHrefs,
+  LinkComponent,
 }: {
   data: VolumeRow[];
   rowHrefs?: (row: VolumeRow) => string | undefined;
   errorHrefs?: (row: VolumeRow) => string | undefined;
+  LinkComponent?: ElementType;
 }) {
   return (
     <HorizontalBars
+      LinkComponent={LinkComponent}
       data={data.map(d => {
         const errorHref = errorHrefs?.(d);
         const rowHref = rowHrefs?.(d);
@@ -63,6 +66,8 @@ export interface TracesVolumeCardViewProps {
    * Pass a function to receive the active tab so actions can scope themselves to the current entity type.
    */
   actions?: ReactNode | ((tab: VolumeTab) => ReactNode);
+  /** Override how drilldown links are rendered (e.g. router-aware adapter). Defaults to `<a>`. */
+  LinkComponent?: ElementType;
 }
 
 export function TracesVolumeCardView({
@@ -72,6 +77,7 @@ export function TracesVolumeCardView({
   getRowHref,
   getErrorSegmentHref,
   actions,
+  LinkComponent,
 }: TracesVolumeCardViewProps) {
   const [activeTab, setActiveTab] = useState<VolumeTab>('agents');
   const renderedActions = typeof actions === 'function' ? actions(activeTab) : actions;
@@ -117,6 +123,7 @@ export function TracesVolumeCardView({
                     data={data.agentData}
                     rowHrefs={tabRowHrefs('agents')}
                     errorHrefs={tabErrorHrefs('agents')}
+                    LinkComponent={LinkComponent}
                   />
                 ) : (
                   <MetricsCard.NoData message="No agent data yet" />
@@ -128,6 +135,7 @@ export function TracesVolumeCardView({
                     data={data.workflowData}
                     rowHrefs={tabRowHrefs('workflows')}
                     errorHrefs={tabErrorHrefs('workflows')}
+                    LinkComponent={LinkComponent}
                   />
                 ) : (
                   <MetricsCard.NoData message="No workflow data yet" />
@@ -139,6 +147,7 @@ export function TracesVolumeCardView({
                     data={data.toolData}
                     rowHrefs={tabRowHrefs('tools')}
                     errorHrefs={tabErrorHrefs('tools')}
+                    LinkComponent={LinkComponent}
                   />
                 ) : (
                   <MetricsCard.NoData message="No tool data yet" />

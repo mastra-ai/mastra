@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ElementType, ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
@@ -14,6 +14,8 @@ export interface TokenUsageByAgentCardViewProps {
   getRowHref?: (row: TokenUsageByAgentRow) => string | undefined;
   /** Optional slot for top-bar action buttons. */
   actions?: ReactNode;
+  /** Override how drilldown links are rendered. Defaults to `<a>`. */
+  LinkComponent?: ElementType;
 }
 
 type TokenUsageTab = 'tokens' | 'cost';
@@ -28,6 +30,7 @@ export function TokenUsageByAgentCardView({
   isError,
   getRowHref,
   actions,
+  LinkComponent,
 }: TokenUsageByAgentCardViewProps) {
   const [activeTab, setActiveTab] = useState<TokenUsageTab>('tokens');
 
@@ -79,6 +82,7 @@ export function TokenUsageByAgentCardView({
               </TabList>
               <TabContent value="tokens">
                 <HorizontalBars
+                  LinkComponent={LinkComponent}
                   data={rows.map(d => ({
                     name: d.name,
                     values: [d.input, d.output],
@@ -95,6 +99,7 @@ export function TokenUsageByAgentCardView({
               <TabContent value="cost">
                 {hasCostData ? (
                   <HorizontalBars
+                    LinkComponent={LinkComponent}
                     data={costRows
                       .slice()
                       .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))

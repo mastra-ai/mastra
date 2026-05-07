@@ -8,7 +8,7 @@ import { useMetrics } from './use-metrics';
  *  each card only has to supply its own scope (`{ rootEntityType, entityName,
  *  ... }`) to produce a full drilldown URL. */
 export function useDrilldown() {
-  const { datePreset, customRange, dimensionalFilter } = useMetrics();
+  const { datePreset, customRange, dimensionalFilter, tracesBasePath, logsBasePath } = useMetrics();
 
   const getTracesHref = useCallback(
     (scope: DrilldownScope = {}): string =>
@@ -17,8 +17,9 @@ export function useDrilldown() {
         customRange,
         dashboardFilter: dimensionalFilter,
         scope,
+        tracesBasePath,
       }),
-    [datePreset, customRange, dimensionalFilter],
+    [datePreset, customRange, dimensionalFilter, tracesBasePath],
   );
 
   const getLogsHref = useCallback(
@@ -28,8 +29,9 @@ export function useDrilldown() {
         customRange,
         dashboardFilter: dimensionalFilter,
         scope,
+        logsBasePath,
       }),
-    [datePreset, customRange, dimensionalFilter],
+    [datePreset, customRange, dimensionalFilter, logsBasePath],
   );
 
   const getBucketTracesHref = useCallback(
@@ -40,9 +42,10 @@ export function useDrilldown() {
         customRange,
         dashboardFilter: dimensionalFilter,
         scope: { ...scope, window },
+        tracesBasePath,
       });
     },
-    [datePreset, customRange, dimensionalFilter],
+    [datePreset, customRange, dimensionalFilter, tracesBasePath],
   );
 
   return { getTracesHref, getLogsHref, getBucketTracesHref };

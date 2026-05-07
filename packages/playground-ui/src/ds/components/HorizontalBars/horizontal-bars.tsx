@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ElementType, ReactNode } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
@@ -20,12 +20,18 @@ export function HorizontalBars({
   maxVal,
   fmt,
   className,
+  LinkComponent = 'a',
 }: {
   data: Array<HorizontalBarRow>;
   segments: Segment[];
   maxVal: number;
   fmt: (v: number) => string;
   className?: string;
+  /** Override how links produced by `href` / `hrefs` are rendered. Receives `href`,
+   *  `className`, `aria-label`, and `children`. Defaults to a plain `<a>` element;
+   *  consumers using a router should pass an adapter that maps `href` to their
+   *  navigation primitive (e.g. react-router `<Link to={href} />`). */
+  LinkComponent?: ElementType;
 }) {
   const sorted = [...data].sort((a, b) => {
     const totalB = b.values.reduce((s, v) => s + v, 0);
@@ -88,14 +94,14 @@ export function HorizontalBars({
 
                         if (segHref) {
                           return (
-                            <a
+                            <LinkComponent
                               key={seg.label}
                               href={segHref}
                               aria-label={`${d.name} — ${seg.label}`}
                               className="contents"
                             >
                               {segmentNode}
-                            </a>
+                            </LinkComponent>
                           );
                         }
                         return <Wrapper key={seg.label}>{segmentNode}</Wrapper>;
@@ -123,13 +129,13 @@ export function HorizontalBars({
 
           if (d.href) {
             return (
-              <a
+              <LinkComponent
                 key={d.name}
                 href={d.href}
                 className="flex items-center gap-14 h-6 rounded outline-none cursor-pointer hover:bg-surface3 focus-visible:bg-surface3 transition-colors"
               >
                 {rowBody}
-              </a>
+              </LinkComponent>
             );
           }
           return (
