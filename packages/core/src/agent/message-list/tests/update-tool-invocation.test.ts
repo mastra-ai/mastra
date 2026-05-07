@@ -542,7 +542,7 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.providerExecuted).toBe(false);
   });
 
-  it('should allow result to override providerMetadata from original call', () => {
+  it('should merge providerMetadata from original call and result', () => {
     const messageList = new MessageList();
 
     const msg = makeAssistantMessage([
@@ -573,6 +573,9 @@ describe('MessageList.updateToolInvocation', () => {
     } as any);
 
     const part = msg.content.parts[0] as any;
-    expect(part.providerMetadata).toEqual({ mastra: { modelOutput: true } });
+    expect(part.providerMetadata).toEqual({
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+      mastra: { modelOutput: true },
+    });
   });
 });

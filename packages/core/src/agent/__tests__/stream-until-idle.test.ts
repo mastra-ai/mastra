@@ -62,10 +62,13 @@ describe('Agent.streamUntilIdle', () => {
       storage,
       backgroundTasks: { enabled: true },
     });
+    // Wire up the workflow event processor's pubsub subscriptions.
+    await mastra.startEventEngine();
   });
 
   afterEach(async () => {
     await mastra.backgroundTaskManager?.shutdown();
+    await mastra.stopEventEngine();
     const bgStore = await storage.getStore('backgroundTasks');
     await bgStore?.dangerouslyClearAll();
   });

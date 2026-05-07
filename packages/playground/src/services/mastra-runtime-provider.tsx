@@ -136,6 +136,34 @@ const buildGlobalOmPartsByCycleId = (messages: MastraUIMessage[]) => {
 };
 
 /**
+ * Build a `MastraUIMessage` representing a stream `error` chunk so it can be
+ * rendered by `error-aware-text`. Prefer the human-readable `message` field on
+ * the error payload when present, falling back to a JSON dump so we never
+ * silently swallow an error.
+ */
+const buildStreamErrorMessage = (chunk: { runId?: string; payload?: { error?: unknown } }): MastraUIMessage => {
+  const errorValue = chunk.payload?.error;
+  let text: string;
+  if (typeof errorValue === 'string') {
+    text = errorValue;
+  } else if (
+    errorValue &&
+    typeof errorValue === 'object' &&
+    typeof (errorValue as { message?: unknown }).message === 'string'
+  ) {
+    text = (errorValue as { message: string }).message;
+  } else {
+    text = JSON.stringify(errorValue ?? 'Unknown error');
+  }
+  return {
+    id: `error-${chunk.runId ?? 'unknown'}-${Date.now()}`,
+    role: 'assistant',
+    parts: [{ type: 'text', text }],
+    metadata: { status: 'error' },
+  } as MastraUIMessage;
+};
+
+/**
  * Combines data-om-* parts in a message into single tool calls by cycleId.
  * - start marker creates a tool call in 'input-available' (loading) state
  * - end/failed marker with same cycleId updates it to 'output-available' (complete) state
@@ -385,6 +413,17 @@ export function MastraRuntimeProvider({
   const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>([]);
+  // Errors emitted as `error` chunks (or thrown by sendMessage) are not persisted to
+  // server memory, so they get wiped from useChat's `messages` state when
+  // `initialMessages` refreshes after a stream ends. Track them in a parallel
+  // state that survives those resets so the chat still surfaces the failure.
+  const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
+
+  // Clear any persisted stream errors when switching threads or agents so they
+  // don't leak across conversations.
+  useEffect(() => {
+    setStreamErrors([]);
+  }, [agentId, threadId]);
 
   useEffect(() => {
     setLegacyMessages(initializeMessageState(initialLegacyMessages || []));
@@ -633,6 +672,7 @@ export function MastraRuntimeProvider({
     if (lastProgress) {
       handleProgressUpdate(lastProgress);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   const {
@@ -681,6 +721,10 @@ export function MastraRuntimeProvider({
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
 
+    // Reset persisted errors at the start of a new turn so a fresh send doesn't
+    // carry over errors from a previous failed run.
+    setStreamErrors([]);
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -726,6 +770,10 @@ export function MastraRuntimeProvider({
 
               if (chunk.type === 'network-execution-event-step-finish') {
                 refreshThreadList?.();
+              }
+
+              if ((chunk as any).type === 'error') {
+                setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk as any)]);
               }
 
               // Signal observation/reflection started (for sidebar status)
@@ -781,6 +829,10 @@ export function MastraRuntimeProvider({
               onChunk: async chunk => {
                 if (chunk.type === 'finish') {
                   await refreshThreadList?.();
+                }
+
+                if (chunk.type === 'error') {
+                  setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk)]);
                 }
 
                 if (
@@ -1209,10 +1261,7 @@ export function MastraRuntimeProvider({
       }
 
       if (isSupportedModel) {
-        setMessages(currentConversation => [
-          ...currentConversation,
-          { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
-        ]);
+        setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
       } else {
         setLegacyMessages(currentConversation => [
           ...currentConversation,
@@ -1260,8 +1309,12 @@ export function MastraRuntimeProvider({
   // parts are spread across messages (e.g., buffering-start on msg A, activation on msg B).
   const globalOmParts = useMemo(() => buildGlobalOmPartsByCycleId(messages), [messages]);
 
-  // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage
-  const vnextmessages = messages.map(msg => {
+  // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage.
+  // Strip transient error messages from `messages` because the same errors are
+  // tracked in `streamErrors` (which survives the post-stream initialMessages
+  // refresh). Without filtering here we would briefly render duplicate errors
+  // during the streaming window.
+  const vnextmessages = [...messages.filter(msg => msg.metadata?.status !== 'error'), ...streamErrors].map(msg => {
     const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
     return toAssistantUIMessage(converted);
   });

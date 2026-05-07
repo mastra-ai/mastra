@@ -12,16 +12,16 @@ import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label, larger radius, and SVG sizing for
 // inline `<svg>` children. Excluded from icon-mode because icon-mode wraps children in `<Icon>`
-// (so `[&>svg]` selectors don't match) and uses a smaller `rounded-md` square shape.
+// (so `[&>svg]` selectors don't match) and uses its own `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
-  'gap-[.75em] rounded-lg',
+  'gap-[.75em] rounded-full',
   '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mx-[-.3em]',
   '[&>svg]:opacity-50 [&:hover>svg]:opacity-100',
 );
 
 export const buttonVariants = cva(
   cn(
-    'inline-flex items-center justify-center leading-0',
+    'inline-flex items-center justify-center leading-0 cursor-pointer',
     'transition-all duration-normal ease-out-custom',
     sharedFormElementDisabledStyle,
     sharedFormElementFocusStyle,
@@ -30,26 +30,26 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-surface3 border-2 border-border1 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
+          'bg-surface3 border border-border1 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
         primary:
-          'bg-surface4 border-2 border-border2 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
-        cta: 'bg-accent1 border-2 border-transparent hover:bg-accent1/90 hover:shadow-glow-accent1 disabled:hover:shadow-none text-surface1 font-medium',
+          'bg-surface4 border border-border2 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
+        cta: 'bg-accent1 border border-transparent hover:bg-accent1/90 hover:shadow-glow-accent1 disabled:hover:shadow-none text-surface1 font-medium',
         ghost:
-          'bg-transparent border-2 border-transparent hover:bg-surface4 hover:text-neutral6 active:bg-surface5 text-neutral4',
+          'bg-transparent border border-transparent hover:bg-surface4 hover:text-neutral6 active:bg-surface5 text-neutral4',
         outline:
-          'bg-transparent border-2 border-border1 hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral5',
+          'bg-transparent border border-border1 hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral5',
         link: 'inline-flex justify-start rounded-none h-auto px-0 bg-transparent text-neutral3 hover:text-neutral4 gap-1 [&>svg]:mx-0 w-auto [&>svg]:opacity-70',
       },
       size: {
-        sm: cn(`${formElementSizes.sm} text-ui-sm px-[.75em]`, TEXT_MODE_ADORNMENTS),
-        md: cn(`${formElementSizes.md} text-ui-md px-[.75em]`, TEXT_MODE_ADORNMENTS),
-        default: cn(`${formElementSizes.default} text-ui-md px-[.85em]`, TEXT_MODE_ADORNMENTS),
-        lg: cn(`${formElementSizes.lg} text-ui-lg px-[1em]`, TEXT_MODE_ADORNMENTS),
-        // Icon sizes: square dimensions, smaller radius. Active state inherits from variant
+        sm: cn(`${formElementSizes.sm} text-ui-sm px-[.9em]`, TEXT_MODE_ADORNMENTS),
+        md: cn(`${formElementSizes.md} text-ui-md px-[.9em]`, TEXT_MODE_ADORNMENTS),
+        default: cn(`${formElementSizes.default} text-ui-md px-[1em]`, TEXT_MODE_ADORNMENTS),
+        lg: cn(`${formElementSizes.lg} text-ui-lg px-[1.15em]`, TEXT_MODE_ADORNMENTS),
+        // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
-        'icon-sm': `${formElementSizes.sm} w-form-sm rounded-md`,
-        'icon-md': `${formElementSizes.md} w-form-md rounded-md`,
-        'icon-lg': `${formElementSizes.lg} w-form-lg rounded-md`,
+        'icon-sm': `${formElementSizes.sm} w-form-sm rounded-full`,
+        'icon-md': `${formElementSizes.md} w-form-md rounded-full`,
+        'icon-lg': `${formElementSizes.lg} w-form-lg rounded-full`,
       },
     },
     defaultVariants: {

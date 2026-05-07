@@ -394,6 +394,45 @@ describe('Responses Handlers', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts omitted agent_id in the create response request schema when previous_response_id is provided', () => {
+    const result = createResponseBodySchema.safeParse({
+      input: 'Hello again',
+      previous_response_id: 'resp_123',
+      stream: false,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects create response requests without agent_id or previous_response_id', () => {
+    const result = createResponseBodySchema.safeParse({
+      input: 'Hello',
+      stream: false,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty agent_id in the create response request schema', () => {
+    const result = createResponseBodySchema.safeParse({
+      agent_id: '',
+      input: 'Hello',
+      stream: false,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty previous_response_id in the create response request schema', () => {
+    const result = createResponseBodySchema.safeParse({
+      input: 'Hello again',
+      previous_response_id: '',
+      stream: false,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('uses the agent default model when create requests omit model', async () => {
     vi.spyOn(agent, 'getModel').mockResolvedValue({
       specificationVersion: 'v2',
@@ -902,7 +941,7 @@ describe('Responses Handlers', () => {
     ).rejects.toThrow(HTTPException);
   });
 
-  it('requires agent_id when previous_response_id is provided', async () => {
+  it('returns 404 when previous_response_id is provided without agent_id and no stored response exists', async () => {
     await expect(
       CREATE_RESPONSE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -912,7 +951,7 @@ describe('Responses Handlers', () => {
         store: true,
         stream: false,
       }),
-    ).rejects.toThrow(HTTPException);
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it('reuses the stored thread when previous_response_id is provided', async () => {
@@ -955,6 +994,109 @@ describe('Responses Handlers', () => {
 
     const secondInput = generateSpy.mock.calls[1]?.[0];
     expect(secondInput).toEqual([{ role: 'user', content: 'Second turn' }]);
+  });
+
+  it('reuses a same-agent response found by the broader previous_response_id lookup', async () => {
+    const generateSpy = vi.spyOn(agent, 'generate');
+    generateSpy.mockResolvedValue(createGenerateResult({ text: 'First response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+    const firstCall = generateSpy.mock.calls[0]?.[1];
+    const firstMemory = (firstCall as { memory?: { thread?: string; resource?: string } })?.memory;
+
+    vi.spyOn(agent, 'getMemory')
+      .mockResolvedValueOnce(undefined as never)
+      .mockResolvedValue(memory as never);
+    generateSpy.mockResolvedValue(createGenerateResult({ text: 'Second response' }));
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Second turn',
+      previous_response_id: firstCreated.id,
+      store: true,
+      stream: false,
+    });
+
+    const secondCall = generateSpy.mock.calls[1]?.[1];
+    expect(generateSpy).toHaveBeenCalledTimes(2);
+    expect(secondCall).toMatchObject({
+      memory: firstMemory,
+    });
+  });
+
+  it('reuses the stored thread when previous_response_id is provided without agent_id', async () => {
+    const generateSpy = vi.spyOn(agent, 'generate');
+    generateSpy.mockResolvedValue(createGenerateResult({ text: 'First response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+    const firstCall = generateSpy.mock.calls[0]?.[1];
+
+    generateSpy.mockResolvedValue(createGenerateResult({ text: 'Second response' }));
+
+    await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      input: 'Second turn',
+      previous_response_id: firstCreated.id,
+      store: true,
+      stream: false,
+    });
+
+    const secondCall = generateSpy.mock.calls[1]?.[1];
+    expect(generateSpy).toHaveBeenCalledTimes(2);
+    expect(secondCall).toMatchObject({
+      memory: (firstCall as { memory?: { thread?: string; resource?: string } })?.memory,
+    });
+  });
+
+  it('returns 400 when previous_response_id belongs to a different explicit agent_id', async () => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'First response' }));
+
+    const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'First turn',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const firstCreated = await readJson(firstResponse);
+
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        agent_id: 'tool-agent',
+        input: 'Second turn',
+        previous_response_id: firstCreated.id,
+        store: true,
+        stream: false,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining('belongs to agent test-agent'),
+    });
   });
 
   it('uses an explicit conversation_id as the thread source of truth', async () => {
@@ -1148,6 +1290,42 @@ describe('Responses Handlers', () => {
         total_tokens: 16,
       },
     });
+  });
+
+  it('keeps explicit conversation_id in streaming events when store is false', async () => {
+    const streamSpy = vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('Hello world'));
+    const memoryThread = await memory.createThread({
+      threadId: 'conv_stream_explicit',
+      resourceId: 'resource-1',
+    });
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      conversation_id: memoryThread.id,
+      input: 'Hello',
+      store: false,
+      stream: true,
+    })) as Response;
+
+    const events = await readSseEvents(response);
+    const createdEvent = events.find(event => event.type === 'response.created');
+    const completedEvent = events.find(event => event.type === 'response.completed');
+
+    expect(createdEvent?.response?.conversation_id).toBe(memoryThread.id);
+    expect(completedEvent?.response?.conversation_id).toBe(memoryThread.id);
+    expect(createdEvent?.response?.store).toBe(false);
+    expect(completedEvent?.response?.store).toBe(false);
+    expect(streamSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Hello' }],
+      expect.objectContaining({
+        memory: {
+          thread: memoryThread.id,
+          resource: memoryThread.resourceId,
+        },
+      }),
+    );
   });
 
   it('falls back to streamLegacy for AI SDK v4 agents', async () => {

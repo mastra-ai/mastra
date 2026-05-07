@@ -1,0 +1,175 @@
+---
+title: "Reference: CostGuardProcessor | Processors"
+description: "API reference for CostGuardProcessor, a processor that enforces monetary cost limits on agent runs."
+packages:
+  - "@mastra/core"
+---
+
+# CostGuardProcessor
+
+The `CostGuardProcessor` enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded.
+
+It uses `processInputStep` to check the cost limit before each LLM call. Cost data is queried from the observability storage APIs (`getMetricAggregate`) for all scopes. For `resource` and `thread` scopes, it aggregates cost across runs within a configurable time window (defaults to 7 days). For `run` scope, it queries cost for the current trace.
+
+For token-based limits, use `TokenLimiterProcessor` instead.
+
+Supports three scoping modes:
+
+- **Run scope**: Tracks cost within a single agent run via trace ID
+- **Resource scope** (default): Tracks cumulative cost per `resourceId` across runs
+- **Thread scope**: Tracks cumulative cost per `threadId` across runs
+
+> **Approximate cost guard.** Cost data is persisted asynchronously via buffered exporters in the observability pipeline. Fast-running agents may exceed the configured limit before metrics are available for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
+
+## Usage example
+
+Track cumulative cost per resource (default scope):
+
+```typescript
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 1.0,
+})
+```
+
+Track cumulative cost per thread with a 24-hour window:
+
+```typescript
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 5.0,
+  scope: 'thread',
+  window: '24h',
+})
+```
+
+Attach to an agent with an `onViolation` callback:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  maxCost: 5.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ detail }) => {
+  console.log(`Cost exceeded for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`)
+}
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'openai/gpt-5-nano',
+  processors: {
+    input: [costGuard],
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxCost',
+    type: 'number',
+    description:
+      'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics. This is an approximate limit due to metric persistence delays.',
+    isOptional: false,
+  },
+  {
+    name: 'scope',
+    type: "'run' | 'resource' | 'thread'",
+    description:
+      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs (default). 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
+    isOptional: true,
+    defaultValue: "'resource'",
+  },
+  {
+    name: 'window',
+    type: "'1h' | '6h' | '24h' | '7d' | '30d' | '365d'",
+    description:
+      "Time window for cost aggregation when using 'resource' or 'thread' scope. Only applicable to non-run scopes.",
+    isOptional: true,
+    defaultValue: "'7d'",
+  },
+  {
+    name: 'strategy',
+    type: "'block' | 'warn'",
+    description:
+      "Strategy when the cost limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
+    isOptional: true,
+    defaultValue: "'block'",
+  },
+  {
+    name: 'message',
+    type: 'string',
+    description: 'Custom message template for the abort reason. Supports {usage} and {limit} placeholders.',
+    isOptional: true,
+    defaultValue: "'Cost guard: cost limit exceeded ({usage}/{limit})'",
+  },
+]}
+/>
+
+## Instance properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'cost-guard'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Cost Guard'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'onViolation',
+    type: '(violation: ProcessorViolation) => void | Promise<void>',
+    description:
+      'Callback invoked when a cost violation is detected, regardless of strategy. Part of the generalized Processor interface. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught.',
+    isOptional: true,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<void>',
+    description:
+      'Checks cumulative estimated cost against maxCost before each LLM call. Queries observability storage for cost data: run scope filters by trace ID, resource/thread scopes filter by their respective IDs with a time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy). Cost checks are approximate due to metric persistence delays.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Error behavior
+
+When the `block` strategy is active (default), `CostGuardProcessor` calls `abort()` with `retry: false` when the cost limit is exceeded. The TripWire metadata includes:
+
+- `processorId`: `'cost-guard'`
+- `usage`: Current cumulative usage (`estimatedCost`, `costUnit`)
+- `maxCost`: The configured cost limit
+- `scope`: The active scope (`'run'`, `'resource'`, or `'thread'`)
+- `scopeKey`: The scope identifier for resource/thread scopes (if applicable)
+
+## Scoping behavior
+
+| Scope | Tracks across runs | Filter | Requires context |
+| - | - | - | - |
+| `run` | No | `traceId` from current span | Tracing context (automatic) |
+| `resource` | Yes | `resourceId` + time window | `resourceId` in `RequestContext` |
+| `thread` | Yes | `threadId` + time window | `threadId` in `RequestContext` |
+
+All scopes require observability storage with `getMetricAggregate` support. If the Mastra instance does not have observability storage configured, an error is thrown at registration time.
+
+For `run` scope, the processor reads the trace ID from the current span's tracing context. If no tracing context is available, the check is skipped (fail-open).
+
+For `resource` and `thread` scopes, if the required context ID is missing at runtime, the check is skipped. Observability query failures are handled with a fail-open strategy: if a query fails, cost is treated as zero.
+
+> **Note on metric persistence delay.** The observability pipeline uses buffered exporters that flush metrics asynchronously. There is a short delay between when an LLM call completes and when its cost metrics are available for query. During high-frequency agent execution, the cost guard may not detect a limit breach until one or more steps after the actual cost exceeded the threshold.

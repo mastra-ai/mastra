@@ -6,6 +6,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
+import type { Mastra } from '@mastra/core/mastra';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
@@ -210,13 +211,31 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  */
 export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
+  private _omEngineInstance: ObservationalMemory | null | undefined;
+  private _mastraInstance: Mastra | undefined;
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
     if (!this._omEngine) {
-      this._omEngine = this._initOMEngine();
+      this._omEngine = this._initOMEngine().then(engine => {
+        this._omEngineInstance = engine;
+        if (engine && this._mastraInstance) {
+          engine.__registerMastra(this._mastraInstance);
+        }
+        return engine;
+      });
     }
     return this._omEngine;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
+    this._mastraInstance = mastra;
+    if (this._omEngineInstance) {
+      this._omEngineInstance.__registerMastra(mastra);
+    } else {
+      void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
+    }
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
@@ -1527,6 +1546,7 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      mastra: this._mastraInstance,
       onIndexObservations,
       observation: omConfig.observation
         ? {

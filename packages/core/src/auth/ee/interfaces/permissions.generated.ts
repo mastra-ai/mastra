@@ -26,6 +26,7 @@ export const RESOURCES = [
   'observability',
   'processor-providers',
   'processors',
+  'schedules',
   'scores',
   'stored',
   'stored-agents',
@@ -66,7 +67,7 @@ export type Action = (typeof ACTIONS)[number];
 export const PERMISSION_PATTERNS = {
   /** Full access to all resources and actions */
   '*': '*',
-  /** create all resources */
+  /** Create all resources */
   '*:create': '*:create',
   /** Delete all resources */
   '*:delete': '*:delete',
@@ -82,7 +83,7 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
-  /** Full access to background-tasks */
+  /** Full access to background tasks */
   'background-tasks:*': 'background-tasks:*',
   /** Full access to channels */
   'channels:*': 'channels:*',
@@ -104,6 +105,8 @@ export const PERMISSION_PATTERNS = {
   'processor-providers:*': 'processor-providers:*',
   /** Full access to processors */
   'processors:*': 'processors:*',
+  /** Full access to schedules */
+  'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
   /** Full access to stored */
@@ -134,7 +137,7 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:read': 'agent-builder:read',
   /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
-  /** create agents */
+  /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
   'agents:delete': 'agents:delete',
@@ -144,7 +147,7 @@ export const PERMISSION_PATTERNS = {
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
-  /** View background-tasks */
+  /** View background tasks */
   'background-tasks:read': 'background-tasks:read',
   /** View channels */
   'channels:read': 'channels:read',
@@ -188,6 +191,12 @@ export const PERMISSION_PATTERNS = {
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Execute schedules */
+  'schedules:execute': 'schedules:execute',
+  /** View schedules */
+  'schedules:read': 'schedules:read',
+  /** Create and modify schedules */
+  'schedules:write': 'schedules:write',
   /** View evaluation scores */
   'scores:read': 'scores:read',
   /** Create and modify evaluation scores */
@@ -284,6 +293,9 @@ export const PERMISSIONS = [
   'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'schedules:execute',
+  'schedules:read',
+  'schedules:write',
   'scores:read',
   'scores:write',
   'stored-agents:delete',
@@ -314,6 +326,138 @@ export const PERMISSIONS = [
  * Specific permission type (e.g., 'agents:read', 'workflows:execute').
  */
 export type Permission = (typeof PERMISSIONS)[number];
+
+/**
+ * Type-safe constants for Mastra-owned FGA permissions.
+ *
+ * These values are generated from server routes and can be used wherever
+ * Mastra checks or maps FGA permissions.
+ */
+export const MastraFGAPermissions = {
+  /** View agent-to-agent communication */
+  A2A_READ: 'a2a:read',
+  /** Create and modify agent-to-agent communication */
+  A2A_WRITE: 'a2a:write',
+  /** Execute agent builder */
+  AGENT_BUILDER_EXECUTE: 'agent-builder:execute',
+  /** View agent builder */
+  AGENT_BUILDER_READ: 'agent-builder:read',
+  /** Create and modify agent builder */
+  AGENT_BUILDER_WRITE: 'agent-builder:write',
+  /** Create agents */
+  AGENTS_CREATE: 'agents:create',
+  /** Delete agents */
+  AGENTS_DELETE: 'agents:delete',
+  /** Execute agents */
+  AGENTS_EXECUTE: 'agents:execute',
+  /** View agents */
+  AGENTS_READ: 'agents:read',
+  /** Create and modify agents */
+  AGENTS_WRITE: 'agents:write',
+  /** View background tasks */
+  BACKGROUND_TASKS_READ: 'background-tasks:read',
+  /** View channels */
+  CHANNELS_READ: 'channels:read',
+  /** Create and modify channels */
+  CHANNELS_WRITE: 'channels:write',
+  /** Delete datasets */
+  DATASETS_DELETE: 'datasets:delete',
+  /** Execute datasets */
+  DATASETS_EXECUTE: 'datasets:execute',
+  /** View datasets */
+  DATASETS_READ: 'datasets:read',
+  /** Create and modify datasets */
+  DATASETS_WRITE: 'datasets:write',
+  /** View embedders */
+  EMBEDDERS_READ: 'embedders:read',
+  /** View experiments */
+  EXPERIMENTS_READ: 'experiments:read',
+  /** View logs */
+  LOGS_READ: 'logs:read',
+  /** Execute MCP servers */
+  MCP_EXECUTE: 'mcp:execute',
+  /** View MCP servers */
+  MCP_READ: 'mcp:read',
+  /** Create and modify MCP servers */
+  MCP_WRITE: 'mcp:write',
+  /** Delete memory and threads */
+  MEMORY_DELETE: 'memory:delete',
+  /** Execute memory and threads */
+  MEMORY_EXECUTE: 'memory:execute',
+  /** View memory and threads */
+  MEMORY_READ: 'memory:read',
+  /** Create and modify memory and threads */
+  MEMORY_WRITE: 'memory:write',
+  /** View traces and spans */
+  OBSERVABILITY_READ: 'observability:read',
+  /** Create and modify traces and spans */
+  OBSERVABILITY_WRITE: 'observability:write',
+  /** View processor-providers */
+  PROCESSOR_PROVIDERS_READ: 'processor-providers:read',
+  /** Execute processors */
+  PROCESSORS_EXECUTE: 'processors:execute',
+  /** View processors */
+  PROCESSORS_READ: 'processors:read',
+  /** View evaluation scores */
+  SCORES_READ: 'scores:read',
+  /** Create and modify evaluation scores */
+  SCORES_WRITE: 'scores:write',
+  /** Delete stored agents */
+  STORED_AGENTS_DELETE: 'stored-agents:delete',
+  /** View stored agents */
+  STORED_AGENTS_READ: 'stored-agents:read',
+  /** Create and modify stored agents */
+  STORED_AGENTS_WRITE: 'stored-agents:write',
+  /** Delete stored */
+  STORED_DELETE: 'stored:delete',
+  /** View stored */
+  STORED_READ: 'stored:read',
+  /** Create and modify stored */
+  STORED_WRITE: 'stored:write',
+  /** View system info */
+  SYSTEM_READ: 'system:read',
+  /** View tool-providers */
+  TOOL_PROVIDERS_READ: 'tool-providers:read',
+  /** Execute tools */
+  TOOLS_EXECUTE: 'tools:execute',
+  /** View tools */
+  TOOLS_READ: 'tools:read',
+  /** Delete vector stores */
+  VECTOR_DELETE: 'vector:delete',
+  /** Execute vector stores */
+  VECTOR_EXECUTE: 'vector:execute',
+  /** View vector stores */
+  VECTOR_READ: 'vector:read',
+  /** Create and modify vector stores */
+  VECTOR_WRITE: 'vector:write',
+  /** View vectors */
+  VECTORS_READ: 'vectors:read',
+  /** Delete workflows */
+  WORKFLOWS_DELETE: 'workflows:delete',
+  /** Execute workflows */
+  WORKFLOWS_EXECUTE: 'workflows:execute',
+  /** View workflows */
+  WORKFLOWS_READ: 'workflows:read',
+  /** Create and modify workflows */
+  WORKFLOWS_WRITE: 'workflows:write',
+  /** Delete workspaces */
+  WORKSPACES_DELETE: 'workspaces:delete',
+  /** View workspaces */
+  WORKSPACES_READ: 'workspaces:read',
+  /** Create and modify workspaces */
+  WORKSPACES_WRITE: 'workspaces:write',
+} as const satisfies Record<string, Permission>;
+
+/**
+ * Mastra-owned FGA permission values.
+ */
+export type MastraFGAPermission = (typeof MastraFGAPermissions)[keyof typeof MastraFGAPermissions];
+
+/**
+ * FGA permission input accepted by public config and provider APIs.
+ * Keeps autocomplete for Mastra-owned permissions while allowing custom provider strings.
+ */
+export type MastraFGAPermissionInput = MastraFGAPermission | (string & {});
 
 /**
  * Type-safe role mapping configuration.

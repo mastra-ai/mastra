@@ -13,7 +13,7 @@ export const formElementFocusWithin =
 export const formElementRadius = 'rounded-md';
 
 export const sharedFormElementStyle =
-  'bg-surface2 border-2 border-border1 text-neutral5 hover:text-neutral6 hover:border-border2 rounded-lg';
+  'bg-surface2 border border-border1 text-neutral5 hover:text-neutral6 hover:border-border2 rounded-lg';
 export const sharedFormElementFocusStyle =
   'outline-hidden focus-visible:outline-hidden focus-visible:border-accent1 focus-visible:ring-1 focus-visible:ring-accent1/40';
 export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';

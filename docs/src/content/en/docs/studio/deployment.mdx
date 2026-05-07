@@ -73,7 +73,29 @@ This builds your project (compiling `src/mastra/` into `.mastra/output`), packag
 
 If this is your first deploy, the CLI will prompt you to create a new project or select an existing one. The `.mastra-project.json` file is written automatically.
 
-A deploy transitions through **queued → uploading → starting → running** (or **failed** if something goes wrong). If a sandbox is already running for your project, the platform hot-updates it in place with no downtime. Otherwise it creates a fresh sandbox. Your instance URL is assigned per project slug and remains stable across deploys. Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically.
+A deploy transitions through **queued → uploading → starting → running** (or **failed** if something goes wrong). If a sandbox is already running for your project, the platform hot-updates it in place with no downtime. Otherwise it creates a fresh sandbox. Your instance URL is assigned per project slug and remains stable across deploys.
+
+### Env file requirement
+
+The deploy bundles environment variables from a `.env` or `.env.*` file in the project directory. If no env file is present, the deploy errors with `No env file found for deploy.` after the build step. Add at least an empty `.env` file before running the command.
+
+When multiple env files are present, the CLI prompts you to pick one. To select non-interactively, pass `--env-file`:
+
+```bash
+mastra studio deploy --env-file .env.production --yes
+```
+
+This is also how you target multiple environments from a single codebase: maintain one env file per environment (for example `.env.staging`, `.env.production`) and pass the right one to each deploy. Each environment still requires its own Mastra platform project — see [Configuration](/docs/mastra-platform/configuration) for the multi-environment pattern.
+
+### Create a new project non-interactively
+
+`mastra studio deploy` can create a project on first run. If `--project <name>` does not match an existing project, the CLI uses the value as the new project name and creates it after confirmation. Combined with `--yes`, this is fully scriptable:
+
+```bash
+mastra studio deploy --project "my-new-project" --yes
+```
+
+Use this from CI or AI coding agents instead of `mastra studio projects create`, which is interactive only.
 
 ## Running a server
 
