@@ -71,6 +71,7 @@
     "@mastra/mcp-docs-server": "1.1.34",
     "@mastra/mcp-registry-registry": "1.0.1",
     "@mastra/memory": "1.17.5",
+    "@mastra/mrscraper": "0.1.0",
     "@internal/playground": "1.8.1",
     "@mastra/playground-ui": "26.0.1",
     "@mastra/rag": "2.2.1",
