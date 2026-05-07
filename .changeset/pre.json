@@ -140,11 +140,15 @@
   },
   "changesets": [
     "automated-provider-registry-20260505-070037",
+    "blue-ligers-think",
     "data-list-virtualization",
     "every-buses-shave",
+    "every-pets-strive",
     "fancy-berries-know",
     "fiery-icons-appear",
     "fiery-lights-kiss",
+    "fix-mode-model-restore",
+    "fix-scorer-form-remount",
     "giant-owls-rule",
     "good-paws-burn",
     "green-birds-knock",
@@ -153,13 +157,16 @@
     "legal-bars-glow",
     "light-forks-joke",
     "logs-virtualization",
+    "metal-squids-fly",
     "nice-rockets-arrive",
     "playground-import-ui-css-tokens",
     "plenty-pens-call",
+    "regen-client-js-route-types",
     "sidebar-truncate-and-nav-label",
     "slimy-badgers-remain",
     "slimy-ghosts-hammer",
     "social-doodles-cross",
+    "tender-bobcats-code",
     "thirty-bottles-yawn"
   ]
 }

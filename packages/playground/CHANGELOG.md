@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.8.2-alpha.2
+
+### Patch Changes
+
+- Fixed a regression where the Studio Layout swapped its DOM tree once auth capabilities finished loading, which unmounted and remounted the active page. On the Create Scorer page this wiped the Name and Description inputs and reset the form, so submitting failed with "Name is required". The Layout now keeps a single stable wrapper across auth states. ([#16288](https://github.com/mastra-ai/mastra/pull/16288))
+
+- Updated dependencies [[`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529), [`e41e7c8`](https://github.com/mastra-ai/mastra/commit/e41e7c88285feefe5cddea22105b40092bcf217f)]:
+  - @mastra/core@1.33.0-alpha.2
+  - @mastra/client-js@1.17.2-alpha.2
+  - @mastra/react@0.2.36-alpha.2
+  - @mastra/playground-ui@26.1.0-alpha.2
+
 ## 1.8.2-alpha.1
 
 ### Patch Changes
