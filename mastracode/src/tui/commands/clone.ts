@@ -1,5 +1,4 @@
-import { Spacer } from '@mariozechner/pi-tui';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { askModalQuestion } from '../modal-question.js';
 import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -16,67 +15,26 @@ interface CloneResetContext {
  * Confirm whether the user wants to clone a thread. Returns true if
  * confirmed, false on cancel or "No".
  */
-export function confirmClone(state: TUIState, threadLabel?: string): Promise<boolean> {
+export async function confirmClone(state: TUIState, threadLabel?: string): Promise<boolean> {
   const label = threadLabel ? `Clone thread "${threadLabel}"?` : 'Clone the current thread?';
-  return new Promise<boolean>(resolve => {
-    const question = new AskQuestionInlineComponent(
-      {
-        question: label,
-        options: [
-          { label: 'Yes', description: 'Clone this thread' },
-          { label: 'No', description: 'Cancel' },
-        ],
-        formatResult: answer => (answer === 'Yes' ? 'Cloning thread...' : 'Cancelled.'),
-        isNegativeAnswer: answer => answer !== 'Yes',
-        onSubmit: answer => {
-          state.activeInlineQuestion = undefined;
-          resolve(answer === 'Yes');
-        },
-        onCancel: () => {
-          state.activeInlineQuestion = undefined;
-          resolve(false);
-        },
-      },
-      state.ui,
-    );
-
-    state.activeInlineQuestion = question;
-    state.chatContainer.addChild(question);
-    state.chatContainer.addChild(new Spacer(1));
-    state.ui.requestRender();
-    state.chatContainer.invalidate();
+  const answer = await askModalQuestion(state.ui, {
+    question: label,
+    options: [
+      { label: 'Yes', description: 'Clone this thread' },
+      { label: 'No', description: 'Cancel' },
+    ],
   });
+  return answer === 'Yes';
 }
 
 /**
  * Prompt for an optional clone name. Returns the trimmed name, or null
  * if the user presses Esc or submits an empty string.
  */
-export function askCloneName(state: TUIState): Promise<string | null> {
-  return new Promise<string | null>(resolve => {
-    const question = new AskQuestionInlineComponent(
-      {
-        question: 'Give the cloned thread a name? (Esc to skip)',
-        formatResult: answer => `Thread name: ${answer}`,
-        onSubmit: answer => {
-          state.activeInlineQuestion = undefined;
-          const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
-        },
-        onCancel: () => {
-          state.activeInlineQuestion = undefined;
-          resolve(null);
-        },
-      },
-      state.ui,
-    );
-
-    state.activeInlineQuestion = question;
-    state.chatContainer.addChild(question);
-    state.chatContainer.addChild(new Spacer(1));
-    state.ui.requestRender();
-    state.chatContainer.invalidate();
-  });
+export async function askCloneName(state: TUIState): Promise<string | null> {
+  const answer = await askModalQuestion(state.ui, { question: 'Give the cloned thread a name? (Esc to skip)' });
+  const trimmed = answer?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /**
