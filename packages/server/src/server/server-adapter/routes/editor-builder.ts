@@ -1,8 +1,24 @@
+import {
+  BUILDER_REGISTRY_INSTALL_ROUTE,
+  BUILDER_REGISTRY_POPULAR_ROUTE,
+  BUILDER_REGISTRY_PREVIEW_ROUTE,
+  BUILDER_REGISTRY_SEARCH_ROUTE,
+  LIST_BUILDER_REGISTRIES_ROUTE,
+} from '../../handlers/builder-registry';
 import { GET_EDITOR_BUILDER_SETTINGS_ROUTE, GET_INFRASTRUCTURE_STATUS_ROUTE } from '../../handlers/editor-builder';
 
 /**
  * Editor Builder Routes
  *
- * Routes for agent builder settings and configuration.
+ * Routes for agent builder settings, infrastructure status, and external
+ * skill registries.
  */
-export const EDITOR_BUILDER_ROUTES = [GET_EDITOR_BUILDER_SETTINGS_ROUTE, GET_INFRASTRUCTURE_STATUS_ROUTE] as const;
+export const EDITOR_BUILDER_ROUTES = [
+  GET_EDITOR_BUILDER_SETTINGS_ROUTE,
+  GET_INFRASTRUCTURE_STATUS_ROUTE,
+  LIST_BUILDER_REGISTRIES_ROUTE,
+  BUILDER_REGISTRY_SEARCH_ROUTE,
+  BUILDER_REGISTRY_POPULAR_ROUTE,
+  BUILDER_REGISTRY_PREVIEW_ROUTE,
+  BUILDER_REGISTRY_INSTALL_ROUTE,
+] as const;
