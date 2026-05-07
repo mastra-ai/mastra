@@ -76,7 +76,7 @@ async function main() {
 
   const workflow = await mastraClient.getWorkflow('triageWorkflow');
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   const result = await run.startAsync({
     inputData: {

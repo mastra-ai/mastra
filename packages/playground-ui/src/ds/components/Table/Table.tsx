@@ -113,7 +113,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           'transition-colors duration-normal ease-out-custom',
           'hover:bg-surface3',
           // Focus state
-          'focus:bg-surface3 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent1/50',
+          'focus:bg-surface3 focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-accent1/50',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,

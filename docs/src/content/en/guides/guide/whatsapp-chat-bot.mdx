@@ -122,7 +122,7 @@ export const chatAgent = new Agent({
 
     Always aim to be helpful while maintaining a friendly, approachable conversation style.
   `,
-  model: 'anthropic/claude-4-sonnet-20250514',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'agent-storage',
@@ -160,7 +160,7 @@ export const textMessageAgent = new Agent({
 
     Always return exactly 5-8 messages in the messages array.
   `,
-  model: 'anthropic/claude-4-sonnet-20250514',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'agent-storage',

@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "vultr/deepseek-r1-distill-llama-70b"
+  model: "vultr/DeepSeek-V3.2"
 });
 
 // Generate a response
@@ -46,28 +46,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "vultr/deepseek-r1-distill-llama-70b",
+    "model": "vultr/DeepSeek-V3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 121808,
-    "maxOutput": 8192,
-    "inputCost": 0.2,
-    "outputCost": 0.2
+    "reasoning": false,
+    "contextWindow": 127000,
+    "maxOutput": 4096,
+    "inputCost": 0.55,
+    "outputCost": 1.65
   },
   {
-    "model": "vultr/deepseek-r1-distill-qwen-32b",
+    "model": "vultr/GLM-5-FP8",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 121808,
-    "maxOutput": 8192,
-    "inputCost": 0.2,
-    "outputCost": 0.2
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": 0.85,
+    "outputCost": 3.1
   },
   {
     "model": "vultr/gpt-oss-120b",
@@ -76,34 +76,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 121808,
-    "maxOutput": 8192,
-    "inputCost": 0.2,
-    "outputCost": 0.2
-  },
-  {
-    "model": "vultr/kimi-k2-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 58904,
+    "contextWindow": 129000,
     "maxOutput": 4096,
-    "inputCost": 0.2,
-    "outputCost": 0.2
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
-    "model": "vultr/qwen2.5-coder-32b-instruct",
+    "model": "vultr/Kimi-K2.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 12952,
-    "maxOutput": 2048,
-    "inputCost": 0.2,
-    "outputCost": 0.2
+    "contextWindow": 254000,
+    "maxOutput": 32768,
+    "inputCost": 0.55,
+    "outputCost": 2.75
+  },
+  {
+    "model": "vultr/MiniMax-M2.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 194000,
+    "maxOutput": 4096,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   }
 ]}
 />
@@ -118,7 +118,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.vultrinference.com/v1",
-    id: "vultr/deepseek-r1-distill-llama-70b",
+    id: "vultr/DeepSeek-V3.2",
     apiKey: process.env.VULTR_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -136,8 +136,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "vultr/qwen2.5-coder-32b-instruct"
-      : "vultr/deepseek-r1-distill-llama-70b";
+      ? "vultr/gpt-oss-120b"
+      : "vultr/DeepSeek-V3.2";
   }
 });
 ```

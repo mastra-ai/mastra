@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Searchbar, SearchbarWrapper } from './searchbar';
 import { useState } from 'react';
+import { Searchbar, SearchbarWrapper } from './searchbar';
 
 const meta: Meta<typeof Searchbar> = {
   title: 'Composite/Searchbar',
@@ -8,7 +8,6 @@ const meta: Meta<typeof Searchbar> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -21,7 +20,7 @@ export const Default: Story = {
     onSearch: (value: string) => console.log('Search:', value),
   },
   render: args => (
-    <div className="w-[300px]">
+    <div className="w-dropdown-max-height">
       <Searchbar {...args} />
     </div>
   ),
@@ -29,7 +28,7 @@ export const Default: Story = {
 
 export const AgentSearch: Story = {
   render: () => (
-    <div className="w-[300px]">
+    <div className="w-dropdown-max-height">
       <Searchbar
         label="Search agents"
         placeholder="Search agents..."
@@ -41,7 +40,7 @@ export const AgentSearch: Story = {
 
 export const WithCustomDebounce: Story = {
   render: () => (
-    <div className="w-[300px]">
+    <div className="w-dropdown-max-height">
       <Searchbar
         label="Search"
         placeholder="Search (500ms debounce)..."
@@ -54,7 +53,7 @@ export const WithCustomDebounce: Story = {
 
 export const WithWrapper: Story = {
   render: () => (
-    <div className="w-[300px] bg-surface2 rounded-lg">
+    <div className="w-dropdown-max-height bg-surface2 rounded-lg">
       <SearchbarWrapper>
         <Searchbar
           label="Search workflows"
@@ -80,7 +79,7 @@ const InteractiveSearchDemo = () => {
   };
 
   return (
-    <div className="w-[300px] space-y-2">
+    <div className="w-dropdown-max-height space-y-2">
       <Searchbar
         label="Search agents"
         placeholder="Type to search agents..."

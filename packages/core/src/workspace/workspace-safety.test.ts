@@ -60,7 +60,7 @@ describe('Workspace Safety Features', () => {
       await workspace.filesystem!.writeFile('existing.txt', 'original');
 
       // Create tools
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Should fail - file exists but wasn't read via read_file tool
@@ -89,7 +89,7 @@ describe('Workspace Safety Features', () => {
       await workspace.filesystem!.writeFile('test.txt', 'original');
 
       // Create tools
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
       const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
@@ -116,7 +116,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Should succeed - new file doesn't require reading
@@ -142,7 +142,7 @@ describe('Workspace Safety Features', () => {
       // Create file first
       await workspace.filesystem!.writeFile('test.txt', 'v1');
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
       const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
@@ -175,7 +175,7 @@ describe('Workspace Safety Features', () => {
       // Create file first
       await workspace.filesystem!.writeFile('test.txt', 'original');
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Should succeed without reading first
@@ -201,7 +201,7 @@ describe('Workspace Safety Features', () => {
       // Create file first
       await workspace.filesystem!.writeFile('test.txt', 'hello world');
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
       const readTool = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
       const editTool = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
@@ -326,7 +326,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       // Read tools should be present
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
@@ -353,7 +353,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeDefined();
@@ -371,7 +371,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       // All tools should be enabled by default
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
@@ -402,7 +402,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       // All tools should require approval
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].requireApproval).toBe(true);
@@ -422,7 +422,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       // No tools should be present when all disabled
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeUndefined();
@@ -451,7 +451,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       // read_file should NOT require approval (per-tool override)
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].requireApproval).toBe(false);
@@ -486,7 +486,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       // Only read_file and list_files should be present
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
@@ -512,7 +512,7 @@ describe('Workspace Safety Features', () => {
       });
       await workspace.init();
 
-      const tools = createWorkspaceTools(workspace);
+      const tools = await createWorkspaceTools(workspace);
 
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
 

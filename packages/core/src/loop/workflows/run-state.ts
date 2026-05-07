@@ -9,12 +9,9 @@ type State = {
     modelVersion: string;
     modelProvider: string;
   };
-  hasToolCallStreaming: boolean;
   hasErrored: boolean;
-  reasoningDeltas: string[];
-  textDeltas: string[];
-  isReasoning: boolean;
-  isStreaming: boolean;
+  apiError: unknown | undefined;
+  deferredErrorChunk: any | undefined;
   providerOptions: Record<string, any> | undefined;
 };
 
@@ -35,13 +32,10 @@ export class AgenticRunState {
         modelVersion: model.specificationVersion,
         modelProvider: model.provider,
       },
-      isReasoning: false,
-      isStreaming: false,
       providerOptions: undefined,
-      hasToolCallStreaming: false,
       hasErrored: false,
-      reasoningDeltas: [],
-      textDeltas: [],
+      apiError: undefined,
+      deferredErrorChunk: undefined,
       stepResult: undefined,
     };
   }

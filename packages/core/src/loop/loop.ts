@@ -39,7 +39,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       category: ErrorCategory.USER,
     });
     loggerToUse.trackException(mastraError);
-    loggerToUse.error(mastraError.toString());
     throw mastraError;
   }
 
@@ -69,6 +68,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     memory: _internal?.memory,
     threadExists: _internal?.threadExists,
     transportRef: _internal?.transportRef ?? {},
+    backgroundTaskManager: _internal?.backgroundTaskManager,
+    agentBackgroundConfig: _internal?.agentBackgroundConfig,
+    backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
+    skipBgTaskWait: _internal?.skipBgTaskWait,
   };
 
   let startTimestamp = internalToUse.now?.();

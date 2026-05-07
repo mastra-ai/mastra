@@ -152,6 +152,21 @@ export class FileReadRequiredError extends FilesystemError {
   }
 }
 
+export class StaleFileError extends FilesystemError {
+  constructor(
+    path: string,
+    public readonly expectedMtime: Date,
+    public readonly actualMtime: Date,
+  ) {
+    super(
+      `File was modified externally: ${path} (expected mtime ${expectedMtime.toISOString()}, actual ${actualMtime.toISOString()})`,
+      'ESTALE',
+      path,
+    );
+    this.name = 'StaleFileError';
+  }
+}
+
 /**
  * Error thrown when a filesystem operation is attempted before initialization.
  */

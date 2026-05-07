@@ -265,11 +265,12 @@ describe('SpanConverter', () => {
       expect(attrs['gen_ai.usage.input_tokens']).toBe(100);
       expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
       expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(20);
-      expect(attrs['gen_ai.usage.cached_input_tokens']).toBe(30);
+      expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(30);
 
       // Should NOT have old naming
       expect(attrs['llm.usage.prompt_tokens']).toBeUndefined();
       expect(attrs['gen_ai.usage.prompt_tokens']).toBeUndefined();
+      expect(attrs['gen_ai.usage.cached_input_tokens']).toBeUndefined();
     });
   });
 

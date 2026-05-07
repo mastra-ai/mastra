@@ -4,12 +4,12 @@ import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
-import { Button } from '@/ds/components/Button';
+import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 import { DatePicker } from './date-picker';
+import { TimePicker } from './time-picker';
+import { Button } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
-import { TimePicker } from './time-picker';
-import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
@@ -51,7 +51,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl w-auto !p-0 bg-surface4 max-w-[16.5rem]"
+        className="backdrop-blur-4xl w-auto p-0! bg-surface4 max-w-[16.5rem]"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -208,7 +208,7 @@ export const DateTimePickerContent = ({
         value={dateInputValue}
         onChange={handleInputChange}
         placeholder={placeholder}
-        className="m-4 mb-0 !w-auto"
+        className="m-4 mb-0 w-auto!"
       />
 
       {localErrorMsg && (
@@ -268,7 +268,7 @@ type DefaultButtonProps = {
 export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonProps>(
   ({ value, placeholder, className, ...props }, ref) => {
     return (
-      <Button ref={ref} className={cn('justify-start', className)} variant="inputLike" {...props}>
+      <Button ref={ref} className={cn('justify-start', className)} {...props}>
         <CalendarIcon className="h-4 w-4" />
         {value ? (
           <span className="text-white">{format(value, 'PP p')}</span>

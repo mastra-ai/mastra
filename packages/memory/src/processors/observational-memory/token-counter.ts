@@ -4,6 +4,8 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import imageSize from 'image-size';
 import { estimateTokenCount } from 'tokenx';
 
+import { formatToolResultForObserver, resolveToolResultValue } from './tool-result-helpers';
+
 type TokenEstimateCacheEntry = {
   v: number;
   source: string;
@@ -1183,18 +1185,7 @@ export class TokenCounter {
     part: CacheablePart,
     invocationResult: unknown,
   ): { value: unknown; usingStoredModelOutput: boolean } {
-    const mastraMetadata = (part as any)?.providerMetadata?.mastra;
-    if (mastraMetadata && typeof mastraMetadata === 'object' && 'modelOutput' in mastraMetadata) {
-      return {
-        value: (mastraMetadata as Record<string, unknown>).modelOutput,
-        usingStoredModelOutput: true,
-      };
-    }
-
-    return {
-      value: invocationResult,
-      usingStoredModelOutput: false,
-    };
+    return resolveToolResultValue(part as { providerMetadata?: Record<string, any> }, invocationResult);
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
@@ -1474,19 +1465,13 @@ export class TokenCounter {
         );
 
         if (resultForCounting !== undefined) {
-          if (typeof resultForCounting === 'string') {
-            tokens += this.readOrPersistPartEstimate(
-              part,
-              usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',
-              resultForCounting,
-            );
-          } else {
-            const resultJson = JSON.stringify(resultForCounting);
-            tokens += this.readOrPersistPartEstimate(
-              part,
-              usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-              resultJson,
-            );
+          const formattedResult = formatToolResultForObserver(resultForCounting);
+          tokens += this.readOrPersistPartEstimate(
+            part,
+            usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
+            formattedResult,
+          );
+          if (typeof resultForCounting !== 'string') {
             overheadDelta -= 12;
           }
         }

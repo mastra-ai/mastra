@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
@@ -7,6 +9,9 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } 
 import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler, LogMessage } from './client';
 import { MCPClient } from './configuration';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
@@ -301,48 +306,36 @@ describe('MCPClient', () => {
       expect(currentWeatherPrompt).toBeDefined();
       expect(currentWeatherPrompt).toMatchObject({
         name: 'current',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const forecast = promptResources.find(r => r.name === 'forecast');
       expect(forecast).toBeDefined();
       expect(forecast).toMatchObject({
         name: 'forecast',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const historical = promptResources.find(r => r.name === 'historical');
       expect(historical).toBeDefined();
       expect(historical).toMatchObject({
         name: 'historical',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
     });
 
     it('should get a specific prompt from a server', async () => {
-      const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'current',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
+      expect(description).toBeDefined();
       expect(messages).toBeDefined();
       const messageItem = messages[0];
       let parsedText: any = {};
-      if (messageItem.content.text && typeof messageItem.content.text === 'string') {
+      const content = messageItem.content;
+      if ('text' in content && typeof content.text === 'string') {
         try {
-          parsedText = JSON.parse(messageItem.content.text);
+          parsedText = JSON.parse(content.text);
         } catch {
           // If parsing fails, parsedText remains an empty object
-          // console.error("Failed to parse resource content text:", _e);
         }
       }
       expect(parsedText).toHaveProperty('location');
@@ -691,30 +684,37 @@ describe('MCPClient', () => {
       agentTestContext.set('traceId', 'agent-trace-xyz');
       agentTestContext.set('tenant', 'acme-corp');
       const loggerFn = vi.fn();
+      const mock = createGatewayMock();
 
-      const mcpClientForAgentTest = new MCPClient({
-        id: 'mcp-for-agent-test-suite',
-        servers: {
-          stockPriceServer: {
-            command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
-            env: { FAKE_CREDS: 'test' },
-            logger: loggerFn,
+      mock.start();
+
+      try {
+        const mcpClientForAgentTest = new MCPClient({
+          id: 'mcp-for-agent-test-suite',
+          servers: {
+            stockPriceServer: {
+              command: 'npx',
+              args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+              env: { FAKE_CREDS: 'test' },
+              logger: loggerFn,
+            },
           },
-        },
-      });
-      clientsToCleanup.push(mcpClientForAgentTest);
+        });
+        clientsToCleanup.push(mcpClientForAgentTest);
 
-      const agentName = 'stockAgentForContextTest';
-      const agent = new Agent({
-        id: agentName,
-        name: agentName,
-        model: 'openai/gpt-4o',
-        instructions: 'Use the getStockPrice tool to find the price of MSFT.',
-        tools: await mcpClientForAgentTest.listTools(),
-      });
+        const agentName = 'stockAgentForContextTest';
+        const agent = new Agent({
+          id: agentName,
+          name: agentName,
+          model: 'openai/gpt-4o',
+          instructions: 'Use the getStockPrice tool to find the price of MSFT.',
+          tools: await mcpClientForAgentTest.listTools(),
+        });
 
-      await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
+        await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
+      } finally {
+        await mock.saveAndStop();
+      }
 
       expect(loggerFn).toHaveBeenCalled();
       const callWithAgentContext = loggerFn.mock.calls.find(call => {

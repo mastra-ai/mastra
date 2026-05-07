@@ -6,13 +6,14 @@
 
 import { Box, Container, getEditorKeybindings, Input, Markdown, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
-import { theme, getSelectListTheme, getMarkdownTheme } from '../theme.js';
+import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme } from '../theme.js';
 
 export interface PlanApprovalInlineOptions {
   planId: string;
   title: string;
   plan: string;
   onApprove: () => void;
+  onGoal: () => void;
   onReject: (feedback?: string) => void;
 }
 
@@ -21,6 +22,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private selectList?: SelectList;
   private feedbackInput?: Input;
   private onApprove: () => void;
+  private onGoal: () => void;
   private onReject: (feedback?: string) => void;
   private resolved = false;
   private mode: 'select' | 'feedback' = 'select';
@@ -41,22 +43,24 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   constructor(options: PlanApprovalInlineOptions, _ui: TUI) {
     super();
     this.onApprove = options.onApprove;
+    this.onGoal = options.onGoal;
     this.onReject = options.onReject;
     this.planTitle = options.title;
     this.planContent = options.plan;
 
-    this.addChild(new Spacer(1));
-
-    // Main content box with pending background
-    this.contentBox = new Box(1, 1, (text: string) => theme.bg('toolPendingBg', text));
+    // Main content box - no background, paddingX=1 to align with user message box
+    this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
+    this.addChild(new Spacer(1));
 
     // Plan title header
     this.contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${options.title}`)), 0, 0));
     this.contentBox.addChild(new Spacer(1));
 
     // Render plan as markdown
-    const md = new Markdown(options.plan, 1, 0, getMarkdownTheme());
+    const md = new Markdown(options.plan, 1, 0, getMarkdownTheme(), {
+      color: (text: string) => theme.fg('text', text),
+    });
     this.contentBox.addChild(md);
     this.contentBox.addChild(new Spacer(1));
 
@@ -65,6 +69,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       {
         value: 'approve',
         label: `  ${theme.fg('success', 'Approve')} ${theme.fg('dim', '— switch to Build mode and implement')}`,
+      },
+      {
+        value: 'goal',
+        label: `  ${theme.fg('success', 'Use as /goal')} ${theme.fg('dim', '— switch to Build mode and pursue this plan')}`,
       },
       {
         value: 'reject',
@@ -97,6 +105,9 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       case 'approve':
         this.handleApprove();
         break;
+      case 'goal':
+        this.handleGoal();
+        break;
       case 'reject':
         this.handleReject();
         break;
@@ -111,6 +122,13 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.resolved = true;
     this.showResult('Approved', true);
     this.onApprove();
+  }
+
+  private handleGoal(): void {
+    if (this.resolved) return;
+    this.resolved = true;
+    this.showResult('Set as goal', true);
+    this.onGoal();
   }
 
   private handleReject(feedback?: string): void {
@@ -129,7 +147,9 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`)), 0, 0));
     this.contentBox.addChild(new Spacer(1));
 
-    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme());
+    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme(), {
+      color: (text: string) => theme.fg('text', text),
+    });
     this.contentBox.addChild(md);
     this.contentBox.addChild(new Spacer(1));
 
@@ -155,8 +175,6 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   private showResult(status: string, isApproved: boolean): void {
     this.contentBox.clear();
-    const bgColor = isApproved ? 'toolSuccessBg' : 'toolErrorBg';
-    this.contentBox.setBgFn((text: string) => theme.bg(bgColor, text));
 
     // Status header with icon
     const icon = isApproved ? theme.fg('success', '✓') : theme.fg('error', '✗');
@@ -170,7 +188,9 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(new Spacer(1));
 
     // Re-render plan as markdown
-    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme());
+    const md = new Markdown(this.planContent, 1, 0, getMarkdownTheme(), {
+      color: (text: string) => theme.fg('text', text),
+    });
     this.contentBox.addChild(md);
   }
 
@@ -205,10 +225,7 @@ export class PlanResultComponent extends Container {
   constructor(options: PlanResultOptions) {
     super();
 
-    this.addChild(new Spacer(1));
-
-    const bgColor = options.isApproved ? 'toolSuccessBg' : 'toolErrorBg';
-    const contentBox = new Box(1, 1, (text: string) => theme.bg(bgColor, text));
+    const contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(contentBox);
 
     // Status header with icon
@@ -225,7 +242,10 @@ export class PlanResultComponent extends Container {
     contentBox.addChild(new Spacer(1));
 
     // Render plan as markdown
-    const md = new Markdown(options.plan, 1, 0, getMarkdownTheme());
+    const md = new Markdown(options.plan, 1, 0, getMarkdownTheme(), {
+      color: (text: string) => theme.fg('text', text),
+    });
     contentBox.addChild(md);
+    this.addChild(new Spacer(1));
   }
 }

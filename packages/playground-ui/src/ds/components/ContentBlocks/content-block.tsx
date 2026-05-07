@@ -1,4 +1,5 @@
-import { Draggable, DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { Draggable } from '@hello-pangea/dnd';
 
 export type ContentBlockChildren =
   | React.ReactNode

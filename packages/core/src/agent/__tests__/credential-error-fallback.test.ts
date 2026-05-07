@@ -241,54 +241,192 @@ describe('Credential/Auth Error Fallback', () => {
   });
 
   describe('retry behavior for non-retryable errors', () => {
-    it('should not retry non-retryable 401 on the same model', async () => {
-      // Non-retryable errors (401/403) should not be retried - p-retry correctly
-      // checks isRetryable and skips retries. The outer fallback loop only handles
-      // model switching, not retries.
-      const primary = createCountingErrorModel(401, 'Unauthorized', false);
-      const secondaryModel = createSuccessModel('Fallback success');
+    describe('stream()', () => {
+      it('should not retry non-retryable 401 on the same model', async () => {
+        // Non-retryable errors (401/403) should not be retried - p-retry correctly
+        // checks isRetryable and skips retries. The outer fallback loop only handles
+        // model switching, not retries.
+        const primary = createCountingErrorModel(401, 'Unauthorized', false);
+        const secondaryModel = createSuccessModel('Fallback success');
 
-      const agent = new Agent({
-        id: 'test-no-retry-but-fallback',
-        name: 'Test No Retry But Fallback',
-        instructions: 'You are a test agent',
-        model: [
-          { model: primary.model, maxRetries: 3 },
-          { model: secondaryModel, maxRetries: 0 },
-        ],
+        const agent = new Agent({
+          id: 'test-no-retry-but-fallback-stream',
+          name: 'Test No Retry But Fallback (stream)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 3 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.stream('Hello');
+        const fullText = await result.text;
+
+        // Fallback works correctly
+        expect(fullText).toBe('Fallback success');
+
+        // 401 (isRetryable: false) is not retried - only 1 call to the primary model
+        expect(primary.getCallCount()).toBe(1);
       });
 
-      const result = await agent.stream('Hello');
-      const fullText = await result.text;
+      it('should not retry non-retryable 403 on the same model', async () => {
+        const primary = createCountingErrorModel(403, 'Forbidden', false);
+        const secondaryModel = createSuccessModel('Fallback success');
 
-      // Fallback works correctly
-      expect(fullText).toBe('Fallback success');
+        const agent = new Agent({
+          id: 'test-no-retry-403-stream',
+          name: 'Test No Retry 403 (stream)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 3 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
 
-      // 401 (isRetryable: false) is not retried - only 1 call to the primary model
-      expect(primary.getCallCount()).toBe(1);
+        const result = await agent.stream('Hello');
+        const fullText = await result.text;
+
+        expect(fullText).toBe('Fallback success');
+
+        // 403 (isRetryable: false) should NOT be retried - only 1 call
+        expect(primary.getCallCount()).toBe(1);
+      });
+
+      it('should retry retryable 429 on the same model before falling back', async () => {
+        const primary = createCountingErrorModel(429, 'Rate limited', true);
+        const secondaryModel = createSuccessModel('Fallback success');
+
+        const agent = new Agent({
+          id: 'test-retry-then-fallback-stream',
+          name: 'Test Retry Then Fallback (stream)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 2 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.stream('Hello');
+        const fullText = await result.text;
+
+        expect(fullText).toBe('Fallback success');
+        // Retries are handled by a single layer (p-retry in execute.ts) which respects isRetryable.
+        // With maxRetries: 2, we get 3 calls (1 initial + 2 retries) before falling back.
+        expect(primary.getCallCount()).toBe(3);
+      });
+
+      it('should retry retryable 500 on the same model before falling back', async () => {
+        const primary = createCountingErrorModel(500, 'Internal server error', true);
+        const secondaryModel = createSuccessModel('Fallback success');
+
+        const agent = new Agent({
+          id: 'test-retry-500-stream',
+          name: 'Test Retry 500 (stream)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 2 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.stream('Hello');
+        const fullText = await result.text;
+
+        expect(fullText).toBe('Fallback success');
+
+        // With maxRetries: 2, exactly 3 calls (1 initial + 2 retries)
+        expect(primary.getCallCount()).toBe(3);
+      });
     });
 
-    it('should retry retryable 429 on the same model before falling back', async () => {
-      const primary = createCountingErrorModel(429, 'Rate limited', true);
-      const secondaryModel = createSuccessModel('Fallback success');
+    describe('generate()', () => {
+      it('should not retry non-retryable 401 on the same model', async () => {
+        const primary = createCountingErrorModel(401, 'Unauthorized', false);
+        const secondaryModel = createSuccessModel('Fallback success');
 
-      const agent = new Agent({
-        id: 'test-retry-then-fallback',
-        name: 'Test Retry Then Fallback',
-        instructions: 'You are a test agent',
-        model: [
-          { model: primary.model, maxRetries: 2 },
-          { model: secondaryModel, maxRetries: 0 },
-        ],
+        const agent = new Agent({
+          id: 'test-no-retry-but-fallback-generate',
+          name: 'Test No Retry But Fallback (generate)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 3 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.generate('Hello');
+
+        expect(result.text).toBe('Fallback success');
+
+        // 401 (isRetryable: false) should NOT be retried - only 1 call to the primary model
+        expect(primary.getCallCount()).toBe(1);
       });
 
-      const result = await agent.stream('Hello');
-      const fullText = await result.text;
+      it('should not retry non-retryable 403 on the same model', async () => {
+        const primary = createCountingErrorModel(403, 'Forbidden', false);
+        const secondaryModel = createSuccessModel('Fallback success');
 
-      expect(fullText).toBe('Fallback success');
-      // Retries are handled by a single layer (p-retry in execute.ts) which respects isRetryable.
-      // With maxRetries: 2, we get 3 calls (1 initial + 2 retries) before falling back.
-      expect(primary.getCallCount()).toBe(3);
+        const agent = new Agent({
+          id: 'test-no-retry-403-generate',
+          name: 'Test No Retry 403 (generate)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 3 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.generate('Hello');
+
+        expect(result.text).toBe('Fallback success');
+
+        // 403 (isRetryable: false) should NOT be retried - only 1 call
+        expect(primary.getCallCount()).toBe(1);
+      });
+
+      it('should retry retryable 429 exactly maxRetries times before falling back', async () => {
+        const primary = createCountingErrorModel(429, 'Rate limited', true);
+        const secondaryModel = createSuccessModel('Fallback success');
+
+        const agent = new Agent({
+          id: 'test-retry-then-fallback-generate',
+          name: 'Test Retry Then Fallback (generate)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 2 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.generate('Hello');
+
+        expect(result.text).toBe('Fallback success');
+
+        // With maxRetries: 2, exactly 3 calls (1 initial + 2 retries) before falling back
+        expect(primary.getCallCount()).toBe(3);
+      });
+
+      it('should retry retryable 500 exactly maxRetries times before falling back', async () => {
+        const primary = createCountingErrorModel(500, 'Internal server error', true);
+        const secondaryModel = createSuccessModel('Fallback success');
+
+        const agent = new Agent({
+          id: 'test-retry-500-generate',
+          name: 'Test Retry 500 (generate)',
+          instructions: 'You are a test agent',
+          model: [
+            { model: primary.model, maxRetries: 2 },
+            { model: secondaryModel, maxRetries: 0 },
+          ],
+        });
+
+        const result = await agent.generate('Hello');
+
+        expect(result.text).toBe('Fallback success');
+
+        // With maxRetries: 2, exactly 3 calls (1 initial + 2 retries)
+        expect(primary.getCallCount()).toBe(3);
+      });
     });
   });
 });

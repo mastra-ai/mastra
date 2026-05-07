@@ -59,7 +59,7 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
       id: 'recruiter-agent',
       name: 'Recruiter Agent',
       instructions: `You are a recruiter.`,
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
     })
 
     const gatherCandidateInfo = createStep({
@@ -200,7 +200,7 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
 
 ## Testing the workflow
 
-You can test your workflow inside [Studio](/docs/getting-started/studio) by starting the development server:
+You can test your workflow inside [Studio](/docs/studio/overview) by starting the development server:
 
 ```bash
 mastra dev

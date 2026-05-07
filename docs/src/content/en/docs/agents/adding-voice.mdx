@@ -1,5 +1,6 @@
 ---
 title: "Voice | Agents"
+description: "Learn how to add voice capabilities to your Mastra agents for text-to-speech and speech-to-text interactions."
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
@@ -38,7 +39,7 @@ export const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   voice,
 })
 
@@ -127,7 +128,7 @@ export const agent = new Agent({
   id: 'speech-to-speech-agent',
   name: 'Speech-to-Speech Agent',
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: {
     // Tools configured on Agent are passed to voice provider
     search,
@@ -227,7 +228,7 @@ export const convertToText = async (input: string | NodeJS.ReadableStream): Prom
 export const hybridVoiceAgent = new Agent({
   id: 'hybrid-voice-agent',
   name: 'Hybrid Voice Agent',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   instructions: 'You can speak and listen using different providers.',
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
@@ -239,7 +240,7 @@ export const unifiedVoiceAgent = new Agent({
   id: 'unified-voice-agent',
   name: 'Unified Voice Agent',
   instructions: 'You are an agent with both STT and TTS capabilities.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   voice: new OpenAIVoice(),
 })
 
@@ -281,7 +282,7 @@ export const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
@@ -306,7 +307,7 @@ export const agent = new Agent({
   id: 'aisdk-voice-agent',
   name: 'AI SDK Voice Agent',
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({
@@ -349,6 +350,7 @@ Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-
 | - | - | - | - |
 | OpenAI | `@mastra/voice-openai` | TTS, STT | [Documentation](/reference/voice/openai) |
 | OpenAI Realtime | `@mastra/voice-openai-realtime` | Realtime speech-to-speech | [Documentation](/reference/voice/openai-realtime) |
+| AWS Nova Sonic | `@mastra/voice-aws-nova-sonic` | Realtime speech-to-speech via AWS Bedrock | [Documentation](/reference/voice/aws-nova-sonic) |
 | ElevenLabs | `@mastra/voice-elevenlabs` | High-quality TTS | [Documentation](/reference/voice/elevenlabs) |
 | PlayAI | `@mastra/voice-playai` | TTS | [Documentation](/reference/voice/playai) |
 | Google | `@mastra/voice-google` | TTS, STT | [Documentation](/reference/voice/google) |
@@ -361,7 +363,7 @@ Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-
 
 ## Next steps
 
-- [Voice API Reference](/reference/voice/mastra-voice) - Detailed API documentation for voice capabilities
-- [Text to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech) - Interactive story generator and other TTS implementations
-- [Speech to Text Examples](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text) - Voice memo app and other STT implementations
-- [Speech to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech) - Real-time voice conversation with call analysis
+- [Voice API Reference](/reference/voice/mastra-voice): Detailed API documentation for voice capabilities
+- [Text to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech): Interactive story generator and other TTS implementations
+- [Speech to Text Examples](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text): Voice memo app and other STT implementations
+- [Speech to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech): Real-time voice conversation with call analysis

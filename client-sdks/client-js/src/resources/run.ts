@@ -181,6 +181,7 @@ export class Run extends BaseResource {
     resumeData,
     tracingOptions,
     perStep,
+    forEachIndex,
     ...rest
   }: {
     step?: string | string[];
@@ -188,6 +189,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(rest.requestContext);
     return this.request(`/workflows/${this.workflowId}/resume?runId=${this.runId}`, {
@@ -198,6 +200,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions,
         perStep,
+        forEachIndex,
       },
     });
   }
@@ -280,19 +283,33 @@ export class Run extends BaseResource {
   }
 
   /**
-   * Observes workflow stream for a workflow run
-   * @returns Promise containing the workflow execution results
+   * Observe (reconnect to) an existing workflow stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a ReadableStream of workflow events
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a workflow stream from a specific position
+   * const stream = await run.observe({ offset: 42 });
+   *
+   * for await (const event of stream) {
+   *   console.log('Received:', event);
+   * }
+   * ```
    */
-  async observeStream(): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
+  async observe(params?: { offset?: number }): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
-    const response: Response = await this.request(
-      `/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        stream: true,
-      },
-    );
+    if (params?.offset !== undefined) {
+      searchParams.set('offset', String(params.offset));
+    }
+
+    const response: Response = await this.request(`/workflows/${this.workflowId}/observe?${searchParams.toString()}`, {
+      method: 'POST',
+      stream: true,
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to observe workflow stream: ${response.statusText}`);
@@ -307,6 +324,15 @@ export class Run extends BaseResource {
   }
 
   /**
+   * Observes workflow stream for a workflow run
+   * @deprecated Use `observe()` instead for better control over replay position
+   * @returns Promise containing the workflow execution results
+   */
+  async observeStream() {
+    return this.observe();
+  }
+
+  /**
    * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the step, resumeData and requestContext
    * @returns Promise containing the workflow resume results
@@ -317,6 +343,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
@@ -327,6 +354,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions: params.tracingOptions,
         perStep: params.perStep,
+        forEachIndex: params.forEachIndex,
       },
     }).then(deserializeWorkflowError);
   }
@@ -342,6 +370,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
@@ -356,6 +385,7 @@ export class Run extends BaseResource {
           requestContext,
           tracingOptions: params.tracingOptions,
           perStep: params.perStep,
+          forEachIndex: params.forEachIndex,
         },
         stream: true,
       },

@@ -73,6 +73,13 @@ export function isNullableSchema(schema: JSONSchema7): boolean {
 }
 
 /**
+ * Check if a JSON Schema uses allOf (intersection)
+ */
+export function isAllOfSchema(schema: JSONSchema7): schema is JSONSchema7 & { allOf: JSONSchema7[] } {
+  return Array.isArray(schema.allOf) && schema.allOf.length > 0;
+}
+
+/**
  * Check if a JSON Schema has number constraints (minimum, maximum, etc.)
  */
 export function hasNumberConstraints(schema: JSONSchema7): boolean {

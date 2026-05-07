@@ -37,7 +37,7 @@ const processor = new UnicodeNormalizer({
             name: 'stripControlChars',
             type: 'boolean',
             description:
-              'Whether to strip control characters. When enabled, removes control characters except \t, \n, \r',
+              'Whether to strip control characters. When enabled, removes control characters except `\t`, `\n`, `\r`',
             isOptional: true,
             default: 'false',
           },
@@ -106,7 +106,7 @@ export const agent = new Agent({
   id: 'normalized-agent',
   name: 'normalized-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,

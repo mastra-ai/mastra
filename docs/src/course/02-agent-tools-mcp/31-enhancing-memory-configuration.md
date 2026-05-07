@@ -61,7 +61,7 @@ export const personalAssistantAgent = new Agent({
     Always maintain a helpful and professional tone.
     Use the stored information to provide more personalized responses.
   `,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4',
   tools: { ...mcpTools },
   memory,
 })

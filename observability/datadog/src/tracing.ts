@@ -28,7 +28,9 @@ import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './util
 import type { DatadogSpanKind } from './utils';
 
 /**
- * LLMObs span options with required name and kind properties.
+ * LLMObs span options passed to dd-trace's llmobs.trace().
+ * Note: endTime is not included because dd-trace does not honor it in trace options.
+ * Instead, we call ddSpan.finish(endTimeMs) explicitly inside the trace callback.
  */
 interface LLMObsSpanOptions {
   kind: DatadogSpanKind;
@@ -39,7 +41,6 @@ interface LLMObsSpanOptions {
   modelName?: string;
   modelProvider?: string;
   startTime?: Date;
-  endTime?: Date;
 }
 
 /**
@@ -127,6 +128,24 @@ export interface DatadogExporterConfig extends BaseExporterConfig {
    * Defaults to false to avoid unexpected instrumentation.
    */
   integrationsEnabled?: boolean;
+
+  /**
+   * Keys from the request context (set via `requestContextKeys` in the Mastra
+   * Observability config) that should be promoted to flat Datadog LLM Observability
+   * tags instead of being nested inside `annotations.metadata`.
+   *
+   * Flat tags are indexable and filterable in the Datadog LLM Observability UI,
+   * which makes them suitable for multi-tenant filtering (e.g. tenantId, agentId).
+   *
+   * @example
+   * ```typescript
+   * new DatadogExporter({
+   *   mlApp: 'my-app',
+   *   requestContextKeys: ['tenantId', 'agentId'],
+   * })
+   * ```
+   */
+  requestContextKeys?: string[];
 }
 
 /**
@@ -255,6 +274,18 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
+   * Sets native dd-trace error tags required by Datadog's Error Tracking UI.
+   */
+  private setErrorTags(ddSpan: any, errorInfo: NonNullable<AnyExportedSpan['errorInfo']>): void {
+    ddSpan.setTag('error', true);
+    ddSpan.setTag('error.message', errorInfo.message);
+    ddSpan.setTag('error.type', errorInfo.name ?? errorInfo.category ?? 'Error');
+    if (errorInfo.stack) {
+      ddSpan.setTag('error.stack', errorInfo.stack);
+    }
+  }
+
+  /**
    * Builds annotations object for llmobs.annotate().
    * Uses dd-trace's expected property names: inputData, outputData, metadata, tags, metrics.
    */
@@ -271,9 +302,11 @@ export class DatadogExporter extends BaseExporter {
       annotations.outputData = formatOutput(span.output, span.type);
     }
 
-    // Add token usage metrics (only on MODEL_GENERATION or MODEL_STEP spans)
-    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_STEP) {
-      const usage = (span.attributes as ModelGenerationAttributes | ModelStepAttributes)?.usage;
+    // Add token usage metrics on MODEL_STEP spans only.
+    // MODEL_STEP is the actual LLM API call; MODEL_GENERATION is its parent wrapper.
+    // Reporting on both would double-count cost in Datadog.
+    if (span.type === SpanType.MODEL_STEP) {
+      const usage = (span.attributes as ModelStepAttributes)?.usage;
       const metrics = formatUsageMetrics(usage);
       if (metrics) {
         annotations.metrics = metrics;
@@ -285,19 +318,58 @@ export class DatadogExporter extends BaseExporter {
     const knownFields = ['usage', 'model', 'provider', 'parameters'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
-    // Merge span.metadata + remaining attributes into metadata
-    const combinedMetadata = {
-      ...span.metadata,
-      ...otherAttributes,
+    // Separate requestContextKeys from span.metadata AND span.attributes:
+    // - Keys listed in this.config.requestContextKeys are promoted to flat LLM Obs tags,
+    //   making them indexable and filterable in the Datadog UI (e.g. tenantId, agentId).
+    // - All remaining keys stay nested in annotations.metadata as before.
+    const contextKeySet = new Set(this.config.requestContextKeys ?? []);
+    const flatContextTags: Record<string, any> = {};
+    const remainingMetadata: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(span.metadata ?? {})) {
+      if (contextKeySet.has(key)) {
+        flatContextTags[key] = value;
+      } else {
+        remainingMetadata[key] = value;
+      }
+    }
+
+    // Also promote matching keys from span.attributes so requestContextKeys
+    // are consistently elevated regardless of where the caller stored them.
+    const remainingAttributes: Record<string, any> = {};
+    for (const [key, value] of Object.entries(otherAttributes)) {
+      if (contextKeySet.has(key)) {
+        // Only promote if not already set from span.metadata (metadata wins)
+        if (!(key in flatContextTags)) {
+          flatContextTags[key] = value;
+        }
+      } else {
+        remainingAttributes[key] = value;
+      }
+    }
+
+    // Merge remaining span.metadata + span attributes into metadata
+    // Error message goes into metadata (not tags) because tags get normalized/truncated
+    // which mangles free-form error text (e.g. colons split into key/value, spaces become underscores)
+    const combinedMetadata: Record<string, any> = {
+      ...remainingMetadata,
+      ...remainingAttributes,
     };
+    if (span.errorInfo) {
+      combinedMetadata['error.message'] = span.errorInfo.message;
+    }
     if (Object.keys(combinedMetadata).length > 0) {
       annotations.metadata = combinedMetadata;
     }
 
-    // Build tags from span.tags (user-provided string[] converted to object) and error info
-    // Datadog annotation tags accept Record<string, any>, so we use proper types
+    // Build tags from span.tags (user-provided string[] converted to object),
+    // promoted requestContextKeys values (flat, indexable in Datadog), and error info.
+    // Datadog annotation tags accept Record<string, any>, so we use proper types.
     // The native span error status is also set via ddSpan.setTag('error', true) in emitSpan()
-    const tags: Record<string, any> = {};
+    const tags: Record<string, any> = {
+      // Promote requestContextKeys values to flat, searchable LLM Observability tags
+      ...flatContextTags,
+    };
 
     // Convert span.tags (string[]) to object format
     // Tags in "key:value" format (e.g. "instance_name:career-scout-api") are split into { key: "value" }
@@ -313,15 +385,19 @@ export class DatadogExporter extends BaseExporter {
       }
     }
 
-    // Add error info as consolidated tags
+    // Add error status and structured error fields as tags (short, structured values that survive normalization)
+    // The error message itself is in metadata above to avoid tag normalization/truncation
     if (span.errorInfo) {
       tags.error = true;
-      tags.errorInfo = {
-        message: span.errorInfo.message,
-        ...(span.errorInfo.id ? { id: span.errorInfo.id } : {}),
-        ...(span.errorInfo.domain ? { domain: span.errorInfo.domain } : {}),
-        ...(span.errorInfo.category ? { category: span.errorInfo.category } : {}),
-      };
+      if (span.errorInfo.id) {
+        tags['error.id'] = span.errorInfo.id;
+      }
+      if (span.errorInfo.domain) {
+        tags['error.domain'] = span.errorInfo.domain;
+      }
+      if (span.errorInfo.category) {
+        tags['error.category'] = span.errorInfo.category;
+      }
     }
 
     if (Object.keys(tags).length > 0) {
@@ -346,13 +422,6 @@ export class DatadogExporter extends BaseExporter {
         this.logger.debug('Datadog llmobs flushed');
       } catch (e) {
         this.logger.error('Error flushing llmobs', { error: e });
-      }
-    } else if ((tracer as any).flush) {
-      try {
-        await (tracer as any).flush();
-        this.logger.debug('Datadog tracer flushed');
-      } catch (e) {
-        this.logger.error('Error flushing tracer', { error: e });
       }
     }
   }
@@ -572,14 +641,22 @@ export class DatadogExporter extends BaseExporter {
    * Builds LLMObs span options from a Mastra span.
    * Handles trace context, timestamps, and conditional model information for LLM spans.
    */
-  private buildSpanOptions(span: AnyExportedSpan): LLMObsSpanOptions {
+  private buildSpanOptions(
+    span: AnyExportedSpan,
+    inheritedModelAttrs?: { model?: string; provider?: string },
+  ): { traceOptions: LLMObsSpanOptions; endTimeMs: number } {
     const traceCtx = this.traceContext.get(span.traceId) || {
       userId: span.metadata?.userId,
       sessionId: span.metadata?.sessionId,
     };
 
     const kind = kindFor(span.type);
-    const attrs = span.attributes as ModelGenerationAttributes | undefined;
+    // MODEL_GENERATION carries model/provider; MODEL_STEP children inherit it from their parent.
+    const ownAttrs = span.attributes as ModelGenerationAttributes | undefined;
+    const attrs = {
+      model: ownAttrs?.model ?? inheritedModelAttrs?.model,
+      provider: ownAttrs?.provider ?? inheritedModelAttrs?.provider,
+    };
 
     const startTime = toDate(span.startTime);
     // Event spans are point-in-time markers; use startTime for endTime if not set (zero duration)
@@ -587,14 +664,18 @@ export class DatadogExporter extends BaseExporter {
     const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? startTime : new Date();
 
     return {
-      kind,
-      name: span.name,
-      sessionId: traceCtx.sessionId,
-      userId: traceCtx.userId,
-      startTime,
-      endTime,
-      ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
-      ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
+      traceOptions: {
+        kind,
+        name: span.name,
+        sessionId: traceCtx.sessionId,
+        userId: traceCtx.userId,
+        startTime,
+        ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
+        ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
+      },
+      // endTime as milliseconds for ddSpan.finish() — dd-trace's llmobs.trace() does not
+      // honor endTime in options, so we must call finish(ms) explicitly on the span.
+      endTimeMs: endTime.getTime(),
     };
   }
 
@@ -603,22 +684,36 @@ export class DatadogExporter extends BaseExporter {
    * This ensures parent-child relationships are properly established in Datadog
    * because child spans are created while their parent span is active in scope.
    */
-  private emitSpanTree(node: SpanNode, state: TraceState): void {
+  private emitSpanTree(
+    node: SpanNode,
+    state: TraceState,
+    inheritedModelAttrs?: { model?: string; provider?: string },
+  ): void {
     const span = node.span;
-    const options = this.buildSpanOptions(span);
+    const { traceOptions, endTimeMs } = this.buildSpanOptions(span, inheritedModelAttrs);
+
+    // If this is a MODEL_GENERATION, propagate its model/provider to MODEL_STEP descendants
+    // so the LLM-kind step spans in Datadog have a model name attached.
+    const childInheritedModelAttrs =
+      span.type === SpanType.MODEL_GENERATION
+        ? {
+            model: (span.attributes as ModelGenerationAttributes | undefined)?.model,
+            provider: (span.attributes as ModelGenerationAttributes | undefined)?.provider,
+          }
+        : inheritedModelAttrs;
 
     // Use nested llmobs.trace() calls - children are emitted INSIDE the parent's callback
     // This ensures the Datadog SDK automatically establishes parent-child relationships
-    tracer.llmobs.trace(options as any, (ddSpan: any) => {
-      // Annotate this span
+    tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
+      // Annotate this span (must happen before finish — annotate throws on finished spans)
       const annotations = this.buildAnnotations(span);
       if (Object.keys(annotations).length > 0) {
         tracer.llmobs.annotate(ddSpan, annotations);
       }
 
-      // Set native Datadog error status for proper UI highlighting
+      // Set native Datadog error tags for proper Error Tracking UI
       if (span.errorInfo) {
-        ddSpan.setTag('error', true);
+        this.setErrorTags(ddSpan, span.errorInfo);
       }
 
       // Store context for potential evaluation submissions
@@ -628,7 +723,15 @@ export class DatadogExporter extends BaseExporter {
       // Recursively emit children INSIDE this span's callback
       // This is the key to establishing proper parent-child relationships
       for (const child of node.children) {
-        this.emitSpanTree(child, state);
+        this.emitSpanTree(child, state, childInheritedModelAttrs);
+      }
+
+      // Explicitly finish with the correct end time. dd-trace's llmobs.trace() does not
+      // honor endTime in span options — it auto-finishes with Date.now() when the callback
+      // returns. By calling finish() here first, the auto-finish becomes a no-op (dd-trace
+      // skips finish if _duration is already set).
+      if (typeof ddSpan.finish === 'function') {
+        ddSpan.finish(endTimeMs);
       }
     });
   }
@@ -638,22 +741,27 @@ export class DatadogExporter extends BaseExporter {
    * Used for late-arriving spans after the main tree has been emitted.
    */
   private emitSingleSpan(span: AnyExportedSpan, state: TraceState, parent?: any) {
-    const options = this.buildSpanOptions(span);
+    const { traceOptions, endTimeMs } = this.buildSpanOptions(span);
 
     const runTrace = () =>
-      tracer.llmobs.trace(options as any, (ddSpan: any) => {
+      tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
         const annotations = this.buildAnnotations(span);
         if (Object.keys(annotations).length > 0) {
           tracer.llmobs.annotate(ddSpan, annotations);
         }
 
-        // Set native Datadog error status for proper UI highlighting
+        // Set native Datadog error tags for proper Error Tracking UI
         if (span.errorInfo) {
-          ddSpan.setTag('error', true);
+          this.setErrorTags(ddSpan, span.errorInfo);
         }
 
         const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
         state.contexts.set(span.id, { ddSpan, exported });
+
+        // Explicitly finish with the correct end time (see emitSpanTree for details)
+        if (typeof ddSpan.finish === 'function') {
+          ddSpan.finish(endTimeMs);
+        }
       });
 
     if (parent) {

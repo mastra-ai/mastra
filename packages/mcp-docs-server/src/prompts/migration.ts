@@ -1,11 +1,11 @@
-import type { MCPServerPrompts } from '@mastra/mcp';
-import type { Prompt, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { MCPServerPrompts, MastraPrompt } from '@mastra/mcp';
+import type { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Migration prompts provide guided workflows for upgrading Mastra versions.
  * These prompts help users systematically work through breaking changes.
  */
-const migrationPrompts: Prompt[] = [
+const migrationPrompts: MastraPrompt[] = [
   {
     name: 'upgrade-to-v1',
     version: 'v1',

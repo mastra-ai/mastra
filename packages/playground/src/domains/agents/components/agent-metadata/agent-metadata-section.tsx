@@ -1,0 +1,39 @@
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
+import { InfoIcon } from 'lucide-react';
+import { useLinkComponent } from '@/lib/framework';
+
+export interface AgentMetadataSectionProps {
+  title: string | React.ReactNode;
+  children: React.ReactNode;
+  hint?: {
+    link: string;
+    title: string;
+    icon?: React.ReactNode;
+  };
+}
+
+export const AgentMetadataSection = ({ title, children, hint }: AgentMetadataSectionProps) => {
+  const { Link } = useLinkComponent();
+  return (
+    <section className="space-y-2 pb-7 last:pb-0">
+      <Txt as="h3" variant="ui-md" className="text-neutral3 flex items-center gap-1">
+        {title}
+        {hint && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href={hint.link} target="_blank" rel="noopener noreferrer">
+                  <Icon className="text-neutral3" size="sm">
+                    {hint.icon || <InfoIcon />}
+                  </Icon>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>{hint.title}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </Txt>
+      {children}
+    </section>
+  );
+};

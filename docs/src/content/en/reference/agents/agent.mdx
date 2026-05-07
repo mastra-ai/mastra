@@ -13,6 +13,8 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 
 ### Basic string instructions
 
+Passing instructions as a string or array of strings is the simplest way to set up an agent. This is useful for straightforward use cases where you need to provide a prompt without additional configuration.
+
 ```typescript title="src/mastra/agents/string-agent.ts"
 import { Agent } from '@mastra/core/agent'
 
@@ -20,36 +22,41 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
+  // highlight-next-line
   instructions: 'You are a helpful assistant that provides concise answers.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 
 // System message object
 export const agent2 = new Agent({
   id: 'test-agent-2',
   name: 'Test Agent 2',
+  // highlight-start
   instructions: {
     role: 'system',
     content: 'You are an expert programmer',
   },
-  model: 'openai/gpt-5.1',
+  // highlight-end
+  model: 'openai/gpt-5.4',
 })
 
 // Array of system messages
 export const agent3 = new Agent({
   id: 'test-agent-3',
   name: 'Test Agent 3',
+  // highlight-start
   instructions: [
     { role: 'system', content: 'You are a helpful assistant' },
     { role: 'system', content: 'You have expertise in TypeScript' },
   ],
-  model: 'openai/gpt-5.1',
+  // highlight-end
+  model: 'openai/gpt-5.4',
 })
 ```
 
-### Single `CoreSystemMessage`
+### Provider-specific configurations
 
-Use CoreSystemMessage format to access additional properties like `providerOptions` for provider-specific configurations:
+Each model provider also enables a few different options, including prompt caching and configuring reasoning. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
 ```typescript title="src/mastra/agents/core-message-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -60,17 +67,19 @@ export const agent = new Agent({
   instructions: {
     role: 'system',
     content: 'You are a helpful assistant specialized in technical documentation.',
+    // highlight-start
     providerOptions: {
       openai: {
         reasoningEffort: 'low',
       },
     },
+    // highlight-end
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
-### Multiple `CoreSystemMessages`
+### Mixed instruction formats
 
 ```typescript title="src/mastra/agents/multi-message-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -95,7 +104,7 @@ export const agent = new Agent({
       },
     },
   ],
-  model: 'anthropic/claude-sonnet-4-20250514',
+  model: 'anthropic/claude-sonnet-4-6',
 })
 ```
 
@@ -217,10 +226,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'requestContextSchema',
-    type: 'z.ZodType<any>',
+    type: 'StandardJSONSchemaV1',
     isOptional: true,
     description:
-      'Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
+      'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
 ]}
 />
@@ -236,7 +245,3 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
 ]}
 />
-
-## Related
-
-- [Agents overview](/docs/agents/overview)

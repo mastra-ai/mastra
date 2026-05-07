@@ -7,7 +7,7 @@ import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
-import { getMarkdownTheme, theme } from '../theme.js';
+import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 
 let _compId = 0;
 function asmDebugLog(...args: unknown[]) {
@@ -37,6 +37,7 @@ export class AssistantMessageComponent extends Container {
     // Container for text/thinking content
     this.contentContainer = new Container();
     this.addChild(this.contentContainer);
+    this.addChild(new Spacer(1));
 
     asmDebugLog(`COMP#${this._id} CREATED`);
 
@@ -70,34 +71,33 @@ export class AssistantMessageComponent extends Container {
     // Clear content container
     this.contentContainer.clear();
 
-    const hasVisibleContent = message.content.some(
-      c => (c.type === 'text' && c.text.trim()) || (c.type === 'thinking' && c.thinking.trim()),
-    );
-
-    if (hasVisibleContent) {
-      this.contentContainer.addChild(new Spacer(1));
-    }
     // Render content in order
     for (let i = 0; i < message.content.length; i++) {
       const content = message.content[i]!;
 
       if (content.type === 'text' && (content as any).text.trim()) {
         // Assistant text messages - trim the text
-        this.contentContainer.addChild(new Markdown((content as any).text.trim(), 1, 0, this.markdownTheme));
+        this.contentContainer.addChild(
+          new Markdown((content as any).text.trim(), CHAT_INDENT, 0, this.markdownTheme, {
+            color: (text: string) => theme.fg('text', text),
+          }),
+        );
       } else if (content.type === 'thinking' && (content as any).thinking.trim()) {
         // Check if there's text content after this thinking block
         const hasTextAfter = message.content.slice(i + 1).some(c => c.type === 'text' && (c as any).text.trim());
 
         if (this.hideThinkingBlock) {
           // Show static "Thinking..." label when hidden
-          this.contentContainer.addChild(new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), 1, 0));
+          this.contentContainer.addChild(
+            new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), CHAT_INDENT, 0),
+          );
           if (hasTextAfter) {
             this.contentContainer.addChild(new Spacer(1));
           }
         } else {
           // Thinking traces in thinkingText color, italic
           this.contentContainer.addChild(
-            new Markdown((content as any).thinking.trim(), 1, 0, this.markdownTheme, {
+            new Markdown((content as any).thinking.trim(), CHAT_INDENT, 0, this.markdownTheme, {
               color: (text: string) => theme.fg('thinkingText', text),
               italic: true,
             }),
@@ -111,12 +111,10 @@ export class AssistantMessageComponent extends Container {
     // Check if aborted or error - show after partial content
     if (message.stopReason === 'aborted') {
       const abortMessage = message.errorMessage || 'Interrupted';
-      this.contentContainer.addChild(new Spacer(1));
-      this.contentContainer.addChild(new Text(theme.fg('error', abortMessage), 1, 0));
+      this.contentContainer.addChild(new Text(theme.fg('error', abortMessage), CHAT_INDENT, 0));
     } else if (message.stopReason === 'error') {
       const errorMsg = message.errorMessage || 'Unknown error';
-      this.contentContainer.addChild(new Spacer(1));
-      this.contentContainer.addChild(new Text(theme.fg('error', `Error: ${errorMsg}`), 1, 0));
+      this.contentContainer.addChild(new Text(theme.fg('error', `Error: ${errorMsg}`), CHAT_INDENT, 0));
     }
   }
 }

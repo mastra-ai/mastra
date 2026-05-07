@@ -1,10 +1,12 @@
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
+import { checkRouteFGA } from '../server-adapter';
 import { getWorkflowInfo } from '../utils';
 import { createTestServerContext } from './test-utils';
 import {
@@ -23,28 +25,6 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
 } from './workflows';
-
-vi.mock('zod', async importOriginal => {
-  const actual = (await importOriginal()) as { z?: Record<string, unknown> };
-
-  const object = vi.fn(() => ({
-    parse: vi.fn(input => input),
-    safeParse: vi.fn(input => ({ success: true, data: input })),
-  }));
-
-  const string = vi.fn(() => ({
-    parse: vi.fn(input => input),
-  }));
-
-  return {
-    ...actual,
-    z: {
-      ...(actual.z ?? {}),
-      object,
-      string,
-    },
-  };
-});
 
 function createMockWorkflow(name: string) {
   const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
@@ -254,9 +234,42 @@ describe('vNext Workflow Handlers', () => {
       expect(workflow.allSteps).toBeDefined();
       expect(workflow.stepCount).toBeUndefined();
     });
+
+    it('should return no workflows when FGA is configured and no user is present', async () => {
+      const filterAccessible = vi.fn();
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
+
+      const result = await LIST_WORKFLOWS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      });
+
+      expect(result).toEqual({});
+      expect(filterAccessible).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET_WORKFLOW_BY_ID_ROUTE', () => {
+    it('should declare FGA for workflow reads', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const check = vi.fn().mockResolvedValue(true);
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { check } } as any);
+
+      const result = await checkRouteFGA(mockMastra, GET_WORKFLOW_BY_ID_ROUTE as any, requestContext as any, {
+        workflowId: 'test-workflow',
+      });
+
+      expect(result).toBeNull();
+      expect(check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'workflow', id: 'test-workflow' },
+          permission: 'workflows:read',
+          context: { resourceId: 'test-workflow', requestContext },
+        },
+      );
+    });
+
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         GET_WORKFLOW_BY_ID_ROUTE.handler({
@@ -1013,6 +1026,36 @@ describe('vNext Workflow Handlers', () => {
       // Verify requestContext was passed through
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-async-value');
+    });
+
+    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass forEachIndex to run.resume()', async () => {
+      // Create and start a run that will suspend
+      const run = await reusableWorkflow.createRun({ runId: 'test-run-foreach-index' });
+      await run.start({ inputData: {} });
+
+      // Wait for it to suspend
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Spy on the resume method to capture options
+      let capturedOptions: any;
+      const originalResume = run.resume.bind(run);
+      vi.spyOn(run, 'resume').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalResume(options);
+      });
+
+      vi.spyOn(reusableWorkflow, 'createRun').mockResolvedValue(run);
+
+      await RESUME_ASYNC_WORKFLOW_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'reusable-workflow',
+        runId: 'test-run-foreach-index',
+        step: 'test-step',
+        resumeData: {},
+        forEachIndex: 2,
+      } as any);
+
+      expect(capturedOptions.forEachIndex).toBe(2);
     });
   });
 });
