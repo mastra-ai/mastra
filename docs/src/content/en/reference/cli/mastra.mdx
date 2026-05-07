@@ -562,6 +562,470 @@ See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#dupli
 
 It accepts [common flags][common-flags].
 
+## `mastra api`
+
+Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra Platform projects, or self-hosted Mastra servers.
+
+```bash
+mastra api agent list --pretty
+mastra api agent run weather-agent '{"messages":"What is the weather in London?"}'
+mastra api tool execute get-weather '{"location":"San Francisco"}'
+```
+
+Use `mastra api <resource> <action> --help` to see examples for a command.
+
+### Output
+
+Success responses are written to `stdout` as JSON. Single-resource commands return:
+
+```json
+{ "data": {} }
+```
+
+List commands return a `data` array and pagination metadata:
+
+```json
+{ "data": [], "page": { "total": 0, "page": 0, "perPage": 0, "hasMore": false } }
+```
+
+Errors are written to `stderr` as JSON and return a non-zero exit code:
+
+```json
+{
+  "error": {
+    "code": "SERVER_UNREACHABLE",
+    "message": "Could not connect to target server",
+    "details": {}
+  }
+}
+```
+
+### Target resolution
+
+The command resolves the target server in this order:
+
+1. `--url <url>` for an explicit remote or self-hosted server.
+1. `http://localhost:4111` for a local `mastra dev` server.
+1. `.mastra-project.json` for a Mastra Platform project.
+
+Automatic platform auth is only used when the CLI resolves a Mastra Platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets do not receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+
+### Flags
+
+#### `--url <url>`
+
+Target a specific Mastra server URL.
+
+```bash
+mastra api --url https://example.com agent list
+```
+
+#### `--header <"Key: Value">`
+
+Send a custom HTTP header. Repeat the flag to send multiple headers.
+
+```bash
+mastra api --url https://example.com --header "Authorization: Bearer $TOKEN" agent list
+```
+
+#### `--timeout <ms>`
+
+Set the request timeout in milliseconds. Defaults to `30000`. Workflow run start and resume commands default to `120000`.
+
+#### `--pretty`
+
+Pretty-print JSON output. Defaults to `false`.
+
+#### `--schema`
+
+Print the CLI-oriented request schema for a command that accepts JSON input. The schema comes from the target server's route contracts and includes the command shape, positionals, examples, request schemas, and response shape.
+
+`--schema` is available on leaf commands that accept JSON input. It is not available as a top-level `mastra api` flag.
+
+```bash
+mastra api agent run --schema
+mastra api tool execute --schema
+```
+
+### Input model
+
+Commands that accept input take one inline JSON argument. Do not pass file paths or stdin.
+
+```bash
+mastra api workflow run start data-pipeline '{"inputData":{"source":"s3://bucket/data.csv"}}'
+```
+
+Use positional arguments for stable IDs and JSON for filters or payloads. For routes that require both query parameters and a request body, pass one JSON object. The CLI splits the input according to the server route schema.
+
+```bash
+mastra api thread create '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'
+```
+
+List commands accept `page` and `perPage` in the JSON input when the target route supports pagination:
+
+```bash
+mastra api score list '{"page":0,"perPage":50}'
+```
+
+### Get command-specific help
+
+Each `mastra api` leaf command includes command-specific examples in its help output. Use `--help` on the exact command you want to call:
+
+```bash
+mastra api agent run --help
+mastra api tool execute --help
+mastra api memory current update --help
+mastra api workflow run resume --help
+```
+
+Use `--schema` on commands that accept JSON input to inspect the request shape returned by the target server:
+
+```bash
+mastra api agent run --schema
+mastra api thread create --schema
+mastra api score create --schema
+```
+
+Some commands have important runtime requirements. For example, `mastra api memory current update` requires working memory to be enabled for the memory instance, and `mastra api workflow run resume` only works for suspended workflow runs.
+
+### Commands
+
+#### `mastra api agent list`
+
+Lists the agents registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api agent list [input]
+```
+
+#### `mastra api agent get`
+
+Gets metadata for one registered agent.
+
+```bash
+mastra api agent get <agentId>
+```
+
+#### `mastra api agent run`
+
+Runs an agent with JSON input. Use command help to see examples for text prompts, chat messages, and memory thread options.
+
+```bash
+mastra api agent run <agentId> <input>
+```
+
+#### `mastra api workflow list`
+
+Lists workflows registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api workflow list [input]
+```
+
+#### `mastra api workflow get`
+
+Gets metadata for one registered workflow.
+
+```bash
+mastra api workflow get <workflowId>
+```
+
+#### `mastra api workflow run start`
+
+Starts a workflow run with JSON input. Workflow start commands use a longer default timeout than most commands because runs can take longer to complete.
+
+```bash
+mastra api workflow run start <workflowId> <input>
+```
+
+#### `mastra api workflow run list`
+
+Lists runs for a workflow. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api workflow run list <workflowId> [input]
+```
+
+#### `mastra api workflow run get`
+
+Gets one workflow run by ID.
+
+```bash
+mastra api workflow run get <workflowId> <runId>
+```
+
+#### `mastra api workflow run resume`
+
+Resumes a suspended workflow run with JSON input. The run must be in a suspended state.
+
+```bash
+mastra api workflow run resume <workflowId> <runId> <input>
+```
+
+#### `mastra api workflow run cancel`
+
+Cancels a workflow run.
+
+```bash
+mastra api workflow run cancel <workflowId> <runId>
+```
+
+#### `mastra api tool list`
+
+Lists tools registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api tool list [input]
+```
+
+#### `mastra api tool get`
+
+Gets metadata and schemas for one tool.
+
+```bash
+mastra api tool get <toolId>
+```
+
+#### `mastra api tool execute`
+
+Executes a tool with JSON input. Raw tool input is wrapped as the route `data` field unless you pass an explicit `data` object.
+
+```bash
+mastra api tool execute <toolId> <input>
+```
+
+#### `mastra api mcp list`
+
+Lists Model Context Protocol (MCP) servers registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api mcp list [input]
+```
+
+#### `mastra api mcp get`
+
+Gets metadata for one MCP server.
+
+```bash
+mastra api mcp get <id>
+```
+
+#### `mastra api mcp tool list`
+
+Lists tools exposed by an MCP server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api mcp tool list <serverId> [input]
+```
+
+#### `mastra api mcp tool get`
+
+Gets metadata and schemas for one MCP tool.
+
+```bash
+mastra api mcp tool get <serverId> <toolId>
+```
+
+#### `mastra api mcp tool execute`
+
+Executes an MCP tool with JSON input. Raw tool input is wrapped as the route `data` field unless you pass an explicit `data` object.
+
+```bash
+mastra api mcp tool execute <serverId> <toolId> <input>
+```
+
+#### `mastra api thread list`
+
+Lists memory threads. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api thread list [input]
+```
+
+#### `mastra api thread get`
+
+Gets one memory thread by ID.
+
+```bash
+mastra api thread get <threadId>
+```
+
+#### `mastra api thread create`
+
+Creates a memory thread. Pass one JSON input object; the CLI splits fields such as `agentId` into query parameters when required by the server route.
+
+```bash
+mastra api thread create <input>
+```
+
+#### `mastra api thread update`
+
+Updates a memory thread. Pass one JSON input object for fields such as `agentId`, `resourceId`, `title`, or `metadata`.
+
+```bash
+mastra api thread update <threadId> <input>
+```
+
+#### `mastra api thread delete`
+
+Deletes a memory thread. Pass JSON input for route-required query parameters such as `agentId` and `resourceId`.
+
+```bash
+mastra api thread delete <threadId> <input>
+```
+
+#### `mastra api thread messages`
+
+Lists messages for a memory thread. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api thread messages <threadId> [input]
+```
+
+#### `mastra api memory search`
+
+Searches long-term memory. Use `--help` or `--schema` to inspect required fields such as `agentId`, `resourceId`, and `searchQuery`.
+
+```bash
+mastra api memory search <input>
+```
+
+#### `mastra api memory current get`
+
+Reads current working memory for a thread.
+
+```bash
+mastra api memory current get <input>
+```
+
+#### `mastra api memory current update`
+
+Updates current working memory for a thread. Working memory must be enabled for the memory instance.
+
+```bash
+mastra api memory current update <input>
+```
+
+#### `mastra api memory status`
+
+Gets memory status for an agent and optional thread or resource context.
+
+```bash
+mastra api memory status <input>
+```
+
+#### `mastra api trace list`
+
+Lists observability traces. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api trace list [input]
+```
+
+#### `mastra api trace get`
+
+Gets one observability trace by ID.
+
+```bash
+mastra api trace get <traceId>
+```
+
+#### `mastra api log list`
+
+Lists observability logs. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api log list [input]
+```
+
+#### `mastra api score create`
+
+Creates an observability score. The input uses the server score body shape; inspect it with `--schema`.
+
+```bash
+mastra api score create <input>
+```
+
+#### `mastra api score list`
+
+Lists observability scores. Pass optional JSON input for filters such as run ID or pagination.
+
+```bash
+mastra api score list [input]
+```
+
+#### `mastra api score get`
+
+Gets one observability score by ID.
+
+```bash
+mastra api score get <scoreId>
+```
+
+#### `mastra api dataset list`
+
+Lists datasets. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api dataset list [input]
+```
+
+#### `mastra api dataset get`
+
+Gets one dataset by ID.
+
+```bash
+mastra api dataset get <datasetId>
+```
+
+#### `mastra api dataset create`
+
+Creates a dataset with JSON input.
+
+```bash
+mastra api dataset create <input>
+```
+
+#### `mastra api dataset items`
+
+Lists items in a dataset. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api dataset items <datasetId> [input]
+```
+
+#### `mastra api experiment list`
+
+Lists experiments for a dataset. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api experiment list <datasetId> [input]
+```
+
+#### `mastra api experiment get`
+
+Gets one experiment by ID.
+
+```bash
+mastra api experiment get <datasetId> <experimentId>
+```
+
+#### `mastra api experiment run`
+
+Starts an experiment for a dataset with JSON input.
+
+```bash
+mastra api experiment run <datasetId> <input>
+```
+
+#### `mastra api experiment results`
+
+Lists results for an experiment. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api experiment results <datasetId> <experimentId> [input]
+```
+
 ## Common flags
 
 ### `--dir`

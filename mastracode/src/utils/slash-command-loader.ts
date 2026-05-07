@@ -16,6 +16,8 @@ export interface SlashCommandMetadata {
   sourcePath: string;
   /** Namespace derived from directory structure */
   namespace?: string;
+  /** Whether this command should also be exposed as /goal/<name> */
+  goal?: boolean;
 }
 
 /**
@@ -51,11 +53,11 @@ export async function parseCommandFile(filePath: string, baseDir?: string): Prom
     const template = parts.slice(2).join('---').trim();
 
     // Parse YAML frontmatter
-    const metadata = parseYaml(frontmatter) as Record<string, string>;
+    const metadata = parseYaml(frontmatter) as Record<string, unknown>;
 
     // Derive name from file path if not specified in frontmatter
     let name: string;
-    if (metadata?.name) {
+    if (typeof metadata?.name === 'string' && metadata.name) {
       name = metadata.name;
     } else if (baseDir) {
       name = extractCommandName(filePath, baseDir);
@@ -65,10 +67,11 @@ export async function parseCommandFile(filePath: string, baseDir?: string): Prom
 
     return {
       name,
-      description: metadata?.description || '',
+      description: typeof metadata?.description === 'string' ? metadata.description : '',
       template,
       sourcePath: filePath,
-      namespace: metadata?.namespace,
+      namespace: typeof metadata?.namespace === 'string' ? metadata.namespace : undefined,
+      goal: metadata?.goal === true,
     };
   } catch (error) {
     console.error(`Error parsing command file ${filePath}:`, error);

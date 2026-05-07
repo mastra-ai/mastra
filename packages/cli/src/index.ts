@@ -17,6 +17,7 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
@@ -122,6 +123,8 @@ program
     parseMcp,
   )
   .action(initProject);
+
+registerApiCommand(program);
 
 program
   .command('lint')

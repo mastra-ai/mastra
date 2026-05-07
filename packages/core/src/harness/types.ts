@@ -935,6 +935,8 @@ export type HarnessMessageContent =
       gapText?: string;
       gapMs?: number;
       timestamp?: string;
+      goalMaxTurns?: number;
+      judgeModelId?: string;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }

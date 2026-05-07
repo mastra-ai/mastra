@@ -21,11 +21,13 @@ export const scoringSourceSchema = z.enum(['LIVE', 'TEST']);
 
 export type ScoringSource = z.infer<typeof scoringSourceSchema>;
 
-export const scoringEntityTypeSchema = z.enum(['AGENT', 'WORKFLOW', ...Object.values(SpanType)] as [
-  string,
-  string,
-  ...string[],
-]);
+export const scoringEntityTypeSchema = z.enum([
+  'AGENT',
+  'WORKFLOW',
+  'TRAJECTORY',
+  'STEP',
+  ...Object.values(SpanType),
+] as [string, string, ...string[]]);
 
 export type ScoringEntityType = z.infer<typeof scoringEntityTypeSchema>;
 
