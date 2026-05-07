@@ -37,7 +37,6 @@ import { SYSTEM_ROUTES } from './system';
 import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
-import { WORKERS_ROUTES } from './workers';
 import { WORKFLOWS_ROUTES } from './workflows';
 import { WORKSPACE_ROUTES } from './workspace';
 
@@ -191,7 +190,6 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...BACKGROUND_TASK_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
-  ...WORKERS_ROUTES,
 ];
 
 /**
@@ -227,7 +225,6 @@ export type ServerRoutes = readonly [
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
   ...typeof CHANNELS_ROUTES,
-  ...typeof WORKERS_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

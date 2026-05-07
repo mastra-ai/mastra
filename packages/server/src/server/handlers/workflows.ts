@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
+import type { Event } from '@mastra/core/events';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
@@ -1288,6 +1289,69 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error executing workflow step');
+    }
+  }) as any,
+});
+
+// Wire shape of an Event delivered through a push-mode broker. Validates the
+// fields `WorkflowEventProcessor` depends on; broker envelopes routinely carry
+// extra metadata that isn't part of `Event` itself, so we passthrough the rest.
+const workflowEventSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  data: z.unknown(),
+  runId: z.string(),
+  createdAt: z.union([z.string(), z.date()]).transform(v => (v instanceof Date ? v : new Date(v))),
+  index: z.number().optional(),
+  deliveryAttempt: z.number().optional(),
+});
+
+const receiveWorkflowEventBodySchema = z.object({
+  event: workflowEventSchema.passthrough(),
+});
+
+const receiveWorkflowEventResponseSchema = z.object({
+  ok: z.boolean(),
+  retry: z.boolean().optional(),
+});
+
+interface ReceiveWorkflowEventHandlerArgs {
+  mastra: Mastra;
+  event: Event;
+}
+
+/**
+ * Generic push receive endpoint for workflow events. A push-mode broker
+ * (GCP Pub/Sub push subscription, SNS, EventBridge) — or a per-broker adapter
+ * that decodes the broker's envelope first — POSTs each event here and the
+ * response code tells the broker whether to retry:
+ *
+ *   - 200/204 → ack
+ *   - 5xx     → transient, retry with backoff
+ *   - 4xx     → poison, drop / send to DLQ
+ *
+ * Auth is enforced through the framework's standard `requiresAuth` flow.
+ * Operators MUST configure an `authenticateToken` provider that recognizes
+ * whatever credential the broker attaches (e.g. a Google-signed OIDC token
+ * for GCP Pub/Sub push). Without an auth provider the endpoint is effectively
+ * public — same caveat as `EXECUTE_WORKFLOW_STEP_ROUTE`.
+ */
+export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workflows/events',
+  responseType: 'json',
+  bodySchema: receiveWorkflowEventBodySchema,
+  responseSchema: receiveWorkflowEventResponseSchema,
+  summary: 'Receive a workflow event from a push-mode broker',
+  description:
+    'Push-mode entry point for workflow events. Brokers (GCP Pub/Sub push, SNS, EventBridge) POST each event here; Mastra processes it through the same pipeline as pull-mode workers.',
+  tags: ['Workflows', 'Worker'],
+  requiresAuth: true,
+  handler: (async ({ mastra, event }: ReceiveWorkflowEventHandlerArgs) => {
+    try {
+      return await mastra.handleWorkflowEvent(event);
+    } catch (error) {
+      return handleError(error, 'Error receiving workflow event');
     }
   }) as any,
 });

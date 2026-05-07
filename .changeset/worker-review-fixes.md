@@ -67,7 +67,7 @@ Push-capable PubSub:
   by a shared `WorkflowEventProcessor`. It is the single entry point used
   by the existing pull-mode `OrchestrationWorker`, by in-process push
   pubsubs (auto-wired during `startWorkers()`), and by the new
-  `POST /api/workers/events` route which lets push-mode brokers (GCP
+  `POST /api/workflows/events` route which lets push-mode brokers (GCP
   Pub/Sub push, SNS, EventBridge) deliver events over HTTP.
 - When the configured pubsub does not support `'pull'`, Mastra
   automatically skips creating an `OrchestrationWorker` and

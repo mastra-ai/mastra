@@ -35,7 +35,6 @@ export const RESOURCES = [
   'tools',
   'vector',
   'vectors',
-  'workers',
   'workflows',
   'workspaces',
 ] as const;
@@ -124,8 +123,6 @@ export const PERMISSION_PATTERNS = {
   'vector:*': 'vector:*',
   /** Full access to vectors */
   'vectors:*': 'vectors:*',
-  /** Full access to workers */
-  'workers:*': 'workers:*',
   /** Full access to workflows */
   'workflows:*': 'workflows:*',
   /** Full access to workspaces */
@@ -234,8 +231,6 @@ export const PERMISSION_PATTERNS = {
   'vector:write': 'vector:write',
   /** View vectors */
   'vectors:read': 'vectors:read',
-  /** Create and modify workers */
-  'workers:write': 'workers:write',
   /** Delete workflows */
   'workflows:delete': 'workflows:delete',
   /** Execute workflows */
@@ -318,7 +313,6 @@ export const PERMISSIONS = [
   'vector:read',
   'vector:write',
   'vectors:read',
-  'workers:write',
   'workflows:delete',
   'workflows:execute',
   'workflows:read',
@@ -444,8 +438,6 @@ export const MastraFGAPermissions = {
   VECTOR_WRITE: 'vector:write',
   /** View vectors */
   VECTORS_READ: 'vectors:read',
-  /** Create and modify workers */
-  WORKERS_WRITE: 'workers:write',
   /** Delete workflows */
   WORKFLOWS_DELETE: 'workflows:delete',
   /** Execute workflows */
