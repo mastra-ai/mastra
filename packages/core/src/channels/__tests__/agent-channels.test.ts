@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import type { Mastra } from '../../mastra';
+import type { StorageThreadType } from '../../memory/types';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels, matchesDomain, extractUrls } from '../agent-channels';
@@ -227,6 +229,77 @@ describe('matchesDomain', () => {
 
   it('does not match partial domain names', () => {
     expect(matchesDomain('https://notyoutube.com/watch', 'youtube.com')).toBe(false);
+  });
+});
+
+describe('AgentChannels channel agent resolution', () => {
+  function resolveAgentForChannel(channels: AgentChannels, mastra: Mastra, thread: StorageThreadType) {
+    return (
+      channels as unknown as {
+        resolveAgentForChannel(m: Mastra, t: StorageThreadType): unknown;
+      }
+    ).resolveAgentForChannel(mastra, thread);
+  }
+
+  function threadStub(overrides: Partial<StorageThreadType> = {}): StorageThreadType {
+    return {
+      id: 'thread-1',
+      resourceId: 'res-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    };
+  }
+
+  it('uses Mastra-registered owner when thread has no stored channel_agentId', () => {
+    const owner = createMockAgent('owner-id');
+    const channels = new AgentChannels({
+      adapters: { discord: createMockAdapter('discord') },
+    });
+    channels.__setAgent(owner);
+    const mastra = {
+      getAgentById(id: string) {
+        expect(id).toBe('owner-id');
+        return owner;
+      },
+    } as unknown as Mastra;
+    expect(resolveAgentForChannel(channels, mastra, threadStub())).toBe(owner);
+  });
+
+  it('throws when stored channel_agentId cannot be resolved', () => {
+    const owner = createMockAgent('owner-id');
+    const channels = new AgentChannels({
+      adapters: { discord: createMockAdapter('discord') },
+    });
+    channels.__setAgent(owner);
+    const mastra = {
+      getAgentById() {
+        throw new Error('not found');
+      },
+    } as unknown as Mastra;
+    expect(() =>
+      resolveAgentForChannel(
+        channels,
+        mastra,
+        threadStub({ metadata: { channel_agentId: 'missing-agent' } }),
+      ),
+    ).toThrow(/Cannot resolve channel agent "missing-agent"/);
+  });
+
+  it('throws when owner agent is not registered on Mastra', () => {
+    const owner = createMockAgent('owner-id');
+    const channels = new AgentChannels({
+      adapters: { discord: createMockAdapter('discord') },
+    });
+    channels.__setAgent(owner);
+    const mastra = {
+      getAgentById() {
+        throw new Error('not found');
+      },
+    } as unknown as Mastra;
+    expect(() => resolveAgentForChannel(channels, mastra, threadStub())).toThrow(
+      /Cannot resolve channel agent "owner-id"/,
+    );
   });
 });
 

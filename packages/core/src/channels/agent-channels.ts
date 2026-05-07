@@ -122,6 +122,9 @@ export interface ChannelWebhookEventOptions {
   waitUntil?: (p: Promise<unknown>) => void;
   /**
    * Agent that handles this webhook (streaming, tools). Defaults to the channels owner.
+   * Must be registered on the same {@link Mastra} instance (resolved via {@link Mastra.getAgentById});
+   * otherwise processing fails instead of falling back to the owner agent.
+   *
    * Stored on the Mastra thread so tool approvals and later messages resolve the same agent
    * when this option is omitted.
    */
@@ -871,17 +874,30 @@ export class AgentChannels {
 
   private resolveAgentForChannel(mastra: Mastra, mastraThread: StorageThreadType): Agent<any, any, any, any> {
     const fromWebhook = channelWebhookAgentOverride.getStore();
-    if (fromWebhook) return fromWebhook;
+    if (fromWebhook) {
+      return this.resolveRegisteredChannelAgentOrThrow(mastra, fromWebhook.id);
+    }
 
     const storedId = mastraThread.metadata?.[CHANNEL_THREAD_AGENT_ID_KEY];
     if (typeof storedId === 'string' && storedId.length > 0) {
-      try {
-        return mastra.getAgentById(storedId as any);
-      } catch {
-        // Stale or unknown id — use the channels owner.
-      }
+      return this.resolveRegisteredChannelAgentOrThrow(mastra, storedId);
     }
-    return this.agent;
+
+    return this.resolveRegisteredChannelAgentOrThrow(mastra, this.agent.id);
+  }
+
+  /**
+   * Resolves the Mastra-registered agent for this id. Never falls back to the channel owner:
+   * stale metadata or unregistered overrides would widen RBAC if we defaulted silently.
+   */
+  private resolveRegisteredChannelAgentOrThrow(mastra: Mastra, agentId: string): Agent<any, any, any, any> {
+    try {
+      return mastra.getAgentById(agentId as any);
+    } catch {
+      throw new Error(
+        `Cannot resolve channel agent "${agentId}". Register it on Mastra, or remove stale thread metadata key "${CHANNEL_THREAD_AGENT_ID_KEY}".`,
+      );
+    }
   }
 
   private async persistChannelAgentThreadMetadata(
