@@ -353,10 +353,11 @@ export class MastraClient extends BaseResource {
       | { agentId: string; networkId?: never; requestContext?: RequestContext | Record<string, any> }
       | { networkId: string; agentId?: never; requestContext?: RequestContext | Record<string, any> },
   ): Promise<{ success: boolean; message: string }> {
-    if (!opts || (!opts.agentId && !opts.networkId)) {
+    if (!opts || !!opts.agentId === !!opts.networkId) {
       throw new Error(
-        'MastraClient.deleteThread() requires either an agentId or a networkId. ' +
-          'The server cannot resolve which memory store owns the thread without one.',
+        'MastraClient.deleteThread() requires exactly one of agentId or networkId. ' +
+          'The server cannot resolve which memory store owns the thread without one, ' +
+          'and passing both is ambiguous.',
       );
     }
 

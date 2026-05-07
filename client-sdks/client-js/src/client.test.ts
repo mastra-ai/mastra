@@ -756,13 +756,22 @@ describe('MastraClient', () => {
       });
 
       it('should throw when neither agentId nor networkId is provided', () => {
-        expect(() => client.deleteThread('thread-1', {} as any)).toThrow(/requires either an agentId or a networkId/);
+        expect(() => client.deleteThread('thread-1', {} as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
         expect(global.fetch).not.toHaveBeenCalled();
       });
 
       it('should throw when opts is missing entirely', () => {
         expect(() => client.deleteThread('thread-1', undefined as any)).toThrow(
-          /requires either an agentId or a networkId/,
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when both agentId and networkId are provided', () => {
+        expect(() => client.deleteThread('thread-1', { agentId: 'agent-1', networkId: 'network-1' } as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
         );
         expect(global.fetch).not.toHaveBeenCalled();
       });
