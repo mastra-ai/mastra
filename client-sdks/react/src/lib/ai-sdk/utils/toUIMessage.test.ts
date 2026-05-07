@@ -538,6 +538,113 @@ describe('toUIMessage', () => {
       mode: 'stream',
     };
 
+    it('should append echoed user-message signals as user messages', () => {
+      const chunk: ChunkType = {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-1',
+          type: 'user-message',
+          contents: { role: 'user', content: [{ type: 'text', text: 'hello from signal' }] },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const result = toUIMessage({ chunk, conversation: [], metadata: baseMetadata });
+
+      expect(result).toEqual([
+        {
+          id: 'signal-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello from signal' }],
+          metadata: baseMetadata,
+        },
+      ]);
+    });
+
+    it('should dedupe echoed user-message signals by signal id', () => {
+      const chunk: ChunkType = {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-1',
+          type: 'user-message',
+          contents: 'hello from signal',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'signal-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello from signal' }],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toEqual(conversation);
+    });
+
+    it('should preserve echoed user-message signal attachments', () => {
+      const chunk: ChunkType = {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-with-file',
+          type: 'user-message',
+          contents: {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'describe this' },
+              { type: 'image', image: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+            ],
+          },
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const result = toUIMessage({ chunk, conversation: [], metadata: baseMetadata });
+
+      expect(result).toEqual([
+        {
+          id: 'signal-with-file',
+          role: 'user',
+          parts: [
+            { type: 'text', text: 'describe this' },
+            { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,abc123' },
+          ],
+          metadata: baseMetadata,
+        },
+      ]);
+    });
+
+    it('should assign stable unique ids for multi-message signal echoes', () => {
+      const chunk: ChunkType = {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-multi',
+          type: 'user-message',
+          contents: [
+            { role: 'user', content: 'first message' },
+            { role: 'user', content: 'second message' },
+          ],
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const result = toUIMessage({ chunk, conversation: [], metadata: baseMetadata });
+
+      expect(result.map(message => message.id)).toEqual(['signal-multi', 'signal-multi-1']);
+      expect(result.map(message => message.parts)).toEqual([
+        [{ type: 'text', text: 'first message' }],
+        [{ type: 'text', text: 'second message' }],
+      ]);
+    });
+
     it('should handle text-start chunk by adding new text part', () => {
       const chunk: ChunkType = {
         type: 'text-start',

@@ -1,5 +1,5 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
-import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
+import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, useAutoscroll } from '@mastra/playground-ui';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -9,6 +9,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
+import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -123,6 +124,8 @@ interface ComposerProps {
 const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRuntime = useComposerRuntime();
+  const { isStreaming } = useThreadRuntimeState();
   // Track IME composition state to prevent Enter from submitting during CJK input.
   // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
   // triggers form submission instead of completing the IME composition.
@@ -197,6 +200,13 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
                   e.preventDefault();
                   e.stopPropagation();
+                  return;
+                }
+
+                if (isStreaming && e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  composerRuntime.send();
                 }
               }}
               disabled={!canExecuteAgent}
@@ -282,9 +292,25 @@ const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: Co
 };
 
 const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
+  const { isStreaming, cancelStream } = useThreadRuntimeState();
+  const composerRuntime = useComposerRuntime();
+  const isComposerEmpty = useComposer(state => state.isEmpty);
+
   return (
     <>
-      <ThreadPrimitive.If running={false}>
+      {isStreaming ? (
+        <Button
+          variant="default"
+          size="icon-md"
+          type="button"
+          tooltip={canExecute ? 'Send' : 'No permission to execute'}
+          className="rounded-full border border-border1 bg-surface5"
+          disabled={!canExecute || isComposerEmpty}
+          onClick={() => composerRuntime.send()}
+        >
+          <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        </Button>
+      ) : (
         <ComposerPrimitive.Send asChild disabled={!canExecute}>
           <Button
             variant="default"
@@ -296,14 +322,12 @@ const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
             <ArrowUp className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </ComposerPrimitive.Send>
-      </ThreadPrimitive.If>
-      <ThreadPrimitive.If running>
-        <ComposerPrimitive.Cancel asChild>
-          <Button variant="default" size="icon-md" className="rounded-full" tooltip="Cancel">
-            <CircleStopIcon />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </ThreadPrimitive.If>
+      )}
+      {isStreaming && (
+        <Button variant="default" size="icon-md" tooltip="Cancel" onClick={() => void cancelStream()}>
+          <CircleStopIcon />
+        </Button>
+      )}
     </>
   );
 };

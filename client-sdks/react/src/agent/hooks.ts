@@ -1,11 +1,12 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MastraUIMessage } from '../lib/ai-sdk';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import type { ModelSettings } from './types';
@@ -43,6 +44,7 @@ export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => 
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
+  signalId?: string;
 };
 
 export type NetworkArgs = SharedArgs & {
@@ -66,6 +68,9 @@ export const useChat = ({
   // concurrent UI consumer, producing duplicate bg-task events and duplicate
   // continuation turns on the server.
   const _streamAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
+  const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
@@ -86,6 +91,96 @@ export const useChat = ({
   useEffect(() => {
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
+
+  const getSignalContents = (coreUserMessages: CoreUserMessage[]): MessageListInput => {
+    if (coreUserMessages.length === 1) {
+      return coreUserMessages[0] as MessageListInput;
+    }
+
+    return coreUserMessages as MessageListInput;
+  };
+
+  const closeThreadSubscription = useCallback(() => {
+    _threadSubscriptionAbortRef.current?.abort();
+    _threadSubscriptionAbortRef.current = null;
+    _threadSubscriptionKeyRef.current = undefined;
+    _threadSubscriptionPromiseRef.current = null;
+  }, []);
+
+  useEffect(() => closeThreadSubscription, [agentId, resourceId, closeThreadSubscription]);
+
+  const processStreamChunk = async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+    setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+    if (chunk.type === 'start') {
+      setIsRunning(true);
+      if ('runId' in chunk && typeof chunk.runId === 'string') {
+        _currentRunId.current = chunk.runId;
+      }
+    }
+
+    if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+      setIsRunning(false);
+    }
+
+    void (onChunk ?? _onChunk.current)?.(chunk);
+  };
+
+  const ensureThreadSubscription = async ({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }) => {
+    const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
+    if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
+      await _threadSubscriptionPromiseRef.current;
+      return;
+    }
+
+    _threadSubscriptionAbortRef.current?.abort();
+    const subscriptionAbort = new AbortController();
+    _threadSubscriptionAbortRef.current = subscriptionAbort;
+    _threadSubscriptionKeyRef.current = subscriptionKey;
+
+    const clientWithAbort = new MastraClient({
+      ...baseClient!.options,
+      abortSignal: subscriptionAbort.signal,
+    });
+    const subscriptionAgent = clientWithAbort.getAgent(agentId);
+
+    _threadSubscriptionPromiseRef.current = subscriptionAgent
+      .subscribeToThread({ resourceId, threadId })
+      .then(response => {
+        void response
+          .processDataStream({
+            onChunk: chunk => processStreamChunk(chunk),
+          })
+          .catch(error => {
+            if ((error as { name?: string }).name !== 'AbortError') {
+              console.error('[useChat] Thread subscription failed', error);
+              setIsRunning(false);
+            }
+          })
+          .finally(() => {
+            if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+              _threadSubscriptionAbortRef.current = null;
+              _threadSubscriptionKeyRef.current = undefined;
+              _threadSubscriptionPromiseRef.current = null;
+            }
+          });
+      })
+      .catch(error => {
+        if ((error as { name?: string }).name !== 'AbortError') {
+          console.error('[useChat] Thread subscription failed', error);
+          setIsRunning(false);
+        }
+        throw error;
+      });
+
+    await _threadSubscriptionPromiseRef.current;
+  };
 
   const generate = async ({
     coreUserMessages,
@@ -197,6 +292,7 @@ export const useChat = ({
     modelSettings,
     signal,
     tracingOptions,
+    signalId,
   }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -216,23 +312,15 @@ export const useChat = ({
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
-    // Abort any still-open prior streamUntilIdle so its bg-task pubsub
-    // subscription closes server-side. Otherwise the prior request keeps
-    // listening and duplicates every bg event into both the old and the new
-    // UI consumer.
     _streamAbortRef.current?.abort();
     const internalAbort = new AbortController();
     _streamAbortRef.current = internalAbort;
 
-    // Forward the caller-supplied signal (e.g. from the runtime provider) so
-    // explicit external cancellation still works.
     if (signal) {
       if (signal.aborted) internalAbort.abort();
       else signal.addEventListener('abort', () => internalAbort.abort(), { once: true });
     }
 
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
       abortSignal: internalAbort.signal,
@@ -240,47 +328,75 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    const runId = uuid();
+    if (!threadId) {
+      const runId = uuid();
+      const response = await agent.streamUntilIdle(coreUserMessages, {
+        runId,
+        maxSteps,
+        modelSettings: {
+          frequencyPenalty,
+          presencePenalty,
+          maxRetries,
+          maxOutputTokens: maxTokens,
+          temperature,
+          topK,
+          topP,
+        },
+        instructions,
+        requestContext: resolvedRequestContext,
+        providerOptions: providerOptions as any,
+        requireToolApproval,
+        tracingOptions,
+      });
 
-    const response = await agent.streamUntilIdle(coreUserMessages, {
-      runId,
-      maxSteps,
-      modelSettings: {
-        frequencyPenalty,
-        presencePenalty,
-        maxRetries,
-        maxOutputTokens: maxTokens,
-        temperature,
-        topK,
-        topP,
-      },
-      instructions,
-      requestContext: resolvedRequestContext,
-      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-      providerOptions: providerOptions as any,
-      requireToolApproval,
-      tracingOptions,
-    });
+      _onChunk.current = onChunk;
+      _currentRunId.current = runId;
+
+      await response.processDataStream({
+        onChunk: chunk => processStreamChunk(chunk, onChunk),
+      });
+
+      if (_streamAbortRef.current === internalAbort) {
+        _streamAbortRef.current = null;
+      }
+      setIsRunning(false);
+      return;
+    }
 
     _onChunk.current = onChunk;
-    _currentRunId.current = runId;
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
+    await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void onChunk?.(chunk);
+    await agent.sendSignal({
+      signal: {
+        id: signalId ?? uuid(),
+        type: 'user-message',
+        contents: getSignalContents(coreUserMessages),
+      },
+      resourceId: resourceId || agentId,
+      threadId,
+      streamOptions: {
+        maxSteps,
+        modelSettings: {
+          frequencyPenalty,
+          presencePenalty,
+          maxRetries,
+          maxOutputTokens: maxTokens,
+          temperature,
+          topK,
+          topP,
+        },
+        instructions,
+        requestContext: resolvedRequestContext,
+        providerOptions: providerOptions as any,
+        requireToolApproval,
+        tracingOptions,
       },
     });
 
-    // Only clear the ref if we're still the active stream — a later stream()
-    // call may have already taken over and aborted us.
     if (_streamAbortRef.current === internalAbort) {
       _streamAbortRef.current = null;
     }
-    setIsRunning(false);
   };
 
   const network = async ({
@@ -343,6 +459,9 @@ export const useChat = ({
   };
 
   const handleCancelRun = () => {
+    _streamAbortRef.current?.abort();
+    _streamAbortRef.current = null;
+    closeThreadSubscription();
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
@@ -368,13 +487,17 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
+    if (_threadSubscriptionKeyRef.current) {
+      return;
+    }
+
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        void onChunk?.(chunk);
+        void (onChunk ?? _onChunk.current)?.(chunk);
       },
     });
     setIsRunning(false);
@@ -396,13 +519,17 @@ export const useChat = ({
       requestContext: _requestContext.current,
     });
 
+    if (_threadSubscriptionKeyRef.current) {
+      return;
+    }
+
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
         // Without this, React might batch intermediate chunks which would break the message reconstruction over time
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        void onChunk?.(chunk);
+        void (onChunk ?? _onChunk.current)?.(chunk);
       },
     });
     setIsRunning(false);
@@ -552,7 +679,7 @@ export const useChat = ({
     if (mode === 'generate') {
       await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages });
+      await stream({ ...args, coreUserMessages, signalId: uiMessages[0]?.id });
     } else if (mode === 'network') {
       await network({ ...args, coreUserMessages });
     }

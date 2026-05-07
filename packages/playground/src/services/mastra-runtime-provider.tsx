@@ -16,6 +16,7 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
+import { ThreadRuntimeStateProvider } from '@/lib/ai-ui/thread-runtime-state';
 import type { ChatProps } from '@/types';
 
 const handleFinishReason = (finishReason: string) => {
@@ -1279,26 +1280,24 @@ export function MastraRuntimeProvider({
   };
 
   const onCancel = async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsLegacyRunning(false);
-      // Reset OM streaming state in case observation was in progress
-      resetObservationalMemoryStreamState();
-      cancelRun?.();
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLegacyRunning(false);
+    // Reset OM streaming state in case observation was in progress
+    resetObservationalMemoryStreamState();
+    cancelRun?.();
 
-      // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
-      if (threadId && isOMEnabled) {
-        baseClient
-          .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
-          .then(result => {
-            setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-            void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
-          })
-          .catch(() => {});
-      }
+    // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
+    if (threadId && isOMEnabled) {
+      baseClient
+        .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+        .then(result => {
+          setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+          setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+          void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+          void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+        })
+        .catch(() => {});
     }
   };
 
@@ -1320,7 +1319,7 @@ export function MastraRuntimeProvider({
   });
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isLegacyRunning || isRunningStream,
+    isRunning: isLegacyRunning,
     messages: isSupportedModel ? vnextmessages : legacyMessages,
     convertMessage: x => x,
     onNew,
@@ -1335,22 +1334,24 @@ export function MastraRuntimeProvider({
   });
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      {isReady ? (
-        <ToolCallProvider
-          approveToolcall={approveToolCall}
-          declineToolcall={declineToolCall}
-          approveToolcallGenerate={approveToolCallGenerate}
-          declineToolcallGenerate={declineToolCallGenerate}
-          isRunning={isRunningStream}
-          toolCallApprovals={toolCallApprovals}
-          approveNetworkToolcall={approveNetworkToolCall}
-          declineNetworkToolcall={declineNetworkToolCall}
-          networkToolCallApprovals={networkToolCallApprovals}
-        >
-          {children}
-        </ToolCallProvider>
-      ) : null}
-    </AssistantRuntimeProvider>
+    <ThreadRuntimeStateProvider value={{ isStreaming: isRunningStream, cancelStream: onCancel }}>
+      <AssistantRuntimeProvider runtime={runtime}>
+        {isReady ? (
+          <ToolCallProvider
+            approveToolcall={approveToolCall}
+            declineToolcall={declineToolCall}
+            approveToolcallGenerate={approveToolCallGenerate}
+            declineToolcallGenerate={declineToolCallGenerate}
+            isRunning={isRunningStream}
+            toolCallApprovals={toolCallApprovals}
+            approveNetworkToolcall={approveNetworkToolCall}
+            declineNetworkToolcall={declineNetworkToolCall}
+            networkToolCallApprovals={networkToolCallApprovals}
+          >
+            {children}
+          </ToolCallProvider>
+        ) : null}
+      </AssistantRuntimeProvider>
+    </ThreadRuntimeStateProvider>
   );
 }

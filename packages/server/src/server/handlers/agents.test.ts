@@ -1235,6 +1235,7 @@ describe('Agent Routes Authorization', () => {
         threadId: 'subscribe-thread-from-context',
       });
       let capturedTarget: any;
+      const abort = vi.fn(() => true);
       const unsubscribe = vi.fn();
       const chunk = {
         type: 'text-delta',
@@ -1247,7 +1248,7 @@ describe('Agent Routes Authorization', () => {
         capturedTarget = target;
         return {
           activeRunId: () => null,
-          abort: () => false,
+          abort,
           unsubscribe,
           stream: (async function* () {
             yield chunk;
@@ -1268,6 +1269,7 @@ describe('Agent Routes Authorization', () => {
       const reader = stream.getReader();
       await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
       await reader.cancel();
+      expect(abort).toHaveBeenCalled();
       expect(unsubscribe).toHaveBeenCalled();
     });
 

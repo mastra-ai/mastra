@@ -124,6 +124,94 @@ export const mapWorkflowStreamChunkToWatchResult = (
   return prev;
 };
 
+
+function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessageMetadata): MastraUIMessage[] {
+  if (typeof contents === 'string') {
+    return [
+      {
+        id: `signal-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', text: contents }],
+        metadata,
+      },
+    ];
+  }
+
+  if (Array.isArray(contents)) {
+    return contents.flatMap(content => signalContentsToUserMessages(content, metadata));
+  }
+
+  if (!contents || typeof contents !== 'object') {
+    return [];
+  }
+
+  const message = contents as { role?: unknown; content?: unknown };
+  if (message.role && message.role !== 'user') {
+    return [];
+  }
+
+  const content = message.content;
+  if (typeof content === 'string') {
+    return [
+      {
+        id: `signal-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', text: content }],
+        metadata,
+      },
+    ];
+  }
+
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const parts = content.flatMap((part): MastraUIMessage['parts'] => {
+    if (!part || typeof part !== 'object') return [];
+    const typedPart = part as Record<string, unknown>;
+
+    if (typedPart.type === 'text' && typeof typedPart.text === 'string') {
+      return [{ type: 'text', text: typedPart.text }];
+    }
+
+    if (typedPart.type === 'image') {
+      const image = typedPart.image;
+      return [
+        {
+          type: 'file',
+          mediaType: typeof typedPart.mimeType === 'string' ? typedPart.mimeType : 'image/*',
+          url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
+        },
+      ];
+    }
+
+    if (typedPart.type === 'file') {
+      const data = typedPart.data;
+      return [
+        {
+          type: 'file',
+          mediaType: typeof typedPart.mimeType === 'string' ? typedPart.mimeType : 'application/octet-stream',
+          url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
+          ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
+        },
+      ];
+    }
+
+    return [];
+  });
+
+  return parts.length
+    ? [
+        {
+          id: `signal-${Date.now()}`,
+          role: 'user',
+          parts,
+          metadata,
+        },
+      ]
+    : [];
+}
+
 export interface ToUIMessageArgs {
   chunk: ChunkType;
   conversation: MastraUIMessage[];
@@ -136,6 +224,25 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
   // Handle data-* chunks (custom data chunks from writer.custom())
   if (chunk.type.startsWith('data-')) {
+    if (chunk.type === 'data-user-message' && 'data' in chunk && chunk.data?.type === 'user-message') {
+      const signalId = chunk.data.id;
+      if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
+        return result;
+      }
+
+      const userMessages = signalContentsToUserMessages(chunk.data.contents, metadata);
+      if (!userMessages.length) return result;
+
+      const messageIdPrefix = typeof signalId === 'string' ? signalId : `signal-${chunk.runId}-${Date.now()}`;
+      return [
+        ...result,
+        ...userMessages.map((message, index) => ({
+          ...message,
+          id: index === 0 ? messageIdPrefix : `${messageIdPrefix}-${index}`,
+        })),
+      ];
+    }
+
     const dataPart = {
       type: chunk.type as `data-${string}`,
       data: 'data' in chunk ? chunk.data : undefined,
