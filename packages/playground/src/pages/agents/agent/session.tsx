@@ -32,7 +32,7 @@ function AgentSession() {
   const hasMemory = Boolean(memory?.result);
 
   const { refetch: refreshThreads } = useThreads({
-    resourceId: agentId!,
+    resourceId: window.MASTRA_STUDIO_THREADS_LIST_RESOURCE_SCOPED === 'false' ? undefined : agentId!,
     agentId: agentId!,
     isMemoryEnabled: hasMemory,
   });

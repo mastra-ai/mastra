@@ -109,6 +109,7 @@ export const HEAD = handle(app);
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
       experimentalUI: `'false'`,
+      threadsListResourceScoped: `'true'`,
     });
 
     writeFileSync(indexPath, html);

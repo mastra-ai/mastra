@@ -40,7 +40,11 @@ function Agent() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
+  } = useThreads({
+    agentId: agentId!,
+    isMemoryEnabled: hasMemory,
+    resourceId: window.MASTRA_STUDIO_THREADS_LIST_RESOURCE_SCOPED === 'false' ? undefined : agentId!,
+  });
 
   useEffect(() => {
     if (threadId) return;

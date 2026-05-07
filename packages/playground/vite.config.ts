@@ -20,7 +20,11 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_CLOUD_API_ENDPOINT%%/g, '')
       .replace(/%%MASTRA_AUTO_DETECT_URL%%/g, 'true')
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
-      .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false');
+      .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false')
+      .replace(
+        /%%MASTRA_STUDIO_THREADS_LIST_RESOURCE_SCOPED%%/g,
+        process.env.MASTRA_STUDIO_THREADS_LIST_RESOURCE_SCOPED === 'false' ? 'false' : 'true',
+      );
   },
 });
 

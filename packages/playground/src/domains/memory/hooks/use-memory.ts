@@ -56,7 +56,7 @@ export const useThreads = ({
   agentId,
   isMemoryEnabled,
 }: {
-  resourceId: string;
+  resourceId: string | undefined;
   agentId: string;
   isMemoryEnabled: boolean;
 }) => {
