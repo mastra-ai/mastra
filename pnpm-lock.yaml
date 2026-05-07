@@ -1648,15 +1648,15 @@ importers:
       fastest-levenshtein:
         specifier: ^1.0.16
         version: 1.0.16
-      js-tiktoken:
-        specifier: ^1.0.21
-        version: 1.0.21
       partial-json:
         specifier: ^0.1.7
         version: 0.1.7
       strip-ansi:
         specifier: ^7.2.0
         version: 7.2.0
+      tokenx:
+        specifier: ^1.3.0
+        version: 1.3.0
       tree-kill:
         specifier: ^1.2.2
         version: 1.2.2
@@ -3166,9 +3166,6 @@ importers:
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
-      js-tiktoken:
-        specifier: ^1.0.21
-        version: 1.0.21
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0

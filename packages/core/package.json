@@ -729,7 +729,6 @@
     "hono": "^4.12.8",
     "hono-openapi": "^1.3.0",
     "ignore": "^7.0.5",
-    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "tokenx": "^1.3.0",
     "lru-cache": "^11.2.7",

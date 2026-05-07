@@ -1,6 +1,5 @@
 import { openai } from '@ai-sdk/openai';
 import { createGatewayMock } from '@internal/test-utils';
-import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -75,7 +74,7 @@ describe('TokenLimiterProcessor', () => {
     ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
   });
 
-  it('should use different encodings based on configuration', async () => {
+  it('should accept the deprecated encoding option without throwing', async () => {
     const { messagesV2 } = generateConversationHistory({
       threadId: '6',
       messageCount: 1,
@@ -83,23 +82,22 @@ describe('TokenLimiterProcessor', () => {
       toolFrequency: 0,
     });
 
-    // Create limiters with different encoding settings
-    const defaultLimiter = new TokenLimiterProcessor(1000);
-    const customLimiter = new TokenLimiterProcessor({
+    // The `encoding` option is retained for backwards compatibility but is now a no-op.
+    // Passing any value should not throw or change behavior compared to the default.
+    const limiter = new TokenLimiterProcessor({
       limit: 1000,
-      encoding: cl100k_base,
+      encoding: { foo: 'bar' } as unknown,
     });
 
     const mockAbort = vi.fn() as any;
-    // All should process messagesV2 successfully but potentially with different token counts
-    const defaultMessageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
+    const messageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
     for (const msg of messagesV2) {
-      defaultMessageList.add(msg, 'input');
+      messageList.add(msg, 'input');
     }
 
-    await defaultLimiter.processInputStep({
-      messageList: defaultMessageList,
-      messages: defaultMessageList.get.all.db(),
+    await limiter.processInputStep({
+      messageList,
+      messages: messageList.get.all.db(),
       abort: mockAbort,
       stepNumber: 0,
       steps: [],
@@ -109,29 +107,7 @@ describe('TokenLimiterProcessor', () => {
       retryCount: 0,
     });
 
-    const customMessageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
-    for (const msg of messagesV2) {
-      customMessageList.add(msg, 'input');
-    }
-
-    await customLimiter.processInputStep({
-      messageList: customMessageList,
-      messages: customMessageList.get.all.db(),
-      abort: mockAbort,
-      stepNumber: 0,
-      steps: [],
-      state: {},
-      systemMessages: [],
-      model: { modelId: 'test-model' } as any,
-      retryCount: 0,
-    });
-
-    const defaultResult = defaultMessageList.get.all.db();
-    const customResult = customMessageList.get.all.db();
-
-    // Each should return the same messagesV2 but with potentially different token counts
-    expect(defaultResult.length).toBe(messagesV2.length);
-    expect(customResult.length).toBe(messagesV2.length);
+    expect(messageList.get.all.db().length).toBe(messagesV2.length);
   });
 
   async function estimateTokens(messages: MastraDBMessage[]) {
