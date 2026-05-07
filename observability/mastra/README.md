@@ -12,7 +12,7 @@ npm install @mastra/observability
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
@@ -23,12 +23,13 @@ export const mastra = new Mastra({
           new DefaultExporter(), // Persists traces for Mastra Studio
           new CloudExporter(), // Sends to Mastra platform
         ],
-        spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
   }),
 });
 ```
+
+A `SensitiveDataFilter` span output processor is auto-applied to every configured instance by default, redacting secrets (API keys, tokens, passwords, etc.) before they reach exporters. Set `sensitiveDataFilter: false` on the `Observability` config to opt out, or pass a `SensitiveDataFilterOptions` object to customize it.
 
 ## Features
 

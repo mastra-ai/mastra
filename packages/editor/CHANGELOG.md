@@ -1,5 +1,11 @@
 # @mastra/editor
 
+## 0.7.24-alpha.2
+
+### Patch Changes
+
+- Fixed `@mastra/editor` integrations (Composio, Arcade) collapsing every tool call onto a shared `'default'` user. Tools resolved during `agent.generate` now scope to the authenticated resource from the request context, so per-user OAuth connections route to the correct account instead of a shared one. ([#16122](https://github.com/mastra-ai/mastra/pull/16122))
+
 ## 0.7.24-alpha.1
 
 ### Patch Changes
