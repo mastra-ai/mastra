@@ -19,6 +19,7 @@ export * from './components/agent-information/agent-information';
 export * from './components/agent-entity-header';
 export * from './components/agent-information/agent-memory';
 export * from './components/agent-layout';
+export * from './components/left-sidebar-context';
 
 export * from './components/browser-view';
 export * from './components/agent-cms-blocks';
@@ -38,6 +39,7 @@ export * from './components/agent-version-panel';
 export * from './components/agent-playground';
 export * from './components/agent-page-tabs';
 export * from './components/agent-top-bar-controls';
+export * from './components/agent-tab-actions';
 export * from './hooks/use-agent-experiments';
 export * from './hooks/use-can-create-agent';
 export * from './components/agent-traces-panel';

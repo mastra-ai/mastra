@@ -73,6 +73,7 @@ import {
   agentWithProcessorWorkflow,
   contentModerationWorkflow,
   simpleAssistantAgent,
+  omAgent,
   agentWithBranchingWorkflow,
   advancedModerationWorkflow,
 } from './workflows/content-moderation';
@@ -116,6 +117,7 @@ export const mastra = new Mastra({
     moderatedAssistantAgent,
     agentWithProcessorWorkflow,
     simpleAssistantAgent,
+    omAgent,
     agentWithBranchingWorkflow,
     agentWithAdvancedModeration,
     agentWithBranchingModeration,

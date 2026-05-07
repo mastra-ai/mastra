@@ -1,8 +1,8 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
-import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, Button, useAutoscroll } from '@mastra/playground-ui';
-import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime, useThreadRuntime } from '@assistant-ui/react';
+import { Avatar, Button, cn, useAutoscroll } from '@mastra/playground-ui';
+import { ArrowUp, Mic, PlusIcon, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
@@ -16,6 +16,7 @@ import { useThreadInput } from '@/domains/conversation';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 // import { useBackgroundTaskStream } from '@/hooks';
 
+
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
@@ -23,9 +24,18 @@ export interface ThreadProps {
   hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
+  composerControls?: React.ReactNode;
 }
 
-export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
+export const Thread = ({
+  agentName,
+  agentId,
+  threadId,
+  hasMemory,
+  hasModelList,
+  hideModelSwitcher,
+  composerControls,
+}: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
@@ -37,98 +47,152 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
   // 3. NOT currently viewing browser in sidebar
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded') && !isInSidebar;
 
+  const threadRuntime = useThreadRuntime();
+  const isEmpty = useSyncExternalStore(
+    cb => threadRuntime.subscribe(cb),
+    () => threadRuntime.getState().messages.length === 0,
+  );
+
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
     return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
+  const composer = (
+    <Composer
+      agentId={agentId}
+      hasModelList={hasModelList}
+      hideModelSwitcher={hideModelSwitcher}
+      controls={composerControls}
+    />
+  );
+
+  const memoryWarning = !hasMemory && (
+    <div className="flex items-center justify-center gap-2 max-w-3xl mx-auto px-4 py-2 mt-1 text-warning1">
+      <TriangleAlert className="h-4 w-4 shrink-0" />
+      <p className="text-xs">
+        Memory not enabled — thread messages will not be stored.{' '}
+        <a
+          href="https://mastra.ai/docs/memory/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:opacity-80"
+        >
+          Learn how to activate memory
+        </a>
+      </p>
+    </div>
+  );
+
   return (
-    <ThreadWrapper>
+    <ThreadWrapper isEmpty={isEmpty}>
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
-        <ThreadWelcome agentName={agentName} />
+        {isEmpty ? (
+          <div className="flex h-full flex-col items-center justify-center pb-16">
+            <Avatar name={agentName || 'Agent'} size="lg" />
+            <p className="mt-4 mb-6 font-medium">How can I help you today?</p>
+            <div className="w-full max-w-3xl px-4">
+              {composer}
+              {memoryWarning}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
+              <BracketOverlay containerRef={messagesContainerRef} />
+              <ThreadPrimitive.Messages
+                components={{
+                  UserMessage: UserMessage,
+                  EditComposer: EditComposer,
+                  AssistantMessage: WrappedAssistantMessage,
+                }}
+              />
+            </div>
 
-        <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
-          <BracketOverlay containerRef={messagesContainerRef} />
-          <ThreadPrimitive.Messages
-            components={{
-              UserMessage: UserMessage,
-              EditComposer: EditComposer,
-              AssistantMessage: WrappedAssistantMessage,
-            }}
-          />
-        </div>
-
-        <ThreadPrimitive.If empty={false}>
-          <ThreadPrimitive.If running={false}>
-            <SaveFullConversationAction />
-          </ThreadPrimitive.If>
-          <div />
-        </ThreadPrimitive.If>
+            <ThreadPrimitive.If empty={false}>
+              <ThreadPrimitive.If running={false}>
+                <SaveFullConversationAction />
+              </ThreadPrimitive.If>
+              <div />
+            </ThreadPrimitive.If>
+          </>
+        )}
       </ThreadPrimitive.Viewport>
 
-      {/* Browser thumbnail - shown above composer when in collapsed/expanded mode */}
-      {showThumbnailInChat && agentId && threadId && (
-        <div className="mx-4 mb-2 max-w-3xl w-full mx-auto">
-          <BrowserThumbnail agentName={agentName} />
+      {!isEmpty && (
+        <div className="pb-4">
+          {/* Browser thumbnail - shown above composer when in collapsed/expanded mode */}
+          {showThumbnailInChat && agentId && threadId && (
+            <div className="mx-4 mb-2 max-w-3xl w-full mx-auto">
+              <BrowserThumbnail agentName={agentName} />
+            </div>
+          )}
+          {composer}
+          {memoryWarning}
         </div>
       )}
 
-      <Composer
-        hasMemory={hasMemory}
-        threadId={threadId}
-        agentId={agentId}
-        hasModelList={hasModelList}
-        hideModelSwitcher={hideModelSwitcher}
-      />
     </ThreadWrapper>
   );
 };
 
-const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
+const ThreadWrapper = ({ children, isEmpty }: { children: React.ReactNode; isEmpty: boolean }) => {
   return (
-    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+    <ThreadPrimitive.Root
+      className={cn(
+        'grid h-full overflow-y-auto transition-[grid-template-rows] duration-slow ease-out-custom',
+        isEmpty ? 'grid-rows-[1fr]' : 'grid-rows-[1fr_auto]',
+      )}
+      data-testid="thread-wrapper"
+    >
       {children}
     </ThreadPrimitive.Root>
   );
 };
 
-export interface ThreadWelcomeProps {
-  agentName?: string;
-}
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
-  return (
-    <ThreadPrimitive.Empty>
-      <div className="flex w-full grow flex-col items-center pt-[15vh]">
-        <Avatar name={agentName || 'Agent'} size="lg" />
-        <p className="mt-4 font-medium">How can I help you today?</p>
-      </div>
-    </ThreadPrimitive.Empty>
-  );
-};
 
 interface ComposerProps {
-  hasMemory?: boolean;
   threadId?: string;
   agentId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
+  controls?: React.ReactNode;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher, controls }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Track IME composition state to prevent Enter from submitting during CJK input.
-  // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
-  // triggers form submission instead of completing the IME composition.
-  // See: https://github.com/mastra-ai/mastra/issues/16109
+  const composerRuntime = useComposerRuntime();
+  const threadRuntime = useThreadRuntime();
   const isComposingRef = useRef(false);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
-  // const { runningTasks, completedTasks, failedTasks, clearCompletedAndFailedTasks } = useBackgroundTaskStream({
-  //   threadId,
-  //   agentId,
-  // });
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (e.key !== 'ArrowUp') return;
+      if (composerRuntime.getState().text.trim() !== '') return;
+
+      const messages = threadRuntime.getState().messages;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role !== 'user') continue;
+        const textPart = msg.content.find(p => p.type === 'text');
+        if (textPart && 'text' in textPart) {
+          composerRuntime.setText(textPart.text);
+          e.preventDefault();
+        }
+        return;
+      }
+    },
+    [composerRuntime, threadRuntime],
+  );
 
   return (
     <div className="mx-4">
@@ -178,24 +242,14 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
               onCompositionEnd={() => {
                 isComposingRef.current = false;
               }}
-              onKeyDown={e => {
-                // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
-                // while an IME composition session is active (e.g. Chinese pinyin).
-                // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
-                // not prevent the primitive's onKeyDown from running on the same element —
-                // preventDefault() is required. e.nativeEvent.isComposing is added as a
-                // defensive fallback for browsers/timings where compositionend has already fired.
-                if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }
-              }}
+              onKeyDown={handleKeyDown}
               disabled={!canExecuteAgent}
             />
           </ComposerPrimitive.Input>
           <div className="flex items-center justify-between gap-2">
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
             <div className="flex items-center gap-2 ml-auto">
+              {controls}
               {canExecuteAgent && <SpeechInput agentId={agentId} />}
               <ComposerAction canExecute={canExecuteAgent} />
             </div>

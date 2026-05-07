@@ -115,9 +115,14 @@ export function AgentPageTabs({
   };
 
   return (
-    <div className="bg-surface2 px-4 flex items-center gap-2">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
-        <TabList>
+    <div className="bg-surface2 px-4 flex items-center gap-2 relative before:absolute before:bottom-0 before:left-0 before:right-0 before:h-px before:bg-border1 before:content-['']">
+      <Tabs
+        value={activeTab}
+        defaultTab={activeTab}
+        onValueChange={handleTabChange}
+        className="flex-1 min-w-0 relative z-10"
+      >
+        <TabList className="border-b-0">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
             value="versions"

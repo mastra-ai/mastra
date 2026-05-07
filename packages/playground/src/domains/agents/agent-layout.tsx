@@ -4,6 +4,7 @@ import { useParams, useLocation } from 'react-router';
 import { AgentHeader } from './agent-header';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
+import { AgentTabActions } from '@/domains/agents/components/agent-tab-actions';
 import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
@@ -52,7 +53,12 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         activeTab={activeTab}
         showPlayground={showPlayground}
         showObservability={showObservability}
-        rightSlot={showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined}
+        rightSlot={
+          <>
+            {showTopBarControls && <AgentTopBarControls requestContextSchema={requestContextSchema} />}
+            <AgentTabActions agentId={agentId!} />
+          </>
+        }
       />
       {children}
     </MainContentLayout>

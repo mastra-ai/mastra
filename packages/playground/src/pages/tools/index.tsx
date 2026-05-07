@@ -72,7 +72,7 @@ export default function Tools() {
           <PageLayout.Column className="flex justify-end gap-2">
             <ButtonWithTooltip
               as="a"
-              href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+              href="https://mastra.ai/docs/agents/using-tools"
               target="_blank"
               rel="noopener noreferrer"
               tooltipContent="Go to Tools documentation"

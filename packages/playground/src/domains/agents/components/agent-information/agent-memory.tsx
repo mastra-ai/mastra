@@ -8,7 +8,6 @@ import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
   useMemorySearch,
-  useCloneThread,
   useMemoryWithOMStatus,
   useThread,
 } from '@/domains/memory/hooks';
@@ -37,6 +36,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   // Check if semantic recall is enabled
   const config = data?.config;
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
+  const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
   // Check if observational memory is enabled
   const { data: omStatus } = useMemoryWithOMStatus({
@@ -52,20 +52,6 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
     resourceId: effectiveResourceId || '',
     threadId,
   });
-
-  // Get clone thread hook
-  const { mutateAsync: cloneThread, isPending: isCloning } = useCloneThread();
-
-  // Handle cloning the current thread
-  const handleCloneThread = useCallback(async () => {
-    if (!threadId || !agentId) return;
-
-    const result = await cloneThread({ threadId, agentId });
-    // Navigate to the cloned thread
-    if (result?.thread?.id) {
-      navigate(paths.agentThreadLink(agentId, result.thread.id));
-    }
-  }, [threadId, agentId, cloneThread, navigate, paths]);
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback(
@@ -102,33 +88,22 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   }
 
   return (
-    <div className="flex flex-col h-full min-w-0 overflow-hidden">
-      {/* Clone Thread Section */}
-      {threadId && (
-        <div className="p-4 border-b border-border1">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-medium text-neutral5">Clone Thread</h3>
-              <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
-            </div>
-            <Button onClick={handleCloneThread} disabled={isCloning}>
-              <Copy className="w-4 h-4 mr-2" />
-              {isCloning ? 'Cloning...' : 'Clone'}
-            </Button>
-          </div>
-        </div>
-      )}
+    <div className="flex flex-col h-full min-w-0 overflow-y-auto bg-surface2">
+      {/* Memory Configuration at top */}
+      <div className="border-b border-border1">
+        <AgentMemoryConfig agentId={agentId} />
+      </div>
 
-      {/* Observational Memory Section - moved above Semantic Recall */}
+      {/* Observational Memory Section */}
       {isOMEnabled && (
         <div className="border-b border-border1 min-w-0 overflow-hidden">
           <AgentObservationalMemory agentId={agentId} resourceId={effectiveResourceId} threadId={threadId} />
         </div>
       )}
 
-      {/* Memory Search Section - hidden for gateway memory */}
-      {!isGatewayMemory && (
-        <div className="p-4 border-b border-border1">
+      {/* Semantic Recall Section - only if enabled, hidden for gateway memory */}
+      {isSemanticRecallEnabled && !isGatewayMemory && (
+        <div className="p-4 border-b border-border1 overflow-hidden flex flex-col max-h-80">
           <div className="mb-2">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
@@ -147,42 +122,18 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               )}
             </div>
           </div>
-          {isSemanticRecallEnabled ? (
-            <MemorySearch
-              searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
-              onResultClick={handleResultClick}
-              currentThreadId={threadId}
-              className="w-full"
-              chatInputValue={chatInputValue}
-            />
-          ) : (
-            <div className="bg-surface3 border border-border1 rounded-lg p-4">
-              <p className="text-sm text-neutral3 mb-3">
-                Semantic recall is not enabled for this agent. Enable it to search through conversation history.
-              </p>
-              <a
-                href="https://mastra.ai/en/docs/memory/semantic-recall"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                Learn about semantic recall
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
+          <MemorySearch
+            searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
+            onResultClick={handleResultClick}
+            currentThreadId={threadId}
+            className="w-full"
+            chatInputValue={chatInputValue}
+          />
         </div>
       )}
 
-      {/* Working Memory & Config Section - hidden for gateway memory */}
-      {!isGatewayMemory && (
-        <div className="flex-1 overflow-y-auto">
-          <AgentWorkingMemory agentId={agentId} />
-          <div className="border-t border-border1">
-            <AgentMemoryConfig agentId={agentId} />
-          </div>
-        </div>
-      )}
+      {/* Working Memory - only if enabled, hidden for gateway memory */}
+      {isWorkingMemoryEnabled && !isGatewayMemory && <AgentWorkingMemory agentId={agentId} />}
 
       {/* Gateway Memory indicator */}
       {isGatewayMemory && (
