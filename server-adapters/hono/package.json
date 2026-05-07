@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.4.14-alpha.4",
+  "version": "1.4.14-alpha.5",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",

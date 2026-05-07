@@ -1,5 +1,32 @@
 # mastracode
 
+## 0.18.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`a68d854`](https://github.com/mastra-ai/mastra/commit/a68d854bf3d042bef7d5e2f6b7d35e311673888b), [`00ef282`](https://github.com/mastra-ai/mastra/commit/00ef2826034d006b984b3f19cd33ba0bba14d6c6)]:
+  - @mastra/duckdb@1.3.1-alpha.0
+  - @mastra/observability@1.12.0-alpha.0
+
+## 0.18.0-alpha.6
+
+### Minor Changes
+
+- Added `/goal` to Mastra Code, a persistent autonomous task loop similar to the goal modes in Codex and Hermes Agent. ([#16065](https://github.com/mastra-ai/mastra/pull/16065))
+
+  A user can start a goal with `/goal <objective>`. Mastra Code saves that objective to the current thread, runs the normal assistant turn, then asks a separate judge model whether the goal is `done`, should `continue`, or is `waiting` on an explicit user checkpoint. When the judge says to continue, Mastra Code feeds the judge feedback back into the conversation and keeps working until the goal is complete, paused, cleared, or reaches the configured attempt limit.
+
+  Use `/judge` to configure the default judge model and max attempts used by future goals.
+
+  Approved plans can be selected as a goal from the inline plan approval UI, slash commands can opt into `/goal/<command>` with top-level `goal: true`, and skills can opt into goal commands with `metadata.goal: true`. `/goal` objectives can also span multiple lines.
+
+### Patch Changes
+
+- Fixed OpenAI Codex login when the default callback port is already in use. The login flow now falls back to the Codex-supported fallback port and shows a clear warning when both supported callback ports are unavailable. ([#16294](https://github.com/mastra-ai/mastra/pull/16294))
+
+- Updated dependencies [[`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962)]:
+  - @mastra/core@1.33.0-alpha.5
+
 ## 0.18.0-alpha.5
 
 ### Patch Changes

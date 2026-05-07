@@ -61,11 +61,6 @@ export function setupKeyboardShortcuts(
       if (current.length > 0) {
         state.lastClearedText = current;
         state.editor.setText('');
-      } else if (state.goalManager.isActive()) {
-        // Input already empty and goal is active — pause the goal
-        state.goalManager.pause();
-        state.goalManager.saveToThread(state).catch(() => {});
-        showInfo(state, 'Goal paused (interrupted). Use /goal resume to continue.');
       }
       state.ui.requestRender();
     }

@@ -1,5 +1,11 @@
 # @mastra/duckdb
 
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Improved DuckDB observability initialization by batching schema setup statements on one connection while preserving migration order. ([#16239](https://github.com/mastra-ai/mastra/pull/16239))
+
 ## 1.3.0
 
 ### Minor Changes

@@ -194,54 +194,6 @@ describe('GoalManager', () => {
     ]);
   });
 
-  it('answers goal-mode questions with the judge using exact option labels', async () => {
-    mocks.stream.mockResolvedValue({
-      consumeStream: vi.fn().mockResolvedValue(undefined),
-      getFullOutput: vi.fn().mockResolvedValue({ object: { answer: 'Verified' } }),
-    });
-    mocks.agentConstructor.mockImplementation(function () {
-      return { stream: mocks.stream };
-    });
-
-    const manager = new GoalManager();
-    manager.setGoal('tell whale facts and wait for judge verification', 'openai/gpt-5.4-mini');
-
-    const answer = await manager.answerQuestion(createState(), 'Is this a whale fact?', [
-      { label: 'Verified', description: 'This is a whale fact.' },
-      { label: 'Reject', description: 'This is not a whale fact.' },
-    ]);
-
-    expect(answer).toBe('Verified');
-    expect(mocks.stream).toHaveBeenCalledWith(
-      expect.stringContaining('verify it yourself unless the goal explicitly requires human/user verification'),
-      expect.objectContaining({ structuredOutput: { schema: expect.any(Object) } }),
-    );
-  });
-
-  it('rejects goal-mode question answers outside the provided option labels', async () => {
-    mocks.stream.mockResolvedValue({
-      consumeStream: vi.fn().mockResolvedValue(undefined),
-      getFullOutput: vi.fn().mockResolvedValue({ object: { answer: 'Looks good' } }),
-    });
-    mocks.agentConstructor.mockImplementation(function () {
-      return { stream: mocks.stream };
-    });
-
-    const manager = new GoalManager();
-    manager.setGoal('tell whale facts and wait for judge verification', 'openai/gpt-5.4-mini');
-
-    const answer = await manager.answerQuestion(createState(), 'Is this a whale fact?', [
-      { label: 'Verified', description: 'This is a whale fact.' },
-      { label: 'Reject', description: 'This is not a whale fact.' },
-    ]);
-
-    expect(answer).toBe('(judge could not answer: returned "Looks good" outside available answers.)');
-    expect(mocks.stream).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ structuredOutput: { schema: expect.any(Object) } }),
-    );
-  });
-
   it('does not auto-continue when the judge says the assistant is waiting on the user', async () => {
     mocks.stream.mockResolvedValue({
       consumeStream: vi.fn().mockResolvedValue(undefined),
