@@ -426,6 +426,29 @@ MCP servers can be discovered through registries. Here's how to connect to some 
 
     As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
   </TabItem>
+
+  <TabItem value="browserless" label="Browserless">
+    [Browserless](https://browserless.io) is a hosted browser-automation MCP server. It exposes 10 tools — search, smart scraper, a multi-turn browser agent, and more — over a single streamable-HTTP endpoint, with browser state preserved across calls.
+
+    ```typescript
+    import { MCPClient } from '@mastra/mcp'
+
+    export const mcp = new MCPClient({
+      servers: {
+        browserless: {
+          url: new URL('https://mcp.browserless.io/mcp'),
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${process.env.BROWSERLESS_TOKEN}`,
+            },
+          },
+        },
+      },
+    })
+    ```
+
+    Get a token at [account.browserless.io](https://account.browserless.io) and store it as `BROWSERLESS_TOKEN`. Visit the [Browserless integration page](/docs/mcp/browserless) for the multi-turn `browserless_agent` example, or the runnable [cookbook](https://github.com/browserless/mastra-cookbook).
+  </TabItem>
 </Tabs>
 
 ## MCP Apps

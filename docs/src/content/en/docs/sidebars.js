@@ -319,6 +319,11 @@ const sidebars = {
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
         },
+        {
+          type: 'doc',
+          id: 'mcp/browserless',
+          label: 'Browserless',
+        },
       ],
     },
     {

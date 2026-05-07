@@ -1,0 +1,98 @@
+---
+title: 'Browserless | MCP'
+description: 'Connect Mastra agents to the Browserless MCP server for hosted browser automation.'
+packages:
+  - '@mastra/mcp'
+---
+
+# Browserless
+
+[Browserless](https://browserless.io) is a hosted browser-automation MCP server. It exposes 10 tools — search, smart scraper, map, crawl, export, performance, function, download, and a multi-turn browser agent (`browserless_agent` plus `browserless_skill`) — over a single streamable-HTTP endpoint. Browser sessions are pinned by `Mcp-Session-Id`, so multi-turn flows preserve state across calls without extra session-management code.
+
+## Setup
+
+Install the MCP package:
+
+```bash npm2yarn
+npm install @mastra/mcp
+```
+
+Get an API token at [account.browserless.io](https://account.browserless.io) and store it as `BROWSERLESS_TOKEN` in your environment.
+
+## Quickstart
+
+Connect Browserless via `MCPClient`:
+
+```typescript title="src/mastra/mcp/browserless.ts"
+import { MCPClient } from '@mastra/mcp'
+
+export const mcp = new MCPClient({
+  servers: {
+    browserless: {
+      url: new URL('https://mcp.browserless.io/mcp'),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer ${process.env.BROWSERLESS_TOKEN}`,
+        },
+      },
+    },
+  },
+})
+```
+
+The `MCPClient` connects on first use and reuses the same MCP session across tool calls.
+
+## Use within an agent
+
+Pass the loaded tools to a Mastra `Agent`. The model selects which Browserless tool to call at each step.
+
+```typescript title="src/mastra/agents/researcher.ts"
+import { Agent } from '@mastra/core/agent'
+import { anthropic } from '@ai-sdk/anthropic'
+import { mcp } from '../mcp/browserless'
+
+export const researcher = new Agent({
+  name: 'Researcher',
+  instructions: 'Use the Browserless tools to scrape and summarize the web. Cite URLs.',
+  model: anthropic('claude-sonnet-4-6'),
+  tools: await mcp.listTools(),
+})
+```
+
+`mcp.listTools()` returns all 10 tools namespaced as `browserless_<toolName>`. Use `mcp.listToolsets()` if you prefer un-prefixed keys grouped by server.
+
+## Drive a stateful browser
+
+The `browserless_agent` tool drives a stateful browser. Each call (`goto`, `snapshot`, `click`, `type`, `text`, `evaluate`) operates on the same browser session as the previous call. Mastra's `MCPClient` keeps one MCP session alive across `tool.execute()` invocations, so multi-step flows preserve browser state automatically:
+
+```typescript
+const tools = await mcp.listTools()
+const agentTool = tools.browserless_browserless_agent
+
+await agentTool.execute({
+  method: 'goto',
+  params: { url: 'https://example.com' },
+})
+await agentTool.execute({ method: 'snapshot' })
+
+const result = await agentTool.execute({
+  method: 'text',
+  params: { selector: 'h1' },
+})
+// result.content[0].text → "Example Domain"
+```
+
+Snapshot the page before extracting elements so the model knows what selectors are available. Pass selector references from the snapshot when calling `text` or `click`.
+
+:::note
+
+Visit the [`MCPClient` reference](/reference/tools/mcp-client) for the full configuration API.
+
+:::
+
+## Related
+
+- [MCP overview](/docs/mcp/overview)
+- [Browserless documentation](https://docs.browserless.io)
+- [Browserless cookbook for Mastra](https://github.com/browserless/mastra-cookbook)
+- [`@mastra/mcp` package](https://github.com/mastra-ai/mastra/tree/main/packages/mcp)
