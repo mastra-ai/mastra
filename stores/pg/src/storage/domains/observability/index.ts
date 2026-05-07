@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  EntityType,
   listTracesArgsSchema,
   ObservabilityStorage,
   TABLE_SCHEMAS,
@@ -27,6 +28,16 @@ import type {
   GetTraceLightResponse,
   LightSpanRecord,
   CreateIndexOptions,
+  GetEntityTypesArgs,
+  GetEntityTypesResponse,
+  GetEntityNamesArgs,
+  GetEntityNamesResponse,
+  GetServiceNamesArgs,
+  GetServiceNamesResponse,
+  GetEnvironmentsArgs,
+  GetEnvironmentsResponse,
+  GetTagsArgs,
+  GetTagsResponse,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
@@ -236,6 +247,92 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SPANS });
+  }
+
+  async getEntityTypes(_args: GetEntityTypesArgs): Promise<GetEntityTypesResponse> {
+    const tableName = getTableName({
+      indexName: TABLE_SPANS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const rows = await this.#db.client.manyOrNone<{ entityType: string }>(
+      `SELECT DISTINCT "entityType" FROM ${tableName} WHERE "entityType" IS NOT NULL ORDER BY "entityType"`,
+    );
+
+    const validTypes = new Set(Object.values(EntityType));
+    const entityTypes = rows
+      .map(row => row.entityType)
+      .filter((entityType): entityType is EntityType => validTypes.has(entityType as EntityType));
+
+    return { entityTypes };
+  }
+
+  async getEntityNames(args: GetEntityNamesArgs): Promise<GetEntityNamesResponse> {
+    const tableName = getTableName({
+      indexName: TABLE_SPANS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const conditions = [`"entityName" IS NOT NULL`];
+    const params: string[] = [];
+
+    if (args.entityType) {
+      params.push(args.entityType);
+      conditions.push(`"entityType" = $${params.length}`);
+    }
+
+    const rows = await this.#db.client.manyOrNone<{ entityName: string }>(
+      `SELECT DISTINCT "entityName" FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "entityName"`,
+      params,
+    );
+
+    return { names: rows.map(row => row.entityName) };
+  }
+
+  async getServiceNames(_args: GetServiceNamesArgs): Promise<GetServiceNamesResponse> {
+    const tableName = getTableName({
+      indexName: TABLE_SPANS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const rows = await this.#db.client.manyOrNone<{ serviceName: string }>(
+      `SELECT DISTINCT "serviceName" FROM ${tableName} WHERE "serviceName" IS NOT NULL ORDER BY "serviceName"`,
+    );
+
+    return { serviceNames: rows.map(row => row.serviceName) };
+  }
+
+  async getEnvironments(_args: GetEnvironmentsArgs): Promise<GetEnvironmentsResponse> {
+    const tableName = getTableName({
+      indexName: TABLE_SPANS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const rows = await this.#db.client.manyOrNone<{ environment: string }>(
+      `SELECT DISTINCT "environment" FROM ${tableName} WHERE "environment" IS NOT NULL ORDER BY "environment"`,
+    );
+
+    return { environments: rows.map(row => row.environment) };
+  }
+
+  async getTags(args: GetTagsArgs): Promise<GetTagsResponse> {
+    const tableName = getTableName({
+      indexName: TABLE_SPANS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const conditions = [`"tags" IS NOT NULL`, `jsonb_typeof("tags") = 'array'`];
+    const params: string[] = [];
+
+    if (args.entityType) {
+      params.push(args.entityType);
+      conditions.push(`"entityType" = $${params.length}`);
+    }
+
+    const rows = await this.#db.client.manyOrNone<{ tag: string }>(
+      `SELECT DISTINCT jsonb_array_elements_text("tags") AS tag
+      FROM ${tableName}
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY tag`,
+      params,
+    );
+
+    return { tags: rows.map(row => row.tag) };
   }
 
   public override get tracingStrategy(): {
