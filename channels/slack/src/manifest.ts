@@ -36,6 +36,9 @@ export const DEFAULT_BOT_SCOPES = [
   // Reactions and files
   'reactions:write',
   'files:read',
+
+  // Assistant mode (enables thread context for DMs)
+  'assistant:write',
 ] as const;
 
 /**
