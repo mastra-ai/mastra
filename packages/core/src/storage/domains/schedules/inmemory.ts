@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { InMemoryDB } from '../inmemory-db';
 import type { Schedule, ScheduleFilter, ScheduleTrigger, ScheduleTriggerListOptions, ScheduleUpdate } from './base';
 import { SchedulesStorage } from './base';
@@ -40,6 +41,12 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
     }
     if (filter?.workflowId) {
       rows = rows.filter(r => r.target.type === 'workflow' && r.target.workflowId === filter.workflowId);
+    }
+    if (filter?.ownerType !== undefined) {
+      rows = rows.filter(r => (r.ownerType ?? null) === filter.ownerType);
+    }
+    if (filter?.ownerId !== undefined) {
+      rows = rows.filter(r => (r.ownerId ?? null) === filter.ownerId);
     }
     rows.sort((a, b) => a.createdAt - b.createdAt);
     return rows.map(clone);
@@ -106,7 +113,12 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
   }
 
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {
-    this.db.scheduleTriggers.push(clone(trigger));
+    const stored: ScheduleTrigger = {
+      ...trigger,
+      id: trigger.id ?? randomUUID(),
+      triggerKind: trigger.triggerKind ?? 'schedule-fire',
+    };
+    this.db.scheduleTriggers.push(clone(stored));
   }
 
   async listTriggers(scheduleId: string, opts?: ScheduleTriggerListOptions): Promise<ScheduleTrigger[]> {

@@ -62,7 +62,7 @@ function prepareServeOptions({ mastra, inngest, functions: userFunctions = [], r
  * import { serve } from 'inngest/express';
  *
  * const serveExpress = createServe(serve);
- * app.use('/api/inngest', serveExpress({ mastra, inngest }));
+ * app.use('/inngest/api', serveExpress({ mastra, inngest }));
  * ```
  *
  * @example Fastify
@@ -74,12 +74,13 @@ function prepareServeOptions({ mastra, inngest, functions: userFunctions = [], r
  * fastify.route({
  *   method: ['GET', 'POST', 'PUT'],
  *   handler: serveFastify({ mastra, inngest }),
- *   url: '/api/inngest',
+ *   url: '/inngest/api',
  * });
  * ```
  *
  * @example Next.js
  * ```ts
+ * // app/inngest/api/route.ts — file path determines the route URL
  * import { createServe } from '@mastra/inngest';
  * import { serve } from 'inngest/next';
  *
@@ -105,7 +106,7 @@ export function createServe<THandler>(
  * ```ts
  * import { serve } from '@mastra/inngest';
  *
- * app.use('/api/inngest', async (c) => {
+ * app.use('/inngest/api', async (c) => {
  *   return serve({ mastra, inngest })(c);
  * });
  * ```

@@ -2,7 +2,9 @@
  * Shared types for WorkOS integration.
  */
 
-import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
+import type { JwtPayload } from '@mastra/auth';
+import type { EEUser, MastraFGAPermission, RoleMapping } from '@mastra/core/auth/ee';
+import type { RequestContext } from '@mastra/core/di';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
@@ -19,6 +21,8 @@ export interface WorkOSUser extends EEUser {
   organizationId?: string;
   /** Organization memberships with roles */
   memberships?: OrganizationMembership[];
+  /** Pre-resolved organization membership ID (if available) */
+  organizationMembershipId?: string;
 }
 
 /**
@@ -77,6 +81,27 @@ export interface WorkOSSessionConfig {
 }
 
 /**
+ * Mapping from a verified bearer JWT payload into a WorkOSUser.
+ *
+ * Use this when your WorkOS JWT template includes custom claims such as
+ * `organizationMembershipId`, tenant IDs, or service-account identifiers.
+ */
+export interface WorkOSJwtClaimsConfig {
+  /** Claim path for the Mastra user ID. Defaults to `sub`. */
+  userId?: string;
+  /** Claim path for the WorkOS user ID. Defaults to the resolved userId. */
+  workosId?: string;
+  /** Claim path for the user's email. Defaults to `email`. */
+  email?: string;
+  /** Claim path for the user's display name. Defaults to `name`. */
+  name?: string;
+  /** Claim path for the organization ID. Defaults to `org_id`. */
+  organizationId?: string;
+  /** Claim path for the organization membership ID used by FGA. */
+  organizationMembershipId?: string;
+}
+
+/**
  * Options for MastraAuthWorkos.
  */
 export interface MastraAuthWorkosOptions {
@@ -92,6 +117,38 @@ export interface MastraAuthWorkosOptions {
   session?: WorkOSSessionConfig;
   /** Custom provider name (default: 'workos') */
   name?: string;
+  /**
+   * Whether to fetch organization memberships during authentication.
+   *
+   * Memberships are required for FGA (Fine-Grained Authorization) checks.
+   * When FGA is not configured, set this to `false` to skip the extra
+   * network call to `listOrganizationMemberships` on every authenticated request.
+   *
+   * Defaults to `false`. Set to `true` when using `MastraFGAWorkos`.
+   */
+  fetchMemberships?: boolean;
+  /**
+   * Claim mapping for verified bearer JWTs.
+   *
+   * This is useful when your WorkOS JWT template includes custom claims such as
+   * `organizationMembershipId`, team IDs, or service-account identity fields.
+   */
+  jwtClaims?: WorkOSJwtClaimsConfig;
+  /**
+   * When `true`, trust the verified bearer JWT claims enough to construct a
+   * `WorkOSUser` even if `workos.userManagement.getUser()` does not apply.
+   *
+   * Use this for machine-to-machine or service-account tokens backed by a
+   * WorkOS custom JWT template.
+   *
+   * Defaults to `false`.
+   */
+  trustJwtClaims?: boolean;
+  /**
+   * Optional escape hatch for advanced bearer-token claim mapping.
+   * Runs after `jwtClaims` mapping and can override or augment the resolved user.
+   */
+  mapJwtPayloadToUser?: (payload: JwtPayload) => Partial<WorkOSUser> | null | undefined;
 }
 
 // ============================================================================
@@ -140,6 +197,87 @@ export interface MastraRBACWorkosOptions {
 
   /** Permission cache configuration */
   cache?: PermissionCacheOptions;
+}
+
+// ============================================================================
+// FGA Types
+// ============================================================================
+
+/**
+ * Configuration for mapping Mastra resource types to FGA resource types.
+ *
+ * @example
+ * ```typescript
+ * {
+ *   agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
+ * }
+ * ```
+ */
+export interface FGAResourceMappingEntry {
+  /** The FGA resource type slug in WorkOS */
+  fgaResourceType: string;
+  /**
+   * Parent FGA resource type slug used for batched WorkOS resource discovery.
+   *
+   * Set this when `deriveId` returns a parent resource ID without a concrete
+   * child resource ID. For example, an agent mapping with
+   * `fgaResourceType: 'team-agent'` can use `parentFgaResourceType: 'team'`.
+   */
+  parentFgaResourceType?: string;
+  /** Alias for parentFgaResourceType. */
+  parentResourceTypeSlug?: string;
+  /**
+   * Derive the FGA resource ID from request/user context.
+   * Return `undefined` to fall back to the raw Mastra resource ID.
+   */
+  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
+}
+
+export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, string>> & Record<string, string>;
+
+/**
+ * Options for MastraFGAWorkos provider.
+ *
+ * @example
+ * ```typescript
+ * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ *
+ * new MastraFGAWorkos({
+ *   resourceMapping: {
+ *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   },
+ *   permissionMapping: {
+ *     [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
+ *   },
+ * });
+ * ```
+ */
+export interface MastraFGAWorkosOptions {
+  /** WorkOS API key (defaults to WORKOS_API_KEY env var) */
+  apiKey?: string;
+  /** WorkOS Client ID (defaults to WORKOS_CLIENT_ID env var) */
+  clientId?: string;
+  /**
+   * Organization ID to scope FGA checks to.
+   * When a user has multiple organization memberships, this determines
+   * which membership to use for authorization checks.
+   * If not provided, uses the first membership found on the user object.
+   */
+  organizationId?: string;
+  /**
+   * Map Mastra resource types to WorkOS FGA resource types.
+   * Keys are Mastra resource types (e.g., 'agent', 'workflow', 'thread').
+   * Legacy aliases such as 'agents', 'workflows', and 'memory' are also accepted.
+   */
+  resourceMapping?: Record<string, FGAResourceMappingEntry>;
+  /**
+   * Map Mastra permission strings to WorkOS permission slugs.
+   * Keys are Mastra permissions such as MastraFGAPermissions.AGENTS_EXECUTE,
+   * values are WorkOS permission slugs.
+   */
+  permissionMapping?: MastraFGAPermissionMapping;
 }
 
 // ============================================================================

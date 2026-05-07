@@ -2,7 +2,7 @@ import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
-import { mergeVersionOverrides } from '@mastra/core/di';
+import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
@@ -13,7 +13,6 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import { MASTRA_VERSIONS_KEY } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -22,6 +21,7 @@ import { stringify } from 'superjson';
 import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
+import { MastraFGAPermissions } from '../fga-permissions';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -51,6 +51,7 @@ import {
   observeAgentResponseSchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
+  resumeStreamUntilIdleBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
@@ -65,6 +66,7 @@ import {
   validateBody,
   getEffectiveResourceId,
   getEffectiveThreadId,
+  enforceThreadAccess,
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
@@ -220,6 +222,7 @@ export interface SerializedAgent {
   defaultStreamOptionsLegacy?: Record<string, unknown>;
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
+
   source?: 'code' | 'stored';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
@@ -936,7 +939,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
       const codeAgents = mastra.listAgents();
@@ -1020,6 +1023,25 @@ export const LIST_AGENTS_ROUTE = createRoute({
         logger.debug('Could not fetch stored agents', { error: storageError });
       }
 
+      // Filter agents by FGA if configured
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      if (fgaProvider && user) {
+        const agentList = Object.values(serializedAgents) as unknown as Array<{ id: string }>;
+        const accessible = await fgaProvider.filterAccessible(
+          user,
+          agentList,
+          'agent',
+          MastraFGAPermissions.AGENTS_READ,
+        );
+        const accessibleSet = new Set(accessible.map(a => a.id));
+        for (const id of Object.keys(serializedAgents)) {
+          if (!accessibleSet.has(id)) {
+            delete serializedAgents[id];
+          }
+        }
+      }
+
       return serializedAgents;
     } catch (error) {
       return handleError(error, 'Error getting agents');
@@ -1039,7 +1061,8 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
     'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_READ },
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
@@ -1118,7 +1141,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
@@ -1162,11 +1185,20 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
-        if (effectiveThreadId && effectiveResourceId) {
+        if (effectiveThreadId) {
           const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
             const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            await validateThreadOwnership(thread, effectiveResourceId);
+            if (thread) {
+              await enforceThreadAccess({
+                mastra,
+                requestContext: serverRequestContext,
+                threadId: effectiveThreadId,
+                thread,
+                effectiveResourceId,
+                permission: MastraFGAPermissions.MEMORY_WRITE,
+              });
+            }
           }
         }
 
@@ -1238,11 +1270,20 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       }
 
       // Validate thread ownership if accessing an existing thread
-      if (effectiveThreadId && effectiveResourceId) {
+      if (effectiveThreadId) {
         const memory = await agent.getMemory({ requestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+          }
         }
       }
 
@@ -1299,11 +1340,20 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       }
 
       // Validate thread ownership if accessing an existing thread
-      if (effectiveThreadId && effectiveResourceId) {
+      if (effectiveThreadId) {
         const memory = await agent.getMemory({ requestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+          }
         }
       }
 
@@ -1420,7 +1470,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
@@ -1463,11 +1513,20 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
-        if (effectiveThreadId && effectiveResourceId) {
+        if (effectiveThreadId) {
           const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
             const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            await validateThreadOwnership(thread, effectiveResourceId);
+            if (thread) {
+              await enforceThreadAccess({
+                mastra,
+                requestContext: serverRequestContext,
+                threadId: effectiveThreadId,
+                thread,
+                effectiveResourceId,
+                permission: MastraFGAPermissions.MEMORY_WRITE,
+              });
+            }
           }
         }
 
@@ -1512,7 +1571,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     'Executes an agent with the provided messages and streams the response in real-time, also listens for background task completions and streams them in real-time',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
@@ -1819,7 +1878,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
   description: 'Resumes a suspended agent stream with custom resume data',
   tags: ['Agents'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
@@ -1862,11 +1921,20 @@ export const RESUME_STREAM_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-      if (effectiveThreadId && effectiveResourceId) {
+      if (effectiveThreadId) {
         const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
         if (memoryInstance) {
           const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext: serverRequestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+          }
         }
       }
 
@@ -1896,6 +1964,119 @@ export const RESUME_STREAM_ROUTE = createRoute({
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error resuming agent stream');
+    }
+  },
+});
+
+export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/resume-stream-until-idle',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: resumeStreamUntilIdleBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Resume agent stream until idle',
+  description:
+    'Resumes a suspended agent stream until idle with custom resume data, also listens for background task completions and streams them in real-time',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      sanitizeBody(params, ['tools']);
+
+      const {
+        resumeData,
+        runId,
+        toolCallId,
+        memory: memoryOption,
+        requestContext: bodyRequestContext,
+        versions,
+        ...rest
+      } = params;
+
+      // Honor body-scoped `requestContext.agentVersionId` so callers
+      // resuming a suspended draft / versioned agent get the right one.
+      // Mirrors RESUME_STREAM_ROUTE.
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(
+          serverRequestContext,
+          bodyRequestContext as Record<string, unknown> | undefined,
+        ),
+      });
+
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
+
+      stashVersionOverrides(serverRequestContext, versions);
+
+      let authorizedMemoryOption = memoryOption;
+      const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
+      // Use the same FGA-aware ownership gate as RESUME_STREAM_ROUTE — the
+      // older `validateThreadOwnership` only compared resource ids and
+      // skipped the FGA check entirely when either id was missing.
+      if (effectiveThreadId) {
+        const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memoryInstance) {
+          const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext: serverRequestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+          }
+        }
+      }
+
+      if (memoryOption || effectiveResourceId || effectiveThreadId) {
+        authorizedMemoryOption = {
+          ...memoryOption,
+          ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
+          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+        } as NonNullable<typeof authorizedMemoryOption>;
+      }
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        runId,
+        toolCallId,
+        ...restOptions,
+        requestContext: serverRequestContext,
+        memory: authorizedMemoryOption,
+        abortSignal,
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
+        : await agent.resumeStreamUntilIdle(resumeData, options);
 
       return streamResult.fullStream;
     } catch (error) {

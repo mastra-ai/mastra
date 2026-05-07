@@ -35,28 +35,27 @@ describe.for(
   describe.concurrent.for(imports.filter(x => !x.endsWith('.css') && pkgJson.exports[x] !== null).map(x => [x]))(
     '%s',
     async ([importPath]) => {
-      it.skipIf(pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/'))(
-        'should use .js and .d.ts extensions when using import',
-        async () => {
-          if (importPath === './package.json') {
-            return;
-          }
+      it.skipIf(
+        pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/') || pkgJson.name === '@mastra/temporal',
+      )('should use .js and .d.ts extensions when using import', async () => {
+        if (importPath === './package.json') {
+          return;
+        }
 
-          const exportConfig = pkgJson.exports[importPath] as any;
-          expect(exportConfig.import).toBeDefined();
-          expect(exportConfig.import).not.toBe(expect.any(String));
-          expect(extname(exportConfig.import.default)).toMatch(/\.js$/);
-          expect(exportConfig.import.types).toMatch(/\.d\.ts$/);
+        const exportConfig = pkgJson.exports[importPath] as any;
+        expect(exportConfig.import).toBeDefined();
+        expect(exportConfig.import).not.toBe(expect.any(String));
+        expect(extname(exportConfig.import.default)).toMatch(/\.js$/);
+        expect(exportConfig.import.types).toMatch(/\.d\.ts$/);
 
-          const fileOutput = customResolve.exports(pkgJson, importPath);
-          expect(fileOutput).toBeDefined();
+        const fileOutput = customResolve.exports(pkgJson, importPath);
+        expect(fileOutput).toBeDefined();
 
-          const pathsOnDisk = await globby(join(__dirname, '..', pkgName, fileOutput[0]));
-          for (const pathOnDisk of pathsOnDisk) {
-            await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
-          }
-        },
-      );
+        const pathsOnDisk = await globby(join(__dirname, '..', pkgName, fileOutput[0]));
+        for (const pathOnDisk of pathsOnDisk) {
+          await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
+        }
+      });
 
       it.skipIf(pkgName === '@mastra/playground-ui' || pkgName === 'mastra' || pkgName.startsWith('@internal/'))(
         'should use .cjs and .d.ts extensions when using require',

@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -53,6 +54,7 @@ export class ObserverRunner {
   private readonly observedMessageIds: Set<string>;
   private readonly resolveModel: ObservationModelResolver;
   private readonly tokenCounter: TokenCounter;
+  private mastra?: Mastra;
 
   /** Captured prompt/response from the last observer call (for repro capture). */
   lastExchange?: ObserverExchange;
@@ -62,15 +64,21 @@ export class ObserverRunner {
     observedMessageIds: Set<string>;
     resolveModel: ObservationModelResolver;
     tokenCounter: TokenCounter;
+    mastra?: Mastra;
   }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
     this.resolveModel = opts.resolveModel;
     this.tokenCounter = opts.tokenCounter;
+    this.mastra = opts.mastra;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
   }
 
   private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
-    return new Agent({
+    const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
       instructions: buildObserverSystemPrompt(
@@ -80,6 +88,10 @@ export class ObserverRunner {
       ),
       model,
     });
+    if (this.mastra) {
+      agent.__registerMastra(this.mastra);
+    }
+    return agent;
   }
 
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
