@@ -2874,4 +2874,9 @@ export interface InfrastructureStatusResponse {
     sandboxProvider: string | null;
     config: Array<{ key: string; value: string }>;
   };
+  registries: {
+    skillsSh: {
+      enabled: boolean;
+    };
+  };
 }

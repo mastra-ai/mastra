@@ -247,10 +247,17 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
         sandboxProvider: null,
         config: [],
       };
+      let registries: InfrastructureStatus['registries'] = {
+        skillsSh: { enabled: false },
+      };
 
       if (editor?.resolveBuilder) {
         const browsers = (editor as unknown as { __browsers?: Map<string, unknown> }).__browsers;
         const builder = await editor.resolveBuilder();
+        const builderRegistries = builder?.getRegistries?.();
+        registries = {
+          skillsSh: { enabled: builderRegistries?.skillsSh?.enabled === true },
+        };
         const configuration = builder?.getConfiguration?.()?.agent as
           | {
               browser?: { type?: string; config?: { provider?: string; env?: string } };
@@ -309,7 +316,7 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
         };
       }
 
-      return { channels, browser, workspace };
+      return { channels, browser, workspace, registries };
     } catch (error) {
       return handleError(error, 'Error getting infrastructure status');
     }

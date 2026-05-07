@@ -399,7 +399,37 @@ describe('GET /editor/builder/infrastructure', () => {
         sandboxProvider: null,
         config: [],
       },
+      registries: { skillsSh: { enabled: false } },
     });
+  });
+
+  it('reports skills.sh registry enabled flag from builder config', async () => {
+    const builder = {
+      getConfiguration: () => ({}),
+      getRegistries: () => ({ skillsSh: { enabled: true } }),
+    };
+    const editor = {
+      __browsers: new Map(),
+      resolveBuilder: vi.fn().mockResolvedValue(builder),
+    };
+    const mastra = createInfraMastra({ editor });
+
+    const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
+
+    expect(result.registries).toEqual({ skillsSh: { enabled: true } });
+  });
+
+  it('reports skills.sh registry disabled when builder lacks getRegistries', async () => {
+    const builder = { getConfiguration: () => ({}) };
+    const editor = {
+      __browsers: new Map(),
+      resolveBuilder: vi.fn().mockResolvedValue(builder),
+    };
+    const mastra = createInfraMastra({ editor });
+
+    const result = (await GET_INFRASTRUCTURE_STATUS_ROUTE.handler({ mastra } as any)) as any;
+
+    expect(result.registries).toEqual({ skillsSh: { enabled: false } });
   });
 
   it('reports configured channel provider info', async () => {
