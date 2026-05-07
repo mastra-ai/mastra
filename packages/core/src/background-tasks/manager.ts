@@ -11,10 +11,9 @@ import type {
   TaskFilter,
   TaskPayload,
   TaskListResult,
-  ToolExecutor,
   BackgroundTaskEvent,
-  BackgroundTaskProgressChunk,
 } from './types';
+import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 const TOPIC_DISPATCH = 'background-tasks';
 const TOPIC_RESULT = 'background-tasks-result';
@@ -29,11 +28,13 @@ export class BackgroundTaskManager {
 
   #mastra?: Mastra;
 
-  // Per-task contexts — keyed by task ID, holds closures from the caller's stream
-  private taskContexts: Map<string, TaskContext> = new Map();
+  // Per-task contexts — keyed by task ID, holds closures from the caller's stream.
+  /** @internal — read by the workflow-engine step bodies in workflow.ts */
+  taskContexts: Map<string, TaskContext> = new Map();
 
   // Track active AbortControllers for running tasks (for cancellation + timeout)
-  private activeAbortControllers: Map<string, AbortController> = new Map();
+  /** @internal — read by the workflow-engine step bodies in workflow.ts */
+  activeAbortControllers: Map<string, AbortController> = new Map();
 
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
@@ -43,6 +44,14 @@ export class BackgroundTaskManager {
 
   // Cleanup interval handle
   private cleanupInterval?: ReturnType<typeof setInterval>;
+
+  // Tracks the in-flight `init(pubsub)` so consumers can await readiness.
+  // Mastra fires init as fire-and-forget in `#ensureBackgroundTaskManager`,
+  // so without this any caller that hits `enqueue`/`resume`/`cancel`
+  // before init completes races against worker subscription + workflow
+  // registration. Public methods that depend on init await this promise
+  // before doing work.
+  private initPromise?: Promise<void>;
 
   constructor(config: BackgroundTaskManagerConfig = { enabled: false }) {
     this.config = {
@@ -71,13 +80,20 @@ export class BackgroundTaskManager {
   }
 
   async init(pubsub: PubSub): Promise<void> {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.#doInit(pubsub);
+    return this.initPromise;
+  }
+
+  async #doInit(pubsub: PubSub): Promise<void> {
     this.pubsub = pubsub;
 
     // Worker: subscribes with group so only one worker processes each task.
-    this.workerCallback = async (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
+    this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.dispatch') {
-        const nacked = await this.handleDispatch(event, nack);
-        if (nacked) return; // Don't ack — pubsub will redeliver
+        await this.handleDispatch(event);
+      } else if (event.type === 'task.resume') {
+        await this.handleResume(event);
       } else if (event.type === 'task.cancel') {
         this.handleCancel(event);
       }
@@ -91,6 +107,26 @@ export class BackgroundTaskManager {
       }
       await ack?.();
     };
+
+    // Register the workflow BEFORE subscribing the worker so that any
+    // dispatch event the worker picks up can immediately resolve the
+    // workflow on Mastra. Reversing this order races: a publish that
+    // arrives between `subscribe(TOPIC_DISPATCH)` and the workflow
+    // registration triggers `__getInternalWorkflow` to throw
+    // `Workflow with id __background-task not found`, the task stays at
+    // `running` forever, and the dispatch is silently dropped.
+    if (this.#mastra) {
+      // Dynamic import breaks the static cycle:
+      // agent → background-tasks → manager → workflow → workflows/evented →
+      // workflows/index → agent. Static import works at runtime but during
+      // module evaluation in test environments the cycle leaves `Workflow`
+      // undefined when `evented/workflow.ts` evaluates its `class extends`.
+      const { buildBackgroundTaskWorkflow } = await import('./workflow');
+      const workflow = buildBackgroundTaskWorkflow(this);
+      if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
+        this.#mastra.__registerInternalWorkflow(workflow as any);
+      }
+    }
 
     await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -135,6 +171,13 @@ export class BackgroundTaskManager {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot enqueue new tasks');
     }
+
+    // Mastra fires `init` as fire-and-forget. If a caller hits enqueue
+    // before init completes, the dispatch publish fires before the worker
+    // subscribes and the event is dropped (or, worse, lands on a worker
+    // whose Mastra hasn't yet registered the bg-task workflow → "Workflow
+    // with id __background-task not found"). Await readiness up front.
+    if (this.initPromise) await this.initPromise;
 
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? randomUUID(),
@@ -187,6 +230,7 @@ export class BackgroundTaskManager {
   }
 
   async cancel(taskId: string): Promise<void> {
+    if (this.initPromise) await this.initPromise;
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
     if (!task) {
@@ -210,6 +254,26 @@ export class BackgroundTaskManager {
       return;
     }
 
+    if (task.status === 'suspended') {
+      // No active executor or AbortController to tear down — the task is
+      // sitting on a workflow snapshot. Flip storage, publish, and tell the
+      // workflow run to cancel so the snapshot is cleaned up too.
+      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
+      if (this.#mastra) {
+        try {
+          const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+          const wrapper = await workflow.createRun({ runId: taskId });
+          await wrapper.cancel();
+        } catch (err) {
+          this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+        }
+      }
+      const cancelledTask = await storage.getTask(taskId);
+      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      this.deregisterTaskContext(taskId);
+      return;
+    }
+
     if (task.status === 'running') {
       await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
 
@@ -218,6 +282,21 @@ export class BackgroundTaskManager {
       if (controller) {
         controller.abort(new Error('Task cancelled'));
         this.activeAbortControllers.delete(taskId);
+      }
+
+      // Also cancel the workflow run so workflow storage reflects the
+      // cancellation (run status flips to 'canceled' and the workflow's
+      // abortSignal fires — redundant with the local AbortController above
+      // but keeps run history clean and propagates cross-process via the
+      // workflow.cancel pubsub event).
+      if (this.#mastra) {
+        try {
+          const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+          const wrapper = await workflow.createRun({ runId: taskId });
+          await wrapper.cancel();
+        } catch (err) {
+          this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+        }
       }
 
       const cancelledTask = await storage.getTask(taskId);
@@ -231,6 +310,53 @@ export class BackgroundTaskManager {
         runId: taskId,
       });
     }
+  }
+
+  /**
+   * Resume a suspended task. The tool executor must be re-registered via
+   * `registerTaskContext(taskId, ...)` before calling this if the original
+   * registration is gone (e.g. process restart) — the manager doesn't
+   * rehydrate executor closures from storage.
+   *
+   * `resumeData` is forwarded to the tool's `execute` options on the
+   * resumed run.
+   */
+  async resume(taskId: string, resumeData?: unknown): Promise<BackgroundTask> {
+    if (!this.#mastra) {
+      throw new Error('Mastra is not registered with this manager');
+    }
+
+    if (this.initPromise) await this.initPromise;
+
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+    if (task.status !== 'suspended') {
+      throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
+    }
+
+    const canRun = await this.checkConcurrency(task.agentId);
+    if (!canRun) {
+      // Resume sits outside the queue/fallback-sync paths — there's no
+      // synchronous caller to fall back to, and silently leaving the task
+      // suspended hides the failure from the caller. Throw and let the
+      // caller retry once a slot frees.
+      throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
+    }
+
+    // Hand off to the worker subscriber. `task.resume` rides the same
+    // `TOPIC_DISPATCH` + `WORKER_GROUP` exactly-once channel as
+    // `task.dispatch`, so any worker (including a different process from
+    // the one that suspended the task) can pick it up.
+    await this.pubsub.publish(TOPIC_DISPATCH, {
+      type: 'task.resume',
+      data: { taskId, resumeData },
+      runId: taskId,
+    });
+
+    return task;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {
@@ -333,6 +459,9 @@ export class BackgroundTaskManager {
    * - `task.completed` (status: 'completed') — task finished successfully
    * - `task.failed` (status: 'failed' or 'timed_out') — task errored or timed out
    * - `task.cancelled` (status: 'cancelled') — task was cancelled
+   * - `task.suspended` (status: 'suspended') — task paused via `suspend()` from
+   *   inside its tool executor; resume with `manager.resume(taskId, data)`
+   * - `task.resumed` (status: 'running') — suspended task resumed
    *
    * The stream stays open until the caller's AbortSignal fires (client disconnect).
    */
@@ -354,16 +483,9 @@ export class BackgroundTaskManager {
       'task.completed': 'completed',
       'task.failed': 'failed',
       'task.cancelled': 'cancelled',
+      'task.suspended': 'suspended',
+      'task.resumed': 'running',
     };
-
-    // const STATUS_EVENT_MAP: Record<string, string> = {
-    //   pending: 'task.pending',
-    //   running: 'task.running',
-    //   completed: 'task.completed',
-    //   failed: 'task.failed',
-    //   cancelled: 'task.cancelled',
-    //   timed_out: 'task.failed',
-    // };
 
     const CHUNK_EVENT_MAP: Record<string, string> = {
       'task.running': 'background-task-running',
@@ -371,6 +493,8 @@ export class BackgroundTaskManager {
       'task.completed': 'background-task-completed',
       'task.failed': 'background-task-failed',
       'task.cancelled': 'background-task-cancelled',
+      'task.suspended': 'background-task-suspended',
+      'task.resumed': 'background-task-resumed',
     };
 
     return new ReadableStream({
@@ -414,6 +538,15 @@ export class BackgroundTaskManager {
             case 'task.output':
               payload.payload = data.chunk;
               break;
+            case 'task.suspended':
+              payload.suspendPayload = data.suspendPayload;
+              payload.suspendedAt = data.suspendedAt;
+              payload.args = data.args;
+              break;
+            case 'task.resumed':
+              payload.startedAt = data.startedAt;
+              payload.args = data.args;
+              break;
           }
 
           try {
@@ -437,20 +570,12 @@ export class BackgroundTaskManager {
           }
         });
 
-        // 2. Emit snapshot of existing tasks
+        // 2. Emit snapshot of existing in-flight tasks (running + suspended).
         try {
           const storage = await manager.getStorage();
-          const { tasks: existing } = await storage.listTasks({
-            agentId,
-            runId,
-            threadId,
-            resourceId,
-            status: 'running',
-          });
-
-          for (const task of existing) {
-            if (abortSignal?.aborted) break;
-            try {
+          if (taskId) {
+            const task = await storage.getTask(taskId);
+            if (task && task.status === 'running') {
               controller.enqueue({
                 type: 'background-task-running',
                 payload: {
@@ -463,8 +588,34 @@ export class BackgroundTaskManager {
                   args: task.args,
                 },
               });
-            } catch {
-              break;
+            }
+          } else {
+            const { tasks: existing } = await storage.listTasks({
+              agentId,
+              runId,
+              threadId,
+              resourceId,
+              status: ['running'],
+            });
+
+            for (const task of existing) {
+              if (abortSignal?.aborted) break;
+              try {
+                controller.enqueue({
+                  type: 'background-task-running',
+                  payload: {
+                    taskId: task.id,
+                    toolName: task.toolName,
+                    toolCallId: task.toolCallId,
+                    agentId: task.agentId,
+                    runId: task.runId,
+                    startedAt: task.startedAt,
+                    args: task.args,
+                  },
+                });
+              } catch {
+                break;
+              }
             }
           }
         } catch {
@@ -496,6 +647,9 @@ export class BackgroundTaskManager {
   // --- Internal ---
 
   private async dispatch(task: BackgroundTask): Promise<void> {
+    // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
+    // exactly one worker handles the task. `handleDispatch` flips the
+    // task to running and starts the per-task workflow run.
     await this.pubsub.publish(TOPIC_DISPATCH, {
       type: 'task.dispatch',
       data: {
@@ -517,8 +671,8 @@ export class BackgroundTaskManager {
   /**
    * Handles a task.dispatch event. Returns true if the message was nacked (for retry).
    */
-  private async handleDispatch(event: Event, nack?: () => Promise<void>): Promise<boolean> {
-    const { taskId, args, timeoutMs } = event.data;
+  private async handleDispatch(event: Event): Promise<boolean> {
+    const { taskId } = event.data;
     const deliveryAttempt = event.deliveryAttempt ?? 1;
     let nacked = false;
 
@@ -535,137 +689,81 @@ export class BackgroundTaskManager {
     const runningTask = await storage.getTask(taskId);
     if (runningTask) await this.publishLifecycleEvent('task.running', runningTask);
 
-    // Look up per-task executor
-    const ctx = this.taskContexts.get(taskId);
-    if (!ctx?.executor) {
-      const errorInfo = { message: 'No executor registered for this task' };
-      await storage.updateTask(taskId, {
-        status: 'failed',
-        error: errorInfo,
-        completedAt: new Date(),
-      });
-      const failedTask = await storage.getTask(taskId);
-      if (failedTask) {
-        await this.publishLifecycleEvent('task.failed', failedTask);
-        await this.runLocalCompletionHooks(failedTask, 'failed', {
-          error: errorInfo,
-        });
-      }
-      this.deregisterTaskContext(taskId);
-      return false;
-    }
-
-    try {
-      void this.runLocalExecutionHook(runningTask!);
-      // Build onProgress callback that forwards to the task context hook
-      const progressThrottleMs = this.config.progressThrottleMs;
-      const shouldThrottleProgress =
-        typeof progressThrottleMs === 'number' && Number.isFinite(progressThrottleMs) && progressThrottleMs > 0;
-      let lastProgressEmitMs: number | undefined;
-
-      const onProgress = async (chunk: any) => {
-        if (shouldThrottleProgress) {
-          const now = Date.now();
-          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) {
-            return;
+    // Fire-and-forget the workflow run; the workflow step body owns
+    // executor invocation, retries, and suspend/resume. The local
+    // execution hook still runs here so callers see `onExecution` fire.
+    if (this.#mastra) {
+      if (runningTask) void this.runLocalExecutionHook(runningTask);
+      const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const run = await workflow.createRun({ runId: taskId });
+      void run
+        .start({ inputData: { taskId } })
+        .then(result => {
+          if (result.status !== 'suspended') {
+            void workflow.deleteWorkflowRunById(taskId);
           }
-          lastProgressEmitMs = now;
-        }
-
-        await this.publishLifecycleEvent('task.output', {
-          ...task,
-          chunk,
+        })
+        .catch(err => {
+          this.#mastra?.getLogger?.()?.error(`background-task workflow start failed for ${taskId}:`, err);
+        })
+        .finally(() => {
+          // Free the concurrency slot once the run terminates.
+          void this.drainPending();
         });
-      };
-
-      const result = await this.executeWithTimeout(taskId, ctx.executor, args, timeoutMs, onProgress);
-
-      const currentTask = await storage.getTask(taskId);
-      if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
-        this.deregisterTaskContext(taskId);
-        return false;
-      }
-
-      await storage.updateTask(taskId, {
-        status: 'completed',
-        result,
-        completedAt: new Date(),
-      });
-
-      const completedTask = await storage.getTask(taskId);
-      if (completedTask) {
-        // Run per-task hooks locally BEFORE publishing. Subscribers to the
-        // `task.completed` pubsub event (e.g. `bgManager.stream` in
-        // `streamUntilIdle`) fire in parallel with `handleResult`; if we
-        // don't run `onResult` first, a continuation can kick off before the
-        // tool result is flushed to memory and the LLM re-dispatches.
-        await this.runLocalCompletionHooks(completedTask, 'completed', { result });
-        await this.publishLifecycleEvent('task.completed', completedTask);
-      }
-    } catch (error: any) {
-      const currentTask = await storage.getTask(taskId);
-      if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
-        this.deregisterTaskContext(taskId);
-        return false;
-      }
-
-      if (error?.name === 'AbortError' || error?.message === 'Task cancelled') {
-        const status = currentTask.status as string;
-        if (status !== 'timed_out' && status !== 'cancelled') {
-          await storage.updateTask(taskId, {
-            status: 'timed_out',
-            error: { message: `Task timed out after ${timeoutMs}ms` },
-            completedAt: new Date(),
-          });
-          const timedOutTask = await storage.getTask(taskId);
-          if (timedOutTask) await this.publishLifecycleEvent('task.failed', timedOutTask);
-        }
-        return false;
-      }
-
-      const errorInfo = { message: error?.message ?? 'Unknown error', stack: error?.stack };
-
-      // Check retry policy — use nack to let pubsub handle redelivery
-      if (currentTask.maxRetries > 0 && deliveryAttempt <= currentTask.maxRetries) {
-        const shouldRetry = this.config.defaultRetries?.retryableErrors
-          ? this.config.defaultRetries.retryableErrors(error)
-          : true;
-
-        if (shouldRetry && nack) {
-          await storage.updateTask(taskId, {
-            status: 'pending',
-            error: undefined,
-            completedAt: undefined,
-            startedAt: undefined,
-          });
-          await nack();
-          nacked = true;
-        }
-      }
-
-      if (!nacked) {
-        await storage.updateTask(taskId, {
-          status: 'failed',
-          error: errorInfo,
-          completedAt: new Date(),
-        });
-        const failedTask = await storage.getTask(taskId);
-        if (failedTask) {
-          // Same ordering contract as the completed branch — run hooks
-          // locally (including `onResult`, which writes the failure into
-          // memory) before publishing so subscribers see consistent state.
-          await this.runLocalCompletionHooks(failedTask, 'failed', { error: errorInfo });
-          await this.publishLifecycleEvent('task.failed', failedTask);
-        }
-      }
-    } finally {
-      this.activeAbortControllers.delete(taskId);
-      if (!nacked) {
-        await this.drainPending();
-      }
     }
 
     return nacked;
+  }
+
+  /**
+   * Handles a task.resume event. Mirrors the workflow branch of handleDispatch
+   * but resumes an existing run from its suspended snapshot instead of starting
+   * a fresh one. Concurrency gating, suspended-status validation, and the
+   * `task.resumed` lifecycle publish all happen here so a different process
+   * than the one that suspended the task can drive the resume.
+   */
+  private async handleResume(event: Event): Promise<void> {
+    const { taskId, resumeData } = event.data;
+
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (!task || task.status !== 'suspended') {
+      // Either gone or already resumed/cancelled by another worker. Drop the
+      // event silently — the worker group ensures exactly-once delivery, but
+      // the task may have moved on between publish and pickup.
+      return;
+    }
+
+    await storage.updateTask(taskId, {
+      status: 'running',
+      startedAt: new Date(),
+      suspendPayload: undefined,
+      suspendedAt: undefined,
+    });
+    const resumedTask = await storage.getTask(taskId);
+    if (resumedTask) {
+      await this.publishLifecycleEvent('task.resumed', resumedTask);
+    }
+
+    if (!this.#mastra) return;
+    const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+    // `createRun({ runId })` reattaches to the existing snapshot when given a
+    // stable runId — we don't want a fresh run.
+    const run = await workflow.createRun({ runId: taskId });
+    void run
+      .resume({ resumeData })
+      .then(result => {
+        if (result.status !== 'suspended') {
+          void workflow.deleteWorkflowRunById(taskId);
+        }
+      })
+      .catch(err => {
+        this.#mastra?.getLogger?.()?.error(`background-task workflow resume failed for ${taskId}:`, err);
+      })
+      .finally(() => {
+        // Mirror dispatch's drain — resuming frees a slot when it terminates.
+        void this.drainPending();
+      });
   }
 
   /**
@@ -681,7 +779,14 @@ export class BackgroundTaskManager {
    * `task.id` — this method is a no-op there, and `handleResult` in the
    * dispatching process runs the hooks instead.
    */
-  private async runLocalCompletionHooks(
+  /**
+   * Terminal-state hooks only. Called when a task reaches `'completed'` or
+   * `'failed'`. Suspend is non-terminal — see `runLocalSuspendHooks` for that
+   * path.
+   *
+   * @internal — also called by the workflow-engine step bodies in workflow.ts
+   */
+  async runLocalCompletionHooks(
     task: BackgroundTask,
     status: 'completed' | 'failed',
     extras: { result?: unknown; error?: { message: string; stack?: string } },
@@ -760,7 +865,32 @@ export class BackgroundTaskManager {
     }
   }
 
-  private async runLocalExecutionHook(task: BackgroundTask): Promise<void> {
+  /**
+   * Per-task suspend hooks. Fires `ctx.onResult({ status: 'suspended', ... })`
+   * so the message list / memory pick up the suspension as the tool's
+   * current invocation state. Does NOT deregister the task context — resume
+   * needs the executor closure intact.
+   *
+   * @internal — called by the workflow-engine step bodies in workflow.ts
+   */
+  async runLocalSuspendHooks(task: BackgroundTask): Promise<void> {
+    const ctx = this.taskContexts.get(task.id);
+    if (!ctx) return;
+    await ctx.onExecution?.({
+      runId: task.runId,
+      taskId: task.id,
+      toolCallId: task.toolCallId,
+      toolName: task.toolName,
+      agentId: task.agentId,
+      threadId: task.threadId,
+      resourceId: task.resourceId,
+      startedAt: task.startedAt!,
+      suspendedAt: task.suspendedAt,
+    });
+  }
+
+  /** @internal — also called by the workflow-engine step bodies in workflow.ts */
+  async runLocalExecutionHook(task: BackgroundTask): Promise<void> {
     const ctx = this.taskContexts.get(task.id);
     if (!ctx) return;
 
@@ -870,29 +1000,16 @@ export class BackgroundTaskManager {
     this.deregisterTaskContext(taskId);
   }
 
-  private async executeWithTimeout(
-    taskId: string,
-    executor: ToolExecutor,
-    args: Record<string, unknown>,
-    timeoutMs: number,
-    onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>,
-  ): Promise<unknown> {
-    const abortController = new AbortController();
-    this.activeAbortControllers.set(taskId, abortController);
-
-    const timeoutHandle = setTimeout(() => {
-      abortController.abort(new Error(`Task timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    try {
-      return await executor.execute(args, { abortSignal: abortController.signal, onProgress });
-    } finally {
-      clearTimeout(timeoutHandle);
-    }
-  }
-
-  private async publishLifecycleEvent(
-    type: 'task.running' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'task.output',
+  /** @internal — also called by the workflow-engine step bodies in workflow.ts */
+  async publishLifecycleEvent(
+    type:
+      | 'task.running'
+      | 'task.completed'
+      | 'task.failed'
+      | 'task.cancelled'
+      | 'task.output'
+      | 'task.suspended'
+      | 'task.resumed',
     task: BackgroundTaskEvent,
   ): Promise<void> {
     await this.pubsub.publish(TOPIC_RESULT, {
@@ -911,6 +1028,8 @@ export class BackgroundTaskManager {
         chunk: task.chunk,
         completedAt: task.completedAt,
         startedAt: task.startedAt,
+        suspendPayload: task.suspendPayload,
+        suspendedAt: task.suspendedAt,
       },
       runId: task.id,
     });
