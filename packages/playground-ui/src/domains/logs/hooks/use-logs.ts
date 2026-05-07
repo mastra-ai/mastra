@@ -19,14 +19,15 @@ function getNextPageParam(lastPage: ListLogsResponse | undefined, _allPages: unk
 
 /** Deduplicates logs across loaded pages. Offset-based pagination duplicates rows at the page
  *  boundary whenever new logs are inserted between sequential `fetchNextPage` calls — without
- *  this filter the duplicates produce duplicate React keys and chaotic virtualizer offsets. */
+ *  this filter the duplicates produce duplicate React keys and chaotic virtualizer offsets.
+ *  Falls back to the full serialized record when `logId` is absent so logs that happen to
+ *  share `(timestamp, message, data)` but differ in other fields aren't collapsed. */
 function selectLogs(data: { pages: ListLogsResponse[] }) {
   const seen = new Set<string>();
   const result = [];
   for (const page of data.pages) {
     for (const log of page.logs ?? []) {
-      const ts = log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp;
-      const key = log.logId ?? `${ts}|${log.message ?? ''}|${log.data ? JSON.stringify(log.data) : ''}`;
+      const key = log.logId ?? JSON.stringify(log);
       if (seen.has(key)) continue;
       seen.add(key);
       result.push(log);
