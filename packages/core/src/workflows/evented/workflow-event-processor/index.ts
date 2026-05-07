@@ -370,8 +370,10 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
+      // get the step from the parent workflow and process it if it's a loop
       const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
+        // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
           {
             workflow: parentWorkflow as unknown as Workflow,
