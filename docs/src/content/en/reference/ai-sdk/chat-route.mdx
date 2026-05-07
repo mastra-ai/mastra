@@ -74,6 +74,14 @@ export const mastra = new Mastra({
     defaultValue: "'v5'",
   },
   {
+    name: 'historySource',
+    type: "'client' | 'server'",
+    description:
+      "Controls where chat history comes from. Pass `'client'` to accept `messages` from the request body. Pass `'server'` to load history from Mastra memory and accept only the new `message` or regeneration `messageId` from the browser.",
+    isOptional: true,
+    defaultValue: "'client'",
+  },
+  {
     name: 'path',
     type: 'string',
     description: 'The route path (e.g., `/chat` or `/chat/:agentId`). Include `:agentId` for dynamic agent routing.',
@@ -133,7 +141,7 @@ export const mastra = new Mastra({
 
 ## Additional configuration
 
-You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent:
+In client history mode, you can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent:
 
 ```typescript
 const { error, status, sendMessage, messages, regenerate, stop } = useChat({
@@ -154,3 +162,57 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   }),
 })
 ```
+
+## Server history mode
+
+Use `historySource: 'server'` when the agent has [memory](/docs/memory/overview) and the server should load stored conversation history. This mode accepts only the compact request fields listed below and rejects browser-provided history, memory scope, request context, and execution options.
+
+The request body can include:
+
+- `id`: The chat ID from AI SDK UI. If the route has a server-controlled resource but no thread, Mastra uses this as the thread ID.
+- `message`: The latest user message for `submit-message`.
+- `messageId`: The assistant message ID to regenerate for `regenerate-message`.
+- `trigger`: The AI SDK UI trigger.
+- `resumeData` and `runId`: Resume data for suspended executions or tool approvals.
+
+Configure the route with server-controlled memory scope:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+        historySource: 'server',
+        defaultOptions: {
+          memory: {
+            resource: 'user-123',
+          },
+        },
+      }),
+    ],
+  },
+})
+```
+
+Use [`prepareServerHistoryRequest()`](/reference/ai-sdk/prepare-server-history-request) on the client so AI SDK UI sends only the new message, regeneration target, or approval resume data:
+
+```typescript
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+import { prepareServerHistoryRequest } from '@mastra/ai-sdk/transport'
+
+const { messages, sendMessage, regenerate } = useChat({
+  id: 'thread-123',
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest: prepareServerHistoryRequest(),
+  }),
+})
+```
+
+If a stream is aborted while an assistant response is incomplete, server-history mode relies on server-marked response metadata to remove that incomplete assistant message before recalling stored history for the next turn.

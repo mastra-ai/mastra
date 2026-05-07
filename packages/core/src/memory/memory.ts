@@ -747,6 +747,8 @@ https://mastra.ai/en/docs/memory/overview`,
           new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            saveMessages: this.saveMessages.bind(this),
+            deleteMessages: this.deleteMessages.bind(this),
           }),
         );
       }
@@ -906,6 +908,8 @@ https://mastra.ai/en/docs/memory/overview`,
           new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            saveMessages: this.saveMessages.bind(this),
+            deleteMessages: this.deleteMessages.bind(this),
           }),
         );
       }

@@ -250,37 +250,57 @@ Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/u
 
 ## Using Mastra Memory
 
-When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
+When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Use server history mode to send only the new message from the client instead of the full conversation history.
 
 Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
+
+Configure the route with `historySource: 'server'`. The server must control the memory resource. If the route provides a resource but no thread, the request `id` is used as the thread ID.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+        historySource: 'server',
+        defaultOptions: {
+          memory: {
+            resource: 'user-123',
+          },
+        },
+      }),
+    ],
+  },
+})
+```
+
+On the client, use `prepareServerHistoryRequest()` from `@mastra/ai-sdk/transport`. It sends the latest submitted message for normal turns, the target message ID for regeneration, and compact resume data for tool approval responses.
 
 ```typescript
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
+import { prepareServerHistoryRequest } from '@mastra/ai-sdk/transport'
 
 const { messages, sendMessage } = useChat({
+  id: 'user-thread-123',
   transport: new DefaultChatTransport({
-    api: 'http://localhost:4111/chat/weatherAgent',
-    prepareSendMessagesRequest({ messages }) {
-      return {
-        body: {
-          messages: [messages[messages.length - 1]],
-          memory: {
-            thread: 'user-thread-123',
-            resource: 'user-123',
-          },
-        },
-      }
-    },
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest: prepareServerHistoryRequest(),
   }),
 })
 ```
 
-Set `memory.thread` and `memory.resource` from your app's own state, such as URL params, auth context, or your database.
+Server history mode accepts only `id`, `message`, `messageId`, `trigger`, `resumeData`, and `runId`. It rejects browser-provided `messages`, `memory`, `threadId`, `resourceId`, `requestContext`, and execution options. Use server code to set memory scope and execution options.
+
+When a browser disconnects or aborts while an assistant response is still being streamed, Mastra treats server memory as the source of truth. Incomplete assistant responses marked by the server are removed on the next server-history turn before stored history is recalled.
 
 See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
 
-[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) already work with memory. Configure the client to send only the new message and include the thread and resource identifiers.
+[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) both support server history mode.
 
 ### `useCompletion()`
 

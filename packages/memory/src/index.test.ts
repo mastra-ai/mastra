@@ -270,6 +270,113 @@ describe('Memory', () => {
       expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
       expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
+
+    it('should preserve the original createdAt when saving the same message id again', async () => {
+      const threadId = 'thread-save-duplicate';
+      const resourceId = 'resource-save-duplicate';
+      const originalCreatedAt = new Date('2024-01-01T10:00:00Z');
+
+      await memory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'duplicate-msg',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: originalCreatedAt,
+            content: { format: 2, parts: [{ type: 'text', text: 'Original answer' }] },
+          },
+        ],
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'duplicate-msg',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-02T10:00:00Z'),
+            content: { format: 2, parts: [{ type: 'text', text: 'Updated answer' }] },
+          },
+        ],
+      });
+
+      const recalled = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(1);
+      expect(recalled.messages[0]).toEqual(
+        expect.objectContaining({
+          id: 'duplicate-msg',
+          createdAt: originalCreatedAt,
+          content: { format: 2, parts: [{ type: 'text', text: 'Updated answer' }] },
+        }),
+      );
+    });
+
+    it('should preserve createdAt only within the same thread and resource', async () => {
+      const originalCreatedAt = new Date('2024-01-01T10:00:00Z');
+      const otherCreatedAt = new Date('2024-01-02T10:00:00Z');
+
+      await memory.createThread({
+        threadId: 'thread-save-duplicate-scope-1',
+        resourceId: 'resource-save-duplicate-scope-1',
+      });
+      await memory.createThread({
+        threadId: 'thread-save-duplicate-scope-2',
+        resourceId: 'resource-save-duplicate-scope-2',
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'duplicate-scoped-msg',
+            threadId: 'thread-save-duplicate-scope-1',
+            resourceId: 'resource-save-duplicate-scope-1',
+            role: 'assistant',
+            createdAt: originalCreatedAt,
+            content: { format: 2, parts: [{ type: 'text', text: 'Original answer' }] },
+          },
+        ],
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'duplicate-scoped-msg',
+            threadId: 'thread-save-duplicate-scope-2',
+            resourceId: 'resource-save-duplicate-scope-2',
+            role: 'assistant',
+            createdAt: otherCreatedAt,
+            content: { format: 2, parts: [{ type: 'text', text: 'Other answer' }] },
+          },
+        ],
+      });
+
+      const recalled = await memory.recall({
+        threadId: 'thread-save-duplicate-scope-2',
+        resourceId: 'resource-save-duplicate-scope-2',
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(1);
+      expect(recalled.messages[0]).toEqual(
+        expect.objectContaining({
+          id: 'duplicate-scoped-msg',
+          createdAt: otherCreatedAt,
+          content: { format: 2, parts: [{ type: 'text', text: 'Other answer' }] },
+        }),
+      );
+    });
   });
 
   describe('cloneThread', () => {
@@ -2151,6 +2258,83 @@ describe('Memory', () => {
           filter: { message_id: { $in: [messageId] } },
         });
       });
+    });
+
+    it('should delete existing message vectors before upserting replacements', async () => {
+      const mockVector: MastraVector = {
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        query: vi.fn(),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        createIndex: vi.fn(),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 2 }),
+        id: 'mock-vector',
+      } as any;
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2]],
+        }),
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: {
+          semanticRecall: true,
+          generateTitle: false,
+        },
+      });
+      const threadId = 'thread-vector-replace';
+      const resourceId = 'resource-vector-replace';
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Vector replace',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-vector-replace',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Replacement text' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-vector-replace',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Updated replacement text' }] },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+        ],
+      });
+
+      expect(mockVector.deleteVectors).toHaveBeenCalledTimes(2);
+      expect(mockVector.deleteVectors).toHaveBeenNthCalledWith(2, {
+        indexName: 'memory_messages',
+        filter: { message_id: { $in: ['msg-vector-replace'] } },
+      });
+      expect(mockVector.upsert).toHaveBeenCalledTimes(2);
+      expect((mockVector.deleteVectors as any).mock.invocationCallOrder[1]).toBeLessThan(
+        (mockVector.upsert as any).mock.invocationCallOrder[1],
+      );
     });
 
     it('should delete thread vectors with default separator', async () => {
