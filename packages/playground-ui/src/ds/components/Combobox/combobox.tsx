@@ -73,10 +73,7 @@ export function Combobox({
             className,
           )}
         >
-          {/* Outer flex MUST allow shrink (min-w-0). `truncate` (overflow:hidden + ellipsis)
-              sits on the INNER span around the value text — never on the outer wrapper,
-              otherwise badges/indicators absolutely positioned on `start` (e.g. provider
-              connection-status dot) would get clipped. */}
+          {/* Keep truncation off the outer wrapper so start adornments are not clipped. */}
           <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
             <span className="truncate">

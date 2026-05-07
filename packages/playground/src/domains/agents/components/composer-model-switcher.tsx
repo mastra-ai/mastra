@@ -6,14 +6,7 @@ import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
-// Inner pills are TRANSPARENT — the outer wrapper (in thread.tsx) carries the visible
-// pill shape, bg, and border. Each pill keeps per-corner radii on its OUTER edge so its
-// hover/active fill is clipped to the pill outline (no overflow-hidden anywhere — keeps
-// the connection-status dot on the provider icon visible).
-//
-// `min-w-0` resets Combobox base `min-w-32` (128px) so icon-only collapse actually shrinks.
-// `!` (Tailwind v4 important) on per-corner radii guarantees the longhand wins regardless
-// of CSS emit order vs. the base `rounded-lg` shorthand.
+// Triggers stay transparent; the wrapper owns the shared pill border/background.
 const COMPOSER_TRIGGER_CLASS = [
   'w-auto min-w-0 px-3 gap-1',
   'border-0 bg-transparent',
@@ -85,10 +78,6 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   }
 
   return (
-    // No overflow-hidden — keeps the provider's connection-status dot visible. Each pill
-    // declares `rounded-none` first (tw-merge kills Combobox base `rounded-lg` cleanly,
-    // since both target the all-corners shorthand group), then layers per-corner radii.
-    // Provider's `border-r-0` + Model's full border = shared 1px divider at the seam.
     <div className="inline-flex items-stretch max-w-full">
       <LLMProviders
         value={currentModelProvider}
@@ -97,14 +86,11 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
         className={cn(
           COMPOSER_TRIGGER_CLASS,
           'shrink-0',
-          // Left pill end. `!` modifier forces longhand wins over base `rounded-lg`.
           'rounded-none! rounded-tl-full! rounded-bl-full!',
-          // Container-narrow: collapse provider to icon-only — hide value text + chevron,
-          // tighten padding.
+          // Collapse provider to icon-only in narrow containers.
           '@max-md:px-2 @max-md:[&>span>span]:hidden @max-md:[&>svg]:hidden',
         )}
       />
-      {/* Vertical divider between the two pills */}
       <div className="w-px self-stretch bg-border1" aria-hidden />
       <LLMModels
         llmId={currentModelProvider}
@@ -113,20 +99,12 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
         open={modelOpen}
         onOpenChange={setModelOpen}
         size="md"
-        className={cn(
-          COMPOSER_TRIGGER_CLASS,
-          // Right pill end. Same reset-then-layer pattern as the provider.
-          'rounded-none! rounded-tr-full! rounded-br-full!',
-          // Cap width — long model names truncate via the Combobox internal `truncate` span.
-          'max-w-[10rem]',
-        )}
+        className={cn(COMPOSER_TRIGGER_CLASS, 'rounded-none! rounded-tr-full! rounded-br-full!', 'max-w-[10rem]')}
       />
     </div>
   );
 };
 
-/** Renders the missing-API-key banner above the composer action row. Returns null when the
- *  provider is connected. Uses TanStack Query — calls dedupe with ComposerModelSwitcher. */
 export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) => {
   const { data: agent } = useAgent(agentId);
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();

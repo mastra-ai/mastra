@@ -251,19 +251,9 @@ const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: Co
 
   return (
     <>
-      {/* `flex-wrap-reverse`: lines stack BOTTOM-UP on the cross axis. Source order is
-          [switcher, buttons] (natural reading order). When both fit: single row, switcher
-          left + buttons right via `ml-auto`. When they don't fit: flex packs in source order
-          — switcher on the FIRST line (now visually at bottom because of wrap-reverse) and
-          buttons on the SECOND line (visually on top). `shrink-0` on both forces the wrap
-          instead of letting flex squash them. No `order-*` hack, no breakpoint magic —
-          wraps exactly when content can't fit. */}
+      {/* Keep action buttons above the switcher when this row wraps. */}
       <div className="flex flex-wrap-reverse items-center gap-2 px-1.5 pb-1.5">
         {showModelSwitcher && agentId && (
-          // Outer wrapper carries the visible pill shape, base bg, and outer border for the
-          // whole switcher group. Inner triggers (in ComposerModelSwitcher) are transparent
-          // with per-corner radii on their outer edges, so their hover/active fills clip to
-          // the pill shape without `overflow-hidden`.
           <div className="shrink-0 max-w-full rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
             <ComposerModelSwitcher agentId={agentId} />
           </div>
