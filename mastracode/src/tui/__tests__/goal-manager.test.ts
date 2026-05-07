@@ -9,6 +9,18 @@ vi.mock('@mastra/core/agent', () => ({
   Agent: mocks.agentConstructor,
 }));
 
+vi.mock('@mastra/core/processors', () => ({
+  PrefillErrorHandler: class {
+    readonly id = 'prefill-error-handler';
+  },
+  ProviderHistoryCompat: class {
+    readonly id = 'provider-history-compat';
+  },
+  StreamErrorRetryProcessor: class {
+    readonly id = 'stream-error-retry-processor';
+  },
+}));
+
 vi.mock('../../agents/model.js', () => ({
   resolveModel: vi.fn(() => 'mock-model'),
 }));
@@ -155,6 +167,31 @@ describe('GoalManager', () => {
     expect(manager.getGoal()?.turnsUsed).toBe(1);
     expect(result.continuation).toContain('<system-reminder type="goal-judge">');
     expect(result.continuation).toContain('Need one more step.');
+  });
+
+  it('configures provider compatibility and retry processors on the judge agent', async () => {
+    mocks.stream.mockResolvedValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+      getFullOutput: vi.fn().mockResolvedValue({ object: { decision: 'done', reason: 'Complete.' } }),
+    });
+    mocks.agentConstructor.mockImplementation(function () {
+      return { stream: mocks.stream };
+    });
+
+    const manager = new GoalManager();
+    manager.setGoal('finish the task', 'openai/gpt-5.4-mini');
+
+    await manager.evaluateAfterTurn(createState());
+
+    const agentConfig = mocks.agentConstructor.mock.calls[0]?.[0] as
+      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
+      | undefined;
+    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toEqual(['provider-history-compat']);
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+      'provider-history-compat',
+    ]);
   });
 
   it('answers goal-mode questions with the judge using exact option labels', async () => {

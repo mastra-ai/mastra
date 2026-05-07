@@ -10,6 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
 import { z } from 'zod';
 
 import { resolveModel } from '../agents/model.js';
@@ -433,6 +434,8 @@ export class GoalManager {
         instructions: JUDGE_SYSTEM_PROMPT,
         model,
         ...(memory ? { memory } : {}),
+        inputProcessors: [new ProviderHistoryCompat()],
+        errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
       });
     } catch {
       return null;
