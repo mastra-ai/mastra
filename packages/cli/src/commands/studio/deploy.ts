@@ -10,6 +10,7 @@ import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from './project-config.js';
 
@@ -296,6 +297,7 @@ export async function deployAction(
     yes?: boolean;
     config?: string;
     skipBuild?: boolean;
+    skipPreflight?: boolean;
     debug?: boolean;
     envFile?: string;
   },
@@ -306,6 +308,7 @@ export async function deployAction(
     throw new Error('MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set');
   }
   const autoAccept = opts.yes ?? isHeadless;
+  const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
 
   p.intro('mastra studio deploy');
 
@@ -445,6 +448,16 @@ export async function deployAction(
     p.log.step(`Found ${envCount} env var(s)`);
   } else {
     p.log.step('No env vars found in selected env file');
+  }
+
+  // Pre-upload validation — catch USER-attributable errors before shipping.
+  if (!skipPreflight) {
+    const issues = await preflightBuildOutput(targetDir, envVars);
+    const proceed = await printPreflightIssues(issues, { autoAccept });
+    if (!proceed) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
   }
 
   t = performance.now();
