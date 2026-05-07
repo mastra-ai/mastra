@@ -331,8 +331,8 @@ function addAction(
 
   const command = parent.command(name).description(descriptor.description);
   for (const positional of descriptor.positionals) {
-    // Keep identity args optional at Commander level so `--schema` can run without real IDs;
-    // execution still validates them for actual requests.
+    // Keep identity args optional at Commander level so `--schema` can run without real IDs.
+    // Actual requests still validate IDs before making an HTTP request.
     command.argument(`[${positional}]`);
   }
   if (descriptor.acceptsInput) {
@@ -353,9 +353,7 @@ function addAction(
   command.action(async (...args: unknown[]) => {
     const command = args.at(-1) as CommanderCommand;
     // Commander passes all declared args before the command object; split identity IDs from JSON input.
-    const positionalValues = args.slice(0, -1).filter(value => typeof value === 'string') as string[];
-    const identityValues = positionalValues.slice(0, descriptor.positionals.length);
-    const maybeInput = descriptor.acceptsInput ? positionalValues[descriptor.positionals.length] : undefined;
+    const { identityValues, maybeInput } = splitActionArgs(descriptor, args.slice(0, -1));
     const analytics = getAnalytics();
     const startedAt = process.hrtime();
 
@@ -376,6 +374,27 @@ function addAction(
       await shutdownApiAnalytics(analytics);
     }
   });
+}
+
+function splitActionArgs(
+  descriptor: ApiCommandDescriptor,
+  args: unknown[],
+): { identityValues: string[]; maybeInput: string | undefined } {
+  const values = args.filter(value => typeof value === 'string') as string[];
+  const possibleInput = descriptor.acceptsInput ? values.at(-1) : undefined;
+
+  if (possibleInput && looksLikeJsonObject(possibleInput) && values.length <= descriptor.positionals.length) {
+    return { identityValues: values.slice(0, -1), maybeInput: possibleInput };
+  }
+
+  return {
+    identityValues: values.slice(0, descriptor.positionals.length),
+    maybeInput: descriptor.acceptsInput ? values[descriptor.positionals.length] : undefined,
+  };
+}
+
+function looksLikeJsonObject(value: string): boolean {
+  return value.trimStart().startsWith('{');
 }
 
 /**

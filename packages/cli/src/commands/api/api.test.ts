@@ -117,6 +117,27 @@ describe('api command executor', () => {
     expect(JSON.parse(stdout)).toEqual({ data: { text: 'hello', usage: { totalTokens: 12 }, spanId: 'span-1' } });
   });
 
+  it('does not treat JSON input as an identity argument', async () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'mastra',
+      'api',
+      '--url',
+      'https://example.com/api',
+      'agent',
+      'run',
+      '{"messages":[{"role":"user","content":"hi"}]}',
+    ]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.parse(stderr)).toMatchObject({
+      error: { code: 'MISSING_ARGUMENT', message: 'Missing required argument <agentId>' },
+    });
+  });
+
   it('wraps raw tool execution input in data before sending the request body', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ temperature: 72 }));
 
