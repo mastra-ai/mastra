@@ -11,8 +11,9 @@ import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { MastraModelOutput } from '../stream/base/output';
+import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
-import { getChatModule } from './chat-lazy';
+import { chatModule, getChatModule } from './chat-lazy';
 
 import {
   formatArgsSummary,
@@ -114,6 +115,15 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onSubscribedMessage?: ChannelHandlerConfig;
+}
+
+/**
+ * Options forwarded to Chat SDK's `StreamingPlan` when streaming agent
+ * responses to the platform.
+ */
+export interface ChannelsStreamingOptions {
+  /** Fallback adapters: minimum interval between post+edit cycles in ms (default: 500). */
+  updateIntervalMs?: number;
 }
 
 /** Configuration for agent chat channels. */
@@ -236,6 +246,30 @@ export interface ChannelConfig {
   tools?: boolean;
 
   /**
+   * Live-stream agent responses to the platform as they're generated.
+   *
+   * When enabled (default), the agent's `fullStream` is piped through a
+   * Chat SDK `StreamingPlan` so:
+   * - text deltas update the message in place (Slack streamer.append, post+edit elsewhere)
+   * - tool calls render as native progress cards (`task_update` chunks)
+   * - reasoning/file/approval/tripwire events still post out-of-band
+   *
+   * Pass `false` to fall back to the legacy buffer-and-post-once behavior
+   * (useful for cost-sensitive deployments, debugging, or workspaces
+   * with strict rate limits).
+   *
+   * Object form tunes streaming behavior:
+   * - `updateIntervalMs` — fallback post+edit cadence on non-native adapters
+   *
+   * @default true
+   * @example
+   * ```ts
+   * streaming: { updateIntervalMs: 750 }
+   * ```
+   */
+  streaming?: boolean | ChannelsStreamingOptions;
+
+  /**
    * Additional options passed directly to the Chat SDK.
    * Use this for advanced configuration not exposed by Mastra.
    *
@@ -332,6 +366,14 @@ async function headContentType(url: string, logger?: IMastraLogger): Promise<str
   }
 }
 
+function resolveStreamingConfig(
+  config: boolean | ChannelsStreamingOptions | undefined,
+): false | ChannelsStreamingOptions {
+  if (config === false) return false;
+  if (config === true || config === undefined) return {};
+  return config;
+}
+
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
  * to the Mastra pipeline (thread mapping → agent.stream → thread.post).
@@ -364,6 +406,8 @@ export class AgentChannels {
   private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
+  /** Resolved streaming config: `false` = legacy buffer-and-post, options object = stream via `StreamingPlan`. */
+  private streamingConfig: false | ChannelsStreamingOptions;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
   /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
@@ -396,6 +440,7 @@ export class AgentChannels {
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
+    this.streamingConfig = resolveStreamingConfig(config.streaming);
   }
 
   /**
@@ -970,15 +1015,24 @@ export class AgentChannels {
       textSegments.push(historyBlock);
     }
 
+    // Always emit a system-reminder so the agent can reference the
+    // platform message id / channel id when calling tools (e.g. adding
+    // a reaction). Author prefix is only added for non-DMs where
+    // multi-user context matters.
+    const reminderLines: string[] = [
+      `Event: ${sdkThread.isDM ? 'message' : 'mention'}`,
+      `Message ID: ${message.id}`,
+      `Channel ID: ${sdkThread.channelId}`,
+      `Thread ID: ${sdkThread.id}`,
+    ];
+    if (!sdkThread.isDM) {
+      reminderLines.push('You were mentioned in this message. Respond to the user.');
+    }
+    textSegments.push(`<system-reminder>\n${reminderLines.join('\n')}\n</system-reminder>`);
+
     if (sdkThread.isDM) {
-      // DMs: just the message text — system message already covers identity
       textSegments.push(message.text);
     } else {
-      // Non-DM: prepend metadata and author prefix for multi-user context
-      const reminderLines = [`Event: mention`, `Message ID: ${message.id}`];
-      reminderLines.push('You were mentioned in this message. Respond to the user.');
-      textSegments.push(`<system-reminder>\n${reminderLines.join('\n')}\n</system-reminder>`);
-
       let authorPrefix = '';
       if (authorMention) {
         authorPrefix = authorName ? `${authorName} (${authorMention})` : authorMention;
@@ -1193,9 +1247,11 @@ export class AgentChannels {
     const adapterConfig = this.adapterConfigs[platform];
     const useCards = adapterConfig?.cards !== false;
 
+    const streamingEnabled = this.streamingConfig !== false;
+    const streamingOptions = this.streamingConfig === false ? undefined : this.streamingConfig;
+    const hasStreamingOptions = !!streamingOptions && streamingOptions.updateIntervalMs !== undefined;
+
     // Per-stream rendering state
-    let textBuffer = '';
-    let typingStarted = false;
     interface TrackedTool {
       displayName: string;
       argsSummary: string;
@@ -1214,16 +1270,24 @@ export class AgentChannels {
       });
     }
 
+    let typingStarted = false;
     let typingInterval: ReturnType<typeof setInterval> | undefined;
+    // Track current status so we only call startTyping(status) when it
+    // actually changes — avoids hammering the platform API on every
+    // text-delta. Adapters that support status text (Slack Assistant
+    // mode) display this; others just show a generic typing indicator.
+    let currentTypingStatus: string | undefined;
 
-    const ensureTyping = async () => {
-      if (!typingStarted) {
-        typingStarted = true;
-        try {
-          await sdkThread.startTyping();
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
-        }
+    const ensureTyping = async (status?: string) => {
+      const isFirst = !typingStarted;
+      const statusChanged = status !== undefined && status !== currentTypingStatus;
+      if (!isFirst && !statusChanged) return;
+      typingStarted = true;
+      if (status !== undefined) currentTypingStatus = status;
+      try {
+        await sdkThread.startTyping(currentTypingStatus);
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
       }
     };
 
@@ -1233,7 +1297,7 @@ export class AgentChannels {
       if (typingInterval) return;
       typingInterval = setInterval(async () => {
         try {
-          await sdkThread.startTyping();
+          await sdkThread.startTyping(currentTypingStatus);
         } catch {
           // best-effort
         }
@@ -1247,13 +1311,269 @@ export class AgentChannels {
       }
     };
 
-    const flushText = async () => {
-      // Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
-      const cleanedText = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
-      if (cleanedText) {
-        await sdkThread.post(cleanedText);
-        textBuffer = '';
+    // Out-of-band side-effect posts (file attachment, tool cards, approvals,
+    // tripwires). Each takes the chunk and runs as a separate `sdkThread.post`.
+    const handleSideEffect = async (chunk: ChunkType): Promise<void> => {
+      if (chunk.type === 'file') {
+        const { data, mimeType } = chunk.payload;
+        this.logger?.debug('[CHANNEL] Received file chunk', {
+          mimeType,
+          dataType: typeof data,
+          size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
+        });
+        const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
+        const filename = `generated.${ext}`;
+        const binary =
+          typeof data === 'string'
+            ? Buffer.from(data, 'base64')
+            : data instanceof Uint8Array
+              ? Buffer.from(data)
+              : data;
+        try {
+          await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
+        }
+        return;
       }
+
+      if (chunk.type === 'tool-call') {
+        if (this.channelToolNames.has(chunk.payload.toolName)) return;
+        const displayName = stripToolPrefix(chunk.payload.toolName);
+        await ensureTyping(`Using ${displayName}…`);
+        startTypingKeepalive();
+        const rawArgs = (
+          typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
+        ) as Record<string, unknown>;
+        const argsSummary = formatArgsSummary(rawArgs);
+
+        let messageId: string | undefined;
+        if (!adapterConfig?.formatToolCall) {
+          const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
+          messageId = sentMessage?.id;
+        }
+
+        toolCalls.set(chunk.payload.toolCallId, {
+          displayName,
+          argsSummary,
+          startedAt: Date.now(),
+          messageId,
+        });
+        return;
+      }
+
+      if (chunk.type === 'tool-result') {
+        if (this.channelToolNames.has(chunk.payload.toolName)) return;
+        // Tool finished — revert status until the next text/tool/reasoning
+        // event sets a more specific one.
+        await ensureTyping('Thinking…');
+
+        const tracked = toolCalls.get(chunk.payload.toolCallId);
+        const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
+        const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
+        const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+        const channelMsgId = tracked?.messageId;
+        const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
+
+        if (adapterConfig?.formatToolCall) {
+          const custom = adapterConfig.formatToolCall({
+            toolName: displayName,
+            args: (chunk.payload.args ?? {}) as Record<string, unknown>,
+            result: chunk.payload.result,
+            isError: chunk.payload.isError,
+          });
+          if (custom != null) {
+            await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
+          }
+        } else {
+          const resultMessage = formatToolResult(
+            displayName,
+            argsSummary,
+            resultText,
+            !!chunk.payload.isError,
+            durationMs,
+            useCards,
+          );
+          await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
+        }
+        return;
+      }
+
+      if (chunk.type === 'tool-call-approval') {
+        const { toolCallId, toolName, args: toolArgs } = chunk.payload;
+        const tracked = toolCalls.get(toolCallId);
+        const displayName = tracked?.displayName || stripToolPrefix(toolName);
+        const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
+        const channelMsgId = tracked?.messageId;
+
+        const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
+
+        await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
+        return;
+      }
+
+      if (chunk.type === 'tripwire') {
+        // retry=true means the agent will retry internally with the tripwire reason as
+        // feedback and produce a new response on this same stream, so nothing to post yet.
+        if (chunk.payload.retry) return;
+
+        const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
+        const display = chunk.payload.processorId
+          ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
+          : `🛡️ ${reason}`;
+        await sdkThread.post(display);
+        return;
+      }
+    };
+
+    // Driver loop: pull from `fullStream` once, splitting it into
+    // sequential text segments separated by out-of-band chunks
+    // (files, tool cards, approvals, tripwires). For each segment we
+    // post a single message — streaming if `streamingEnabled` (text
+    // deltas push into an async iterable consumed by `sdkThread.post`,
+    // wrapped in `StreamingPlan` when options are supplied), else
+    // buffered and posted on segment end. Out-of-band chunks land
+    // between segments so message ordering reads top-to-bottom.
+    //
+    // The split-on-out-of-band approach matches platform reality:
+    // - Slack's streaming card finalizes when the iterable closes;
+    //   you can't pause-and-resume it. So a tool card mid-stream
+    //   means "end this streaming card, post the tool card, start
+    //   a fresh streaming card for any subsequent text."
+    // - Tool approval ends the agent run entirely; no need to plan
+    //   for resumption inside the same `consumeAgentStream` call.
+
+    const iterator = stream.fullStream[Symbol.asyncIterator]();
+    let pending: ChunkType | null = null;
+    let iteratorDone = false;
+
+    // Emits text strings for one segment of `fullStream`. Pulls chunks
+    // from the shared iterator and yields cleaned text deltas plus
+    // `\n\n` between steps. Returns when an out-of-band chunk lands
+    // (left in `pending` for the driver) or when `fullStream` ends.
+    async function* nextTextSegment(): AsyncGenerator<string> {
+      // Pending paragraph break from a step-finish. Held back until the
+      // *next* text-delta lands so we never trail a message with `\n\n`
+      // (would otherwise produce an empty trailing line in Slack when
+      // the run ends with step-finish → finish, or step-finish → tool).
+      let pendingBreak = false;
+      while (true) {
+        if (iteratorDone) return;
+        let next: IteratorResult<unknown>;
+        try {
+          next = await iterator.next();
+        } catch (e) {
+          // fullStream errored — surface via stream.error, end the segment.
+          iteratorDone = true;
+          throw e;
+        }
+        if (next.done) {
+          iteratorDone = true;
+          return;
+        }
+        const chunk = next.value as ChunkType;
+
+        if (chunk.type === 'text-delta') {
+          const raw = chunk.payload.text;
+          if (!raw) continue;
+          await ensureTyping('Typing…');
+          startTypingKeepalive();
+          // Strip zero-width chars (U+200B, U+200C, U+200D, U+FEFF) that LLMs sometimes emit
+          const cleaned = raw.replace(/[\u200B-\u200D\uFEFF]/g, '');
+          if (!cleaned) continue;
+          if (pendingBreak) {
+            yield '\n\n';
+            pendingBreak = false;
+          }
+          yield cleaned;
+          continue;
+        }
+
+        if (chunk.type === 'reasoning-delta') {
+          await ensureTyping('Thinking…');
+          startTypingKeepalive();
+          continue;
+        }
+
+        if (chunk.type === 'step-finish') {
+          // Step boundary inside the same text run. Defer the paragraph
+          // break until the next text-delta proves there's more to write.
+          pendingBreak = true;
+          continue;
+        }
+
+        if (chunk.type === 'finish') {
+          // End of the entire response; close the segment.
+          return;
+        }
+
+        // Anything else (file, tool-call, tool-result, tool-call-approval,
+        // tripwire, ...) ends the current segment — driver handles it.
+        pending = chunk;
+        return;
+      }
+    }
+
+    // Consumes one text segment. Peeks the first value to avoid posting
+    // an empty message when a segment ends before any text deltas arrive
+    // (e.g. an agent that immediately calls a tool, or back-to-back tools).
+    // Streaming mode: feed the (re-prefixed) generator into
+    // `sdkThread.post(...)`, wrapped in `StreamingPlan` if options are
+    // supplied. Buffered mode: drain into a string and post once.
+    const consumeTextSegment = async (gen: AsyncGenerator<string>): Promise<void> => {
+      const first = await gen.next();
+      if (first.done) return;
+
+      if (streamingEnabled) {
+        // Tee the stream: yield to sdkThread.post while accumulating
+        // a buffer. If the adapter's streaming path fails (e.g. Slack
+        // DM with no thread context, missing assistant:write scope),
+        // we fall back to posting the accumulated text as a single
+        // message so the user still sees the reply.
+        let buffer = '';
+        async function* tee(): AsyncGenerator<string> {
+          buffer += first.value;
+          yield first.value;
+          for await (const piece of gen) {
+            buffer += piece;
+            yield piece;
+          }
+        }
+        const iterable = tee();
+        const postable = hasStreamingOptions
+          ? new (chatModule().StreamingPlan)(iterable, {
+              updateIntervalMs: streamingOptions!.updateIntervalMs,
+            })
+          : iterable;
+        try {
+          await sdkThread.post(postable);
+        } catch (e) {
+          this.logger?.warn('[CHANNEL] sdkThread.post(stream) threw, falling back to buffered post', {
+            error: e,
+          });
+          // Drain any remaining chunks the streaming path didn't consume.
+          try {
+            for await (const piece of gen) buffer += piece;
+          } catch (drainErr) {
+            this.logger?.warn('[CHANNEL] error draining generator after stream failure', {
+              error: drainErr,
+            });
+          }
+          const cleaned = buffer.trim();
+          if (cleaned) {
+            try {
+              await sdkThread.post(cleaned);
+            } catch (postErr) {
+              this.logger?.warn('[CHANNEL] buffered fallback post also failed', { error: postErr });
+            }
+          }
+        }
+        return;
+      }
+      let buffer = first.value;
+      for await (const piece of gen) buffer += piece;
+      const cleaned = buffer.trim();
+      if (cleaned) await sdkThread.post(cleaned);
     };
 
     // If nothing triggers typing within 3s, start it anyway and keep it
@@ -1261,165 +1581,41 @@ export class AgentChannels {
     // chunks arrive for a long time.
     const typingFallbackTimer = setTimeout(async () => {
       if (!typingStarted) {
-        await ensureTyping();
+        await ensureTyping('Thinking…');
         startTypingKeepalive();
       }
     }, 3_000);
 
     try {
-      for await (const chunk of stream.fullStream) {
-        // --- Text accumulation ---
-        if (chunk.type === 'text-delta') {
-          if (chunk.payload.text) {
-            await ensureTyping();
-            startTypingKeepalive();
-          }
-          textBuffer += chunk.payload.text;
+      while (true) {
+        await consumeTextSegment(nextTextSegment());
+
+        if (pending) {
+          const chunk = pending;
+          pending = null;
+          await handleSideEffect(chunk);
           continue;
         }
 
-        if (chunk.type === 'reasoning-delta') {
-          await ensureTyping();
-          startTypingKeepalive();
-          continue;
-        }
-
-        // --- File (e.g. model-generated image): post as attachment ---
-        if (chunk.type === 'file') {
-          await flushText();
-          const { data, mimeType } = chunk.payload;
-          this.logger?.debug('[CHANNEL] Received file chunk', {
-            mimeType,
-            dataType: typeof data,
-            size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
-          });
-          const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
-          const filename = `generated.${ext}`;
-          const binary =
-            typeof data === 'string'
-              ? Buffer.from(data, 'base64')
-              : data instanceof Uint8Array
-                ? Buffer.from(data)
-                : data;
-          try {
-            await sdkThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
-          } catch (e) {
-            this.logger?.debug('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
-          }
-          continue;
-        }
-
-        // --- Text flush triggers ---
-        if (chunk.type === 'step-finish' || chunk.type === 'finish') {
-          await flushText();
-          continue;
-        }
-
-        // --- Tool call: post eager "Running…" card ---
-        if (chunk.type === 'tool-call') {
-          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-          await ensureTyping();
-          startTypingKeepalive();
-          await flushText();
-
-          const displayName = stripToolPrefix(chunk.payload.toolName);
-          const rawArgs = (
-            typeof chunk.payload.args === 'object' && chunk.payload.args != null ? chunk.payload.args : {}
-          ) as Record<string, unknown>;
-          const argsSummary = formatArgsSummary(rawArgs);
-
-          let messageId: string | undefined;
-          if (!adapterConfig?.formatToolCall) {
-            const sentMessage = await sdkThread.post(formatToolRunning(displayName, argsSummary, useCards));
-            messageId = sentMessage?.id;
-          }
-
-          toolCalls.set(chunk.payload.toolCallId, {
-            displayName,
-            argsSummary,
-            startedAt: Date.now(),
-            messageId,
-          });
-          continue;
-        }
-
-        // --- Tool result: edit the "Running…" card with the outcome ---
-        if (chunk.type === 'tool-result') {
-          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-          const tracked = toolCalls.get(chunk.payload.toolCallId);
-          const displayName = tracked?.displayName || stripToolPrefix(chunk.payload.toolName);
-          const argsSummary = tracked?.argsSummary || formatArgsSummary(chunk.payload.args ?? {});
-          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-          const channelMsgId = tracked?.messageId;
-          const durationMs = tracked?.startedAt != null ? Date.now() - tracked.startedAt : undefined;
-
-          if (adapterConfig?.formatToolCall) {
-            const custom = adapterConfig.formatToolCall({
-              toolName: displayName,
-              args: (chunk.payload.args ?? {}) as Record<string, unknown>,
-              result: chunk.payload.result,
-              isError: chunk.payload.isError,
-            });
-            if (custom != null) {
-              await this.editOrPost(adapter, sdkThread, channelMsgId, custom);
-            }
-          } else {
-            const resultMessage = formatToolResult(
-              displayName,
-              argsSummary,
-              resultText,
-              !!chunk.payload.isError,
-              durationMs,
-              useCards,
-            );
-            await this.editOrPost(adapter, sdkThread, channelMsgId, resultMessage);
-          }
-          continue;
-        }
-
-        // --- Tool approval: edit the "Running…" card to show Approve/Deny ---
-        if (chunk.type === 'tool-call-approval') {
-          const { toolCallId, toolName, args: toolArgs } = chunk.payload;
-          const tracked = toolCalls.get(toolCallId);
-          const displayName = tracked?.displayName || stripToolPrefix(toolName);
-          const argsSummary = tracked?.argsSummary || formatArgsSummary(toolArgs);
-          const channelMsgId = tracked?.messageId;
-
-          const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
-
-          await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
-          continue;
-        }
-
-        // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
-        // Without this branch the chunk is skipped, stream.error stays unset, and the
-        // user sees silence (see #15344).
-        if (chunk.type === 'tripwire') {
-          // retry=true means the agent will retry internally with the tripwire reason as
-          // feedback and produce a new response on this same stream, so nothing to post yet.
-          if (chunk.payload.retry) continue;
-
-          await flushText();
-          const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
-          const display = chunk.payload.processorId
-            ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
-            : `🛡️ ${reason}`;
-          await sdkThread.post(display);
-          continue;
-        }
+        // Generator returned without leaving a pending chunk → end of fullStream
+        // (or it errored — `iteratorDone` is set either way).
+        if (iteratorDone) return;
       }
     } finally {
       clearTimeout(typingFallbackTimer);
       stopTypingKeepalive();
-    }
 
-    // Check for errors that occurred during streaming
-    if (stream.error) {
-      const msg = stream.error.message;
-      const display = msg.length > 500 ? msg.slice(0, 500) + '…' : msg;
-      this.log('error', `[${platform}] Stream completed with error`, { error: display });
-      await sdkThread.post(`❌ Error: ${display}`);
+      // Check for errors that occurred during streaming
+      if (stream.error) {
+        const msg = stream.error.message;
+        const display = msg.length > 500 ? msg.slice(0, 500) + '…' : msg;
+        this.log('error', `[${platform}] Stream completed with error`, { error: display });
+        try {
+          await sdkThread.post(`❌ Error: ${display}`);
+        } catch (e) {
+          this.logger?.debug('[CHANNEL] Failed to post error message', { error: e });
+        }
+      }
     }
   }
 

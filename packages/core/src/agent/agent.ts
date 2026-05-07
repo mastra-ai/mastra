@@ -587,6 +587,9 @@ export class Agent<
     }
     this.#agentChannels = agentChannels;
     agentChannels.__setAgent(this);
+    if (this.logger) {
+      agentChannels.__setLogger(this.logger);
+    }
   }
 
   /**
@@ -2201,6 +2204,10 @@ export class Agent<
   __registerPrimitives(p: MastraPrimitives) {
     if (p.logger) {
       this.__setLogger(p.logger);
+      // Propagate logger to channels so platform/runtime errors surface in logs
+      if (this.#agentChannels) {
+        this.#agentChannels.__setLogger(p.logger);
+      }
     }
 
     // Store primitives for later use when creating LLM instances
@@ -2217,6 +2224,10 @@ export class Agent<
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
       this.#workspace.__setLogger(this.logger);
+    }
+    // Propagate logger to channels so platform/runtime errors surface in logs
+    if (this.#agentChannels) {
+      this.#agentChannels.__setLogger(this.logger);
     }
     // Mastra will be passed to the LLM when it's created in getLLM()
 
