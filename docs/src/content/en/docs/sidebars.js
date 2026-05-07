@@ -323,6 +323,18 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'A2A',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'a2a/overview',
+          label: 'Overview',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Workspaces',
       items: [
         {
@@ -419,11 +431,6 @@ const sidebars = {
           type: 'doc',
           id: 'server/custom-api-routes',
           label: 'Custom API Routes',
-        },
-        {
-          type: 'doc',
-          id: 'server/a2a',
-          label: 'A2A Protocol',
         },
         {
           type: 'doc',

@@ -1,15 +1,15 @@
 ---
-title: "A2A protocol | Server"
-description: "Use Mastra agents through the A2A protocol with agent cards, streaming tasks, and push notifications."
+title: "A2A overview | A2A"
+description: "Learn how Mastra exposes agents over A2A and how client agents call remote agents through agent cards, tasks, and streams."
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
   - "@mastra/server"
 ---
 
-# A2A protocol
+# A2A overview
 
-Mastra exposes agents through the Agent-to-Agent (A2A) protocol so other services and clients can discover an agent, send work to it, and track task progress over time. Use it when you need an interoperable agent endpoint instead of a Mastra-specific agent route.
+Mastra exposes agents through the Agent-to-Agent (A2A) protocol so another agent or service can discover them, send work to them, and track task progress over time. Use A2A when you need an interoperable agent endpoint instead of a Mastra-specific route.
 
 ## When to use A2A
 
@@ -17,7 +17,25 @@ Mastra exposes agents through the Agent-to-Agent (A2A) protocol so other service
 - You want task-oriented streaming instead of plain text token streaming
 - You need to resume a task later or receive task completion callbacks
 
-## Quickstart
+## How A2A works in Mastra
+
+In Mastra, A2A usually involves two roles:
+
+- **Client agent**: The caller that discovers an agent card, sends a message, and listens for task updates
+- **Remote agent**: The Mastra agent running behind the A2A endpoint
+
+The remote agent is still a normal Mastra agent. It keeps using its own instructions, tools, memory, workflows, and server configuration. A2A changes how that agent is reached, not how the agent is authored.
+
+The flow looks like this:
+
+1. Register a standard Mastra agent in your `Mastra` instance.
+1. Start Mastra Server or mount Mastra routes into your own server.
+1. Mastra exposes that agent through an agent card at `/.well-known/:agentId/agent-card.json` and an execution endpoint at `/a2a/:agentId`.
+1. A client agent or application reads the card, sends messages, and receives task, artifact, and status events.
+
+This makes A2A useful for agent-to-agent calls across process boundaries, across services, or across teams. The client does not need direct access to the remote agent's internal code or tools. It only needs the A2A endpoint.
+
+## Get started
 
 Mastra serves an agent card at `/.well-known/:agentId/agent-card.json` and handles A2A execution requests at `/a2a/:agentId`. If you use `MastraClient`, those routes are called through the client's configured `baseUrl` and `apiPrefix`.
 
