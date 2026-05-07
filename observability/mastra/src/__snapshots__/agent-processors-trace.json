@@ -75,8 +75,7 @@
                         "text": "  Hello! How are you?  ",
                         "createdAt": "<date>"
                       }
-                    ],
-                    "content": "  Hello! How are you?  "
+                    ]
                   }
                 }
               ],
@@ -447,8 +446,7 @@
                     "metadata": {
                       "modelId": "mock-model-id",
                       "provider": "mock-provider"
-                    },
-                    "content": "Mock V2 stream response"
+                    }
                   },
                   "createdAt": "<date>"
                 }
