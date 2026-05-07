@@ -129,12 +129,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -267,9 +267,9 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
+                      "environment": "test",
                       "toolCallId": "call-calc-1",
-                      "toolName": "calculator",
-                      "environment": "test"
+                      "toolName": "calculator"
                     }
                   }
                 }
@@ -305,12 +305,12 @@
                 },
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  },
-                  "environment": "test"
+                  }
                 },
                 "input": [
                   {
@@ -323,15 +323,11 @@
                   },
                   {
                     "role": "assistant",
-                    "content": "[tool: calculator]"
+                    "content": "Let me calculate that for you. [tool: calculator]"
                   },
                   {
                     "role": "tool",
                     "content": "[tool: calculator]"
-                  },
-                  {
-                    "role": "assistant",
-                    "content": "Let me calculate that for you. "
                   }
                 ],
                 "output": {

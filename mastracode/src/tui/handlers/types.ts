@@ -21,6 +21,7 @@ export interface EventHandlerContext {
   addUserMessage: (message: HarnessMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;
   fireMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => void;
+  startGoal: (objective: string, cancelMessage?: string) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
   renderExistingMessages: () => Promise<void>;
   renderCompletedTasksInline: (tasks: TaskItem[], insertIndex?: number, collapsed?: boolean) => void;

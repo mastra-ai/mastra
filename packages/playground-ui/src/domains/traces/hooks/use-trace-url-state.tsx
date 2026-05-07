@@ -7,6 +7,8 @@ import {
   TRACE_DATE_PRESET_VALUES,
   TRACE_DATE_TO_PARAM,
   TRACE_PROPERTY_FILTER_FIELD_IDS,
+  TRACE_LIST_MODE_PARAM,
+  TRACE_LIST_MODE_VALUES,
   TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   TRACE_ROOT_ENTITY_TYPE_PARAM,
   TRACE_STATUS_PARAM,
@@ -14,7 +16,7 @@ import {
   applyTracePropertyFilterTokens,
   getTracePropertyFilterTokens,
 } from '../trace-filters';
-import type { EntityOptions, TraceStatusFilter } from '../trace-filters';
+import type { EntityOptions, TraceListMode, TraceStatusFilter } from '../trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 const TRACE_ID_PARAM = 'traceId';
@@ -72,6 +74,7 @@ export interface UseTraceUrlStateResult {
   scoreIdParam: string | undefined;
 
   // Filter state (derived from URL)
+  listMode: TraceListMode;
   selectedEntityOption: EntityOptions | undefined;
   selectedStatus: TraceStatusFilter | undefined;
   filterTokens: PropertyFilterToken[];
@@ -152,6 +155,10 @@ export function useTraceUrlState(
           : undefined;
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
+  const listMode = useMemo<TraceListMode>(() => {
+    const value = searchParams.get(TRACE_LIST_MODE_PARAM);
+    return value && TRACE_LIST_MODE_VALUES.has(value as TraceListMode) ? (value as TraceListMode) : 'traces';
+  }, [searchParams]);
   const selectedEntityOption = useMemo(
     () => ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM)),
     [searchParams],
@@ -332,6 +339,7 @@ export function useTraceUrlState(
     setSearchParams(
       prev => {
         const next = new URLSearchParams(prev);
+        next.delete(TRACE_LIST_MODE_PARAM);
         next.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
         next.delete(TRACE_STATUS_PARAM);
         for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
@@ -356,6 +364,7 @@ export function useTraceUrlState(
     spanIdParam,
     spanTabParam,
     scoreIdParam,
+    listMode,
     selectedEntityOption,
     selectedStatus,
     filterTokens,
