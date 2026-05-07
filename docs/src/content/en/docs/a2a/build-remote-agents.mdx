@@ -1,0 +1,61 @@
+---
+title: "Build remote A2A agents | A2A"
+description: "Expose a Mastra agent over A2A so other agents and services can discover it and send work to it."
+packages:
+  - "@mastra/core"
+  - "@mastra/server"
+---
+
+# Build remote A2A agents
+
+Use A2A on the remote side when you want a Mastra agent to be callable from another agent or service over a standard protocol. Mastra handles the A2A routes for you once the agent is registered on your server.
+
+## When to use build remote A2A agents
+
+Use this pattern when your Mastra app owns the remote agent and you want another system to discover it through an agent card and call it through the A2A execution endpoint.
+
+## Quickstart
+
+Register a normal Mastra agent in your `Mastra` instance. Once that agent is available through Mastra Server, Mastra exposes the A2A agent card at `/.well-known/:agentId/agent-card.json` and the execution route at `/a2a/:agentId`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+
+const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'You research topics and return concise summaries.',
+  model: 'openai/gpt-5.4',
+})
+
+export const mastra = new Mastra({
+  agents: { researchAgent },
+})
+```
+
+If you run the generated Mastra server, the routes are available automatically. If you use your own HTTP framework, mount Mastra with a [server adapter](/docs/server/server-adapters).
+
+## How the remote side works
+
+The remote agent is still a standard Mastra agent. A2A does not require a separate agent class or a separate execution model.
+
+- The agent card is built from the Mastra agent identity and configuration
+- The execution endpoint runs the same Mastra agent you register locally
+- The agent can keep using its normal tools, memory, workflows, and request context
+
+This means you can start with a local Mastra agent and later expose it over A2A without rewriting the agent itself.
+
+## Expose the agent from your server
+
+Mastra exposes the A2A routes from the same server process that serves your agents and workflows. If you need custom middleware, authentication, or deployment behavior, use a [server adapter](/docs/server/server-adapters) and mount the Mastra routes into your existing app.
+
+:::note
+Visit the [Server overview](/docs/server/mastra-server) page for more about Mastra Server and the [Server adapters](/docs/server/server-adapters) page for custom HTTP setups.
+:::
+
+## Related
+
+- [A2A overview](/docs/a2a/overview)
+- [Connect to a remote A2A agent with Mastra Client](/docs/a2a/connect-with-mastra-client)
+- [Server overview](/docs/server/mastra-server)

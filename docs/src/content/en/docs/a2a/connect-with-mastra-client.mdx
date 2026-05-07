@@ -1,0 +1,108 @@
+---
+title: "Connect to a remote A2A agent with Mastra Client | A2A"
+description: "Use Mastra Client to discover a remote A2A agent, send messages, and manage task lifecycles."
+packages:
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+# Connect to a remote A2A agent with Mastra Client
+
+Use `MastraClient` when your application or client agent needs to call a remote A2A agent exposed by a Mastra server. This gives you typed access to the agent card, task lifecycle, streaming events, and push notification APIs.
+
+## When to use connect to a remote A2A agent with Mastra Client
+
+Use this approach when you do not own the remote agent process directly and want to interact with it through A2A from a browser, backend service, or another client application.
+
+## Quickstart
+
+Mastra serves an agent card at `/.well-known/:agentId/agent-card.json` and handles A2A execution requests at `/a2a/:agentId`. If you use `MastraClient`, those routes are called through the client's configured `baseUrl` and `apiPrefix`.
+
+```typescript title="src/a2a-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+})
+
+const a2a = client.getA2A('research-agent')
+
+const card = await a2a.getAgentCard()
+console.log(card.name, card.url)
+
+let taskId: string | undefined
+
+for await (const event of a2a.sendMessageStream({
+  message: {
+    kind: 'message',
+    role: 'user',
+    messageId: crypto.randomUUID(),
+    contextId: 'demo-session',
+    parts: [{ kind: 'text', text: 'Summarize Mastra A2A support.' }],
+  },
+})) {
+  if (event.kind === 'task') {
+    taskId = event.id
+    console.log('task started', taskId)
+  }
+
+  if (event.kind === 'artifact-update') {
+    console.log(event.artifact.parts)
+  }
+
+  if (event.kind === 'status-update' && event.final) {
+    console.log('task finished', event.status.state)
+  }
+}
+```
+
+Use `contextId` when you want Mastra to keep the conversation tied to the same memory thread across turns.
+
+## Resume or inspect a task
+
+Streaming clients can disconnect before a task completes. Use the returned task ID to inspect the latest snapshot, resume the stream, or cancel the task.
+
+```typescript title="src/a2a-task-lifecycle.ts"
+const task = await a2a.getTask({ id: taskId! })
+console.log(task.result?.status.state)
+
+for await (const event of a2a.resubscribeTask({ id: taskId! })) {
+  if (event.kind === 'artifact-update') {
+    console.log('new artifact', event.artifact.name)
+  }
+
+  if (event.kind === 'status-update' && event.final) {
+    console.log('final state', event.status.state)
+  }
+}
+
+await a2a.cancelTask({ id: taskId! })
+```
+
+When you resubscribe to an in-progress task, Mastra sends the current task snapshot first and then continues streaming live artifact and status updates.
+
+## Add push notifications
+
+Use push notifications when the caller cannot keep an HTTP stream open. You can attach a callback URL when you start the task or register it later with the task ID.
+
+```typescript title="src/a2a-push-notifications.ts"
+await a2a.setTaskPushNotificationConfig({
+  taskId: taskId!,
+  pushNotificationConfig: {
+    url: 'https://app.example.com/api/a2a-webhook',
+    token: process.env.A2A_WEBHOOK_TOKEN,
+  },
+})
+```
+
+When the task updates, Mastra sends task payloads to that URL and includes the token in the `X-A2A-Notification-Token` header.
+
+:::note
+Visit the [Mastra client SDK](/docs/server/mastra-client) page for general client setup.
+:::
+
+## Related
+
+- [A2A overview](/docs/a2a/overview)
+- [Build remote A2A agents](/docs/a2a/build-remote-agents)
+- [Mastra client SDK](/docs/server/mastra-client)

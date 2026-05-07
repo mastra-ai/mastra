@@ -331,6 +331,21 @@ const sidebars = {
           id: 'a2a/overview',
           label: 'Overview',
         },
+        {
+          type: 'doc',
+          id: 'a2a/build-remote-agents',
+          label: 'Build Remote A2A Agents',
+        },
+        {
+          type: 'doc',
+          id: 'a2a/remote-agents-as-subagents',
+          label: 'Remote A2A Agents as Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'a2a/connect-with-mastra-client',
+          label: 'Connect with Mastra Client',
+        },
       ],
     },
     {
