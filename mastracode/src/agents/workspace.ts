@@ -11,6 +11,7 @@ import type { z } from 'zod';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { detectNestedGitTrees } from '../utils/project.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -144,6 +145,30 @@ const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp'].reduce<string[]>((
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
 /**
+ * Hint embedded in `PermissionError` when a file op lands inside a nested
+ * git tree. Tells the agent how to recover (request_access) instead of
+ * leaving it to assume the path is unreachable.
+ */
+const NESTED_GIT_DISALLOWED_HINT =
+  'path is inside a separate git tree nested under the project root; use the request_access tool to grant access if you really mean to operate inside it';
+
+/**
+ * Detect nested git trees inside `projectPath` (worktrees, submodules,
+ * vendored repos) and return their absolute paths so they can be wired into
+ * `LocalFilesystem.disallowedPaths`. Mastra Code treats these as separate
+ * sandboxes — the agent must call `request_access` before touching them.
+ *
+ * Exported so tests can verify the wiring without having to spin up a full
+ * `Workspace` (whose `DEFAULT_ALLOWED_PATHS` would otherwise short-circuit
+ * the disallow check when project paths land under `/tmp`).
+ */
+export function getNestedGitDisallowedPaths(projectPath: string): string[] {
+  return detectNestedGitTrees(projectPath).map(t => t.absolutePath);
+}
+
+export const NESTED_GIT_DISALLOWED_PATH_HINT = NESTED_GIT_DISALLOWED_HINT;
+
+/**
  * Detect the project's package runner from lock files.
  * Used as a fallback packageRunner for LSP when no binary is found locally or on PATH.
  */
@@ -191,8 +216,13 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     // Not registered yet
   }
 
+  // Re-detect nested git trees on every call so newly-created worktrees /
+  // submodules show up without restarting the harness.
+  const disallowedPaths = getNestedGitDisallowedPaths(projectPath);
+
   if (existing) {
     existing.filesystem.setAllowedPaths(allowedPaths);
+    existing.filesystem.setDisallowedPaths(disallowedPaths);
     existing.setToolsConfig(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES);
     return existing;
   }
@@ -212,6 +242,8 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     filesystem: new LocalFilesystem({
       basePath: projectPath,
       allowedPaths,
+      disallowedPaths,
+      disallowedPathHint: NESTED_GIT_DISALLOWED_HINT,
     }),
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,

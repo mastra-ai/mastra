@@ -5,7 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
-import { constants as fsConstants, existsSync, realpathSync } from 'node:fs';
+import { constants as fsConstants, realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import type { RequestContext } from '../../request-context';
@@ -86,6 +86,45 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    */
   allowedPaths?: string[];
   /**
+   * Directories within `basePath` that are walled off — file ops on a path
+   * inside (or equal to) a disallowed root throw `PermissionError`. Useful
+   * for treating nested git worktrees, submodules, vendored repositories,
+   * or other trust boundaries inside the workspace as separate sandboxes.
+   *
+   * Disallowed paths are ignored when the same path is also covered by
+   * `allowedPaths`, so a per-call grant always wins over a static block.
+   *
+   * Relative paths resolve against `basePath`. Absolute and tilde paths are
+   * used as-is.
+   *
+   * @example
+   * ```typescript
+   * new LocalFilesystem({
+   *   basePath: '/work/proj',
+   *   disallowedPaths: ['vendor/sub-repo', 'wt-feat'],
+   * })
+   * ```
+   *
+   * @default []
+   */
+  disallowedPaths?: string[];
+  /**
+   * Optional message included in the `PermissionError` thrown when a path
+   * is blocked by `disallowedPaths`. Use this to point the agent at whatever
+   * recovery flow the surrounding workspace exposes (e.g. an "ask for
+   * access" tool) — `LocalFilesystem` itself stays unaware of those
+   * conventions.
+   *
+   * Two forms are supported:
+   * - `string` — used verbatim as the message hint.
+   * - `(absolutePath) => string` — receives the resolved absolute path so
+   *   the hint can mention the offending location.
+   *
+   * When omitted, a generic "path is in a restricted location within the
+   * workspace" hint is used.
+   */
+  disallowedPathHint?: string | ((absolutePath: string) => string);
+  /**
    * Custom instructions that override the default instructions
    * returned by `getInstructions()`.
    *
@@ -142,6 +181,8 @@ export class LocalFilesystem extends MastraFilesystem {
   private readonly _basePath: string;
   private readonly _contained: boolean;
   private _allowedPaths: string[];
+  private _disallowedPaths: string[];
+  private readonly _disallowedPathHint?: string | ((absolutePath: string) => string);
   private readonly _instructionsOverride?: InstructionsOption;
 
   /**
@@ -193,6 +234,26 @@ export class LocalFilesystem extends MastraFilesystem {
     this._allowedPaths = newPaths.map(p => resolveToBasePath(this._basePath, p));
   }
 
+  /**
+   * Current set of resolved disallowed paths.
+   * File operations on a path equal to or inside one of these throw
+   * `PermissionError` unless the path is also covered by `allowedPaths`.
+   */
+  get disallowedPaths(): readonly string[] {
+    return this._disallowedPaths;
+  }
+
+  /**
+   * Update disallowed paths. Accepts a direct array or an updater callback
+   * receiving the current paths (React setState pattern). Useful when the
+   * workspace owner needs to refresh the list after detecting new sub-trees
+   * (e.g. a newly-created git worktree inside the project root).
+   */
+  setDisallowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
+    const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._disallowedPaths) : pathsOrUpdater;
+    this._disallowedPaths = newPaths.map(p => resolveToBasePath(this._basePath, p));
+  }
+
   constructor(options: LocalFilesystemOptions) {
     super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
@@ -200,6 +261,8 @@ export class LocalFilesystem extends MastraFilesystem {
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
     this._allowedPaths = (options.allowedPaths ?? []).map(p => resolveToBasePath(this._basePath, p));
+    this._disallowedPaths = (options.disallowedPaths ?? []).map(p => resolveToBasePath(this._basePath, p));
+    this._disallowedPathHint = options.disallowedPathHint;
     this._instructionsOverride = options.instructions;
   }
 
@@ -248,16 +311,14 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private _isWithinAnyRoot(absolutePath: string): boolean {
-    // Allowed paths are explicit grants (e.g. via `request_access`) and bypass
-    // the nested-git boundary check. basePath access is restricted to the
-    // current project's git tree — nested worktrees, submodules, or vendored
-    // git repos require an explicit grant.
+    // Allowed paths are explicit grants and bypass the disallowed-paths check
+    // entirely — a per-call grant always wins over a static block.
     if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
       return true;
     }
 
     if (this._isWithinRoot(absolutePath, this._basePath)) {
-      return !this._crossesNestedGitBoundary(absolutePath, this._basePath);
+      return !this._isInDisallowedPath(absolutePath);
     }
 
     const resolvedPath = this._resolvePathForContainment(absolutePath);
@@ -276,44 +337,27 @@ export class LocalFilesystem extends MastraFilesystem {
 
     const resolvedBase = this._resolvePathForContainment(this._basePath);
     if (resolvedBase && this._isWithinRoot(resolvedPath, resolvedBase)) {
-      return !this._crossesNestedGitBoundary(resolvedPath, resolvedBase);
+      return !this._isInDisallowedPath(resolvedPath);
     }
 
     return false;
   }
 
   /**
-   * Walk ancestors from `absolutePath` toward `basePath`. Return true if any
-   * directory between `absolutePath` (inclusive) and `basePath` (exclusive)
-   * contains a `.git` entry — a marker for a separate git tree (worktree,
-   * submodule, or vendored repo). Use `request_access` to grant access.
-   *
-   * Assumes `absolutePath` is within `basePath`. The basePath's own `.git`
-   * is intentionally excluded from the check because that is the current
-   * project itself.
+   * Return true if `absolutePath` is equal to, or contained within, any of
+   * the configured `disallowedPaths` roots. Pure containment check — never
+   * touches the filesystem.
    */
-  private _crossesNestedGitBoundary(absolutePath: string, basePath: string): boolean {
-    if (absolutePath === basePath) return false;
-
-    let current = absolutePath;
-    while (current !== basePath) {
-      const gitPath = nodePath.join(current, '.git');
-      try {
-        if (existsSync(gitPath)) return true;
-      } catch {
-        // Treat fs errors here as "no .git" — the file op itself will surface
-        // a more meaningful error if the directory is otherwise unreadable.
-      }
-
-      const parent = nodePath.dirname(current);
-      if (parent === current) return false;
-      current = parent;
-    }
-    return false;
+  private _isInDisallowedPath(absolutePath: string): boolean {
+    if (this._disallowedPaths.length === 0) return false;
+    return this._disallowedPaths.some(root => this._isWithinRoot(absolutePath, root));
   }
 
-  private _nestedGitOperationHint(inputPath: string): string {
-    return `access (path is inside a separate git tree nested under the project root; use the request_access tool to grant access to "${inputPath}" if you really mean to operate inside it)`;
+  private _disallowedPathOperationHint(absolutePath: string): string {
+    const hint = this._disallowedPathHint;
+    if (typeof hint === 'function') return `access (${hint(absolutePath)})`;
+    if (typeof hint === 'string' && hint.length > 0) return `access (${hint})`;
+    return `access (path is in a restricted location within the workspace)`;
   }
 
   private toBuffer(content: FileContent): Buffer {
@@ -327,14 +371,11 @@ export class LocalFilesystem extends MastraFilesystem {
 
     if (this._contained) {
       if (!this._isWithinAnyRoot(absolutePath)) {
-        // Differentiate "outside basePath" from "inside a nested git tree" so
-        // the agent knows to call `request_access` for the latter rather than
-        // assume the path is unreachable.
-        if (
-          this._isWithinRoot(absolutePath, this._basePath) &&
-          this._crossesNestedGitBoundary(absolutePath, this._basePath)
-        ) {
-          throw new PermissionError(absolutePath, this._nestedGitOperationHint(absolutePath));
+        // Differentiate "blocked by disallowedPaths" from "outside basePath"
+        // so the workspace owner's hint can guide recovery (e.g. towards an
+        // ask-for-access tool) instead of looking like an unreachable path.
+        if (this._isWithinRoot(absolutePath, this._basePath) && this._isInDisallowedPath(absolutePath)) {
+          throw new PermissionError(absolutePath, this._disallowedPathOperationHint(absolutePath));
         }
         throw new PermissionError(inputPath, this._accessOperationHint(inputPath));
       }
@@ -408,25 +449,22 @@ export class LocalFilesystem extends MastraFilesystem {
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
 
-    // Allowed paths are explicit grants — bypass the nested-git check.
+    // Allowed paths are explicit grants — bypass the disallowed-paths check.
     if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
       return;
     }
 
     // Resolve symlinks for the target path. If it doesn't exist there are no
-    // symlinks to escape through, but we still apply the nested-git check on
-    // the literal path so writes into a sibling worktree can't sneak in via a
-    // not-yet-created file.
+    // symlinks to escape through, but we still apply the disallowed-paths
+    // check on the literal path so writes into a blocked subtree can't sneak
+    // in via a not-yet-created file.
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
     } catch (error: unknown) {
       if (isEnoentError(error)) {
-        if (
-          this._isWithinRoot(absolutePath, this._basePath) &&
-          this._crossesNestedGitBoundary(absolutePath, this._basePath)
-        ) {
-          throw new PermissionError(absolutePath, this._nestedGitOperationHint(absolutePath));
+        if (this._isWithinRoot(absolutePath, this._basePath) && this._isInDisallowedPath(absolutePath)) {
+          throw new PermissionError(absolutePath, this._disallowedPathOperationHint(absolutePath));
         }
         return;
       }
@@ -455,8 +493,8 @@ export class LocalFilesystem extends MastraFilesystem {
     }
 
     if (targetReal === baseReal || targetReal.startsWith(baseReal + nodePath.sep)) {
-      if (this._crossesNestedGitBoundary(targetReal, baseReal)) {
-        throw new PermissionError(absolutePath, this._nestedGitOperationHint(absolutePath));
+      if (this._isInDisallowedPath(targetReal)) {
+        throw new PermissionError(absolutePath, this._disallowedPathOperationHint(absolutePath));
       }
       return;
     }

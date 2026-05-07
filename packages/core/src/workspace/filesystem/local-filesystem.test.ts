@@ -1053,108 +1053,111 @@ describe('LocalFilesystem', () => {
   });
 
   // ===========================================================================
-  // Nested git tree boundary
+  // disallowedPaths boundary
   // ===========================================================================
-  describe('nested git tree boundary', () => {
+  describe('disallowedPaths boundary', () => {
     /**
-     * Nested git trees (worktrees, submodules, vendored repos) inside basePath
-     * are walled off — file ops require an explicit `request_access` grant.
-     * basePath's own `.git` is the project itself and must not block normal ops.
+     * Subtrees inside basePath that are listed in `disallowedPaths` are walled
+     * off — file ops on them throw `PermissionError`. Allowed paths always
+     * win, so a per-call grant overrides the static block.
+     *
+     * Mastra Code uses this to wall off nested git worktrees / submodules /
+     * vendored repos discovered inside the project root.
      */
-    it('should allow access to files at basePath even when basePath itself has a .git dir', async () => {
-      // Simulate: basePath is a git repo
-      await fs.mkdir(path.join(tempDir, '.git'));
-      await fs.writeFile(path.join(tempDir, 'src.ts'), 'let x = 1;');
+    it('should block reads inside a disallowed directory', async () => {
+      const blocked = path.join(tempDir, 'vendor', 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'inside sub');
 
-      const content = await localFs.readFile('src.ts', { encoding: 'utf-8' });
-      expect(content).toBe('let x = 1;');
-    });
-
-    it('should block reads inside a nested git directory (separate repo / submodule)', async () => {
-      // Simulate a vendored repo or submodule with a real .git directory
-      const nestedRepo = path.join(tempDir, 'vendor', 'sub');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
-      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'inside sub');
-
-      await expect(localFs.readFile('vendor/sub/file.ts')).rejects.toThrow(PermissionError);
-      await expect(localFs.readFile('vendor/sub/file.ts')).rejects.toThrow(/request_access/);
-    });
-
-    it('should block writes inside a nested git directory', async () => {
-      const nestedRepo = path.join(tempDir, 'pkg', 'embedded');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
-
-      await expect(localFs.writeFile('pkg/embedded/new.ts', 'nope')).rejects.toThrow(PermissionError);
-      await expect(localFs.writeFile('pkg/embedded/new.ts', 'nope')).rejects.toThrow(/request_access/);
-    });
-
-    it('should block access inside a git worktree (where .git is a file, not a dir)', async () => {
-      // git worktrees place a `.git` *file* (not a dir) containing
-      // `gitdir: <main>/.git/worktrees/<name>`. The check must catch that too.
-      const worktreeDir = path.join(tempDir, 'wt-feat');
-      await fs.mkdir(worktreeDir, { recursive: true });
-      await fs.writeFile(path.join(worktreeDir, '.git'), 'gitdir: /tmp/main/.git/worktrees/wt-feat\n');
-      await fs.writeFile(path.join(worktreeDir, 'file.ts'), 'wt content');
-
-      await expect(localFs.readFile('wt-feat/file.ts')).rejects.toThrow(PermissionError);
-      await expect(localFs.readFile('wt-feat/file.ts')).rejects.toThrow(/request_access/);
-    });
-
-    it('should block access to files that do not exist yet but live inside a nested git tree', async () => {
-      const nestedRepo = path.join(tempDir, 'wt');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
-
-      // The file doesn't exist — but the write would still land inside the nested tree.
-      await expect(localFs.writeFile('wt/new-file.ts', 'content')).rejects.toThrow(PermissionError);
-      await expect(localFs.writeFile('wt/new-file.ts', 'content')).rejects.toThrow(/request_access/);
-    });
-
-    it('should allow access to a nested git tree once it is added to allowedPaths', async () => {
-      const nestedRepo = path.join(tempDir, 'sub');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
-      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'sub content');
-
-      const fsWithGrant = new LocalFilesystem({
+      const fsWithBlock = new LocalFilesystem({
         basePath: tempDir,
-        allowedPaths: [nestedRepo],
+        disallowedPaths: [blocked],
       });
 
-      const content = await fsWithGrant.readFile(path.join(nestedRepo, 'file.ts'), { encoding: 'utf-8' });
-      expect(content).toBe('sub content');
+      await expect(fsWithBlock.readFile('vendor/sub/file.ts')).rejects.toThrow(PermissionError);
     });
 
-    it('should still allow reads in sibling directories without nested .git', async () => {
-      const nestedRepo = path.join(tempDir, 'wt');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+    it('should block writes inside a disallowed directory', async () => {
+      const blocked = path.join(tempDir, 'pkg', 'embedded');
+      await fs.mkdir(blocked, { recursive: true });
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      await expect(fsWithBlock.writeFile('pkg/embedded/new.ts', 'nope')).rejects.toThrow(PermissionError);
+    });
+
+    it('should block access to files that do not exist yet but live inside a disallowed tree', async () => {
+      const blocked = path.join(tempDir, 'wt');
+      await fs.mkdir(blocked, { recursive: true });
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      // The file doesn't exist — but the write would still land inside the blocked tree.
+      await expect(fsWithBlock.writeFile('wt/new-file.ts', 'content')).rejects.toThrow(PermissionError);
+    });
+
+    it('should block access to the disallowed directory itself', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'sub');
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      await expect(fsWithBlock.readdir('sub')).rejects.toThrow(PermissionError);
+    });
+
+    it('should still allow reads in sibling directories not listed in disallowedPaths', async () => {
+      const blocked = path.join(tempDir, 'wt');
+      await fs.mkdir(blocked, { recursive: true });
 
       await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
       await fs.writeFile(path.join(tempDir, 'src/main.ts'), 'main');
 
-      const content = await localFs.readFile('src/main.ts', { encoding: 'utf-8' });
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      const content = await fsWithBlock.readFile('src/main.ts', { encoding: 'utf-8' });
       expect(content).toBe('main');
     });
 
-    it('should not be triggered by basePath itself even when basePath is a git worktree', async () => {
-      // basePath itself can be a worktree (its `.git` is a file). That is the
-      // *current* project, not a nested one — file ops in basePath must work.
-      await fs.writeFile(path.join(tempDir, '.git'), 'gitdir: /tmp/main/.git/worktrees/cur\n');
-      await fs.writeFile(path.join(tempDir, 'file.ts'), 'cur');
+    it('should allow access to a disallowed path once it is also added to allowedPaths', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'sub content');
 
-      const content = await localFs.readFile('file.ts', { encoding: 'utf-8' });
-      expect(content).toBe('cur');
+      const fsWithGrant = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+        allowedPaths: [blocked],
+      });
+
+      const content = await fsWithGrant.readFile(path.join(blocked, 'file.ts'), { encoding: 'utf-8' });
+      expect(content).toBe('sub content');
     });
 
-    it('should treat allowedPaths as an explicit grant that overrides nested-git checks', async () => {
-      // Even a deeply nested grant should work — request_access can grant access
-      // to a path inside a nested git tree when the user explicitly approves it.
-      const nestedRepo = path.join(tempDir, 'wt');
-      const inner = path.join(nestedRepo, 'inner');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
+    it('should treat allowedPaths as an explicit grant that overrides a containing disallowed root', async () => {
+      // A grant on a child directory inside a blocked root should still let
+      // reads through — useful when the workspace owner blocks `vendor/` but
+      // a per-call grant opens `vendor/sub/`.
+      const blocked = path.join(tempDir, 'wt');
+      const inner = path.join(blocked, 'inner');
       await fs.mkdir(inner, { recursive: true });
       await fs.writeFile(path.join(inner, 'deep.ts'), 'deep');
 
       const fsWithGrant = new LocalFilesystem({
         basePath: tempDir,
+        disallowedPaths: [blocked],
         allowedPaths: [inner],
       });
 
@@ -1162,22 +1165,116 @@ describe('LocalFilesystem', () => {
       expect(content).toBe('deep');
     });
 
-    it('should block deleteFile inside a nested git tree', async () => {
-      const nestedRepo = path.join(tempDir, 'sub');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
-      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'sub content');
+    it('should block deleteFile inside a disallowed tree', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'sub content');
 
-      await expect(localFs.deleteFile('sub/file.ts')).rejects.toThrow(PermissionError);
-      await expect(localFs.deleteFile('sub/file.ts')).rejects.toThrow(/request_access/);
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      await expect(fsWithBlock.deleteFile('sub/file.ts')).rejects.toThrow(PermissionError);
     });
 
-    it('should block readdir inside a nested git tree', async () => {
-      const nestedRepo = path.join(tempDir, 'sub');
-      await fs.mkdir(path.join(nestedRepo, '.git'), { recursive: true });
-      await fs.writeFile(path.join(nestedRepo, 'file.ts'), 'sub content');
+    it('should default to the generic restricted-location hint when no custom hint is provided', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'x');
 
-      await expect(localFs.readdir('sub')).rejects.toThrow(PermissionError);
-      await expect(localFs.readdir('sub')).rejects.toThrow(/request_access/);
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+      });
+
+      await expect(fsWithBlock.readFile('sub/file.ts')).rejects.toThrow(/restricted location within the workspace/);
+    });
+
+    it('should surface a string disallowedPathHint in the PermissionError message', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'x');
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+        disallowedPathHint: 'use the request_access tool to grant access if you really mean to operate inside it',
+      });
+
+      await expect(fsWithBlock.readFile('sub/file.ts')).rejects.toThrow(/request_access/);
+    });
+
+    it('should surface a function-form disallowedPathHint in the PermissionError message', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'x');
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: [blocked],
+        disallowedPathHint: absolutePath => `cannot touch "${absolutePath}" — call request_access first`,
+      });
+
+      await expect(fsWithBlock.readFile('sub/file.ts')).rejects.toThrow(/call request_access first/);
+    });
+
+    it('should accept relative disallowedPaths and resolve them against basePath', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'x');
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: ['sub'],
+      });
+
+      await expect(fsWithBlock.readFile('sub/file.ts')).rejects.toThrow(PermissionError);
+    });
+
+    it('should expose disallowedPaths via the getter', () => {
+      const blocked = path.join(tempDir, 'sub');
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: ['sub'],
+      });
+
+      expect(fsWithBlock.disallowedPaths).toEqual([blocked]);
+    });
+
+    it('should allow updating disallowedPaths via setDisallowedPaths', async () => {
+      const blocked = path.join(tempDir, 'sub');
+      await fs.mkdir(blocked, { recursive: true });
+      await fs.writeFile(path.join(blocked, 'file.ts'), 'x');
+
+      const fsWithBlock = new LocalFilesystem({ basePath: tempDir });
+
+      // Initially no disallowed paths — read succeeds.
+      const before = await fsWithBlock.readFile('sub/file.ts', { encoding: 'utf-8' });
+      expect(before).toBe('x');
+
+      // Add a block — read now fails.
+      fsWithBlock.setDisallowedPaths([blocked]);
+      await expect(fsWithBlock.readFile('sub/file.ts')).rejects.toThrow(PermissionError);
+
+      // Use updater form to clear it again.
+      fsWithBlock.setDisallowedPaths(prev => prev.filter(p => p !== blocked));
+      const after = await fsWithBlock.readFile('sub/file.ts', { encoding: 'utf-8' });
+      expect(after).toBe('x');
+    });
+
+    it('should not affect basePath itself or unrelated paths', async () => {
+      // basePath ops must always work even if a sibling tree is blocked.
+      await fs.writeFile(path.join(tempDir, 'top.ts'), 'top');
+      await fs.mkdir(path.join(tempDir, 'sub'), { recursive: true });
+
+      const fsWithBlock = new LocalFilesystem({
+        basePath: tempDir,
+        disallowedPaths: ['sub'],
+      });
+
+      const content = await fsWithBlock.readFile('top.ts', { encoding: 'utf-8' });
+      expect(content).toBe('top');
     });
   });
 
