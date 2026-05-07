@@ -21,7 +21,8 @@ Do this:
    Within each reviewer bucket, sort so easy merges or easy closes appear first.
 6. After the full tracking file is ready, present the best first candidates and pair-review them with me one at a time, updating the list as we go through to add status/notes, until the list is empty.
 7. For each PR in the pair-review sequence, start with a concise TL;DR that explains the issue/change, whether it needs more work or looks close to done, and any other short helpful context for deciding what to do next.
-8. When pair-reviewing the first PR, ask whether I want you to open each PR in my browser with the GitHub CLI (`gh pr view <number> --web`). Ask this preference only once, then respect the answer for each PR in the pair-review sequence.
+8. After the TL;DR for each PR, stop and ask me what action to take. Do not submit a review, request changes, approve, merge, close, comment, or mark a GitHub action as taken until I explicitly choose that action.
+9. When pair-reviewing the first PR, ask whether I want you to open each PR in my browser with the GitHub CLI (`gh pr view <number> --web`). Ask this preference only once, then respect the answer for each PR in the pair-review sequence.
 
 If I provide extra guidance, use it as additional selection criteria:
 
