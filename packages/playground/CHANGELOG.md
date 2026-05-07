@@ -1,5 +1,39 @@
 # @internal/playground
 
+## 1.9.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+  - @mastra/client-js@1.17.2-alpha.3
+  - @mastra/react@0.2.36-alpha.3
+  - @mastra/playground-ui@26.1.0-alpha.3
+
+## 1.8.2-alpha.2
+
+### Patch Changes
+
+- Fixed a regression where the Studio Layout swapped its DOM tree once auth capabilities finished loading, which unmounted and remounted the active page. On the Create Scorer page this wiped the Name and Description inputs and reset the form, so submitting failed with "Name is required". The Layout now keeps a single stable wrapper across auth states. ([#16288](https://github.com/mastra-ai/mastra/pull/16288))
+
+- Updated dependencies [[`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529), [`e41e7c8`](https://github.com/mastra-ai/mastra/commit/e41e7c88285feefe5cddea22105b40092bcf217f)]:
+  - @mastra/core@1.33.0-alpha.2
+  - @mastra/client-js@1.17.2-alpha.2
+  - @mastra/react@0.2.36-alpha.2
+  - @mastra/playground-ui@26.1.0-alpha.2
+
+## 1.8.2-alpha.1
+
+### Patch Changes
+
+- Fixed local studio CSS to import design tokens directly from `@mastra/playground-ui` source. Removes ~80 lines of divergent token redeclarations (hex/rgba) that were silently overridden by the auto-injected oklch tokens from playground-ui. Single source of truth, no behavior change. ([#16257](https://github.com/mastra-ai/mastra/pull/16257))
+
+- Updated dependencies [[`c48076e`](https://github.com/mastra-ai/mastra/commit/c48076ee21d3c205902c7ab1737459d92e490744), [`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d), [`bfc3044`](https://github.com/mastra-ai/mastra/commit/bfc3044901e69ccd438102c907804e409a90943b)]:
+  - @mastra/playground-ui@26.1.0-alpha.1
+  - @mastra/core@1.33.0-alpha.1
+  - @mastra/client-js@1.17.2-alpha.1
+  - @mastra/react@0.2.36-alpha.1
+
 ## 1.8.2-alpha.0
 
 ### Patch Changes

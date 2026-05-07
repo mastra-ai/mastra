@@ -41,11 +41,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: String(row.run_id),
     result: parseJson(row.result),
     error: parseJson(row.error),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
     createdAt: new Date(String(row.createdAt)),
     startedAt: row.startedAt ? new Date(String(row.startedAt)) : undefined,
+    suspendedAt: row.suspendedAt ? new Date(String(row.suspendedAt)) : undefined,
     completedAt: row.completedAt ? new Date(String(row.completedAt)) : undefined,
   };
 }
@@ -65,6 +67,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     await this.#db.createTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+    });
+    // Backfill columns added after the initial schema shipped.
+    await this.#db.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
   }
 
@@ -88,11 +96,13 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         args: task.args,
         result: task.result ?? null,
         error: task.error ?? null,
+        suspend_payload: task.suspendPayload ?? null,
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
         createdAt: task.createdAt.toISOString(),
         startedAt: task.startedAt?.toISOString() ?? null,
+        suspendedAt: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
       },
     });
@@ -114,6 +124,10 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       setClauses.push('error = jsonb(?)');
       params.push(serializeJson(update.error));
     }
+    if ('suspendPayload' in update) {
+      setClauses.push('suspend_payload = jsonb(?)');
+      params.push(serializeJson(update.suspendPayload));
+    }
     if ('retryCount' in update) {
       setClauses.push('retry_count = ?');
       params.push(update.retryCount as number);
@@ -121,6 +135,10 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     if ('startedAt' in update) {
       setClauses.push('startedAt = ?');
       params.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      setClauses.push('suspendedAt = ?');
+      params.push(update.suspendedAt?.toISOString() ?? null);
     }
     if ('completedAt' in update) {
       setClauses.push('completedAt = ?');
@@ -174,13 +192,19 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       conditions.push('tool_name = ?');
       params.push(filter.toolName);
     }
+    if (filter.toolCallId) {
+      conditions.push('tool_call_id = ?');
+      params.push(filter.toolCallId);
+    }
     // Date range filtering
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? 'startedAt'
-        : filter.dateFilterBy === 'completedAt'
-          ? 'completedAt'
-          : 'createdAt';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.dateFilterBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());
@@ -200,7 +224,13 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     const total = Number(countResult.rows[0]?.count ?? 0);
 
     const orderCol =
-      filter.orderBy === 'startedAt' ? 'startedAt' : filter.orderBy === 'completedAt' ? 'completedAt' : 'createdAt';
+      filter.orderBy === 'startedAt'
+        ? 'startedAt'
+        : filter.orderBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.orderBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     const direction = filter.orderDirection === 'desc' ? 'DESC' : 'ASC';
 
     let sql = `SELECT ${buildSelectColumns(TABLE_BACKGROUND_TASKS)} FROM ${TABLE_BACKGROUND_TASKS} ${where} ORDER BY ${orderCol} ${direction}`;
@@ -238,9 +268,11 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? 'startedAt'
-        : filter.dateFilterBy === 'completedAt'
-          ? 'completedAt'
-          : 'createdAt';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.dateFilterBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());
