@@ -18,7 +18,11 @@ describe('PlanApprovalInlineComponent', () => {
     );
 
     const selectList = (component as any).selectList;
-    expect(selectList.items.some((item: { value: string; label: string }) => item.value === 'goal' && item.label.includes('Use as /goal'))).toBe(true);
+    expect(
+      selectList.items.some(
+        (item: { value: string; label: string }) => item.value === 'goal' && item.label.includes('Use as /goal'),
+      ),
+    ).toBe(true);
 
     (component as any).handleSelection('goal');
 
