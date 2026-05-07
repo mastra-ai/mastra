@@ -66,6 +66,10 @@ export function buildMessagesFromChunks({
   responseModelMetadata?: { metadata: Record<string, unknown> };
   tools?: ToolSet;
 }): MastraDBMessage[] {
+  // Parts are pushed in first-delta order. Text and reasoning spans push a part
+  // on the first delta and mutate it in place as subsequent deltas arrive.
+  // *-start only stashes providerMetadata. This preserves content arrival
+  // ordering without needing slots, nulls, or separate push tracking (#15914).
   const parts: MastraMessagePart[] = [];
 
   // Collect tool results so we can match them to tool calls
@@ -94,173 +98,178 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // State for text span accumulation (keyed by text ID to handle interleaved spans)
-  const textSpans = new Map<
+  // Metadata stashed by *-start events, applied when the ref is created on first delta.
+  const textMeta = new Map<string, Record<string, any> | undefined>();
+  const reasoningMeta = new Map<string, Record<string, any> | undefined>();
+
+  // Visibility accumulated across the start/delta/end events of a span. The
+  // merged value is applied to the ref so the more restrictive flag wins
+  // regardless of which event carried it.
+  const textVisibility = new Map<string, MastraPartVisibility | undefined>();
+  const reasoningVisibility = new Map<string, MastraPartVisibility | undefined>();
+
+  // Live references to parts already in the `parts` array, keyed by span ID.
+  // Created and pushed on first delta — position reflects content arrival order (#15914).
+  const textRefs = new Map<
+    string,
+    { type: 'text'; text: string; providerMetadata?: Record<string, any>; visibility?: MastraPartVisibility }
+  >();
+  const reasoningRefs = new Map<
     string,
     {
-      deltas: string[];
-      providerMetadata: Record<string, any> | undefined;
+      type: 'reasoning';
+      reasoning: string;
+      details: any[];
+      providerMetadata?: Record<string, any>;
       visibility?: MastraPartVisibility;
     }
   >();
 
-  // State for reasoning span accumulation (keyed by reasoning ID)
-  const reasoningSpans = new Map<
-    string,
-    {
-      deltas: string[];
-      providerMetadata: Record<string, any> | undefined;
-      redacted: boolean;
-      visibility?: MastraPartVisibility;
-    }
-  >();
   for (const chunk of chunks) {
     switch (chunk.type) {
       // ── Text span ──────────────────────────────────────────────
       case 'text-start': {
         const p = chunk.payload as TextStartPayload;
-        if (!textSpans.has(p.id)) {
-          textSpans.set(p.id, {
-            deltas: [],
-            providerMetadata: p.providerMetadata,
-            visibility: mergeVisibility(undefined, chunk.visibility),
-          });
-        } else {
-          // Update providerMetadata if this start has it
-          const existing = textSpans.get(p.id)!;
-          if (p.providerMetadata) {
-            existing.providerMetadata = p.providerMetadata;
-          }
-          existing.visibility = mergeVisibility(existing.visibility, chunk.visibility);
-        }
+        // Just stash metadata — part is created on first delta
+        textMeta.set(p.id, p.providerMetadata);
+        textVisibility.set(p.id, mergeVisibility(textVisibility.get(p.id), chunk.visibility));
         break;
       }
       case 'text-delta': {
         const p = chunk.payload as TextDeltaPayload;
-        let span = textSpans.get(p.id);
-        // Auto-create span if delta arrives without a matching text-start
-        if (!span) {
-          span = { deltas: [], providerMetadata: p.providerMetadata };
-          textSpans.set(p.id, span);
+        const merged = mergeVisibility(textVisibility.get(p.id), chunk.visibility);
+        textVisibility.set(p.id, merged);
+        let ref = textRefs.get(p.id);
+        if (!ref) {
+          // First delta for this span — create the part and push it now
+          ref = { type: 'text' as const, text: '', providerMetadata: textMeta.get(p.id) ?? p.providerMetadata };
+          textRefs.set(p.id, ref);
+          parts.push(ref as unknown as MastraMessagePart);
         }
-        span.deltas.push(p.text);
-        // AI SDK semantics: latest non-null providerMetadata wins
+        ref.text += p.text;
         if (p.providerMetadata) {
-          span.providerMetadata = p.providerMetadata;
+          ref.providerMetadata = p.providerMetadata;
         }
-        span.visibility = mergeVisibility(span.visibility, chunk.visibility);
+        if (merged === 'llm') {
+          ref.visibility = 'llm';
+        }
         break;
       }
       case 'text-end': {
         const pEnd = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
-        const span = textSpans.get(pEnd.id);
-        if (span) {
-          // AI SDK semantics: latest non-null providerMetadata wins
+        const merged = mergeVisibility(textVisibility.get(pEnd.id), chunk.visibility);
+        textVisibility.set(pEnd.id, merged);
+        const ref = textRefs.get(pEnd.id);
+        if (ref) {
           if (pEnd.providerMetadata) {
-            span.providerMetadata = pEnd.providerMetadata;
+            ref.providerMetadata = pEnd.providerMetadata;
           }
-          span.visibility = mergeVisibility(span.visibility, chunk.visibility);
-          const text = span.deltas.join('');
-          // Only emit a part if there's actual content — skip empty text spans
-          if (text.length > 0) {
-            parts.push(
-              withVisibility(
-                {
-                  type: 'text' as const,
-                  text,
-                  ...(span.providerMetadata ? { providerMetadata: span.providerMetadata } : {}),
-                } as MastraMessagePart,
-                span.visibility,
-              ),
-            );
+          // Clean up undefined providerMetadata so we don't serialize { providerMetadata: undefined }
+          if (!ref.providerMetadata) {
+            delete ref.providerMetadata;
           }
-          textSpans.delete(pEnd.id);
+          if (merged === 'llm') {
+            ref.visibility = 'llm';
+          }
         }
+        // text-end with no deltas means empty span — nothing to emit
+        textMeta.delete(pEnd.id);
+        textRefs.delete(pEnd.id);
+        textVisibility.delete(pEnd.id);
         break;
       }
 
       // ── Reasoning span ─────────────────────────────────────────
       case 'reasoning-start': {
         const p = chunk.payload as ReasoningStartPayload;
-        // Check for redacted reasoning
         const isRedacted = Object.values(p.providerMetadata || {}).some((v: any) => v?.redactedData);
+        const merged = mergeVisibility(reasoningVisibility.get(p.id), chunk.visibility);
+        reasoningVisibility.set(p.id, merged);
 
-        if (!reasoningSpans.has(p.id)) {
-          reasoningSpans.set(p.id, {
-            deltas: [],
+        // Redacted reasoning never receives deltas, so create and push immediately
+        if (isRedacted) {
+          const part: {
+            type: 'reasoning';
+            reasoning: string;
+            details: any[];
+            providerMetadata?: Record<string, any>;
+            visibility?: MastraPartVisibility;
+          } = {
+            type: 'reasoning' as const,
+            reasoning: '',
+            details: [{ type: 'redacted', data: '' }],
             providerMetadata: p.providerMetadata,
-            redacted: isRedacted,
-            visibility: mergeVisibility(undefined, chunk.visibility),
-          });
+          };
+          if (merged === 'llm') {
+            part.visibility = 'llm';
+          }
+          reasoningRefs.set(p.id, part);
+          parts.push(part as unknown as MastraMessagePart);
         } else {
-          // Update providerMetadata if this start has it
-          const existing = reasoningSpans.get(p.id)!;
-          if (p.providerMetadata) {
-            existing.providerMetadata = p.providerMetadata;
-          }
-          if (isRedacted) {
-            existing.redacted = true;
-          }
-          existing.visibility = mergeVisibility(existing.visibility, chunk.visibility);
+          // Non-redacted: just stash metadata, part is created on first delta
+          reasoningMeta.set(p.id, p.providerMetadata);
         }
         break;
       }
       case 'reasoning-delta': {
         const p = chunk.payload as ReasoningDeltaPayload;
-        let span = reasoningSpans.get(p.id);
-        // Auto-create span if delta arrives without a matching reasoning-start
-        if (!span) {
-          span = { deltas: [], providerMetadata: p.providerMetadata, redacted: false };
-          reasoningSpans.set(p.id, span);
+        const merged = mergeVisibility(reasoningVisibility.get(p.id), chunk.visibility);
+        reasoningVisibility.set(p.id, merged);
+        let ref = reasoningRefs.get(p.id);
+        if (!ref) {
+          // First delta for this span — create the part and push it now
+          ref = {
+            type: 'reasoning' as const,
+            reasoning: '',
+            details: [{ type: 'text', text: '' }],
+            providerMetadata: reasoningMeta.get(p.id) ?? p.providerMetadata,
+          };
+          reasoningRefs.set(p.id, ref);
+          parts.push(ref as unknown as MastraMessagePart);
         }
-        span.deltas.push(p.text);
-        // AI SDK semantics: latest non-null providerMetadata wins
+        // Append to the text detail
+        const detail = ref.details[0];
+        if (detail && detail.type === 'text') {
+          detail.text += p.text;
+        }
         if (p.providerMetadata) {
-          span.providerMetadata = p.providerMetadata;
+          ref.providerMetadata = p.providerMetadata;
         }
-        span.visibility = mergeVisibility(span.visibility, chunk.visibility);
+        if (merged === 'llm') {
+          ref.visibility = 'llm';
+        }
         break;
       }
       case 'reasoning-end': {
         const p = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
-        const span = reasoningSpans.get(p.id);
-        if (span) {
-          // End metadata wins if present — it's the final/complete metadata for this span
+        const merged = mergeVisibility(reasoningVisibility.get(p.id), chunk.visibility);
+        reasoningVisibility.set(p.id, merged);
+        const ref = reasoningRefs.get(p.id);
+        if (ref) {
           if (p.providerMetadata) {
-            span.providerMetadata = p.providerMetadata;
+            ref.providerMetadata = p.providerMetadata;
           }
-          span.visibility = mergeVisibility(span.visibility, chunk.visibility);
-
-          if (span.redacted) {
-            parts.push(
-              withVisibility(
-                {
-                  type: 'reasoning' as const,
-                  reasoning: '',
-                  details: [{ type: 'redacted', data: '' }],
-                  providerMetadata: span.providerMetadata,
-                } as MastraMessagePart,
-                span.visibility,
-              ),
-            );
-          } else {
-            // Always emit reasoning parts, even if empty — OpenAI requires item_reference
-            // for tool calls that follow reasoning. See: https://github.com/mastra-ai/mastra/issues/9005
-            parts.push(
-              withVisibility(
-                {
-                  type: 'reasoning' as const,
-                  reasoning: '',
-                  details: [{ type: 'text', text: span.deltas.join('') }],
-                  providerMetadata: span.providerMetadata,
-                } as MastraMessagePart,
-                span.visibility,
-              ),
-            );
+          if (merged === 'llm') {
+            ref.visibility = 'llm';
           }
-
-          reasoningSpans.delete(p.id);
+        } else {
+          // No deltas arrived — emit empty reasoning part.
+          // OpenAI requires item_reference for tool calls that follow reasoning.
+          // See: https://github.com/mastra-ai/mastra/issues/9005
+          const part: MastraMessagePart = withVisibility(
+            {
+              type: 'reasoning' as const,
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: p.providerMetadata ?? reasoningMeta.get(p.id),
+            } as MastraMessagePart,
+            merged,
+          );
+          parts.push(part);
         }
+        reasoningMeta.delete(p.id);
+        reasoningRefs.delete(p.id);
+        reasoningVisibility.delete(p.id);
         break;
       }
 
@@ -329,7 +338,8 @@ export function buildMessagesFromChunks({
         const result = toolResults.get(p.toolCallId);
 
         if (result) {
-          // Merge call + result into a single 'result' state part
+          // Merge call + result into a single 'result' state part.
+          // Visibility: the more restrictive of the call chunk and the result chunk wins.
           const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
           parts.push(
             withVisibility(
@@ -377,59 +387,52 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // Flush any unclosed reasoning spans (stream ended without reasoning-end)
-  for (const [_id, span] of reasoningSpans) {
-    if (span.redacted) {
-      parts.push(
-        withVisibility(
-          {
-            type: 'reasoning' as const,
-            reasoning: '',
-            details: [{ type: 'redacted', data: '' }],
-            providerMetadata: span.providerMetadata,
-          } as MastraMessagePart,
-          span.visibility,
-        ),
+  // Unclosed reasoning spans that had deltas are already in `parts` (pushed on first delta).
+  // Unclosed reasoning spans with NO deltas need to be emitted for #9005.
+  for (const [id] of reasoningMeta) {
+    if (!reasoningRefs.has(id)) {
+      const part: MastraMessagePart = withVisibility(
+        {
+          type: 'reasoning' as const,
+          reasoning: '',
+          details: [{ type: 'text', text: '' }],
+          providerMetadata: reasoningMeta.get(id),
+        } as MastraMessagePart,
+        reasoningVisibility.get(id),
       );
-    } else {
-      const text = span.deltas.join('');
-      parts.push(
-        withVisibility(
-          {
-            type: 'reasoning' as const,
-            reasoning: '',
-            details: [{ type: 'text', text }],
-            providerMetadata: span.providerMetadata,
-          } as MastraMessagePart,
-          span.visibility,
-        ),
-      );
+      parts.push(part);
     }
   }
 
-  // Flush any unclosed text spans (stream ended without text-end)
-  for (const [, span] of textSpans) {
-    const text = span.deltas.join('');
-    if (text.length > 0) {
-      parts.push(
-        withVisibility(
-          {
-            type: 'text' as const,
-            text,
-            ...(span.providerMetadata ? { providerMetadata: span.providerMetadata } : {}),
-          } as MastraMessagePart,
-          span.visibility,
-        ),
-      );
+  // Unclosed text spans that had deltas are already in `parts`.
+  // Clean up undefined providerMetadata on any that are still open and apply
+  // any accumulated visibility flag.
+  for (const [id, ref] of textRefs) {
+    if (!ref.providerMetadata) {
+      delete ref.providerMetadata;
+    }
+    if (textVisibility.get(id) === 'llm') {
+      ref.visibility = 'llm';
     }
   }
+
+  // Apply any accumulated visibility flag on unclosed reasoning span refs too.
+  for (const [id, ref] of reasoningRefs) {
+    if (reasoningVisibility.get(id) === 'llm') {
+      ref.visibility = 'llm';
+    }
+  }
+
+  // Remove text parts that ended up empty (e.g. spans where every delta was '').
+  // Empty reasoning parts are kept intentionally (#9005) and are not filtered here.
+  const nonEmptyParts = parts.filter(p => !(p.type === 'text' && (p as any).text === ''));
 
   // Insert step-start markers between tool-invocation and subsequent text parts.
   // This matches the convention used by MessageMerger.pushNewPart when merging messages,
   // and is required so that AI SDK convertToModelMessages splits them into separate steps.
   const finalParts: MastraMessagePart[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!;
+  for (let i = 0; i < nonEmptyParts.length; i++) {
+    const part = nonEmptyParts[i]!;
     if (
       part.type === 'text' &&
       finalParts.length > 0 &&

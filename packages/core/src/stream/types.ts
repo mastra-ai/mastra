@@ -61,6 +61,24 @@ export type StreamTransport = {
   closeOnFinish: boolean;
 };
 
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
+
 export type StreamTransportRef = {
   current?: StreamTransport;
 };
@@ -459,6 +477,29 @@ export interface BackgroundTaskOutputPayload {
   payload: Extract<AgentChunkType, { type: 'tool-output' }>;
 }
 
+export interface BackgroundTaskSuspendedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  args: Record<string, unknown>;
+  /** Whatever the tool passed to `suspend(data)`. */
+  suspendPayload?: unknown;
+  /** When the task suspended. */
+  suspendedAt?: Date;
+}
+
+export interface BackgroundTaskResumedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -802,6 +843,14 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & {
       type: 'background-task-output';
       payload: BackgroundTaskOutputPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-suspended';
+      payload: BackgroundTaskSuspendedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-resumed';
+      payload: BackgroundTaskResumedPayload;
     });
 
 export type WorkflowStreamEvent =

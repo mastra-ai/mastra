@@ -1,5 +1,21 @@
 # @mastra/client-js
 
+## 1.17.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
+## 1.17.2-alpha.2
+
+### Patch Changes
+
+- Regenerate route types to include `TRAJECTORY` and `STEP` entityType variants on the score response (follow-up to #16249). ([#16288](https://github.com/mastra-ai/mastra/pull/16288))
+
+- Updated dependencies [[`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529)]:
+  - @mastra/core@1.33.0-alpha.2
+
 ## 1.17.2-alpha.1
 
 ### Patch Changes

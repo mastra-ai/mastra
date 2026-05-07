@@ -34,6 +34,9 @@ export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as 
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
+export const TRACE_LIST_MODE_PARAM = 'listMode';
+export const TRACE_LIST_MODE_VALUES = new Set(['traces', 'branches'] as const);
+export type TraceListMode = 'traces' | 'branches';
 export const TRACE_DATE_PRESET_PARAM = 'datePreset';
 export const TRACE_DATE_FROM_PARAM = 'dateFrom';
 export const TRACE_DATE_TO_PARAM = 'dateTo';

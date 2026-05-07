@@ -479,13 +479,17 @@ describe('sanitizeV5UIMessages — empty text part filtering', () => {
   });
 });
 
-describe('sanitizeV5UIMessages — duplicate OpenAI itemId merging', () => {
-  const makeTextPart = (text: string, itemId?: string): AIV5Type.TextUIPart => ({
+describe('sanitizeV5UIMessages — duplicate OpenAI-compatible itemId merging', () => {
+  const makeTextPart = (
+    text: string,
+    itemId?: string,
+    provider: 'openai' | 'azure' = 'openai',
+  ): AIV5Type.TextUIPart => ({
     type: 'text',
     text,
     ...(itemId && {
       providerMetadata: {
-        openai: { itemId },
+        [provider]: { itemId },
       },
     }),
   });
@@ -521,6 +525,52 @@ describe('sanitizeV5UIMessages — duplicate OpenAI itemId merging', () => {
     expect((result[0]!.parts[0] as AIV5Type.TextUIPart).text).toBe('Part 1. Part 2. Part 3.');
   });
 
+  it('should merge Azure OpenAI text parts with the same itemId', () => {
+    const msg = makeMessage([
+      makeTextPart('Hello ', 'msg_azure123', 'azure'),
+      makeTextPart('Azure!', 'msg_azure123', 'azure'),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+    expect((result[0]!.parts[0] as AIV5Type.TextUIPart).text).toBe('Hello Azure!');
+    expect((result[0]!.parts[0] as any).providerMetadata?.azure?.itemId).toBe('msg_azure123');
+  });
+
+  it('should not merge matching itemIds from different provider namespaces', () => {
+    const msg = makeMessage([
+      makeTextPart('OpenAI ', 'msg_shared', 'openai'),
+      makeTextPart('Azure', 'msg_shared', 'azure'),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(2);
+  });
+
+  it('should merge matching itemIds across source annotations', () => {
+    const msg = makeMessage([
+      makeTextPart('According to sources, ', 'msg_websearch_001'),
+      {
+        type: 'source-url',
+        sourceId: 'src_1',
+        url: 'https://example.com',
+        title: 'Example',
+      } as any,
+      makeTextPart('the answer is 42.', 'msg_websearch_001'),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], false);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(2);
+    expect((result[0]!.parts[0] as AIV5Type.TextUIPart).text).toBe('According to sources, the answer is 42.');
+    expect(result[0]!.parts[1]!.type).toBe('source-url');
+  });
+
   it('should keep text parts with different itemIds separate', () => {
     const msg = makeMessage([
       makeTextPart('First response. ', 'msg_abc123'),
@@ -544,7 +594,7 @@ describe('sanitizeV5UIMessages — duplicate OpenAI itemId merging', () => {
     expect(result[0]!.parts).toHaveLength(2);
   });
 
-  it('should handle mixed parts: text with itemId, text without, and tool parts', () => {
+  it('should handle mixed parts without moving text across tool parts', () => {
     const msg = makeMessage([
       makeTextPart('With itemId part 1. ', 'msg_abc123'),
       { type: 'tool-web_search', toolCallId: 'call-1', state: 'output-available', input: {}, output: {} } as any,
@@ -555,11 +605,11 @@ describe('sanitizeV5UIMessages — duplicate OpenAI itemId merging', () => {
     const result = sanitizeV5UIMessages([msg], false);
 
     expect(result).toHaveLength(1);
-    // Should have: merged text (itemId), tool, text (no itemId)
-    expect(result[0]!.parts).toHaveLength(3);
-    expect((result[0]!.parts[0] as AIV5Type.TextUIPart).text).toBe('With itemId part 1. With itemId part 2.');
+    expect(result[0]!.parts).toHaveLength(4);
+    expect((result[0]!.parts[0] as AIV5Type.TextUIPart).text).toBe('With itemId part 1. ');
     expect(result[0]!.parts[1]!.type).toBe('tool-web_search');
-    expect((result[0]!.parts[2] as AIV5Type.TextUIPart).text).toBe('Without itemId.');
+    expect((result[0]!.parts[2] as AIV5Type.TextUIPart).text).toBe('With itemId part 2.');
+    expect((result[0]!.parts[3] as AIV5Type.TextUIPart).text).toBe('Without itemId.');
   });
 
   it('should handle web search scenario: multiple flushes from source chunks', () => {
