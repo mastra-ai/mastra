@@ -2,6 +2,7 @@ import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upl
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
+import type { DeployDiagnosis, DeployDiagnosisLookup } from '../deploy-suggestions.js';
 
 export interface Project {
   id: string;
@@ -10,6 +11,7 @@ export interface Project {
   organizationId: string;
   latestDeployId: string | null;
   latestDeployStatus: string | null;
+  latestDeployCreatedAt?: string | null;
   instanceUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -66,6 +68,59 @@ export async function fetchDeployStatus(deployId: string, token: string, orgId?:
   }
 
   return data.deploy;
+}
+
+export async function fetchDeployDiagnosis(
+  deployId: string,
+  token: string,
+  orgId?: string,
+): Promise<DeployDiagnosisLookup> {
+  const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/diagnosis`, {
+    headers: authHeaders(token, orgId),
+  });
+
+  if (resp.status === 204) {
+    return { state: 'healthy' };
+  }
+
+  if (!resp.ok) {
+    let detail: string | undefined;
+    try {
+      const error = (await resp.json()) as { detail?: string };
+      detail = error.detail;
+    } catch {
+      detail = undefined;
+    }
+    throwApiError('Failed to fetch deploy diagnosis', resp.status, detail);
+  }
+
+  const data = (await resp.json()) as { diagnosis: DeployDiagnosis | null };
+  if (!data.diagnosis) {
+    return { state: 'missing' };
+  }
+
+  return { state: 'ready', diagnosis: data.diagnosis };
+}
+
+export async function startDeployDiagnosis(deployId: string, token: string, orgId?: string): Promise<void> {
+  const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/diagnosis`, {
+    method: 'POST',
+    headers: authHeaders(token, orgId),
+  });
+
+  if (resp.status === 201 || resp.status === 304) {
+    return;
+  }
+
+  let detail: string | undefined;
+  try {
+    const error = (await resp.json()) as { detail?: string };
+    detail = error.detail;
+  } catch {
+    detail = undefined;
+  }
+
+  throwApiError('Failed to start deploy diagnosis', resp.status, detail);
 }
 
 export async function uploadDeploy(

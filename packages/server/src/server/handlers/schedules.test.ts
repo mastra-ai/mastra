@@ -48,7 +48,8 @@ const makeTrigger = (overrides: Partial<ScheduleTrigger> = {}): ScheduleTrigger 
   runId: 'run-1',
   scheduledFireAt: 1_000_000,
   actualFireAt: 1_000_001,
-  status: 'published',
+  outcome: 'published',
+  triggerKind: 'schedule-fire',
   ...overrides,
 });
 
@@ -123,6 +124,17 @@ describe('Schedules handlers', () => {
       } as any);
 
       expect(result).toEqual({ schedules: [] });
+    });
+
+    it('rejects ownerId without ownerType via query schema', () => {
+      const schema = LIST_SCHEDULES_ROUTE.queryParamSchema!;
+      expect(schema.safeParse({ ownerId: 'agent_1' }).success).toBe(false);
+    });
+
+    it('accepts ownerType with optional ownerId via query schema', () => {
+      const schema = LIST_SCHEDULES_ROUTE.queryParamSchema!;
+      expect(schema.safeParse({ ownerType: 'agent' }).success).toBe(true);
+      expect(schema.safeParse({ ownerType: 'agent', ownerId: 'agent_1' }).success).toBe(true);
     });
   });
 
@@ -247,7 +259,7 @@ describe('Schedules handlers', () => {
       const schedulesStore = (await storage.getStore('schedules'))!;
       await schedulesStore.createSchedule(makeSchedule({ id: 'wf_a' }));
       await schedulesStore.recordTrigger(
-        makeTrigger({ scheduleId: 'wf_a', runId: 'run-x', status: 'failed', error: 'publish failed' }),
+        makeTrigger({ scheduleId: 'wf_a', runId: 'run-x', outcome: 'failed', error: 'publish failed' }),
       );
 
       const result = await LIST_SCHEDULE_TRIGGERS_ROUTE.handler({

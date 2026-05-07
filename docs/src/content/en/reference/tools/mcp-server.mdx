@@ -165,6 +165,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description:
       'An object defining how the server should handle MCP prompts. See Prompt Handling section for details.',
   },
+  {
+    name: 'appResources',
+    type: 'AppResources',
+    isOptional: true,
+    description:
+      'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
+  },
 ]}
 />
 
@@ -1485,6 +1492,105 @@ app.all('/mcp', async (req, res) => {
 
 app.listen(3000)
 ```
+
+## MCP Apps (`appResources`)
+
+The `appResources` option lets you serve interactive HTML UIs from your MCP server via the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps). Each entry maps a `ui://` URI to an HTML app that renders in a sandboxed iframe in Mastra Studio.
+
+### `AppResources` type
+
+<PropertiesTable
+  content={[
+  {
+    name: 'Key (URI)',
+    type: 'string',
+    description: 'A `ui://` URI that identifies the app resource (e.g., `ui://calculator/main`).',
+  },
+]}
+/>
+
+Each value is an `AppResource` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: false,
+    description: 'Display name for the UI resource.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional description of the UI resource.',
+  },
+  {
+    name: 'html',
+    type: 'string',
+    isOptional: true,
+    description: 'Inline HTML content for the UI. Provide either `html` or `htmlPath`.',
+  },
+  {
+    name: 'htmlPath',
+    type: 'string',
+    isOptional: true,
+    description: 'Path to an HTML file. Resolved at server startup. Provide either `html` or `htmlPath`.',
+  },
+  {
+    name: 'meta',
+    type: 'McpUiResourceMeta',
+    isOptional: true,
+    description: 'UI resource metadata (CSP, permissions, rendering preferences) from the official ext-apps SDK.',
+  },
+]}
+/>
+
+### Example
+
+```typescript
+import { MCPServer } from '@mastra/mcp'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const calculatorTool = createTool({
+  id: 'calculatorWithUI',
+  description: 'An interactive calculator',
+  inputSchema: z.object({
+    num1: z.number(),
+    num2: z.number(),
+    operation: z.enum(['add', 'subtract']),
+  }),
+  execute: async ({ num1, num2, operation }) => {
+    const result = operation === 'add' ? num1 + num2 : num1 - num2
+    return {
+      content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+      structuredContent: { result },
+    }
+  },
+})
+
+const server = new MCPServer({
+  id: 'app-server',
+  name: 'App Server',
+  version: '1.0.0',
+  tools: { calculatorTool },
+  appResources: {
+    'ui://calculator/main': {
+      name: 'Interactive Calculator',
+      html: '<html><body><h2>Calculator</h2>...</body></html>',
+    },
+  },
+})
+```
+
+Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools.
+
+:::note
+
+Visit [MCP Apps](/docs/mcp/mcp-apps) for the full app bridge API and usage patterns.
+
+:::
 
 ## Related information
 

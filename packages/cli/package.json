@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.7.4-alpha.0",
+  "version": "1.9.0-alpha.3",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -23,6 +23,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
@@ -94,7 +95,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.1.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.32.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
