@@ -12,7 +12,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
-import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import { backgroundOverrideJsonSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -25,8 +25,6 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
-import { isZodObject } from '../../utils/zod-utils';
-
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
 import type {
@@ -38,6 +36,74 @@ import type {
   VercelToolV5,
 } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
+
+function injectBackgroundAndResumeFieldsIntoInputSchema(
+  schema: unknown,
+  isBackgroundEligible: boolean,
+  isResumableTool: boolean,
+) {
+  let resolved = schema;
+  if (typeof resolved === 'function') {
+    resolved = (resolved as () => unknown)();
+  }
+  if (resolved === undefined || resolved === null) {
+    resolved = z.object({});
+  }
+
+  const objectJsonSchema = standardSchemaToJSONSchema(toStandardSchema(resolved as any), {
+    io: 'input',
+  });
+
+  if (
+    !objectJsonSchema ||
+    typeof objectJsonSchema !== 'object' ||
+    (objectJsonSchema as { type?: unknown }).type !== 'object'
+  ) {
+    return null;
+  }
+
+  const baseProps =
+    objectJsonSchema.properties && typeof objectJsonSchema.properties === 'object'
+      ? { ...objectJsonSchema.properties }
+      : {};
+
+  let properties: Record<string, unknown> = { ...baseProps };
+
+  if (isBackgroundEligible) {
+    properties = {
+      ...properties,
+      _background: backgroundOverrideJsonSchema,
+    };
+  }
+  if (isResumableTool) {
+    properties = {
+      ...properties,
+      suspendedToolRunId: {
+        type: ['string', 'null'] as const,
+        description: 'The runId of the suspended tool',
+      },
+      resumeData: {
+        description: 'The resumeData object created from the resumeSchema of suspended tool',
+      },
+    };
+  }
+
+  const injectedKeys = ['_background', 'suspendedToolRunId', 'resumeData'] as const;
+  const merged: typeof objectJsonSchema = {
+    ...objectJsonSchema,
+    type: 'object',
+    properties,
+  };
+
+  const required = Array.isArray(merged.required) ? [...merged.required] : undefined;
+  if (required) {
+    merged.required = required.filter(
+      name => !injectedKeys.includes(name as (typeof injectedKeys)[number]),
+    );
+  }
+
+  return merged;
+}
 
 /**
  * Types that can be converted to Mastra tools.
@@ -87,56 +153,13 @@ export class CoreToolBuilder extends MastraBase {
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
       if (isBackgroundEligible || isResumableTool) {
-        let schema = this.originalTool.inputSchema;
-        if (typeof schema === 'function') {
-          schema = schema();
-        }
-        if (!schema) {
-          schema = z.object({});
-        }
-
-        if (isZodObject(schema)) {
-          let nextSchema = schema;
-          if (isBackgroundEligible) {
-            nextSchema = nextSchema.extend({
-              _background: backgroundOverrideZodSchema,
-            });
-          }
-          if (isResumableTool) {
-            nextSchema = nextSchema.extend({
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
-          }
-          this.originalTool.inputSchema = nextSchema;
-        } else {
-          // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
-          // Extract JSON Schema, add suspend/resume fields, re-wrap.
-          const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
-          if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-            if (isBackgroundEligible) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                _background: backgroundOverrideJsonSchema,
-              };
-            }
-            if (isResumableTool) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                suspendedToolRunId: {
-                  type: ['string', 'null'],
-                  description: 'The runId of the suspended tool',
-                },
-                resumeData: {
-                  description: 'The resumeData object created from the resumeSchema of suspended tool',
-                },
-              };
-            }
-            this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
-          }
+        const merged = injectBackgroundAndResumeFieldsIntoInputSchema(
+          this.originalTool.inputSchema,
+          isBackgroundEligible,
+          isResumableTool,
+        );
+        if (merged) {
+          this.originalTool.inputSchema = toStandardSchema(merged) as any;
         }
       }
     }
