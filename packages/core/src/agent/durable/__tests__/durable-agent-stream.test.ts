@@ -279,6 +279,7 @@ describe('DurableAgent streaming execution', () => {
 
       expect(writerWasProvided).toBe(true);
       expect(dataChunk).toBeDefined();
+      expect(dataChunk.data).toEqual({ status: 'processed' });
       expect(finishChunk).toBeDefined();
       expect(dataIndex).toBeLessThan(finishIndex);
       expect(finishChunk?.payload.output.text).toBe('processed response');
