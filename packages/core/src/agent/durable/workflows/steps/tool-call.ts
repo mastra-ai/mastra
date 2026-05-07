@@ -208,7 +208,12 @@ export function createDurableToolCallStep() {
         });
 
       // 2. Check if tool requires approval
-      const requiresApproval = await toolRequiresApproval(tool, agentOptions.requireToolApproval, args);
+      const requiresApproval = await toolRequiresApproval(tool, agentOptions.requireToolApproval, args, {
+        requestContext,
+        workspace,
+        logger,
+        toolName,
+      });
 
       if (requiresApproval && !resumeData) {
         const resumeSchema = JSON.stringify({

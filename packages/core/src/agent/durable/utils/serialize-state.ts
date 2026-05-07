@@ -45,7 +45,7 @@ export function serializeToolMetadata(name: string, tool: CoreTool): Serializabl
     name,
     description: tool.description,
     inputSchema,
-    requireApproval: (tool as any).requireApproval,
+    requireApproval: Boolean((tool as any).requireApproval || (tool as any).needsApprovalFn),
     hasSuspendSchema: (tool as any).hasSuspendSchema,
   };
 }

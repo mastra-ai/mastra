@@ -369,8 +369,8 @@ describe('createWorkspaceTools', () => {
       const tools = await createWorkspaceTools(workspace);
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
-      // Static flag is true so the pipeline knows to check the function
-      expect(writeTool.requireApproval).toBe(true);
+      // Static flag remains false because the dynamic function decides per call
+      expect(writeTool.requireApproval).toBe(false);
       // The dynamic function is stored for execution-time evaluation
       expect(typeof writeTool.needsApprovalFn).toBe('function');
 

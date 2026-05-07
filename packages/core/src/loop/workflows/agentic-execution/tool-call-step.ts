@@ -17,6 +17,7 @@ import {
   withToolPayloadTransformMetadata,
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
+import { resolveToolRequiresApproval } from '../../../tools/approval';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -369,22 +370,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
-        if ((tool as any).needsApprovalFn) {
-          // Evaluate the function with parsed args and available context
-          try {
-            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
-              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
-              workspace: _internal?.stepWorkspace,
-            });
-            toolRequiresApproval = needsApprovalResult;
-          } catch (error) {
-            // Log error to help developers debug faulty needsApprovalFn implementations
-            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe
-            toolRequiresApproval = true;
-          }
+        if (resumeData && typeof resumeData === 'object' && 'approved' in resumeData && resumeData.approved === false) {
+          await removeToolMetadata(inputData.toolName, 'approval');
+
+          return {
+            result: 'Tool call was not approved by the user',
+            ...inputData,
+          };
         }
+
+        const toolRequiresApproval = await resolveToolRequiresApproval({
+          tool,
+          args,
+          requireToolApproval: Boolean(requireToolApproval),
+          requestContext,
+          workspace: _internal?.stepWorkspace,
+          logger,
+          toolName: inputData.toolName,
+        });
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(

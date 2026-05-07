@@ -20,6 +20,7 @@ import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
+import { resolveToolRequiresApproval } from '../../tools/approval';
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
@@ -1576,19 +1577,18 @@ export async function createNetworkLoop({
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
       // - undefined (no approval needed)
       // If needsApprovalFn exists, evaluate it with the tool args
-      let toolRequiresApproval = (tool as any).requireApproval;
-      if ((tool as any).needsApprovalFn) {
-        // Evaluate the function with the parsed args
-        try {
-          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
-          toolRequiresApproval = needsApprovalResult;
-        } catch (error) {
-          // Log error to help developers debug faulty needsApprovalFn implementations
-          logger?.error(`Error evaluating needsApprovalFn for tool ${toolId}:`, error);
-          // On error, default to requiring approval to be safe
-          toolRequiresApproval = true;
-        }
-      }
+      const approvalWasDenied =
+        resumeData && typeof resumeData === 'object' && 'approved' in resumeData && resumeData.approved === false;
+
+      const toolRequiresApproval =
+        approvalWasDenied ||
+        (await resolveToolRequiresApproval({
+          tool,
+          args: inputDataToUse as Record<string, unknown>,
+          requestContext,
+          logger,
+          toolName: toolId,
+        }));
 
       if (toolRequiresApproval) {
         // Check if abort fired before writing approval metadata or suspending

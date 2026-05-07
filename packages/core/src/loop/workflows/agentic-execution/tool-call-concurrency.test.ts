@@ -8,6 +8,7 @@ import {
 describe('tool call concurrency resolution', () => {
   const safeTool = {};
   const approvalTool = { requireApproval: true };
+  const dynamicApprovalTool = { needsApprovalFn: () => false };
   const suspendTool = { hasSuspendSchema: true };
 
   it('requires sequential execution when global approval is enabled', () => {
@@ -56,6 +57,18 @@ describe('tool call concurrency resolution', () => {
         activeTools: ['safe'],
       }),
     ).toBe(false);
+  });
+
+  it('requires sequential execution when a dynamic approval tool is active', () => {
+    expect(
+      effectiveToolSetRequiresSequentialExecution({
+        tools: {
+          safe: safeTool,
+          dynamicApproval: dynamicApprovalTool,
+        },
+        activeTools: ['dynamicApproval'],
+      }),
+    ).toBe(true);
   });
 
   it('ignores unknown active tool names', () => {

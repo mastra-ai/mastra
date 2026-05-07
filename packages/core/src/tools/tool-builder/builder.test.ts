@@ -232,8 +232,8 @@ describe('MCP Tool Tracing', () => {
 
       const builtTool = builder.build();
 
-      // requireApproval should be true to trigger logic in tool-call-step
-      expect(builtTool.requireApproval).toBe(true);
+      // requireApproval remains the static approval flag.
+      expect(builtTool.requireApproval).toBe(false);
       // needsApprovalFn should be correctly assigned from options
       expect((builtTool as any).needsApprovalFn).toBe(needsApprovalFn);
     });
@@ -257,6 +257,31 @@ describe('MCP Tool Tracing', () => {
       const builtTool = builder.build();
       expect(builtTool.requireApproval).toBe(true);
       expect((builtTool as any).needsApprovalFn).toBeUndefined();
+    });
+
+    it('should preserve needsApprovalFn from the original tool when requireApproval is static false', () => {
+      const needsApprovalFn = (input: any) => input.value === 'secret';
+      const testTool = {
+        id: 'test-tool',
+        description: 'A test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        requireApproval: false,
+        needsApprovalFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'test-tool',
+          requireApproval: false,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      expect(builtTool.requireApproval).toBe(false);
+      expect((builtTool as any).needsApprovalFn).toBe(needsApprovalFn);
     });
   });
 });
