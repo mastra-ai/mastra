@@ -1,6 +1,5 @@
 ---
-'@mastra/client-js': patch
-'@internal/playground': patch
+'@mastra/client-js': minor
 ---
 
 Fix `orderBy` shape mismatch for paginated list methods.
