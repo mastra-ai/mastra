@@ -310,6 +310,126 @@ function hasTextPart(message: MastraDBMessage): boolean {
   );
 }
 
+function isEmptyAssistantMessage(message: MastraDBMessage): boolean {
+  return message.role === 'assistant' && Array.isArray(message.content?.parts) && message.content.parts.length === 0;
+}
+
+function hasToolInvocationPart(message: MastraDBMessage): boolean {
+  return Boolean(
+    message.content?.parts?.some(
+      part => isPlainObject(part) && part.type === 'tool-invocation' && isPlainObject(part.toolInvocation),
+    ),
+  );
+}
+
+function getMessageText(message: MastraDBMessage): string {
+  return (
+    message.content?.parts
+      ?.flatMap(part => (isPlainObject(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : []))
+      .join('') ?? ''
+  );
+}
+
+function getOutputMessageText(item: Extract<ResponseOutputItem, { type: 'message' }>): string {
+  return item.content.map(part => part.text).join('');
+}
+
+function normalizeFallbackComparisonText(text: string): string {
+  return text.trim();
+}
+
+function matchesFallbackText(messageText: string, fallbackText: string): boolean {
+  return messageText === fallbackText || normalizeFallbackComparisonText(messageText) === normalizeFallbackComparisonText(fallbackText);
+}
+
+function hasMatchingAssistantText(
+  messages: MastraDBMessage[],
+  item: Extract<ResponseOutputItem, { type: 'message' }>,
+): boolean {
+  const fallbackText = getOutputMessageText(item);
+
+  return messages.some(
+    message => message.role === 'assistant' && hasTextPart(message) && matchesFallbackText(getMessageText(message), fallbackText),
+  );
+}
+
+function shouldReplaceAssistantText(messageText: string, fallbackText: string): boolean {
+  const normalizedMessageText = normalizeFallbackComparisonText(messageText);
+  const normalizedFallbackText = normalizeFallbackComparisonText(fallbackText);
+
+  return (
+    normalizedFallbackText !== normalizedMessageText &&
+    (fallbackText.startsWith(messageText) || normalizedFallbackText.startsWith(normalizedMessageText))
+  );
+}
+
+function getAssistantMessageTexts(messages: MastraDBMessage[]): string[] {
+  return messages.flatMap(message =>
+    message.role === 'assistant' && hasTextPart(message) ? [getMessageText(message)] : [],
+  );
+}
+
+function shouldAddFallbackMessageText(
+  messages: MastraDBMessage[],
+  item: Extract<ResponseOutputItem, { type: 'message' }>,
+): boolean {
+  const assistantTexts = getAssistantMessageTexts(messages);
+  if (assistantTexts.length === 0) {
+    return true;
+  }
+
+  const fallbackText = getOutputMessageText(item);
+  return assistantTexts.every(messageText => shouldReplaceAssistantText(messageText, fallbackText));
+}
+
+function shouldReplaceAssistantTextWithFallback({
+  fallbackMessageTexts,
+  message,
+  textOnlyFallbackMessageTexts,
+}: {
+  fallbackMessageTexts: Set<string>;
+  message: MastraDBMessage;
+  textOnlyFallbackMessageTexts: Set<string>;
+}): boolean {
+  if (message.role !== 'assistant' || !hasTextPart(message)) {
+    return false;
+  }
+
+  const messageText = getMessageText(message);
+  if (!messageText) {
+    return false;
+  }
+
+  const comparisonTexts = hasToolInvocationPart(message) ? fallbackMessageTexts : textOnlyFallbackMessageTexts;
+
+  return [...comparisonTexts].some(fallbackText => shouldReplaceAssistantText(messageText, fallbackText));
+}
+
+function replaceAssistantTextWithFallback({
+  fallbackMessageTexts,
+  message,
+  textOnlyFallbackMessageTexts,
+}: {
+  fallbackMessageTexts: Set<string>;
+  message: MastraDBMessage;
+  textOnlyFallbackMessageTexts: Set<string>;
+}): MastraDBMessage {
+  if (!shouldReplaceAssistantTextWithFallback({ fallbackMessageTexts, message, textOnlyFallbackMessageTexts })) {
+    return message;
+  }
+
+  const parts = message.content?.parts ?? [];
+  const remainingParts = parts.filter(part => !(isPlainObject(part) && part.type === 'text'));
+
+  return {
+    ...message,
+    content: {
+      ...message.content,
+      parts: remainingParts,
+    },
+  };
+}
+
 function parseFunctionCallArguments(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -452,7 +572,6 @@ function getMissingFallbackOutputItems({
 
   const existingCallIds = new Set<string>();
   const existingResultCallIds = new Set<string>();
-  const hasAssistantText = messages.some(message => message.role === 'assistant' && hasTextPart(message));
 
   for (const message of messages) {
     for (const toolInvocation of getToolInvocationParts(message)) {
@@ -480,7 +599,11 @@ function getMissingFallbackOutputItems({
     }
 
     if (item.type === 'message') {
-      return !hasAssistantText && item.content.some(part => part.text.length > 0);
+      if (!item.content.some(part => part.text.length > 0) || hasMatchingAssistantText(messages, item)) {
+        return false;
+      }
+
+      return shouldAddFallbackMessageText(messages, item);
     }
 
     return false;
@@ -567,6 +690,29 @@ export async function resolveResponseTurnMessagesForStorage({
   }
 
   const missingFallbackItems = getMissingFallbackOutputItems({ fallbackOutputItems, messages: responseMessages });
+  const missingFallbackMessageIds = new Set(
+    missingFallbackItems
+      .filter((item): item is Extract<ResponseOutputItem, { type: 'message' }> => item.type === 'message')
+      .map(item => item.id),
+  );
+  const fallbackItemsWithMatchingAssistantText = (fallbackOutputItems ?? []).filter(
+    (item): item is Extract<ResponseOutputItem, { type: 'message' }> =>
+      item.type === 'message' && hasMatchingAssistantText(responseMessages, item),
+  );
+  const textOnlyFallbackMessageTexts = new Set(
+    fallbackItemsWithMatchingAssistantText.map(getOutputMessageText).filter(Boolean),
+  );
+  const fallbackMessageTexts = new Set(
+    (fallbackOutputItems ?? [])
+      .filter((item): item is Extract<ResponseOutputItem, { type: 'message' }> => item.type === 'message')
+      .filter(item => missingFallbackMessageIds.has(item.id) || fallbackItemsWithMatchingAssistantText.includes(item))
+      .map(getOutputMessageText)
+      .filter(Boolean),
+  );
+  const baseMessages = fallbackMessageTexts.size
+    ? responseMessages
+        .map(message => replaceAssistantTextWithFallback({ fallbackMessageTexts, message, textOnlyFallbackMessageTexts }))
+    : responseMessages;
   const syntheticFallbackMessages = createSyntheticMessagesFromOutputItems({
     contextOutputItems: fallbackOutputItems ?? [],
     outputItems: missingFallbackItems,
@@ -575,7 +721,7 @@ export async function resolveResponseTurnMessagesForStorage({
   });
   const resolvedMessages = sortMessagesByFallbackOutputOrder({
     fallbackOutputItems,
-    messages: [...responseMessages, ...syntheticFallbackMessages],
+    messages: [...baseMessages, ...syntheticFallbackMessages],
     responseId,
   });
 
@@ -647,15 +793,20 @@ export async function persistResponseTurnRecord({
   } else {
     normalizedMessages.push(lastAssistantMessage);
   }
+  const storedMessageIndex = responseAnchorIndex >= 0 ? responseAnchorIndex : normalizedMessages.length - 1;
 
+  const droppedSupersededMessageIds = normalizedMessages.flatMap((message, index) =>
+    index !== storedMessageIndex && isEmptyAssistantMessage(message) && messages[index]?.id ? [messages[index]!.id] : [],
+  );
   const staleMessageIds =
     responseAnchorIndex >= 0 && messages[responseAnchorIndex]?.id && messages[responseAnchorIndex]?.id !== responseId
       ? [messages[responseAnchorIndex]!.id]
       : [];
+  const messagesToSave = normalizedMessages.filter((message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message));
 
   const storedMessage = writeResponseTurnRecordMetadata(lastAssistantMessage, {
     ...metadata,
-    messageIds: normalizedMessages.map(message => message.id),
+    messageIds: messagesToSave.map(message => message.id),
   });
 
   if (responseAnchorIndex >= 0) {
@@ -664,10 +815,13 @@ export async function persistResponseTurnRecord({
     normalizedMessages[normalizedMessages.length - 1] = storedMessage;
   }
 
-  await memoryStore.saveMessages({ messages: normalizedMessages });
+  const savedMessages = normalizedMessages.filter((message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message));
 
-  if (staleMessageIds.length > 0) {
-    await memoryStore.deleteMessages(staleMessageIds);
+  await memoryStore.saveMessages({ messages: savedMessages });
+
+  const deleteMessageIds = [...new Set([...staleMessageIds, ...droppedSupersededMessageIds])];
+  if (deleteMessageIds.length > 0) {
+    await memoryStore.deleteMessages(deleteMessageIds);
   }
 }
 

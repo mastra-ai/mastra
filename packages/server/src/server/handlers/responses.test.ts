@@ -279,18 +279,28 @@ function createStreamResultFromChunks({
   } as unknown as Awaited<ReturnType<Agent['stream']>>;
 }
 
-function createLegacyStreamResult(text: string) {
+function createLegacyStreamResult({
+  text,
+  chunks = [
+    {
+      type: 'text-delta',
+      textDelta: 'Hello',
+    },
+    {
+      type: 'text-delta',
+      textDelta: ' world',
+    },
+  ],
+}: {
+  text: string;
+  chunks?: Array<Record<string, unknown>>;
+}) {
   const fullStream = Promise.resolve(
     new ReadableStream({
       start(controller) {
-        controller.enqueue({
-          type: 'text-delta',
-          textDelta: 'Hello',
-        });
-        controller.enqueue({
-          type: 'text-delta',
-          textDelta: ' world',
-        });
+        for (const chunk of chunks) {
+          controller.enqueue(chunk);
+        }
         controller.close();
       },
     }),
@@ -1302,7 +1312,9 @@ describe('Responses Handlers', () => {
 
   it('falls back to streamLegacy for AI SDK v4 agents', async () => {
     mockAgentSpecVersion(agent, 'v1');
-    const streamLegacySpy = vi.spyOn(agent, 'streamLegacy').mockResolvedValue(createLegacyStreamResult('Hello world'));
+    const streamLegacySpy = vi.spyOn(agent, 'streamLegacy').mockResolvedValue(
+      createLegacyStreamResult({ text: 'Hello world' }),
+    );
     const streamSpy = vi.spyOn(agent, 'stream');
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
@@ -1326,23 +1338,27 @@ describe('Responses Handlers', () => {
     const toolTurn = { callId: 'call_legacy_stream', city: 'Lagos', weather: 'sunny' };
     mockAgentSpecVersion(agent, 'v1');
     const streamLegacySpy = vi.spyOn(agent, 'streamLegacy').mockResolvedValue(
-      createStreamResultFromChunks({
+      createLegacyStreamResult({
         text: 'Legacy tool done.',
         chunks: [
-          ...createWeatherToolCallChunk(toolTurn),
-          createWeatherToolResultChunk(toolTurn),
+          {
+            type: 'tool-call',
+            toolCallId: toolTurn.callId,
+            toolName: 'weather',
+            args: { city: toolTurn.city },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: toolTurn.callId,
+            toolName: 'weather',
+            result: { weather: toolTurn.weather },
+          },
           {
             type: 'text-delta',
-            payload: {
-              text: 'Legacy tool done.',
-            },
+            textDelta: 'Legacy tool done.',
           },
         ],
-        dbMessages: createWeatherToolMessages({
-          turns: [toolTurn],
-          finalText: 'Legacy tool done.',
-        }),
-      }) as Awaited<ReturnType<Agent['streamLegacy']>>,
+      }),
     );
     const streamSpy = vi.spyOn(agent, 'stream');
 
@@ -2564,6 +2580,447 @@ describe('Responses Handlers', () => {
         content: [{ text: 'The lookup is done.' }],
       },
     ]);
+  });
+
+  it('does not let a partial assistant text db message suppress completed fallback text', async () => {
+    const toolTurn = { callId: 'call_partial_text_db_message', city: 'Lagos', weather: 'sunny' };
+
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'The lookup is done.',
+        chunks: [
+          ...createWeatherToolCallChunk(toolTurn),
+          createWeatherToolResultChunk(toolTurn),
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'The lookup is done.',
+            },
+          },
+        ],
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-partial-text',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:59:00.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: toolTurn.callId,
+                  toolName: 'weather',
+                  args: { city: toolTurn.city },
+                },
+              },
+              { type: 'text', text: 'The lookup' },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check Lagos',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: completed.response.id,
+    });
+    const storedMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+    const expectedOutput = [
+      {
+        id: toolTurn.callId,
+        type: 'function_call',
+        call_id: toolTurn.callId,
+        name: 'weather',
+        arguments: JSON.stringify({ city: 'Lagos' }),
+      },
+      {
+        id: `${toolTurn.callId}:output`,
+        type: 'function_call_output',
+        call_id: toolTurn.callId,
+        output: JSON.stringify({ weather: 'sunny' }),
+      },
+      {
+        id: completed.response.id,
+        type: 'message',
+        content: [expect.objectContaining({ text: 'The lookup is done.' })],
+      },
+    ];
+
+    for (const output of [completed.response.output, retrieved.output]) {
+      expect(output).toMatchObject(expectedOutput);
+      expect(output).toHaveLength(expectedOutput.length);
+    }
+    const storedPartialMessage = storedMessages.messages.find(message => message.id === 'assistant-partial-text');
+    expect(storedPartialMessage?.content.parts).toEqual([
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          toolCallId: toolTurn.callId,
+          toolName: 'weather',
+          args: { city: toolTurn.city },
+        }),
+      }),
+    ]);
+  });
+
+  it('does not duplicate fallback text when persisted assistant text only differs by surrounding whitespace', async () => {
+    const toolTurn = { callId: 'call_trimmed_text_db_message', city: 'Lagos', weather: 'sunny' };
+
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'The lookup is done.',
+        chunks: [
+          ...createWeatherToolCallChunk(toolTurn),
+          createWeatherToolResultChunk(toolTurn),
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'The lookup is done.',
+            },
+          },
+        ],
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-whitespace-final',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:59:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup is done.\n' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check Lagos',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: completed.response.id,
+    });
+
+    for (const output of [completed.response.output, retrieved.output]) {
+      expect(output).toHaveLength(3);
+      expect(output.filter(item => item.type === 'message')).toHaveLength(1);
+      expect(output).toMatchObject([
+        {
+          id: toolTurn.callId,
+          type: 'function_call',
+          call_id: toolTurn.callId,
+        },
+        {
+          id: `${toolTurn.callId}:output`,
+          type: 'function_call_output',
+          call_id: toolTurn.callId,
+        },
+        {
+          id: completed.response.id,
+          type: 'message',
+          content: [{ text: 'The lookup is done.\n' }],
+        },
+      ]);
+    }
+  });
+
+  it('does not duplicate fallback text for non-prefix assistant text mismatches', async () => {
+    const toolTurn = { callId: 'call_mismatched_text_db_message', city: 'Lagos', weather: 'sunny' };
+
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'The lookup is done.',
+        chunks: [
+          ...createWeatherToolCallChunk(toolTurn),
+          createWeatherToolResultChunk(toolTurn),
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'The lookup is done.',
+            },
+          },
+        ],
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-mismatched-final',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:59:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup is done!' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check Lagos',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: completed.response.id,
+    });
+
+    for (const output of [completed.response.output, retrieved.output]) {
+      expect(output).toHaveLength(3);
+      expect(output.filter(item => item.type === 'message')).toHaveLength(1);
+      expect(output).toMatchObject([
+        {
+          id: toolTurn.callId,
+          type: 'function_call',
+          call_id: toolTurn.callId,
+        },
+        {
+          id: `${toolTurn.callId}:output`,
+          type: 'function_call_output',
+          call_id: toolTurn.callId,
+        },
+        {
+          id: completed.response.id,
+          type: 'message',
+          content: [{ text: 'The lookup is done!' }],
+        },
+      ]);
+    }
+  });
+
+  it('does not add fallback text when a partial db message precedes a non-prefix text mismatch', async () => {
+    const toolTurn = { callId: 'call_partial_then_mismatched_text', city: 'Lagos', weather: 'sunny' };
+
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'The lookup is done.',
+        chunks: [
+          ...createWeatherToolCallChunk(toolTurn),
+          createWeatherToolResultChunk(toolTurn),
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'The lookup is done.',
+            },
+          },
+        ],
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-partial-before-mismatch',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:58:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup' }],
+          }),
+          createDbMessage({
+            id: 'assistant-mismatched-after-partial',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:59:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup is done!' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check Lagos',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: completed.response.id,
+    });
+    const storedMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+
+    for (const output of [completed.response.output, retrieved.output]) {
+      const messageTexts = output.flatMap(item =>
+        item.type === 'message' ? [item.content.map(part => part.text).join('')] : [],
+      );
+
+      expect(output).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: toolTurn.callId,
+            type: 'function_call',
+            call_id: toolTurn.callId,
+          }),
+          expect.objectContaining({
+            id: `${toolTurn.callId}:output`,
+            type: 'function_call_output',
+            call_id: toolTurn.callId,
+          }),
+        ]),
+      );
+      expect(messageTexts).toEqual(expect.arrayContaining(['The lookup', 'The lookup is done!']));
+      expect(messageTexts).toHaveLength(2);
+      expect(messageTexts).not.toContain('The lookup is done.');
+    }
+    expect(storedMessages.messages.map(message => message.id)).toContain('assistant-partial-before-mismatch');
+  });
+
+  it('strips partial assistant text when a later db message already has the completed fallback text', async () => {
+    const toolTurn = { callId: 'call_partial_then_final_text', city: 'Lagos', weather: 'sunny' };
+
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'The lookup is done.',
+        chunks: [
+          ...createWeatherToolCallChunk(toolTurn),
+          createWeatherToolResultChunk(toolTurn),
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'The lookup is done.',
+            },
+          },
+        ],
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-earlier-partial-text',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:58:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup' }],
+          }),
+          createDbMessage({
+            id: 'assistant-later-final-text',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:59:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup is done.' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check Lagos',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: completed.response.id,
+    });
+    const storedMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+
+    for (const output of [completed.response.output, retrieved.output]) {
+      expect(output).toHaveLength(3);
+      expect(output.filter(item => item.type === 'message')).toHaveLength(1);
+      expect(output).toMatchObject([
+        {
+          id: toolTurn.callId,
+          type: 'function_call',
+          call_id: toolTurn.callId,
+        },
+        {
+          id: `${toolTurn.callId}:output`,
+          type: 'function_call_output',
+          call_id: toolTurn.callId,
+        },
+        {
+          id: completed.response.id,
+          type: 'message',
+          content: [{ text: 'The lookup is done.' }],
+        },
+      ]);
+    }
+    expect(storedMessages.messages.map(message => message.id)).not.toContain('assistant-earlier-partial-text');
+  });
+
+  it('preserves text-only prefix db messages while storing completed fallback text', async () => {
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'The lookup is done.',
+        chunks: [
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'The lookup is done.',
+            },
+          },
+        ],
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-partial-text-only',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:59:00.000Z'),
+            parts: [{ type: 'text', text: 'The lookup' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Check Lagos',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completed = events.find(event => event.type === 'response.completed')!;
+    const storedMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+
+    const messageTexts = completed.response.output.flatMap(item =>
+      item.type === 'message' ? [item.content.map(part => part.text).join('')] : [],
+    );
+    expect(messageTexts).toEqual(expect.arrayContaining(['The lookup', 'The lookup is done.']));
+    expect(messageTexts).toHaveLength(2);
+    expect(storedMessages.messages.map(message => message.id)).toContain('assistant-partial-text-only');
+
+    await DELETE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: completed.response.id,
+    });
+
+    const remainingMessages = await memory.recall({
+      threadId: completed.response.conversation_id,
+      perPage: false,
+    });
+    expect(remainingMessages.messages.map(message => message.id)).not.toContain('assistant-partial-text-only');
   });
 
   it('preserves streamed fallback tool calls when db messages only contain tool results', async () => {
