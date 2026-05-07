@@ -59,7 +59,7 @@ export type ParentWorkflow = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
   stepId: string;
-  stepGraph: Record<string, StepFlowEntry>;
+  stepGraph: StepFlowEntry[];
   activeSteps: Record<string, boolean>;
   resumeSteps: string[];
   resumeData: any;
