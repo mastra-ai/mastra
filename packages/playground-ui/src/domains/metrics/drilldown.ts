@@ -92,6 +92,10 @@ type BuildArgs = {
   dashboardFilter: MetricsDimensionalFilter;
   /** Per-card scoping applied on top of dashboard filters. */
   scope: DrilldownScope;
+  /** Override the Traces page base path. Defaults to `/observability` (mastra Studio). */
+  tracesBasePath?: string;
+  /** Override the Logs page base path. Defaults to `/logs` (mastra Studio). */
+  logsBasePath?: string;
 };
 
 function applyDate(
@@ -133,7 +137,13 @@ function appendArray(params: URLSearchParams, key: string, values: string[] | un
 
 /** Build a relative URL to the Traces page pre-filtered by the dashboard
  *  filters + per-card scope. */
-export function buildTracesDrilldownUrl({ preset, customRange, dashboardFilter, scope }: BuildArgs): string {
+export function buildTracesDrilldownUrl({
+  preset,
+  customRange,
+  dashboardFilter,
+  scope,
+  tracesBasePath = '/observability',
+}: BuildArgs): string {
   const params = new URLSearchParams();
   params.set(TRACE_LIST_MODE_PARAM, 'branches');
 
@@ -168,12 +178,18 @@ export function buildTracesDrilldownUrl({ preset, customRange, dashboardFilter, 
   appendArray(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.tags, dashboardFilter.tags);
 
   const query = params.toString();
-  return query ? `/observability?${query}` : '/observability';
+  return query ? `${tracesBasePath}?${query}` : tracesBasePath;
 }
 
 /** Build a relative URL to the Logs page pre-filtered by the dashboard filters
  *  + per-card scope. Useful for "View errors in logs" affordances. */
-export function buildLogsDrilldownUrl({ preset, customRange, dashboardFilter, scope }: BuildArgs): string {
+export function buildLogsDrilldownUrl({
+  preset,
+  customRange,
+  dashboardFilter,
+  scope,
+  logsBasePath = '/logs',
+}: BuildArgs): string {
   const params = new URLSearchParams();
 
   applyDate(
@@ -209,5 +225,5 @@ export function buildLogsDrilldownUrl({ preset, customRange, dashboardFilter, sc
   }
 
   const query = params.toString();
-  return query ? `/logs?${query}` : '/logs';
+  return query ? `${logsBasePath}?${query}` : logsBasePath;
 }

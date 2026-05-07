@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import type { ElementType } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
 
@@ -13,12 +14,18 @@ export function MetricsDataTable<T extends { key: string }>({
   data,
   className,
   getRowHref,
+  LinkComponent = 'a',
 }: {
   columns: Column<T>[];
   data: T[];
   className?: string;
   /** If provided and returns a non-null string, the row is rendered as a link to that URL. */
   getRowHref?: (row: T) => string | undefined;
+  /** Override how `getRowHref` links are rendered. Receives `href`, `className`,
+   *  `onFocus`, `onBlur`, `onMouseEnter`, `onMouseLeave`, and `children`.
+   *  Defaults to a plain `<a>`; pass an adapter (e.g. for react-router or
+   *  next/link) to keep navigation in-app. */
+  LinkComponent?: ElementType;
 }) {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
@@ -78,7 +85,7 @@ export function MetricsDataTable<T extends { key: string }>({
 
                 if (href) {
                   return (
-                    <a
+                    <LinkComponent
                       key={`${row.key}-${i}`}
                       href={href}
                       className={cellClasses}
@@ -87,7 +94,7 @@ export function MetricsDataTable<T extends { key: string }>({
                       {...rowHandlers}
                     >
                       {col.value(row)}
-                    </a>
+                    </LinkComponent>
                   );
                 }
                 return (
