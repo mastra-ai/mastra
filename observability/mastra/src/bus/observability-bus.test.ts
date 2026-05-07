@@ -268,15 +268,18 @@ describe('ObservabilityBus', () => {
       bus.registerExporter(exporter);
 
       const event = createScoreEvent();
+      event.score.spanId = 'span-fallback-test';
+      event.score.scorerName = 'Readable Fallback Scorer';
+      event.score.metadata = { source: 'legacy-fallback-test' };
       bus.emit(event);
 
       expect(addScoreToTrace).toHaveBeenCalledWith({
         traceId: event.score.traceId,
-        spanId: event.score.spanId,
-        score: event.score.score,
-        reason: event.score.reason,
-        scorerName: event.score.scorerName ?? event.score.scorerId,
-        metadata: event.score.metadata,
+        spanId: 'span-fallback-test',
+        score: 0.85,
+        reason: 'Relevant response',
+        scorerName: 'Readable Fallback Scorer',
+        metadata: { source: 'legacy-fallback-test' },
       });
     });
 
