@@ -50,7 +50,7 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
-import type { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
@@ -3883,7 +3883,6 @@ export class Mastra<
    */
   public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     if (!this.#workflowEventProcessor) {
-      const { WorkflowEventProcessor } = await import('../workflows/evented/workflow-event-processor');
       this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
     }
     return this.#workflowEventProcessor.handle(event);

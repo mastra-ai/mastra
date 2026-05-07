@@ -1,5 +1,6 @@
 import type { Event } from '../../events/types';
-import type { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
+import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
+import { HttpRemoteStrategy } from '../strategies/http-remote-strategy';
 import { PullTransport } from '../transport/pull-transport';
 import type { WorkerTransport } from '../transport/transport';
 import type { StepExecutionStrategy } from '../types';
@@ -61,13 +62,11 @@ export class OrchestrationWorker extends MastraWorker {
     // separate "worker secret" gate.
     const remoteUrl = process.env.MASTRA_STEP_EXECUTION_URL;
     if (remoteUrl) {
-      const { HttpRemoteStrategy } = await import('../strategies/http-remote-strategy');
       this.#strategy = new HttpRemoteStrategy({
         serverUrl: remoteUrl,
       });
     }
 
-    const { WorkflowEventProcessor } = await import('../../workflows/evented/workflow-event-processor');
     this.#processor = new WorkflowEventProcessor({
       mastra: deps.mastra,
       stepExecutionStrategy: this.#strategy,

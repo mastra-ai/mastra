@@ -1,4 +1,7 @@
+import { RequestContext } from '../../di';
 import type { Mastra } from '../../mastra';
+import { StepExecutor } from '../../workflows/evented/step-executor';
+import { getStep } from '../../workflows/evented/workflow-event-processor/utils';
 import type { StepResult } from '../../workflows/types';
 import type { StepExecutionParams, StepExecutionStrategy } from '../types';
 
@@ -22,10 +25,6 @@ export class InProcessStrategy implements StepExecutionStrategy {
       throw new Error('InProcessStrategy requires Mastra instance. Call __registerMastra() first.');
     }
 
-    const { StepExecutor } = await import('../../workflows/evented/step-executor');
-    const { getStep } = await import('../../workflows/evented/workflow-event-processor/utils');
-    const { RequestContext: RC } = await import('../../di');
-
     const workflow = this.#mastra.getWorkflow(params.workflowId);
     const step = getStep(workflow, params.executionPath);
 
@@ -35,7 +34,7 @@ export class InProcessStrategy implements StepExecutionStrategy {
       );
     }
 
-    const rc = new RC<unknown>(Object.entries(params.requestContext ?? {}));
+    const rc = new RequestContext<unknown>(Object.entries(params.requestContext ?? {}));
 
     let abortController: AbortController | undefined;
     if (params.abortSignal) {

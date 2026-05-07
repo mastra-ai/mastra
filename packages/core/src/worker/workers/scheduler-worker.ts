@@ -1,4 +1,4 @@
-import type { WorkflowScheduler } from '../../workflows/scheduler/scheduler';
+import { WorkflowScheduler } from '../../workflows/scheduler/scheduler';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
 
@@ -34,7 +34,6 @@ export class SchedulerWorker extends MastraWorker {
       return;
     }
 
-    const { WorkflowScheduler } = await import('../../workflows/scheduler/scheduler');
     this.#scheduler = new WorkflowScheduler({
       schedulesStore,
       pubsub: deps.pubsub,

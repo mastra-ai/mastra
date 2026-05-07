@@ -1,4 +1,4 @@
-import type { BackgroundTaskManager } from '../../background-tasks/manager';
+import { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { Mastra } from '../../mastra';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
@@ -56,7 +56,6 @@ export class BackgroundTaskWorker extends MastraWorker {
       return;
     }
 
-    const { BackgroundTaskManager } = await import('../../background-tasks/manager');
     this.#manager = new BackgroundTaskManager({
       enabled: true,
       globalConcurrency: this.#config.globalConcurrency,
