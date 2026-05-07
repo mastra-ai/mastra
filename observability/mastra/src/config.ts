@@ -294,7 +294,7 @@ const sensitiveDataFilterOptionsSchema = z
     redactionToken: z.string().optional(),
     redactionStyle: z.enum(['full', 'partial']).optional(),
   })
-  .passthrough();
+  .strict();
 
 export const observabilityRegistryConfigSchema = z
   .object({

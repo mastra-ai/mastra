@@ -960,6 +960,10 @@ describe('Observability Registry', () => {
       });
 
       it('should not modify pre-instantiated ObservabilityInstance values', () => {
+        // Default ConsoleLogger level is ERROR, so warn() is a no-op. Spy on the
+        // method itself so we can assert the call regardless of the level gate.
+        const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+
         const preBuilt = new DefaultObservabilityInstance({
           serviceName: 'pre-built',
           name: 'pre-built',
@@ -975,8 +979,41 @@ describe('Observability Registry', () => {
         });
 
         // Pre-built instance is registered as-is, no auto-injected filter.
-        const processors = observability.getInstance('preBuilt')?.getSpanOutputProcessors();
-        expect(processors).toHaveLength(0);
+        const registered = observability.getInstance('preBuilt');
+        expect(registered).toBe(preBuilt);
+        expect(registered?.getSpanOutputProcessors()).toHaveLength(0);
+
+        // With auto-apply enabled (default) and no filter present, a warning is logged.
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Pre-instantiated observability instance does not include a SensitiveDataFilter'),
+          expect.objectContaining({ instanceName: 'preBuilt' }),
+        );
+
+        warnSpy.mockRestore();
+      });
+
+      it('should not warn for pre-instantiated instances when sensitiveDataFilter is disabled', () => {
+        const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+
+        const preBuilt = new DefaultObservabilityInstance({
+          serviceName: 'pre-built',
+          name: 'pre-built',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [new TestExporter()],
+          spanOutputProcessors: [],
+        });
+
+        observability = new Observability({
+          configs: { preBuilt },
+          sensitiveDataFilter: false,
+        });
+
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('Pre-instantiated observability instance does not include a SensitiveDataFilter'),
+          expect.anything(),
+        );
+
+        warnSpy.mockRestore();
       });
     });
 

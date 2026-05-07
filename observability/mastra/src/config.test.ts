@@ -219,6 +219,30 @@ describe('Observability Config Validation', () => {
         }
       }
     });
+
+    it('should reject unknown keys on sensitiveDataFilter options', () => {
+      try {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            // @ts-expect-error - misspelled option should fail-closed
+            sensitiveFieldsTypo: ['client_secret'],
+          },
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        if (error instanceof MastraError) {
+          expect(error.id).toBe('OBSERVABILITY_INVALID_CONFIG');
+          expect(error.message).toContain('sensitiveDataFilter');
+        }
+      }
+    });
   });
 
   describe('SamplingStrategy validation', () => {
