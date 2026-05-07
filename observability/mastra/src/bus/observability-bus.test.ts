@@ -262,6 +262,37 @@ describe('ObservabilityBus', () => {
       expect(onScoreEvent).toHaveBeenCalledWith(event);
     });
 
+    it('should fall back to deprecated addScoreToTrace for exporters without onScoreEvent', () => {
+      const addScoreToTrace = vi.fn();
+      const exporter = createMockExporter({ onScoreEvent: undefined, addScoreToTrace });
+      bus.registerExporter(exporter);
+
+      const event = createScoreEvent();
+      bus.emit(event);
+
+      expect(addScoreToTrace).toHaveBeenCalledWith({
+        traceId: event.score.traceId,
+        spanId: event.score.spanId,
+        score: event.score.score,
+        reason: event.score.reason,
+        scorerName: event.score.scorerName ?? event.score.scorerId,
+        metadata: event.score.metadata,
+      });
+    });
+
+    it('should prefer onScoreEvent over deprecated addScoreToTrace when both are implemented', () => {
+      const onScoreEvent = vi.fn();
+      const addScoreToTrace = vi.fn();
+      const exporter = createMockExporter({ onScoreEvent, addScoreToTrace });
+      bus.registerExporter(exporter);
+
+      const event = createScoreEvent();
+      bus.emit(event);
+
+      expect(onScoreEvent).toHaveBeenCalledWith(event);
+      expect(addScoreToTrace).not.toHaveBeenCalled();
+    });
+
     it('should not fail when exporter has no onScoreEvent handler', () => {
       const exporter = createMockExporter({ onScoreEvent: undefined });
       bus.registerExporter(exporter);

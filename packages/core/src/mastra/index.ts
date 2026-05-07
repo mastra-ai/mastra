@@ -3115,11 +3115,11 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
-    // Register step-level scorers from the workflow with the Mastra instance so
-    // their `__registerMastra` is set. Without this, the score-event publish
-    // inside `MastraScorer.run()` (`packages/core/src/evals/base.ts`) silently
-    // skips because `this.#mastra` is undefined, and workflow step scorers
-    // never reach the observability bus / exporters via `onScoreEvent`.
+    this.registerStaticWorkflowScorers(workflow);
+
+    // Dynamic scorer functions need request context, so they cannot be fully
+    // resolved synchronously here. Resolve what we can in the background for
+    // registry discovery; execution-time registration handles the live path.
     workflow
       .listScorers()
       .then(scorers => {
@@ -3150,6 +3150,19 @@ export class Mastra<
         })();
       } else {
         this.#ensureScheduler();
+      }
+    }
+  }
+
+  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
+    for (const step of Object.values(workflow.steps ?? {})) {
+      const scorers = step.scorers;
+      if (!scorers || typeof scorers === 'function') {
+        continue;
+      }
+
+      for (const [, entry] of Object.entries(scorers)) {
+        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }
