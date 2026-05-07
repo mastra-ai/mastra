@@ -89,7 +89,7 @@
     "prettier:format": "prettier --write . --log-level warn",
     "prettier:format:check": "prettier --check .",
     "list-changed-files": "(git diff --name-only --diff-filter=ACMR $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo 'main')...HEAD && git diff --name-only --diff-filter=ACMR && git diff --cached --name-only --diff-filter=ACMR) | sort -u",
-    "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' || true",
+    "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' | while IFS= read -r file; do [ -L \"$file\" ] || printf '%s\\n' \"$file\"; done || true",
     "prettier:changed": "pnpm --silent list-prettier-files | xargs prettier --write --log-level warn",
     "typecheck": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
     "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",

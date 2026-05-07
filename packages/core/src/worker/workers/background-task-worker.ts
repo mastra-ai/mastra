@@ -31,6 +31,7 @@ export class BackgroundTaskWorker extends MastraWorker {
   readonly name = 'backgroundTasks';
 
   #manager?: BackgroundTaskManager;
+  #ownsManager = false;
   #config: BackgroundTaskWorkerConfig;
   #running = false;
 
@@ -42,6 +43,19 @@ export class BackgroundTaskWorker extends MastraWorker {
   async init(deps: WorkerDeps): Promise<void> {
     await super.init(deps);
 
+    // Reuse Mastra's existing BackgroundTaskManager when available so the
+    // worker shares the per-task `taskContexts` registry populated by the
+    // producer. Spinning up a second manager subscribes the same WORKER_GROUP
+    // twice, runs `recoverStaleTasks` twice, and breaks per-task closures —
+    // any task dispatched from the producer that lands on this worker's
+    // duplicate manager has no `taskContexts` entry.
+    const existing = deps.mastra?.backgroundTaskManager;
+    if (existing) {
+      this.#manager = existing;
+      this.#ownsManager = false;
+      return;
+    }
+
     const { BackgroundTaskManager } = await import('../../background-tasks/manager');
     this.#manager = new BackgroundTaskManager({
       enabled: true,
@@ -50,6 +64,7 @@ export class BackgroundTaskWorker extends MastraWorker {
       backpressure: this.#config.backpressure,
       defaultTimeoutMs: this.#config.defaultTimeoutMs,
     });
+    this.#ownsManager = true;
 
     if (deps.mastra) {
       this.#manager.__registerMastra(deps.mastra);
@@ -88,13 +103,21 @@ export class BackgroundTaskWorker extends MastraWorker {
     if (!this.#manager || !this.deps) {
       throw new Error('BackgroundTaskWorker: call init() before start()');
     }
-    await this.#manager.init(this.deps.pubsub);
+    // When sharing Mastra's manager, Mastra has already fired off init() in
+    // its constructor as fire-and-forget. Don't re-await it here — that would
+    // surface init errors twice (the constructor's `.catch` already reports
+    // them) and serialize startWorkers() behind the manager's full bootstrap.
+    if (this.#ownsManager) {
+      await this.#manager.init(this.deps.pubsub);
+    }
     this.#running = true;
   }
 
   async stop(): Promise<void> {
     if (!this.#running) return;
-    if (this.#manager) {
+    // Only tear down the manager if this worker owns it. When sharing Mastra's
+    // manager, Mastra's stopWorkers() / shutdown is responsible.
+    if (this.#manager && this.#ownsManager) {
       await this.#manager.shutdown();
     }
     this.#running = false;

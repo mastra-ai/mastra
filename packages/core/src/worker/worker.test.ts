@@ -144,7 +144,11 @@ describe('BackgroundTaskWorker', () => {
     const worker = new BackgroundTaskWorker();
     const deps = createMockDeps();
     deps._storage.getStore.mockResolvedValue({});
-    deps.mastra = { getLogger: vi.fn().mockReturnValue(deps._logger) } as any;
+    deps.mastra = {
+      getLogger: vi.fn().mockReturnValue(deps._logger),
+      __hasInternalWorkflow: vi.fn().mockReturnValue(false),
+      __registerInternalWorkflow: vi.fn(),
+    } as any;
 
     await worker.init(deps);
     expect(worker.manager).toBeDefined();
