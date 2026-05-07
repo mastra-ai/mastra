@@ -1,7 +1,7 @@
-import { Spacer } from '@mariozechner/pi-tui';
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
+import { LoginSelectorComponent } from '../components/login-selector.js';
+import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 async function performLogin(ctx: SlashCommandContext, providerId: string): Promise<void> {
@@ -24,11 +24,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
       resolve();
     });
 
-    ctx.state.ui.showOverlay(dialog, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, dialog, { widthPercent: 0.8, maxHeight: '60%' });
     dialog.focused = true;
 
     ctx
@@ -85,47 +81,36 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
     return;
   }
 
-  const action = mode === 'login' ? 'Log in to' : 'Log out from';
-
   return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
+    const selector = new LoginSelectorComponent(
+      mode,
       {
-        question: `${action} which provider?`,
-        options: providers.map(p => ({
-          label: p.name,
-          description: loggedInIds.includes(p.id) ? '(logged in)' : '',
-        })),
-        formatResult: answer => (mode === 'login' ? `Logging in to ${answer}…` : `Logged out from ${answer}`),
-        onSubmit: async answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          const provider = providers.find(p => p.name === answer);
-          if (provider) {
-            if (mode === 'login') {
-              await performLogin(ctx, provider.id);
+        getOAuthProviders: () => providers,
+        isLoggedIn: providerId => loggedInIds.includes(providerId),
+      },
+      async providerId => {
+        ctx.state.ui.hideOverlay();
+        const provider = providers.find(p => p.id === providerId);
+        if (provider) {
+          if (mode === 'login') {
+            await performLogin(ctx, provider.id);
+          } else {
+            if (ctx.authStorage) {
+              ctx.authStorage.logout(provider.id);
+              ctx.showInfo(`Logged out from ${provider.name}`);
             } else {
-              if (ctx.authStorage) {
-                ctx.authStorage.logout(provider.id);
-                ctx.showInfo(`Logged out from ${provider.name}`);
-              } else {
-                ctx.showError('Auth storage not configured');
-              }
+              ctx.showError('Auth storage not configured');
             }
           }
-          resolve();
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve();
-        },
+        }
+        resolve();
       },
-      ctx.state.ui,
+      () => {
+        ctx.state.ui.hideOverlay();
+        resolve();
+      },
     );
 
-    ctx.state.activeInlineQuestion = questionComponent;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(questionComponent);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
   });
 }

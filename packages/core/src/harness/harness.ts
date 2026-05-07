@@ -1007,30 +1007,42 @@ export class Harness<TState = {}> {
       const meta = thread?.metadata as Record<string, unknown> | undefined;
       const updates: Record<string, unknown> = {};
 
-      // Load model ID: per-mode first, then global
-      const modeModelKey = `modeModelId_${this.currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        updates.currentModelId = meta[modeModelKey];
-      } else if (meta?.currentModelId) {
-        updates.currentModelId = meta.currentModelId;
-      }
-
-      // Restore mode
+      // Restore the saved mode FIRST so we resolve currentModelId for the
+      // correct mode. Otherwise we'd look up modeModelId_<defaultMode> first
+      // and then never overwrite it when the saved mode has no per-mode
+      // override persisted (e.g. user only ever used the mode's default
+      // model), leaving the wrong mode's model active on restart.
+      let previousModeIdForEmit: string | undefined;
       if (meta?.currentModeId) {
         const savedModeId = meta.currentModeId as string;
         const modeExists = this.config.modes.some(m => m.id === savedModeId);
         if (modeExists && savedModeId !== this.currentModeId) {
+          previousModeIdForEmit = this.currentModeId;
           this.currentModeId = savedModeId;
-          const restoredModeModelKey = `modeModelId_${savedModeId}`;
-          if (meta[restoredModeModelKey]) {
-            updates.currentModelId = meta[restoredModeModelKey];
-          }
-          this.emit({
-            type: 'mode_changed',
-            modeId: savedModeId,
-            previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
-          });
         }
+      }
+
+      // Resolve the model for the (now-restored) current mode.
+      // Order: per-mode thread metadata → mode's defaultModelId → legacy
+      // global currentModelId (set by createThread).
+      const modeModelKey = `modeModelId_${this.currentModeId}`;
+      if (meta?.[modeModelKey]) {
+        updates.currentModelId = meta[modeModelKey];
+      } else {
+        const currentMode = this.config.modes.find(m => m.id === this.currentModeId);
+        if (currentMode?.defaultModelId) {
+          updates.currentModelId = currentMode.defaultModelId;
+        } else if (meta?.currentModelId) {
+          updates.currentModelId = meta.currentModelId;
+        }
+      }
+
+      if (previousModeIdForEmit !== undefined) {
+        this.emit({
+          type: 'mode_changed',
+          modeId: this.currentModeId,
+          previousModeId: previousModeIdForEmit,
+        });
       }
 
       // Restore observer/reflector model IDs
