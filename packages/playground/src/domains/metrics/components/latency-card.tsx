@@ -1,8 +1,8 @@
 import { EntityType } from '@mastra/core/observability';
-import { LatencyCardView, useDrilldown, useLatencyMetrics } from '@mastra/playground-ui';
+import { LatencyCardView, OpenInTracesButton, useDrilldown, useLatencyMetrics } from '@mastra/playground-ui';
 import type { LatencyTab } from '@mastra/playground-ui';
 import { useNavigate } from 'react-router';
-import { OpenInTracesButton } from './card-action-buttons';
+import { useLinkComponent } from '@/lib/framework';
 
 const TAB_TO_ROOT_ENTITY: Record<LatencyTab, EntityType> = {
   agents: EntityType.AGENT,
@@ -13,6 +13,7 @@ const TAB_TO_ROOT_ENTITY: Record<LatencyTab, EntityType> = {
 export function LatencyCard() {
   const { data, isLoading, isError } = useLatencyMetrics();
   const { getTracesHref, getBucketTracesHref } = useDrilldown();
+  const { Link } = useLinkComponent();
   const navigate = useNavigate();
 
   return (
@@ -27,7 +28,7 @@ export function LatencyCard() {
         }
       }}
       actions={(tab: LatencyTab) => (
-        <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] })} />
+        <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] })} LinkComponent={Link} />
       )}
     />
   );

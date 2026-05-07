@@ -1,6 +1,10 @@
 import { EntityType } from '@mastra/core/observability';
-import { ModelUsageCostCardView, useDrilldown, useModelUsageCostMetrics } from '@mastra/playground-ui';
-import { OpenInTracesButton } from './card-action-buttons';
+import {
+  ModelUsageCostCardView,
+  OpenInTracesButton,
+  useDrilldown,
+  useModelUsageCostMetrics,
+} from '@mastra/playground-ui';
 import { useLinkComponent } from '@/lib/framework';
 
 export function ModelUsageCostCard() {
@@ -17,7 +21,7 @@ export function ModelUsageCostCard() {
       // Model-specific filtering on traces is not yet available — row
       // drilldowns land on the agent-scoped traces list for now.
       getRowHref={() => getTracesHref({ rootEntityType: EntityType.AGENT })}
-      actions={<OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} />}
+      actions={<OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} LinkComponent={Link} />}
     />
   );
 }

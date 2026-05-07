@@ -1,156 +1,29 @@
 import {
-  MetricsCard,
-  MetricsDataTable,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
-  formatCompact,
-  formatCost,
+  MemoryCardView,
   useDrilldown,
   useTopActiveThreadsMetrics,
   useTopResourcesByThreadsMetrics,
 } from '@mastra/playground-ui';
-import { useState } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
-type ThreadRow = {
-  key: string;
-  threadIdFull: string;
-  resourceIdFull: string | null;
-  threadId: string;
-  resourceId: string;
-  runs: number;
-  tokens: number;
-  cost: number | null;
-  costUnit: string | null;
-};
-
-type ResourceRow = {
-  key: string;
-  resourceIdFull: string;
-  resourceId: string;
-  threadCount: number;
-  tokens: number;
-  cost: number | null;
-  costUnit: string | null;
-};
-
 export function MemoryCard() {
-  const [activeTab, setActiveTab] = useState<'threads' | 'resources'>('threads');
-
   const threads = useTopActiveThreadsMetrics();
   const resources = useTopResourcesByThreadsMetrics();
   const { getTracesHref } = useDrilldown();
   const { Link } = useLinkComponent();
 
-  const threadRows: ThreadRow[] =
-    threads.data?.map(r => ({
-      key: r.threadId,
-      threadIdFull: r.threadId,
-      resourceIdFull: r.resourceId ?? null,
-      threadId: shortId(r.threadId),
-      resourceId: r.resourceId ? shortId(r.resourceId) : '—',
-      runs: r.runs,
-      tokens: r.tokens,
-      cost: r.cost,
-      costUnit: r.costUnit,
-    })) ?? [];
-
-  const resourceRows: ResourceRow[] =
-    resources.data?.map(r => ({
-      key: r.resourceId,
-      resourceIdFull: r.resourceId,
-      resourceId: shortId(r.resourceId),
-      threadCount: r.threadCount,
-      tokens: r.tokens,
-      cost: r.cost,
-      costUnit: r.costUnit,
-    })) ?? [];
-
-  const hasThreadData = threadRows.length > 0;
-  const hasResourceData = resourceRows.length > 0;
-
-  const threadTotal = threads.data?.reduce((s, r) => s + r.runs, 0) ?? 0;
-  const resourceTotal = resources.data?.reduce((s, r) => s + r.threadCount, 0) ?? 0;
-
-  const active = activeTab === 'threads' ? threads : resources;
-
   return (
-    <MetricsCard>
-      <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Memory" description="Resource and Thread consumption" />
-        {activeTab === 'threads' && hasThreadData && (
-          <MetricsCard.Summary value={threadTotal.toLocaleString()} label="Total runs" />
-        )}
-        {activeTab === 'resources' && hasResourceData && (
-          <MetricsCard.Summary value={resourceTotal.toLocaleString()} label="Total threads" />
-        )}
-      </MetricsCard.TopBar>
-      {active.isLoading ? (
-        <MetricsCard.Loading />
-      ) : active.isError ? (
-        <MetricsCard.Error message="Failed to load memory data" />
-      ) : (
-        <MetricsCard.Content>
-          <Tabs
-            defaultTab="threads"
-            value={activeTab}
-            onValueChange={v => setActiveTab(v as 'threads' | 'resources')}
-            className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
-          >
-            <TabList>
-              <Tab value="threads">Threads</Tab>
-              <Tab value="resources">Resources</Tab>
-            </TabList>
-            <TabContent value="threads">
-              {hasThreadData ? (
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Thread ID', value: row => row.threadId },
-                    { label: 'Resource ID', value: row => row.resourceId },
-                    { label: 'Runs', value: row => row.runs.toLocaleString(), highlight: true },
-                    { label: 'Tokens', value: row => (row.tokens > 0 ? formatCompact(row.tokens) : '—') },
-                    { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—') },
-                  ]}
-                  data={threadRows}
-                  LinkComponent={Link}
-                  getRowHref={row =>
-                    getTracesHref({
-                      threadId: row.threadIdFull,
-                      ...(row.resourceIdFull ? { resourceId: row.resourceIdFull } : {}),
-                    })
-                  }
-                />
-              ) : (
-                <MetricsCard.NoData message="No thread activity yet" />
-              )}
-            </TabContent>
-            <TabContent value="resources">
-              {hasResourceData ? (
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Resource ID', value: row => row.resourceId },
-                    { label: 'Threads', value: row => row.threadCount.toLocaleString(), highlight: true },
-                    { label: 'Tokens', value: row => (row.tokens > 0 ? formatCompact(row.tokens) : '—') },
-                    { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—') },
-                  ]}
-                  data={resourceRows}
-                  LinkComponent={Link}
-                  getRowHref={row => getTracesHref({ resourceId: row.resourceIdFull })}
-                />
-              ) : (
-                <MetricsCard.NoData message="No resource activity yet" />
-              )}
-            </TabContent>
-          </Tabs>
-        </MetricsCard.Content>
-      )}
-    </MetricsCard>
+    <MemoryCardView
+      threads={{ data: threads.data, isLoading: threads.isLoading, isError: threads.isError }}
+      resources={{ data: resources.data, isLoading: resources.isLoading, isError: resources.isError }}
+      LinkComponent={Link}
+      getThreadRowHref={row =>
+        getTracesHref({
+          threadId: row.threadId,
+          ...(row.resourceId ? { resourceId: row.resourceId } : {}),
+        })
+      }
+      getResourceRowHref={row => getTracesHref({ resourceId: row.resourceId })}
+    />
   );
-}
-
-function shortId(id: string): string {
-  if (id.length <= 12) return id;
-  return `${id.slice(0, 6)}…${id.slice(-4)}`;
 }

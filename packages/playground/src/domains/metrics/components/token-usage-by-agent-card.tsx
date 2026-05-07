@@ -1,6 +1,10 @@
 import { EntityType } from '@mastra/core/observability';
-import { TokenUsageByAgentCardView, useDrilldown, useTokenUsageByAgentMetrics } from '@mastra/playground-ui';
-import { OpenInTracesButton } from './card-action-buttons';
+import {
+  OpenInTracesButton,
+  TokenUsageByAgentCardView,
+  useDrilldown,
+  useTokenUsageByAgentMetrics,
+} from '@mastra/playground-ui';
 import { useLinkComponent } from '@/lib/framework';
 
 export function TokenUsageByAgentCard() {
@@ -15,7 +19,7 @@ export function TokenUsageByAgentCard() {
       isError={isError}
       LinkComponent={Link}
       getRowHref={row => getTracesHref({ rootEntityType: EntityType.AGENT, entityName: row.name })}
-      actions={<OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} />}
+      actions={<OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} LinkComponent={Link} />}
     />
   );
 }

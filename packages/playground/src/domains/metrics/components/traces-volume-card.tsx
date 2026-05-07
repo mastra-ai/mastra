@@ -1,7 +1,12 @@
 import { EntityType } from '@mastra/core/observability';
-import { TracesVolumeCardView, useDrilldown, useTraceVolumeMetrics } from '@mastra/playground-ui';
+import {
+  OpenErrorsInLogsButton,
+  OpenInTracesButton,
+  TracesVolumeCardView,
+  useDrilldown,
+  useTraceVolumeMetrics,
+} from '@mastra/playground-ui';
 import type { VolumeTab } from '@mastra/playground-ui';
-import { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-buttons';
 import { useLinkComponent } from '@/lib/framework';
 
 const TAB_TO_ROOT_ENTITY: Record<VolumeTab, EntityType> = {
@@ -29,8 +34,11 @@ export function TracesVolumeCard() {
       }
       actions={(tab: VolumeTab) => (
         <>
-          <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] })} />
-          <OpenErrorsInLogsButton href={getLogsHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], status: 'error' })} />
+          <OpenInTracesButton href={getTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] })} LinkComponent={Link} />
+          <OpenErrorsInLogsButton
+            href={getLogsHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab], status: 'error' })}
+            LinkComponent={Link}
+          />
         </>
       )}
     />
