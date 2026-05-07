@@ -83,6 +83,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
       if (pendingSignals.length > 0) {
+        typedInputData.messageId = _internal?.generateId?.() ?? randomUUID();
         for (const pendingSignal of pendingSignals) {
           messageList.add(pendingSignal.toLLMMessage(), 'input');
           safeEnqueue(controller, pendingSignal.toDataPart() as any);

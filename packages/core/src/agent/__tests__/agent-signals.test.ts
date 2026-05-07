@@ -65,6 +65,16 @@ async function waitForActiveRun(subscription: { activeRunId: () => string | null
   return runId;
 }
 
+async function waitForCondition(predicate: () => boolean, timeoutMs = 500) {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Timed out waiting for condition');
+    }
+    await nextTick();
+  }
+}
+
 describe('Agent signals', () => {
   it('converts signals between DB, LLM, and data part formats', () => {
     const signal = createSignal({
@@ -339,6 +349,172 @@ describe('Agent signals', () => {
     expect(firstRun.value.text).toBe('first responsesignal response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Hello while running');
+
+    subscription.unsubscribe();
+  });
+
+  it('interrupts an active reasoning stream to drain thread-targeted follow-up signals', async () => {
+    const prompts: any[][] = [];
+    let callCount = 0;
+    let releaseReasoningChunk: (() => void) | undefined;
+    let finishFirstCall: (() => void) | undefined;
+
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        callCount += 1;
+        const callIndex = callCount;
+        prompts.push(prompt);
+
+        if (callIndex === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: 'id-1',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'reasoning-start', id: 'reasoning-1' });
+                controller.enqueue({ type: 'reasoning-delta', id: 'reasoning-1', delta: 'thinking' });
+                await new Promise<void>(resolve => (releaseReasoningChunk = resolve));
+                controller.enqueue({ type: 'reasoning-delta', id: 'reasoning-1', delta: ' still thinking' });
+                await new Promise<void>(resolve => (finishFirstCall = resolve));
+                controller.enqueue({ type: 'reasoning-end', id: 'reasoning-1' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        }
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'signal response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'interleaved-reasoning-signal-agent',
+      name: 'Interleaved Reasoning Signal Agent',
+      instructions: 'Test',
+      model,
+    });
+
+    const subscription = await agent.subscribeToThread({
+      threadId: 'interleaved-reasoning-thread',
+      resourceId: 'interleaved-reasoning-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const runPromise = readNextRun(iterator);
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'interleaved-reasoning-thread', resource: 'interleaved-reasoning-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+    const signalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'Stop reasoning and answer this' },
+      { resourceId: 'interleaved-reasoning-user', threadId: 'interleaved-reasoning-thread' },
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+
+    releaseReasoningChunk?.();
+    await waitForCondition(() => callCount === 2);
+    finishFirstCall?.();
+
+    const run = await runPromise;
+    expect(run.value.text).toContain('signal response');
+    expect(JSON.stringify(prompts[1])).toContain('Stop reasoning and answer this');
+
+    subscription.unsubscribe();
+  });
+
+  it('drains thread-targeted follow-up signals into an idle-started run before the run record exists', async () => {
+    const prompts: any[][] = [];
+
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'idle-start-thread-target-agent',
+      name: 'Idle Start Thread Target Agent',
+      instructions: 'Test',
+      model,
+    });
+
+    const subscription = await agent.subscribeToThread({
+      threadId: 'idle-start-thread',
+      resourceId: 'idle-start-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const runPromise = readNextRun(iterator);
+
+    const firstSignal = agent.sendSignal(
+      { type: 'user-message', contents: 'start idle stream' },
+      {
+        resourceId: 'idle-start-user',
+        threadId: 'idle-start-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'idle-start-user', thread: 'idle-start-thread' } } },
+      },
+    );
+
+    const followUp = agent.sendSignal(
+      { type: 'user-message', contents: 'thread targeted follow up' },
+      {
+        resourceId: 'idle-start-user',
+        threadId: 'idle-start-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'idle-start-user', thread: 'idle-start-thread' } } },
+      },
+    );
+
+    expect(followUp.runId).toBe(firstSignal.runId);
+
+    const run = await runPromise;
+    expect(run.value.runId).toBe(firstSignal.runId);
+    expect(run.value.text).toBe('response');
+    expect(prompts).toHaveLength(1);
+    expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
 
     subscription.unsubscribe();
   });

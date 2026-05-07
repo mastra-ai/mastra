@@ -5,6 +5,7 @@ import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import type { CreatedAgentSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -74,8 +75,14 @@ function getRequestInputProcessors({
     : llmRequestInputProcessors;
 }
 
+type ProcessOutputStreamResult = {
+  collectedChunks: CollectedChunk[];
+  interruptedSignals: CreatedAgentSignal[];
+};
+
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
+  runId: string;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
@@ -89,6 +96,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     rawResponse: any;
   };
   logger?: IMastraLogger;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
 };
@@ -183,9 +191,11 @@ async function processOutputStream<OUTPUT = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
+  runId,
+  drainPendingSignals,
   transportRef,
   transportResolver,
-}: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
+}: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
 
@@ -368,9 +378,16 @@ async function processOutputStream<OUTPUT = undefined>({
     if (runState.state.hasErrored) {
       break;
     }
+
+    if (['text-delta', 'reasoning-delta', 'reasoning-end', 'source', 'tool-result'].includes(chunk.type)) {
+      const interruptedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interruptedSignals.length > 0) {
+        return { collectedChunks, interruptedSignals };
+      }
+    }
   }
 
-  return collectedChunks;
+  return { collectedChunks, interruptedSignals: [] };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -527,12 +544,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
-          const initialSignalEchoes = _internal.initialSignalEchoes?.splice(0) ?? [];
+          const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
           for (const initialSignal of initialSignalEchoes) {
             safeEnqueue(controller, initialSignal.toDataPart() as any);
           }
 
-          const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
+          const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
+          if (pendingSignals.length > 0) {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+          }
           for (const pendingSignal of pendingSignals) {
             messageList.add(pendingSignal.toLLMMessage(), 'input');
             safeEnqueue(controller, pendingSignal.toDataPart() as any);
@@ -981,10 +1001,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            const collectedChunks = await processOutputStream({
+            const { collectedChunks, interruptedSignals } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
+              runId,
               messageId: currentStep.messageId,
               messageList,
               runState,
@@ -996,6 +1017,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 rawResponse,
               },
               logger,
+              drainPendingSignals: _internal?.drainPendingSignals,
               transportRef: _internal?.transportRef,
               transportResolver,
             });
@@ -1011,6 +1033,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');
+            }
+
+            if (interruptedSignals.length > 0) {
+              currentMessageId = _internal?.generateId?.() ?? generateId();
+              currentStep.messageId = currentMessageId;
+              outputStream.messageId = currentMessageId;
+              for (const signal of interruptedSignals) {
+                messageList.add(signal.toLLMMessage(), 'input');
+                safeEnqueue(controller, signal.toDataPart() as any);
+              }
+              runState.setState({
+                stepResult: {
+                  reason: 'other',
+                  messageId: currentMessageId,
+                  isContinued: true,
+                },
+              });
             }
 
             // Apply structuredOutput metadata to the assistant message.

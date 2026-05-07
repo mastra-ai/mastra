@@ -155,12 +155,18 @@ export class AgentThreadStreamRuntime {
   }
 
   async #drainPendingSignals(key: string, previousRun: AgentThreadRunRecord<any>) {
-    if (this.#activeThreadRunIds.has(key)) return;
+    if (this.#activeThreadRunIds.has(key)) {
+      return;
+    }
 
     const queue = this.#pendingSignalsByThread.get(key);
-    if (!queue) return;
+    if (!queue) {
+      return;
+    }
     const signal = queue.shift();
-    if (!signal) return;
+    if (!signal) {
+      return;
+    }
     if (queue.length === 0) {
       this.#pendingSignalsByThread.delete(key);
     }
@@ -186,7 +192,9 @@ export class AgentThreadStreamRuntime {
     if (!key) return [];
 
     const queue = this.#pendingSignalsByThread.get(key);
-    if (!queue || queue.length === 0) return [];
+    if (!queue || queue.length === 0) {
+      return [];
+    }
 
     this.#pendingSignalsByThread.delete(key);
     return queue;
@@ -302,6 +310,8 @@ export class AgentThreadStreamRuntime {
       }
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
+      } else if (activeRunId && !activeRecord) {
+        runId = activeRunId;
       }
     }
 
