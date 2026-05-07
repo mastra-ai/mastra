@@ -10,6 +10,7 @@ import type {
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  StepFailure,
   StepFlowEntry,
   StepResult,
   TimeTravelExecutionParams,
@@ -56,15 +57,26 @@ function buildResumedBlockResult(
       }, {}),
     };
   } else {
-    const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
-    const suspendData =
-      stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
-    result = {
-      status: 'suspended',
-      payload: suspendData,
-      suspendPayload: suspendData,
-      suspendedAt: Date.now(),
-    };
+    // Check for failed steps before assuming suspended
+    const failedStep = stepsToCheck.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'failed');
+    if (failedStep && failedStep.type === 'step') {
+      const failedResult = stepResults[failedStep.step.id] as StepFailure<any, any, any, any> | undefined;
+      result = {
+        status: 'failed',
+        error: failedResult?.error ?? new Error('Workflow step failed after resume'),
+        tripwire: failedResult?.tripwire,
+      };
+    } else {
+      const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
+      const suspendData =
+        stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
+      result = {
+        status: 'suspended',
+        payload: suspendData,
+        suspendPayload: suspendData,
+        suspendedAt: Date.now(),
+      };
+    }
   }
 
   if (result.status === 'suspended') {

@@ -1041,6 +1041,7 @@ export type ProviderModelsMap = {
     'poolside/laguna-xs.2:free',
     'prime-intellect/intellect-3',
     'qwen/qwen-2.5-coder-32b-instruct',
+    'qwen/qwen-3.6-27b',
     'qwen/qwen2.5-vl-72b-instruct',
     'qwen/qwen3-235b-a22b-07-25',
     'qwen/qwen3-235b-a22b-thinking-2507',
@@ -1070,6 +1071,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.1-fast',
     'x-ai/grok-4.20-beta',
     'x-ai/grok-4.20-multi-agent-beta',
+    'x-ai/grok-4.3',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-omni',
@@ -1118,8 +1120,6 @@ export type ProviderModelsMap = {
     'glm-5.1',
     'kimi-k2.5',
     'kimi-k2.6',
-    'mimo-v2-omni',
-    'mimo-v2-pro',
     'mimo-v2.5',
     'mimo-v2.5-pro',
     'minimax-m2.5',
@@ -1641,7 +1641,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5-Turbo',
     'zai-org/GLM-5.1-TEE',
   ];
-  readonly dinference: readonly ['glm-4.7', 'glm-5', 'gpt-oss-120b'];
+  readonly dinference: readonly ['glm-4.7', 'glm-5', 'glm-5.1', 'gpt-oss-120b', 'minimax-m2.5'];
   readonly vivgrid: readonly [
     'deepseek-v3.2',
     'deepseek-v4-pro',
@@ -1670,7 +1670,10 @@ export type ProviderModelsMap = {
     'anthropic/claude-4-opus',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-V3.2',
+    'deepseek-ai/DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-Pro',
+    'google/gemma-4-26B-A4B-it',
+    'google/gemma-4-31B-it',
     'meta-llama/Llama-3.1-70B-Instruct',
     'meta-llama/Llama-3.1-70B-Instruct-Turbo',
     'meta-llama/Llama-3.1-8B-Instruct',
@@ -2536,20 +2539,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
-  readonly 'zhipuai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5v-turbo'];
-  readonly 'alibaba-coding-plan': readonly [
-    'MiniMax-M2.5',
-    'glm-4.7',
-    'glm-5',
-    'kimi-k2.5',
-    'qwen3-coder-next',
-    'qwen3-coder-plus',
-    'qwen3-max-2026-01-23',
-    'qwen3.5-plus',
-    'qwen3.6-plus',
-  ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
-  readonly firmware: readonly [
+  readonly frogbot: readonly [
     'claude-haiku-4-5',
     'claude-opus-4-6',
     'claude-opus-4-7',
@@ -2577,6 +2567,19 @@ export type ProviderModelsMap = {
     'qwen-3-6-plus',
     'zai-glm-5-1',
   ];
+  readonly 'zhipuai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5v-turbo'];
+  readonly 'alibaba-coding-plan': readonly [
+    'MiniMax-M2.5',
+    'glm-4.7',
+    'glm-5',
+    'kimi-k2.5',
+    'qwen3-coder-next',
+    'qwen3-coder-plus',
+    'qwen3-max-2026-01-23',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
+  ];
+  readonly cerebras: readonly ['gpt-oss-120b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
   readonly 'moonshotai-cn': readonly [
@@ -2847,6 +2850,20 @@ export type ProviderModelsMap = {
     'text-embedding-3-small',
     'text-embedding-ada-002',
   ];
+  readonly kiro: readonly [
+    'auto',
+    'claude-haiku-4.5',
+    'claude-opus-4.5',
+    'claude-opus-4.6',
+    'claude-opus-4.7',
+    'claude-sonnet-4',
+    'claude-sonnet-4.5',
+    'claude-sonnet-4.6',
+    'deepseek-3.2',
+    'minimax-m2.1',
+    'minimax-m2.5',
+    'qwen3-coder-next',
+  ];
   readonly requesty: readonly [
     'anthropic/claude-3-7-sonnet',
     'anthropic/claude-haiku-4-5',
@@ -2914,6 +2931,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'gte-large-en-v1.5',
     'kimi-k2.5',
+    'kimi-k2.6',
     'llama-4-maverick',
     'llama-guard-4-12b',
     'llama3.3-70b-instruct',
@@ -3867,6 +3885,7 @@ export type ProviderModelsMap = {
     'minimaxai/chat-completion/models/MiniMax-M2_5-high-throughput',
     'mistralai/completion/models/Ministral-3-14B-Reasoning-2512',
     'mistralai/completion/models/Ministral-3-3B-Reasoning-2512',
+    'moonshotai/chat-completion/models/Kimi-K2_6',
     'openai/chat-completion/models/gpt-oss-120b-high-throughput',
     'openai/chat-completion/models/gpt-oss-20b',
     'qwen/qwenCoder/models/Qwen3-Coder-30B-A3B-Instruct',
@@ -3946,6 +3965,7 @@ export type ProviderModelsMap = {
     'gemini/gemini-3.1-pro-preview-customtools',
     'gemini/gemini-flash-latest',
     'gemini/gemini-flash-lite-latest',
+    'openai/chat-latest',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',

@@ -142,6 +142,7 @@ function SpanDataPanelContent({
           </Notice>
         </div>
       )}
+
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
       <DataKeysAndValues>

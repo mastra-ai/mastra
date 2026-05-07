@@ -286,16 +286,16 @@ describe('createMastraCode', () => {
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('stream-error-retry-processor');
   });
 
-  it('wires the AuthStorage singleton for every OAuth-capable provider', async () => {
-    const claudeMax = await import('../providers/claude-max.js');
-    const openaiCodex = await import('../providers/openai-codex.js');
-    const githubCopilot = await import('../providers/github-copilot.js');
-    const { createAuthStorage } = await import('../index.js');
+  it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
+    const { createMastraCode } = await import('../index.js');
 
-    const authStorage = createAuthStorage();
+    await createMastraCode();
 
-    expect(claudeMax.setAuthStorage).toHaveBeenCalledWith(authStorage);
-    expect(openaiCodex.setAuthStorage).toHaveBeenCalledWith(authStorage);
-    expect(githubCopilot.setAuthStorage).toHaveBeenCalledWith(authStorage);
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
+      | undefined;
+    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 });
