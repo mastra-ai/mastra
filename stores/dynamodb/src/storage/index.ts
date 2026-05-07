@@ -6,12 +6,13 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
+import { BackgroundTasksStorageDynamoDB } from './domains/background-tasks';
 import { MemoryStorageDynamoDB } from './domains/memory';
 import { ScoresStorageDynamoDB } from './domains/scores';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageDynamoDB, ScoresStorageDynamoDB, WorkflowStorageDynamoDB };
+export { BackgroundTasksStorageDynamoDB, MemoryStorageDynamoDB, ScoresStorageDynamoDB, WorkflowStorageDynamoDB };
 export type { DynamoDBDomainConfig } from './db';
 
 // Export TTL utilities
@@ -261,11 +262,13 @@ export class DynamoDBStore extends MastraCompositeStore {
       const workflows = new WorkflowStorageDynamoDB(domainConfig);
       const memory = new MemoryStorageDynamoDB(domainConfig);
       const scores = new ScoresStorageDynamoDB(domainConfig);
+      const backgroundTasks = new BackgroundTasksStorageDynamoDB(domainConfig);
 
       this.stores = {
         workflows,
         memory,
         scores,
+        backgroundTasks,
       };
     } catch (error) {
       throw new MastraError(

@@ -1,5 +1,5 @@
-import { FlaskConicalIcon } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, RadioGroup, RadioGroupItem, Button } from '@mastra/playground-ui';
+import { FlaskConicalIcon } from 'lucide-react';
 import { useMaybeExperimentalUI } from './experimental-ui-context';
 
 export function ExperimentalUIManager({ pathname }: { pathname?: string }) {

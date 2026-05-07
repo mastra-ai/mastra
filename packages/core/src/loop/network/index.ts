@@ -51,6 +51,40 @@ import {
   generateStructuredFinalResult,
 } from './validation';
 
+const OBSERVATIONAL_MEMORY_NETWORK_ERROR =
+  'Observational Memory is not supported with agent network. Agent network does not propagate the threadId/resourceId context Observational Memory requires. Disable observationalMemory before using agent.network().';
+
+function isObservationalMemoryEnabled(config: unknown): boolean {
+  if (config === true) return true;
+  if (!config || config === false) return false;
+  if (typeof config !== 'object') return false;
+  return (config as { enabled?: boolean }).enabled !== false;
+}
+
+function assertNetworkSupportsMemory(memory: Awaited<ReturnType<Agent['getMemory']>>, memoryConfig: unknown) {
+  const configuredObservationalMemory =
+    typeof memory?.getConfig === 'function' ? memory.getConfig().observationalMemory : undefined;
+  const runtimeObservationalMemory =
+    memoryConfig && typeof memoryConfig === 'object' && 'observationalMemory' in memoryConfig
+      ? (memoryConfig as { observationalMemory?: unknown }).observationalMemory
+      : undefined;
+
+  if (
+    isObservationalMemoryEnabled(runtimeObservationalMemory) ||
+    (runtimeObservationalMemory === undefined && isObservationalMemoryEnabled(configuredObservationalMemory))
+  ) {
+    throw new MastraError({
+      id: 'AGENT_NETWORK_OBSERVATIONAL_MEMORY_UNSUPPORTED',
+      domain: ErrorDomain.AGENT_NETWORK,
+      category: ErrorCategory.USER,
+      text: OBSERVATIONAL_MEMORY_NETWORK_ERROR,
+      details: {
+        status: 400,
+      },
+    });
+  }
+}
+
 /**
  * Safely parses JSON from LLM output, handling common issues like:
  * - Unescaped control characters (newlines, tabs) in strings
@@ -133,12 +167,14 @@ export async function getRoutingAgent({
   requestContext,
   agent,
   routingConfig,
+  memoryConfig,
 }: {
   agent: Agent;
   requestContext: RequestContext;
   routingConfig?: {
     additionalInstructions?: string;
   };
+  memoryConfig?: any;
 }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
@@ -146,6 +182,7 @@ export async function getRoutingAgent({
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
+  assertNetworkSupportsMemory(memoryToUse, memoryConfig);
   const clientToolsToUse = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
 
   // Get only user-configured processors (not memory processors) for the routing agent.
@@ -272,6 +309,7 @@ export async function prepareMemoryStep({
 } & Partial<ObservabilityContext>) {
   const observabilityContext = resolveObservabilityContext(rest);
   const memory = await routingAgent.getMemory({ requestContext });
+  assertNetworkSupportsMemory(memory, memoryConfig);
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
@@ -307,6 +345,7 @@ export async function prepareMemoryStep({
               resourceId: thread?.resourceId,
             },
           ] as MastraDBMessage[],
+          observabilityContext,
         }),
       );
     }
@@ -322,6 +361,7 @@ export async function prepareMemoryStep({
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
+          observabilityContext,
         }),
       );
     }
@@ -350,6 +390,7 @@ export async function prepareMemoryStep({
       const existingMessages = await memory.recall({
         threadId: thread.id,
         resourceId: thread.resourceId,
+        observabilityContext,
       });
       const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
       const isFirstUserMessage = existingUserMessages.length === 0;
@@ -393,7 +434,12 @@ export async function prepareMemoryStep({
  */
 async function saveMessagesWithProcessors(
   memory:
-    | { saveMessages: (params: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }> }
+    | {
+        saveMessages: (params: {
+          messages: MastraDBMessage[];
+          observabilityContext?: Partial<ObservabilityContext>;
+        }) => Promise<{ messages: MastraDBMessage[] }>;
+      }
     | undefined,
   messages: MastraDBMessage[],
   processorRunner: ProcessorRunner | null,
@@ -403,8 +449,11 @@ async function saveMessagesWithProcessors(
 ): Promise<void> {
   if (!memory) return;
 
+  const { requestContext, ...observabilityContext } = context ?? {};
+  const resolved = resolveObservabilityContext(observabilityContext);
+
   if (!processorRunner || messages.length === 0) {
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages, observabilityContext: resolved });
     return;
   }
 
@@ -414,17 +463,11 @@ async function saveMessagesWithProcessors(
     messageList.add(msg, 'response');
   }
 
-  // Run output processors on the messages
-  const { requestContext, ...observabilityContext } = context ?? {};
-  await processorRunner.runOutputProcessors(
-    messageList,
-    resolveObservabilityContext(observabilityContext),
-    requestContext,
-  );
+  await processorRunner.runOutputProcessors(messageList, resolved, requestContext);
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
-  await memory.saveMessages({ messages: processedMessages });
+  await memory.saveMessages({ messages: processedMessages, observabilityContext: resolved });
 }
 
 async function saveFinalResultIfProvided({
@@ -474,6 +517,7 @@ export async function createNetworkLoop({
   agent,
   generateId,
   routingAgentOptions,
+  routingAgentMemoryConfig,
   routing,
   onStepFinish,
   onError,
@@ -485,6 +529,7 @@ export async function createNetworkLoop({
   runId: string;
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
+  routingAgentMemoryConfig?: any;
   generateId: NetworkIdGenerator;
   routing?: {
     additionalInstructions?: string;
@@ -495,6 +540,8 @@ export async function createNetworkLoop({
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
 }) {
+  assertNetworkSupportsMemory(await agent.getMemory({ requestContext }), routingAgentMemoryConfig);
+
   /**
    * Shared abort handler for all primitive execution steps.
    * Calls onAbort, writes the abort event to the stream, and returns the standard abort result.
@@ -592,7 +639,12 @@ export async function createNetworkLoop({
 
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
-      const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
+      const routingAgent = await getRoutingAgent({
+        requestContext,
+        agent,
+        routingConfig: routing,
+        memoryConfig: routingAgentMemoryConfig,
+      });
 
       // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
       // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
@@ -2091,6 +2143,8 @@ export async function networkLoop<OUTPUT = undefined>({
     });
   }
 
+  assertNetworkSupportsMemory(memoryToUse, routingAgentOptions?.memory?.options);
+
   const task = getLastMessage(messages);
 
   let resumeDataFromTask: any | undefined;
@@ -2187,6 +2241,7 @@ export async function networkLoop<OUTPUT = undefined>({
     runId: runIdToUse,
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
+    routingAgentMemoryConfig: routingAgentMemoryOptions?.options,
     generateId,
     routing,
     onStepFinish,
@@ -2276,6 +2331,7 @@ export async function networkLoop<OUTPUT = undefined>({
             requestContext,
             agent: routingAgent,
             routingConfig: routing,
+            memoryConfig: routingAgentMemoryOptions?.options,
           });
 
           // Use structured output generation if schema is provided
@@ -2324,6 +2380,7 @@ export async function networkLoop<OUTPUT = undefined>({
           requestContext,
           agent: routingAgent,
           routingConfig: routing,
+          memoryConfig: routingAgentMemoryOptions?.options,
         });
         // Use the default LLM completion check
         const defaultResult = await runDefaultCompletionCheck(

@@ -6,11 +6,12 @@ import fs from 'node:fs';
 
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
-import { loadSettings } from './onboarding/settings.js';
+import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
+import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
@@ -32,15 +33,31 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain() {
-  const result = await createMastraCode();
+async function tuiMain(pipedInput?: string | null) {
+  // Load browser from settings (before creating harness)
+  const settings = loadSettings();
+  const browser = await createBrowserFromSettings(settings.browser);
+
+  const result = await createMastraCode({ browser });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
 
+  // Track the initial browser settings in harness state for config drift detection
+  if (browser) {
+    harness.setState({ activeBrowserSettings: settings.browser } as any);
+  }
+
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
+  }
+  if (result.observabilityWarning) {
+    console.info(`⚠ ${result.observabilityWarning}`);
+  }
+
+  if (browser) {
+    console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);
   }
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that
@@ -77,6 +94,7 @@ async function tuiMain() {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
 
   tui.run().catch(error => {
@@ -143,7 +161,29 @@ function handleFatalError(error: unknown): never {
   process.exit(1);
 }
 
-const main = hasHeadlessFlag(process.argv) ? headlessMain : tuiMain;
+async function main() {
+  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+    return headlessMain();
+  }
+
+  // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
+  // before starting the TUI.  The drain blocks until the sender process exits
+  // and closes its stdout, so we never see partial output.
+  let pipedInput: string | null = null;
+  if (!process.stdin.isTTY) {
+    process.stderr.write('Reading piped input...\n');
+    pipedInput = await drainPipedStdin();
+
+    // Always reopen a real TTY — even if the pipe was empty, the original
+    // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
+    if (!reopenStdinFromTTY()) {
+      process.stderr.write('No TTY available — falling back to headless mode.\n');
+      return headlessMain(pipedInput);
+    }
+  }
+
+  return tuiMain(pipedInput);
+}
 
 main().catch(error => {
   handleFatalError(error);

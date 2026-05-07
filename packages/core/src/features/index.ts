@@ -21,4 +21,6 @@ export const coreFeatures = new Set<string>([
   'workspaces-v1',
   'datasets',
   'observability:v1.13.2',
+  'channels',
+  'deploy-diagnosis',
 ]);

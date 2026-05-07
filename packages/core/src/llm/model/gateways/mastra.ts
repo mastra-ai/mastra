@@ -1,4 +1,4 @@
-import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { MastraError } from '../../../error/index.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';

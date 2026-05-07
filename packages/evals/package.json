@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "",
   "type": "module",
   "files": [
@@ -85,7 +85,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

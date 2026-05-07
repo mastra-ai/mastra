@@ -1002,6 +1002,9 @@ export class TestExporter extends BaseExporter {
       if (value instanceof Date) {
         return '<date>';
       }
+      if (key === 'createdAt' && typeof value === 'number') {
+        return '<date>';
+      }
       if (typeof value === 'string') {
         // Special handling for traceId - use the shared traceIdMap (handles both UUID and 32-char hex formats)
         if (key === 'traceId' && (uuidRegex.test(value) || hexId32Regex.test(value))) {
@@ -1035,9 +1038,27 @@ export class TestExporter extends BaseExporter {
       if (value && typeof value === 'object') {
         const normalized: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(value)) {
-          // Pass the key name when normalizing the value
-          normalized[k] = normalizeValue(v, k);
+          if (key === 'providerOptions' && k === 'mastra' && v && typeof v === 'object') {
+            const mastraOptions = v as Record<string, unknown>;
+            const remainingMastraOptions = Object.fromEntries(
+              Object.entries(mastraOptions).filter(([mastraKey]) => mastraKey !== 'createdAt'),
+            );
+            if (Object.keys(remainingMastraOptions).length > 0) {
+              normalized[k] = normalizeValue(remainingMastraOptions, k);
+            }
+            continue;
+          }
+
+          const normalizedValue = normalizeValue(v, k);
+          if (normalizedValue !== undefined) {
+            normalized[k] = normalizedValue;
+          }
         }
+
+        if (key === 'providerOptions' && Object.keys(normalized).length === 0) {
+          return undefined;
+        }
+
         return normalized;
       }
       return value;

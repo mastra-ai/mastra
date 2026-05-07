@@ -1,0 +1,155 @@
+---
+title: "Reference: DuckDB storage | Storage"
+description: Documentation for the DuckDB storage implementation in Mastra, an embedded analytical backend for local observability development.
+packages:
+  - "@mastra/duckdb"
+  - "@mastra/core"
+---
+
+# DuckDB storage
+
+[DuckDB](https://duckdb.org/) is an embedded, in-process analytical database. The `@mastra/duckdb` package provides an OLAP-backed observability store for local development, suitable for traces, logs, metrics, scores, and feedback without running an external service.
+
+For vector search, see the [DuckDB vector store reference](/reference/vectors/duckdb), which is a separate API in the same package.
+
+## When to use DuckDB
+
+Local development of observability features. DuckDB is embedded and file-based, so it does not require a server and starts instantly. It supports the same observability signals as ClickHouse, which makes it useful for testing dashboards and trace exploration before deploying to a production backend.
+
+DuckDB currently implements only the `observability` domain. Pair it with another storage adapter (such as [LibSQL](/reference/storage/libsql)) for `memory` and `workflows` in a [composite storage](/reference/storage/composite) setup.
+
+:::warning
+DuckDB is for development and not recommended for production. It runs in-process, persists to a single local file, and does not work on platforms with ephemeral filesystems (such as Railway, Fly.io, Render, Heroku, or serverless containers). For production observability, use [ClickHouse](/reference/storage/clickhouse).
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/duckdb@latest
+```
+
+## Usage
+
+### As the observability domain in a composite store
+
+This is the standard local-development setup. LibSQL handles the other domains, and DuckDB handles observability.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { Observability, DefaultExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: new DuckDBStore().observability,
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+})
+```
+
+The `.observability` accessor returns the observability domain store directly. The equivalent generic form uses `getStore()`, which works for any composite-style storage adapter:
+
+```typescript
+const observability = await new DuckDBStore().getStore('observability')
+```
+
+### Standalone
+
+When you need only observability storage outside the `Mastra` composite, instantiate `DuckDBStore` directly and access the observability domain:
+
+```typescript
+import { DuckDBStore } from '@mastra/duckdb'
+
+const duckdb = new DuckDBStore({ path: './traces.duckdb' })
+const observability = duckdb.observability
+
+await observability.init()
+```
+
+### In-memory database
+
+Pass `:memory:` to use an ephemeral DuckDB instance. Data is lost when the process exits, which is appropriate for unit tests and short-lived scripts.
+
+```typescript
+const duckdb = new DuckDBStore({ path: ':memory:' })
+```
+
+## Configuration
+
+### `DuckDBStore` options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: true,
+    defaultValue: "'duckdb'",
+  },
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Path to the DuckDB database file. Use `:memory:` for an ephemeral in-memory database.',
+    isOptional: true,
+    defaultValue: "'mastra.duckdb'",
+  },
+]}
+/>
+
+### Lower-level types
+
+`@mastra/duckdb` also exports `DuckDBConnection` for sharing a single underlying database across multiple Mastra storage instances, and the corresponding `DuckDBStorageConfig` type. Most applications will not need these directly.
+
+## Supported domains
+
+DuckDB currently implements one storage domain:
+
+| Domain | Supported |
+| - | - |
+| `observability` | Yes |
+| `memory` | No |
+| `workflows` | No |
+| `scores` | No |
+| `agents` | No |
+
+For a full storage solution, compose `DuckDBStore` with an adapter that covers the missing domains (most commonly [LibSQL](/reference/storage/libsql) for local development).
+
+## Initialization
+
+When passed to `Mastra` through `MastraCompositeStore`, the observability domain initializes itself on first use. To run initialization explicitly outside of `Mastra`, call `init()` on the observability store:
+
+```typescript
+import { DuckDBStore } from '@mastra/duckdb'
+
+const duckdb = new DuckDBStore({ path: './traces.duckdb' })
+await duckdb.observability.init()
+```
+
+## Observability strategy
+
+DuckDB supports the `event-sourced` strategy used by `DefaultExporter`, which buffers spans in memory and writes completed events in batches. This is appropriate for development-scale traffic. For high-volume production workloads, see [`DefaultExporter` storage provider support](/docs/observability/tracing/exporters/default#storage-provider-support).
+
+## Related
+
+- [Storage overview](/reference/storage/overview)
+- [Composite storage](/reference/storage/composite)
+- [ClickHouse storage](/reference/storage/clickhouse): Production observability backend
+- [DuckDB vector store](/reference/vectors/duckdb): Vector search using the same package
+- [Observability overview](/docs/observability/overview)

@@ -17,7 +17,7 @@ import type {
   ResolvedReflectionConfig,
 } from '../types';
 
-import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
+import type { ObservationRunOpts, ObservationRunResult, ObserverOutput, ProcessedObservation } from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
 const hasherPromise = xxhash();
@@ -83,10 +83,10 @@ export abstract class ObservationStrategy {
 
   /**
    * Run the full observation lifecycle.
-   * @returns `true` if a full observation cycle completed; `false` if skipped (stale lock) or async-buffer failure was swallowed.
+   * @returns Result with `observed` flag and optional `usage` from the observer LLM call.
    * @throws On sync/resource-scoped observer failure after failed markers (same as pre–Option-A contract).
    */
-  async run(): Promise<boolean> {
+  async run(): Promise<ObservationRunResult> {
     const { record, threadId, abortSignal, writer, reflectionHooks, requestContext } = this.opts;
     const cycleId = this.generateCycleId();
 
@@ -94,7 +94,7 @@ export abstract class ObservationStrategy {
       if (this.needsLock) {
         const fresh = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
         if (fresh?.lastObservedAt && record.lastObservedAt && fresh.lastObservedAt > record.lastObservedAt) {
-          return false;
+          return { observed: false };
         }
       }
 
@@ -118,7 +118,7 @@ export abstract class ObservationStrategy {
         });
       }
 
-      return true;
+      return { observed: true, usage: output.usage };
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
 
@@ -137,7 +137,7 @@ export abstract class ObservationStrategy {
         await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
         if (abortSignal?.aborted) throw error;
         omError('[OM] Observation failed', error);
-        return false;
+        return { observed: false };
       }
 
       // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.
@@ -154,8 +154,12 @@ export abstract class ObservationStrategy {
 
   protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
     if (this.opts.writer) {
-      await this.opts.writer.custom(marker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      await this.opts.writer.custom({ ...marker, transient: true }).catch(() => {});
     }
+
+    const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
+    await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
   }
 
   protected getObservationMarkerConfig(): ObservationMarkerConfig {

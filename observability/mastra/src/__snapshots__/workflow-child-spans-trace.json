@@ -20,7 +20,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "value": "child-span-test"
@@ -46,7 +47,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "value": "child-span-test"
@@ -72,7 +74,8 @@
                   "runId": "<runId-1>",
                   "childOperation": "processing",
                   "inputValue": "child-span-test",
-                  "endValue": "pizza"
+                  "endValue": "pizza",
+                  "environment": "test"
                 }
               }
             }

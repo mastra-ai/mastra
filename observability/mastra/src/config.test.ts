@@ -1,6 +1,7 @@
 import { MastraError } from '@mastra/core/error';
+import { SpanType } from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
-import { SamplingStrategyType } from './config';
+import { SamplingStrategyType, observabilityConfigValueSchema, observabilityInstanceConfigSchema } from './config';
 import { Observability } from './default';
 import { TestExporter } from './exporters';
 
@@ -163,6 +164,84 @@ describe('Observability Config Validation', () => {
           configSelector: () => 'config1',
         });
       }).not.toThrow();
+    });
+
+    it('should accept sensitiveDataFilter as boolean', () => {
+      expect(() => {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: false,
+        });
+      }).not.toThrow();
+    });
+
+    it('should accept sensitiveDataFilter as options object', () => {
+      expect(() => {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            sensitiveFields: ['mySecret'],
+            redactionStyle: 'partial',
+            redactionToken: '***',
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should reject invalid sensitiveDataFilter value', () => {
+      try {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          // @ts-expect-error - testing invalid config
+          sensitiveDataFilter: 'invalid',
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        if (error instanceof MastraError) {
+          expect(error.id).toBe('OBSERVABILITY_INVALID_CONFIG');
+          expect(error.message).toContain('sensitiveDataFilter');
+        }
+      }
+    });
+
+    it('should reject unknown keys on sensitiveDataFilter options', () => {
+      try {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            // @ts-expect-error - misspelled option should fail-closed
+            sensitiveFieldsTypo: ['client_secret'],
+          },
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        if (error instanceof MastraError) {
+          expect(error.id).toBe('OBSERVABILITY_INVALID_CONFIG');
+          expect(error.message).toContain('sensitiveDataFilter');
+        }
+      }
     });
   });
 
@@ -334,6 +413,48 @@ describe('Observability Config Validation', () => {
           expect(error.message).toContain('At least one exporter or a bridge is required');
         }
       }
+    });
+
+    it('should preserve span filtering, logging, and cardinality fields during parsing', () => {
+      const spanFilter = () => true;
+      const config = {
+        serviceName: 'my-service',
+        sampling: { type: SamplingStrategyType.ALWAYS } as const,
+        exporters: [new TestExporter()],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+        spanFilter,
+        cardinality: {
+          blockedLabels: ['request_id'],
+          blockUUIDs: false,
+        },
+        logging: {
+          enabled: false,
+          level: 'warn' as const,
+        },
+      };
+
+      const instanceResult = observabilityInstanceConfigSchema.safeParse({
+        name: 'myTracing',
+        ...config,
+      });
+      expect(instanceResult.success).toBe(true);
+      if (!instanceResult.success) return;
+
+      expect(instanceResult.data.excludeSpanTypes).toEqual(config.excludeSpanTypes);
+      expect(instanceResult.data.spanFilter).toBeTypeOf('function');
+      expect(instanceResult.data.spanFilter?.({ type: SpanType.MODEL_CHUNK } as any)).toBe(true);
+      expect(instanceResult.data.cardinality).toEqual(config.cardinality);
+      expect(instanceResult.data.logging).toEqual(config.logging);
+
+      const configValueResult = observabilityConfigValueSchema.safeParse(config);
+      expect(configValueResult.success).toBe(true);
+      if (!configValueResult.success) return;
+
+      expect(configValueResult.data.excludeSpanTypes).toEqual(config.excludeSpanTypes);
+      expect(configValueResult.data.spanFilter).toBeTypeOf('function');
+      expect(configValueResult.data.spanFilter?.({ type: SpanType.MODEL_CHUNK } as any)).toBe(true);
+      expect(configValueResult.data.cardinality).toEqual(config.cardinality);
+      expect(configValueResult.data.logging).toEqual(config.logging);
     });
   });
 });

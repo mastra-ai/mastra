@@ -3,6 +3,7 @@ import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   createResponseBodySchema,
@@ -42,9 +43,10 @@ import type {
   ThreadExecutionContext,
   UsageLike,
 } from './responses.storage';
-import { getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
+import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
+type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
 
 type ResponseExecutionResult = {
   text?: string;
@@ -99,7 +101,9 @@ type PreparedCreateResponseRequest = {
   didStore: boolean;
   executionInput: AgentExecutionInput;
   previousResponseTurnRecord: ResponseTurnRecord | null;
+  resolvedModel: ResolvedAgentModel;
   responseId: string;
+  responseModel: string;
   responseMetadata: Omit<
     ResponseTurnRecordMetadata,
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
@@ -212,7 +216,13 @@ async function resolveThreadExecutionContext({
       throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
     }
 
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId: conversationId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -239,7 +249,13 @@ async function resolveThreadExecutionContext({
   const threadId = effectiveThreadId;
   const existingThread = await memory.getThreadById({ threadId });
   if (existingThread) {
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -320,7 +336,8 @@ async function resolveAgentMemoryStore({
  */
 async function executeGenerate({
   agent,
-  model,
+  resolvedModel,
+  modelOverride,
   instructions,
   text,
   providerOptions,
@@ -330,7 +347,8 @@ async function executeGenerate({
   threadContext,
 }: {
   agent: Agent;
-  model: string;
+  resolvedModel: ResolvedAgentModel;
+  modelOverride?: string;
   instructions: string | undefined;
   text: CreateResponseBody['text'];
   providerOptions: CreateResponseBody['providerOptions'];
@@ -341,16 +359,16 @@ async function executeGenerate({
 }) {
   const executionMemory = createExecutionMemory(threadContext);
   const structuredOutput = createStructuredOutput(text);
+  const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
     instructions,
     requestContext,
     abortSignal,
-    model,
+    ...modelOption,
     structuredOutput,
     providerOptions,
     ...(executionMemory ?? {}),
   };
-  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
 
   if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
@@ -358,7 +376,7 @@ async function executeGenerate({
         instructions,
         requestContext,
         abortSignal,
-        model,
+        ...modelOption,
         output: structuredOutput?.schema,
         providerOptions,
         resourceId: threadContext.resourceId,
@@ -370,7 +388,7 @@ async function executeGenerate({
       instructions,
       requestContext,
       abortSignal,
-      model,
+      ...modelOption,
       output: structuredOutput?.schema,
       providerOptions,
     } as never)) as ResponseExecutionResult;
@@ -384,7 +402,8 @@ async function executeGenerate({
  */
 async function executeStream({
   agent,
-  model,
+  resolvedModel,
+  modelOverride,
   instructions,
   text,
   providerOptions,
@@ -394,7 +413,8 @@ async function executeStream({
   threadContext,
 }: {
   agent: Agent;
-  model: string;
+  resolvedModel: ResolvedAgentModel;
+  modelOverride?: string;
   instructions: string | undefined;
   text: CreateResponseBody['text'];
   providerOptions: CreateResponseBody['providerOptions'];
@@ -405,16 +425,16 @@ async function executeStream({
 }) {
   const executionMemory = createExecutionMemory(threadContext);
   const structuredOutput = createStructuredOutput(text);
+  const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
     instructions,
     requestContext,
     abortSignal,
-    model,
+    ...modelOption,
     structuredOutput,
     providerOptions,
     ...(executionMemory ?? {}),
   };
-  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
 
   if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
@@ -422,7 +442,7 @@ async function executeStream({
         instructions,
         requestContext,
         abortSignal,
-        model,
+        ...modelOption,
         output: structuredOutput?.schema,
         providerOptions,
         resourceId: threadContext.resourceId,
@@ -434,7 +454,7 @@ async function executeStream({
       instructions,
       requestContext,
       abortSignal,
-      model,
+      ...modelOption,
       output: structuredOutput?.schema,
       providerOptions,
     } as never)) as ResponseStreamResult;
@@ -611,10 +631,84 @@ async function prepareCreateResponseRequest({
   requestContext: RequestContext;
 }): Promise<PreparedCreateResponseRequest> {
   const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
-  const agent = await resolveResponseAgent({
-    mastra,
-    agentId: body.agent_id,
+  let previousResponseTurnRecord: ResponseTurnRecord | null = null;
+  let resolvedAgent: Agent<any, any, any, any> | null = null;
+
+  if (body.previous_response_id) {
+    if (body.agent_id) {
+      resolvedAgent = await resolveResponseAgent({ mastra, agentId: body.agent_id });
+      previousResponseTurnRecord = await findResponseTurnRecord({
+        agent: resolvedAgent,
+        responseId: body.previous_response_id,
+        requestContext,
+      });
+
+      if (!previousResponseTurnRecord) {
+        const owningResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
+          mastra,
+          responseId: body.previous_response_id,
+          requestContext,
+        });
+
+        if (owningResponseTurnRecord) {
+          if (owningResponseTurnRecord.metadata.agentId === body.agent_id) {
+            previousResponseTurnRecord = owningResponseTurnRecord;
+          } else {
+            throw new HTTPException(400, {
+              message: `Stored response ${body.previous_response_id} belongs to agent ${owningResponseTurnRecord.metadata.agentId}, not ${body.agent_id}`,
+            });
+          }
+        }
+
+        if (!previousResponseTurnRecord) {
+          throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+        }
+      }
+    } else {
+      if (!mastra) {
+        throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
+      }
+
+      previousResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
+        mastra,
+        responseId: body.previous_response_id,
+        requestContext,
+      });
+
+      if (!previousResponseTurnRecord) {
+        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+      }
+    }
+  }
+
+  const agent =
+    resolvedAgent ??
+    (await resolveResponseAgent({
+      mastra,
+      agentId: body.agent_id ?? previousResponseTurnRecord?.metadata.agentId,
+    }));
+  const resolvedModel = await agent.getModel({
+    requestContext,
+    modelConfig: body.model,
   });
+  const responseModel =
+    body.model ??
+    (() => {
+      if (resolvedModel.provider && resolvedModel.modelId) {
+        const publicProviderId = resolvedModel.provider.includes('.')
+          ? resolvedModel.provider.split('.')[0]!
+          : resolvedModel.provider;
+        return `${publicProviderId}/${resolvedModel.modelId}`;
+      }
+
+      if (resolvedModel.modelId) {
+        return resolvedModel.modelId;
+      }
+
+      throw new HTTPException(500, {
+        message: 'Responses route could not determine the effective model for this request',
+      });
+    })();
   const shouldStore = body.store ?? false;
   const needsMemoryStore = shouldStore || Boolean(body.conversation_id) || Boolean(body.previous_response_id);
   const agentMemoryStore = needsMemoryStore
@@ -628,14 +722,6 @@ async function prepareCreateResponseRequest({
             : 'conversation_id requires the target agent to have memory storage configured',
       })
     : null;
-  const previousResponseTurnRecord = body.previous_response_id
-    ? await findResponseTurnRecord({ agent, responseId: body.previous_response_id, requestContext })
-    : null;
-
-  if (body.previous_response_id && !previousResponseTurnRecord) {
-    throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
-  }
-
   const configuredTools = mapMastraToolsToResponseTools(
     (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
   );
@@ -666,10 +752,12 @@ async function prepareCreateResponseRequest({
     didStore,
     executionInput,
     previousResponseTurnRecord,
+    resolvedModel,
     responseId,
+    responseModel,
     responseMetadata: {
       agentId: agent.id,
-      model: body.model,
+      model: responseModel,
       createdAt,
       instructions: body.instructions,
       text: body.text,
@@ -693,6 +781,7 @@ function createResponseEventStream({
   didStore,
   previousResponseTurnRecord,
   responseId,
+  responseModel,
   responseMetadata,
   streamResult,
   threadContext,
@@ -704,6 +793,7 @@ function createResponseEventStream({
   didStore: boolean;
   previousResponseTurnRecord: ResponseTurnRecord | null;
   responseId: string;
+  responseModel: string;
   responseMetadata: Omit<
     ResponseTurnRecordMetadata,
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
@@ -713,7 +803,7 @@ function createResponseEventStream({
 }) {
   const createdResponse = buildInProgressResponse({
     responseId,
-    model: body.model,
+    model: responseModel,
     createdAt,
     instructions: body.instructions,
     textConfig: body.text,
@@ -793,7 +883,7 @@ function createResponseEventStream({
           result: streamResult,
           responseId,
           createdAt,
-          model: body.model,
+          model: responseModel,
           instructions: body.instructions,
           previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
           conversationId: threadContext?.threadId ?? body.conversation_id,
@@ -853,7 +943,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   description: 'Creates a response through a Mastra-hosted Responses API-compatible route',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
       const {
@@ -864,7 +954,9 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         didStore,
         executionInput,
         previousResponseTurnRecord,
+        resolvedModel,
         responseId,
+        responseModel,
         responseMetadata,
         threadContext,
       } = await prepareCreateResponseRequest({ body, mastra, requestContext });
@@ -872,7 +964,8 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       if (!body.stream) {
         const result = await executeGenerate({
           agent,
-          model: body.model,
+          resolvedModel,
+          modelOverride: body.model,
           instructions: body.instructions,
           text: body.text,
           providerOptions: body.providerOptions,
@@ -889,7 +982,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           result,
           responseId,
           createdAt,
-          model: body.model,
+          model: responseModel,
           instructions: body.instructions,
           previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
           conversationId: threadContext?.threadId ?? body.conversation_id,
@@ -903,7 +996,8 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       const streamResult = await executeStream({
         agent,
-        model: body.model,
+        resolvedModel,
+        modelOverride: body.model,
         instructions: body.instructions,
         text: body.text,
         providerOptions: body.providerOptions,
@@ -921,6 +1015,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         didStore,
         previousResponseTurnRecord,
         responseId,
+        responseModel,
         responseMetadata,
         streamResult,
         threadContext,
@@ -950,7 +1045,7 @@ export const GET_RESPONSE_ROUTE = createRoute({
   description: 'Returns a previously stored response object',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
@@ -975,7 +1070,7 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   description: 'Deletes a stored response so it can no longer be retrieved or chained',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:delete',
+  requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });

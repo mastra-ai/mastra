@@ -6,6 +6,7 @@
  * CorrelationContext and metadata are snapshotted at construction time.
  */
 
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   MetricsContext,
   Counter,
@@ -77,6 +78,7 @@ export class MetricsContextImpl implements MetricsContext {
     const costContext = options?.costContext ? cloneCostContext(options.costContext) : undefined;
 
     const exportedMetric: ExportedMetric = {
+      metricId: generateSignalId(),
       timestamp: new Date(),
       traceId: this.traceId,
       spanId: this.spanId,

@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Workflow class
 
 The `Workflow` class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
@@ -26,6 +29,76 @@ export const workflow = createWorkflow({
 })
 ```
 
+## Define schemas
+
+You can define the workflow's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    import { createWorkflow, createStep } from "@mastra/core/workflows";
+    import { z } from "zod";
+
+    const step1 = createStep({...});
+
+    export const testWorkflow = createWorkflow({
+      id: "test-workflow",
+      inputSchema: z.object({
+        message: z.string()
+      }),
+      outputSchema: z.object({
+        output: z.string()
+      })
+    })
+      .then(step1)
+      .commit();
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    import { createWorkflow, createStep } from "@mastra/core/workflows";
+    import * as v from "valibot";
+    import { toStandardJsonSchema } from "@valibot/to-json-schema";
+
+    const step1 = createStep({...});
+
+    export const testWorkflow = createWorkflow({
+      id: "test-workflow",
+      inputSchema: toStandardJsonSchema(v.object({
+        message: v.string()
+      })),
+      outputSchema: toStandardJsonSchema(v.object({
+        output: v.string()
+      }))
+    })
+      .then(step1)
+      .commit();
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    import { createWorkflow, createStep } from "@mastra/core/workflows";
+    import { type } from "arktype";
+
+    const step1 = createStep({...});
+
+    export const testWorkflow = createWorkflow({
+      id: "test-workflow",
+      inputSchema: type({
+        message: "string"
+      }),
+      outputSchema: type({
+        output: "string"
+      })
+    })
+      .then(step1)
+      .commit();
+    ```
+  </TabItem>
+</Tabs>
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -37,27 +110,84 @@ export const workflow = createWorkflow({
   },
   {
     name: 'inputSchema',
-    type: 'z.ZodType<any>',
-    description: 'Zod schema defining the input structure for the workflow',
+    type: 'StandardJSONSchemaV1',
+    description: 'Standard JSON Schema defining the input structure for the workflow',
   },
   {
     name: 'outputSchema',
-    type: 'z.ZodType<any>',
-    description: 'Zod schema defining the output structure for the workflow',
+    type: 'StandardJSONSchemaV1',
+    description: 'Standard JSON Schema defining the output structure for the workflow',
   },
   {
     name: 'stateSchema',
-    type: 'z.ZodObject<any>',
+    type: 'StandardJSONSchemaV1',
     description:
-      "Optional Zod schema for the workflow state. Automatically injected when using Mastra's state system. If not specified, type is 'any'.",
+      "Optional Standard JSON Schema for the workflow state. Automatically injected when using Mastra's state system. If not specified, type is 'any'.",
     isOptional: true,
   },
   {
     name: 'requestContextSchema',
-    type: 'z.ZodType<any>',
+    type: 'StandardJSONSchemaV1',
     description:
-      'Zod schema for validating request context values. When provided, the context is validated at the start of run.start(), throwing an error if validation fails.',
+      'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of run.start(), throwing an error if validation fails.',
     isOptional: true,
+  },
+  {
+    name: 'schedule',
+    type: 'WorkflowScheduleConfig | WorkflowScheduleConfig[]',
+    description:
+      'Optional cron schedule for the workflow. Accepts a single config or an array of configs to fire on multiple cadences. Setting this auto-promotes the workflow to the evented execution engine. See the scheduled workflows guide for usage.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'WorkflowScheduleConfig',
+        parameters: [
+          {
+            name: 'id',
+            type: 'string',
+            description:
+              'Stable identifier for the schedule. Required when passing an array of schedules. Defaults to the workflow id when passing a single schedule object.',
+            isOptional: true,
+          },
+          {
+            name: 'cron',
+            type: 'string',
+            description: 'A 5-, 6-, or 7-part cron expression. Validated at workflow construction time.',
+          },
+          {
+            name: 'timezone',
+            type: 'string',
+            description:
+              'IANA timezone, for example "America/New_York". Defaults to the host\'s local timezone. Set this explicitly in production so fire times do not depend on server locale.',
+            isOptional: true,
+          },
+          {
+            name: 'inputData',
+            type: 'TInput',
+            description: "Payload passed as the workflow's input on every fire.",
+            isOptional: true,
+          },
+          {
+            name: 'initialState',
+            type: 'TState',
+            description: 'Initial state for the run.',
+            isOptional: true,
+          },
+          {
+            name: 'requestContext',
+            type: 'Record<string, unknown>',
+            description: 'Request context attached to the run.',
+            isOptional: true,
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            description: 'Arbitrary metadata persisted alongside the schedule row.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'options',

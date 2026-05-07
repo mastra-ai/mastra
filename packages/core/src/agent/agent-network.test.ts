@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
+import type { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
@@ -9,6 +10,110 @@ import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
+
+const createNetworkTestModel = (text = '{}') =>
+  new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      content: [{ type: 'text', text }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([]),
+    }),
+  });
+
+describe('Agent - network - observational memory', () => {
+  it('should throw when observational memory is configured on agent memory', async () => {
+    const networkAgent = new Agent({
+      id: 'om-network-config-test',
+      name: 'OM Network Config Test Agent',
+      instructions: 'Test network',
+      model: createNetworkTestModel(),
+      memory: new MockMemory({
+        options: {
+          observationalMemory: true,
+        },
+      }),
+    });
+
+    await expect(
+      networkAgent.network('Do something', {
+        memory: {
+          thread: 'om-network-config-thread',
+          resource: 'om-network-config-resource',
+        },
+      }),
+    ).rejects.toThrow('Observational Memory is not supported with agent network');
+  });
+
+  it('should throw when observational memory is enabled at runtime', async () => {
+    const networkAgent = new Agent({
+      id: 'om-network-runtime-test',
+      name: 'OM Network Runtime Test Agent',
+      instructions: 'Test network',
+      model: createNetworkTestModel(),
+      memory: new MockMemory(),
+    });
+
+    await expect(
+      networkAgent.network('Do something', {
+        memory: {
+          thread: 'om-network-runtime-thread',
+          resource: 'om-network-runtime-resource',
+          options: {
+            observationalMemory: {
+              model: 'google/gemini-2.5-flash',
+            },
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      id: 'AGENT_NETWORK_OBSERVATIONAL_MEMORY_UNSUPPORTED',
+      domain: 'AGENT_NETWORK',
+      category: 'USER',
+    } satisfies Partial<MastraError>);
+  });
+
+  it('should allow network when runtime options explicitly disable configured observational memory', async () => {
+    const networkAgent = new Agent({
+      id: 'om-network-disabled-test',
+      name: 'OM Network Disabled Test Agent',
+      instructions: 'Test network',
+      model: createNetworkTestModel(
+        JSON.stringify({
+          isComplete: true,
+          finalResult: 'Done',
+          completionReason: 'Task complete',
+        }),
+      ),
+      memory: new MockMemory({
+        options: {
+          observationalMemory: true,
+        },
+      }),
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      memory: {
+        thread: 'om-network-disabled-thread',
+        resource: 'om-network-disabled-resource',
+        options: {
+          observationalMemory: false,
+        },
+      },
+    });
+
+    const chunks: unknown[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+});
 
 describe('Agent - network - finalResult token efficiency', () => {
   it('should NOT store redundant toolCalls in finalResult when messages already contain tool call data', async () => {

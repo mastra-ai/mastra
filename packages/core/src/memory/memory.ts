@@ -1,10 +1,13 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import { MastraFGAPermissions } from '../auth/ee';
+import type { MastraFGAPermissionInput } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
 import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
+import type { ObservabilityContext } from '../observability';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -96,6 +99,8 @@ export const memoryDefaultOptions = {
 `,
   },
 } satisfies MemoryConfigInternal;
+
+export { filterSystemReminderMessages, isSystemReminderMessage } from './system-reminders';
 
 /**
  * Abstract base class for implementing conversation memory systems.
@@ -453,6 +458,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -467,6 +473,8 @@ https://mastra.ai/en/docs/memory/overview`,
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      includeSystemReminders?: boolean;
+      observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -558,6 +566,45 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
+   * Static helper to check FGA authorization for thread access.
+   * Can be called from HTTP handlers and agent execution paths.
+   */
+  static async checkThreadFGA(options: {
+    mastra?: Mastra;
+    user: Record<string, unknown>;
+    threadId: string;
+    resourceId?: string;
+    requestContext?: RequestContext;
+    permission?: MastraFGAPermissionInput;
+  }): Promise<void> {
+    const {
+      mastra,
+      user,
+      threadId,
+      resourceId,
+      requestContext,
+      permission = MastraFGAPermissions.MEMORY_READ,
+    } = options;
+    const fgaProvider = mastra?.getServer()?.fga;
+    if (!fgaProvider) return;
+
+    const { checkFGA } = await import('../auth/ee/fga-check');
+    await checkFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'thread', id: threadId },
+      permission,
+      context:
+        resourceId || requestContext
+          ? {
+              resourceId,
+              requestContext,
+            }
+          : undefined,
+    });
+  }
+
+  /**
    * Retrieves working memory for a specific thread
    * @param threadId - The unique identifier of the thread
    * @param resourceId - The unique identifier of the resource
@@ -591,11 +638,13 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId,
     workingMemory,
     memoryConfig,
+    observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
 
   /**
@@ -867,7 +916,10 @@ https://mastra.ai/en/docs/memory/overview`,
     return processors;
   }
 
-  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
+  abstract deleteMessages(
+    messageIds: MessageDeleteInput,
+    observabilityContext?: Partial<ObservabilityContext>,
+  ): Promise<void>;
 
   /**
    * Clones a thread with all its messages to a new thread
@@ -954,7 +1006,10 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const result: SerializedObservationalMemoryConfig = {
       scope: om.scope,
+      activateAfterIdle: om.activateAfterIdle,
+      activateOnProviderChange: om.activateOnProviderChange,
       shareTokenBudget: om.shareTokenBudget,
+      temporalMarkers: om.temporalMarkers,
       retrieval: om.retrieval,
     };
 

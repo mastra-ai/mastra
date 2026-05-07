@@ -122,6 +122,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      // Clear per-thread ephemeral state first so renderExistingMessages
+      // and other downstream observers see clean state.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks([]);
+        state.ui.requestRender();
+      }
+      state.taskWriteInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -134,14 +142,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
-      }
-      // Restore tasks from thread state
-      const threadState = state.harness.getState() as {
-        tasks?: TaskItem[];
-      };
-      if (state.taskProgress) {
-        state.taskProgress.updateTasks(threadState.tasks ?? []);
-        state.ui.requestRender();
+        // Load goal state from thread metadata
+        state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
       }
       break;
     }
@@ -150,12 +152,22 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      // If /goal started without an existing thread, save that pending goal to the
+      // newly-created thread. Otherwise load the thread's own goal metadata so goals
+      // do not bleed into unrelated new threads.
+      const shouldPersistPendingGoal = state.goalManager?.consumePersistOnNextThreadCreate() ?? false;
+      if (shouldPersistPendingGoal) {
+        state.goalManager?.saveToThread(state).catch(() => {});
+      } else {
+        state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
+      }
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
-      // Clear stale tasks from the previous thread
+      // Clear per-thread ephemeral state so new threads start clean.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
@@ -217,9 +229,28 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       handleOMBufferingFailed(ectx, event.operationType, event.error);
       break;
 
-    case 'om_activation':
-      handleOMActivation(ectx, event.operationType, event.tokensActivated, event.observationTokens);
+    case 'om_activation': {
+      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+        triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+        lastActivityAt?: number;
+        ttlExpiredMs?: number;
+        activateAfterIdle?: number;
+        previousModel?: string;
+        currentModel?: string;
+      };
+      handleOMActivation(
+        ectx,
+        activationEvent.operationType,
+        activationEvent.tokensActivated,
+        activationEvent.observationTokens,
+        activationEvent.triggeredBy,
+        activationEvent.activateAfterIdle,
+        activationEvent.ttlExpiredMs,
+        activationEvent.previousModel,
+        activationEvent.currentModel,
+      );
       break;
+    }
 
     case 'om_thread_title_updated':
       state.currentThreadTitle = event.newTitle;
@@ -248,7 +279,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     // Subagent / Task delegation events
     case 'subagent_start':
-      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId);
+      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId, event.forked);
       break;
 
     case 'subagent_tool_start':

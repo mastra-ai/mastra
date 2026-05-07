@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { AnySpan } from './types';
+import { setCurrentSpanResolver, setExecuteWithContext, setExecuteWithContextSync } from './utils';
 
 /**
  * Ambient storage for the current span. Populated by executeWithContext/executeWithContextSync
@@ -15,6 +16,24 @@ const spanContextStorage = new AsyncLocalStorage<AnySpan>();
  */
 export function getCurrentSpan(): AnySpan | undefined {
   return spanContextStorage.getStore();
+}
+
+let initialized = false;
+
+/**
+ * Registers the AsyncLocalStorage-backed context resolvers with the browser-safe
+ * utils module. Must be called once at startup (e.g. from the Mastra constructor).
+ *
+ * This is an explicit initialization function rather than a top-level side-effect
+ * because the package declares `"sideEffects": false` and tsup's tree-shaking
+ * (`preset: 'smallest'`) strips bare side-effect imports.
+ */
+export function initContextStorage(): void {
+  if (initialized) return;
+  initialized = true;
+  setCurrentSpanResolver(getCurrentSpan);
+  setExecuteWithContext(executeWithContext);
+  setExecuteWithContextSync(executeWithContextSync);
 }
 
 /**

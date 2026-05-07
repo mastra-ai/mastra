@@ -92,6 +92,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
   if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
   if (field.includes('block')) return 'test-prompt-block';
+  if (field === 'uri') return 'ui://test/app';
 
   return 'test-string';
 }
@@ -346,6 +347,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
     params.agentId = 'test-agent';
   }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
+  if (route.path.includes(':scheduleId')) params.scheduleId = 'test-schedule';
+  if (route.path.includes(':backgroundTaskId')) params.backgroundTaskId = 'test-background-task-id';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
@@ -358,6 +361,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   } else if (route.path.includes(':scorerId')) {
     params.scorerId = 'test-scorer';
   }
+  if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
@@ -405,6 +409,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Tool provider route params
   if (route.path.includes(':providerId')) params.providerId = 'test-provider';
   if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
+
+  // Channel route params
+  if (route.path.includes(':platform')) params.platform = 'test-platform';
 
   return params;
 }

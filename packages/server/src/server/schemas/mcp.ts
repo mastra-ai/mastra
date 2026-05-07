@@ -63,6 +63,7 @@ export const mcpToolInfoSchema = z.object({
   inputSchema: z.unknown(),
   outputSchema: z.unknown().optional(),
   toolType: z.string().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const listMcpServerToolsResponseSchema = z.object({
@@ -71,6 +72,37 @@ export const listMcpServerToolsResponseSchema = z.object({
 
 export const executeToolResponseSchema = z.object({
   result: z.unknown(),
+});
+
+// Resource schemas
+export const mcpServerResourcePathParams = z.object({
+  serverId: z.string().describe('MCP server ID'),
+});
+
+export const readResourceBodySchema = z.object({
+  uri: z.string().describe('Resource URI to read'),
+});
+
+export const resourceContentSchema = z.object({
+  uri: z.string(),
+  text: z.string().optional(),
+  blob: z.string().optional(),
+});
+
+export const readResourceResponseSchema = z.object({
+  contents: z.array(resourceContentSchema),
+});
+
+export const resourceInfoSchema = z.object({
+  uri: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  mimeType: z.string().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const listResourcesResponseSchema = z.object({
+  resources: z.array(resourceInfoSchema),
 });
 
 // JSON-RPC error response schema

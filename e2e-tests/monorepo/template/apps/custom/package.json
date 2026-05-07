@@ -18,8 +18,8 @@
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
     "date-fns": "^4.1.0",
-    "lodash": "^4.17.23",
-    "hono": "^4.11.7",
+    "lodash": "^4.18.1",
+    "hono": "^4.12.14",
     "unicorn-magic": "0.4.0",
     "zod": "^4.0.0"
   },

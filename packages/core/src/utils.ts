@@ -4,6 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { ToolBackgroundConfig } from './background-tasks';
 import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
@@ -22,6 +23,8 @@ import type { Workspace } from './workspace/workspace';
 
 // Re-export Zod utilities for external use (isZodType is defined locally below)
 export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
+export { fetchWithRetry } from './utils/fetchWithRetry';
+export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -344,7 +347,12 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
    */
   outputWriter?: OutputWriter;
-  requireApproval?: boolean;
+  requireApproval?:
+    | boolean
+    | ((
+        input: any,
+        ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
+      ) => boolean | Promise<boolean>);
   // Workflow-specific properties
   workflow?: any;
   workflowId?: string;
@@ -355,6 +363,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * workspace.filesystem and workspace.sandbox for file operations and command execution.
    */
   workspace?: Workspace;
+  backgroundConfig?: ToolBackgroundConfig;
   /**
    * Browser available for tool execution. When provided, tools can access
    * browser capabilities for web automation, screenshots, and data extraction.
@@ -469,8 +478,15 @@ export function makeCoreTool(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
+  backgroundTaskEnabled?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
+  return new CoreToolBuilder({
+    originalTool,
+    options,
+    logType,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+  }).build();
 }
 
 export function makeCoreToolV5(
@@ -478,8 +494,15 @@ export function makeCoreToolV5(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
+  backgroundTaskEnabled?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
+  return new CoreToolBuilder({
+    originalTool,
+    options,
+    logType,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+  }).buildV5();
 }
 
 /**
@@ -671,47 +694,6 @@ export function parseFieldKey(key: string): FieldKey {
 }
 
 /**
- * Performs a fetch request with automatic retries using exponential backoff
- * @param url The URL to fetch from
- * @param options Standard fetch options
- * @param maxRetries Maximum number of retry attempts
- * @param validateResponse Optional function to validate the response beyond HTTP status
- * @returns The fetch Response if successful
- */
-export async function fetchWithRetry(
-  url: string,
-  options: RequestInit = {},
-  maxRetries: number = 3,
-): Promise<Response> {
-  let retryCount = 0;
-  let lastError: Error | null = null;
-
-  while (retryCount < maxRetries) {
-    try {
-      const response = await fetch(url, options);
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status: ${response.status} ${response.statusText}`);
-      }
-
-      return response;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      retryCount++;
-
-      if (retryCount >= maxRetries) {
-        break;
-      }
-
-      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError || new Error('Request failed after multiple retry attempts');
-}
-
-/**
  * Removes specific keys from an object.
  * @param obj - The original object
  * @param keysToOmit - Keys to exclude from the returned object
@@ -766,18 +748,33 @@ export function getNestedValue(obj: any, path: string): any {
 export function setNestedValue(obj: any, path: string, value: any): void {
   const keys = path.split('.');
   const lastKey = keys.pop();
-  if (!lastKey) {
+  if (!lastKey) return;
+
+  // Validate every segment up-front so we never walk or assign through
+  // a prototype-mutating key like "__proto__", "constructor", or "prototype".
+  for (const key of keys) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return;
+    }
+  }
+  if (lastKey === '__proto__' || lastKey === 'constructor' || lastKey === 'prototype') {
     return;
   }
 
-  const target = keys.reduce((current, key) => {
-    if (!current[key] || typeof current[key] !== 'object') {
-      current[key] = {};
+  let current = obj;
+  for (const key of keys) {
+    const existing = Object.prototype.hasOwnProperty.call(current, key) ? current[key] : undefined;
+    if (existing === null || typeof existing !== 'object') {
+      // Use a null-prototype object so intermediate containers cannot be
+      // used as a prototype-pollution sink even if a sanitizer check is
+      // bypassed upstream.
+      const container = Object.create(null);
+      Object.defineProperty(current, key, { value: container, writable: true, enumerable: true, configurable: true });
     }
-    return current[key];
-  }, obj);
+    current = current[key];
+  }
 
-  target[lastKey] = value;
+  Object.defineProperty(current, lastKey, { value, writable: true, enumerable: true, configurable: true });
 }
 
 export const removeUndefinedValues = (obj: Record<string, any>) => {

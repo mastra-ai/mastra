@@ -1,5 +1,71 @@
 # @mastra/evals
 
+## 1.2.2
+
+### Patch Changes
+
+- Fixed prebuilt LLM-judge scorers (faithfulness, answer relevancy, bias, hallucination, toxicity, …) crashing with `TypeError: output.find is not a function` when used against workflows, inline tasks, or string targets. The shared input/output helpers and scorer run types now also accept `string`, `ModelMessage[]`, `{ prompt }` (workflow input), `{ text }` / `{ content }` (workflow / task output), and a single assistant message object — alongside the existing agent shape. ([#15805](https://github.com/mastra-ai/mastra/pull/15805))
+
+  ```ts
+  // Previously crashed; now works.
+  await createFaithfulnessScorer({ model, options: { context: ['Paris is the capital of France.'] } }).run({
+    input: { prompt: 'What is the capital of France?' },
+    output: { text: 'Paris is the capital of France.' },
+  });
+  ```
+
+  Fixes [#15615](https://github.com/mastra-ai/mastra/issues/15615).
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed prebuilt LLM-judge scorers (faithfulness, answer relevancy, bias, hallucination, toxicity, …) crashing with `TypeError: output.find is not a function` when used against workflows, inline tasks, or string targets. The shared input/output helpers and scorer run types now also accept `string`, `ModelMessage[]`, `{ prompt }` (workflow input), `{ text }` / `{ content }` (workflow / task output), and a single assistant message object — alongside the existing agent shape. ([#15805](https://github.com/mastra-ai/mastra/pull/15805))
+
+  ```ts
+  // Previously crashed; now works.
+  await createFaithfulnessScorer({ model, options: { context: ['Paris is the capital of France.'] } }).run({
+    input: { prompt: 'What is the capital of France?' },
+    output: { text: 'Paris is the capital of France.' },
+  });
+  ```
+
+  Fixes [#15615](https://github.com/mastra-ai/mastra/issues/15615).
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
+## 1.2.1
+
+### Patch Changes
+
+- Fix answer-similarity scorer to align prompt guidelines with allowed match types ([#15001](https://github.com/mastra-ai/mastra/pull/15001))
+
+  The answer-similarity scorer could throw a ZodError when the LLM returned
+  "contradiction" as a matchType, since only exact/semantic/partial/missing are
+  valid. The prompt now correctly directs contradictory information to the
+  existing contradictions array instead.
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fix answer-similarity scorer to align prompt guidelines with allowed match types ([#15001](https://github.com/mastra-ai/mastra/pull/15001))
+
+  The answer-similarity scorer could throw a ZodError when the LLM returned
+  "contradiction" as a matchType, since only exact/semantic/partial/missing are
+  valid. The prompt now correctly directs contradictory information to the
+  existing contradictions array instead.
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
 ## 1.2.0
 
 ### Minor Changes

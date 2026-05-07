@@ -24,6 +24,8 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -415,6 +417,55 @@ export class ObservabilityPG extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      const spans = await this.#db.client.manyOrNone<LightSpanRecord>(
+        `SELECT
+          "traceId", "spanId", "parentSpanId", "name",
+          "entityType", "entityId", "entityName",
+          "spanType", "error", "isEvent",
+          "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
+          "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
+        FROM ${tableName}
+        WHERE "traceId" = $1
+        ORDER BY "startedAtZ" ASC`,
+        [traceId],
+      );
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map(span =>
+          transformFromSqlRow<LightSpanRecord>({
+            tableName: TABLE_SPANS,
+            sqlRow: span,
+          }),
+        ),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

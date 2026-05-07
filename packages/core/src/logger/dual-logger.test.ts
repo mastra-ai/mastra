@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as utils from '../observability/context-storage';
 import type { LoggerContext } from '../observability/types/logging';
+import * as utils from '../observability/utils';
 import { DualLogger } from './dual-logger';
 import type { IMastraLogger } from './logger';
 
@@ -227,7 +227,7 @@ describe('DualLogger', () => {
         },
       };
 
-      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(mockSpan as any);
+      vi.spyOn(utils, 'resolveCurrentSpan').mockReturnValue(mockSpan as any);
 
       const dual = new DualLogger(inner, () => vnext);
       dual.info('inside span', { key: 'value' });
@@ -242,7 +242,7 @@ describe('DualLogger', () => {
     });
 
     it('falls back to global loggerVNext when no span in context', () => {
-      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(undefined);
+      vi.spyOn(utils, 'resolveCurrentSpan').mockReturnValue(undefined);
 
       const dual = new DualLogger(inner, () => vnext);
       dual.info('no span', { key: 'value' });
@@ -255,7 +255,7 @@ describe('DualLogger', () => {
 
     it('falls back to global loggerVNext when span has no observabilityInstance', () => {
       const mockSpan = { observabilityInstance: undefined };
-      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(mockSpan as any);
+      vi.spyOn(utils, 'resolveCurrentSpan').mockReturnValue(mockSpan as any);
 
       const dual = new DualLogger(inner, () => vnext);
       dual.info('no instance', { key: 'value' });
@@ -273,7 +273,7 @@ describe('DualLogger', () => {
         },
       };
 
-      vi.spyOn(utils, 'getCurrentSpan').mockReturnValue(mockSpan as any);
+      vi.spyOn(utils, 'resolveCurrentSpan').mockReturnValue(mockSpan as any);
 
       const dual = new DualLogger(inner, () => vnext);
       const error = {

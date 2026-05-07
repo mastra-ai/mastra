@@ -26,7 +26,10 @@ interface LangfuseExporterConfig extends BaseExporterConfig {
   secretKey?: string
   baseUrl?: string
   realtime?: boolean
-  options?: any
+  flushAt?: number
+  flushInterval?: number
+  environment?: string
+  release?: string
 }
 ```
 
@@ -52,13 +55,38 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'baseUrl',
     type: 'string',
-    description: 'Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.',
+    description: 'Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var. Default: https://cloud.langfuse.com',
     required: false,
   },
   {
     name: 'realtime',
     type: 'boolean',
-    description: 'Enable realtime mode - flushes after each event',
+    description: 'Enable realtime mode - exports spans immediately instead of batching',
+    required: false,
+  },
+  {
+    name: 'flushAt',
+    type: 'number',
+    description: 'Maximum number of spans per OTEL export batch. Forwarded to the underlying LangfuseSpanProcessor.',
+    required: false,
+  },
+  {
+    name: 'flushInterval',
+    type: 'number',
+    description:
+      'Maximum time in seconds before pending spans are exported. Forwarded to the underlying LangfuseSpanProcessor.',
+    required: false,
+  },
+  {
+    name: 'environment',
+    type: 'string',
+    description: 'Environment tag for traces (e.g. production, staging). Shows in Langfuse UI for filtering.',
+    required: false,
+  },
+  {
+    name: 'release',
+    type: 'string',
+    description: 'Release tag for traces (e.g. git commit hash). Used for version tracking.',
     required: false,
   },
   {
@@ -67,32 +95,20 @@ Extends `BaseExporterConfig`, which includes:
     description: "Logger level (default: 'warn')",
     required: false,
   },
-  {
-    name: 'options',
-    type: 'any',
-    description: 'Additional Langfuse client options',
-    required: false,
-  },
 ]}
 />
 
+## Properties
+
+### `client`
+
+```typescript prettier:false
+get client(): LangfuseClient | undefined
+```
+
+The `LangfuseClient` instance for advanced Langfuse features. Returns `undefined` when the exporter is disabled (missing credentials). Use this for prompt management, evaluations, datasets, and direct API access.
+
 ## Methods
-
-### `exportTracingEvent`
-
-```typescript prettier:false
-async exportTracingEvent(event: TracingEvent): Promise<void>
-```
-
-Exports a tracing event to Langfuse.
-
-### export
-
-```typescript prettier:false
-async export(spans: ReadOnlySpan[]): Promise<void>
-```
-
-Batch exports spans to Langfuse.
 
 ### flush
 
@@ -100,7 +116,7 @@ Batch exports spans to Langfuse.
 async flush(): Promise<void>
 ```
 
-Force flushes any buffered spans to Langfuse without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+Force flushes any buffered spans and scores to Langfuse without shutting down. Useful in serverless environments where you need to ensure data is exported before the runtime terminates.
 
 ### shutdown
 
@@ -108,7 +124,7 @@ Force flushes any buffered spans to Langfuse without shutting down the exporter.
 async shutdown(): Promise<void>
 ```
 
-Flushes pending data and shuts down the client.
+Flushes pending data and shuts down both the span processor and the client.
 
 ## Usage
 
@@ -136,10 +152,11 @@ const exporter = new LangfuseExporter({
 
 ## Span mapping
 
-- Root spans → Langfuse traces
-- `MODEL_GENERATION` spans → Langfuse generations
+Mastra spans are converted to OTel format and sent to Langfuse via `LangfuseSpanProcessor`. Langfuse automatically maps spans based on their `gen_ai.*` attributes:
+
+- Spans with a `model` attribute → Langfuse generations
 - All other spans → Langfuse spans
-- Event spans → Langfuse events
+- Parent-child relationships are preserved via OTel trace/span IDs
 
 ## Prompt linking
 
@@ -147,22 +164,21 @@ Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/p
 
 ```typescript
 import { buildTracingOptions } from '@mastra/observability'
-import { withLangfusePrompt } from '@mastra/langfuse'
-import { Langfuse } from 'langfuse'
+import { LangfuseExporter, withLangfusePrompt } from '@mastra/langfuse'
 
-const langfuse = new Langfuse({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-})
+const exporter = new LangfuseExporter()
 
-const prompt = await langfuse.getPrompt('customer-support')
+// Fetch prompt via the Langfuse client
+const prompt = await exporter.client.prompt.get('customer-support', { type: 'text' })
 
 const agent = new Agent({
   name: 'support-agent',
-  instructions: prompt.prompt,
+  instructions: prompt.compile(),
   model: 'openai/gpt-5.4',
   defaultGenerateOptions: {
-    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+    tracingOptions: buildTracingOptions(
+      withLangfusePrompt({ name: prompt.name, version: prompt.version }),
+    ),
   },
 })
 ```
@@ -174,12 +190,8 @@ const agent = new Agent({
 Adds Langfuse prompt metadata to tracing options.
 
 ```typescript
-// With Langfuse SDK prompt object
-withLangfusePrompt(prompt)
-
-// With manual fields
+// Link by name and version (required for Langfuse v5)
 withLangfusePrompt({ name: 'my-prompt', version: 1 })
-withLangfusePrompt({ id: 'prompt-uuid' })
 ```
 
-When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either `id` alone, or `name` + `version`), the exporter automatically links the generation to the prompt in Langfuse.
+The prompt metadata is passed through as span attributes and Langfuse links the generation to the corresponding prompt.

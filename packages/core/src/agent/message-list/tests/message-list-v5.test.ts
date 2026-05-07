@@ -514,7 +514,49 @@ describe('MessageList V5 Support', () => {
 
         // Find text part (there may be other parts like step-start)
         const textPart = uiMessages[0].parts.find(p => p.type === 'text');
-        expect(textPart).toEqual({ type: 'text', text: 'User message' });
+        expect(textPart).toMatchObject({ type: 'text', text: 'User message' });
+      });
+
+      it('stamps parts added from response model messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        list.add(
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'hello' },
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'weather', input: { city: 'SF' } },
+            ],
+          },
+          'response',
+        );
+
+        const dbMessages = list.get.all.db();
+        expect(dbMessages[0].content.parts).toEqual([
+          expect.objectContaining({ type: 'text', createdAt: expect.any(Number) }),
+          expect.objectContaining({ type: 'tool-invocation', createdAt: expect.any(Number) }),
+        ]);
+      });
+
+      it('does not stamp parts loaded from memory', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        list.add(
+          {
+            id: 'msg-memory',
+            role: 'assistant',
+            createdAt: new Date('2026-04-06T00:00:00.000Z'),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'from memory' }],
+            },
+          },
+          'memory',
+        );
+
+        const dbMessages = list.get.all.db();
+        expect(dbMessages[0].content.parts[0]).toMatchObject({ type: 'text', text: 'from memory' });
+        expect((dbMessages[0].content.parts[0] as { createdAt?: number }).createdAt).toBeUndefined();
       });
 
       it('prompt() should include system messages', () => {
@@ -718,7 +760,7 @@ describe('MessageList V5 Support', () => {
       const v5Model = list.get.all.aiV5.model();
 
       expect(v4Core[0].content).toEqual([{ type: 'text', text: 'Simple string message' }]);
-      expect(v5Model[0].content).toEqual([{ type: 'text', text: 'Simple string message' }]);
+      expect(v5Model[0].content).toEqual([expect.objectContaining({ type: 'text', text: 'Simple string message' })]);
     });
 
     it.skip('should handle v4 CoreMessage with tools → v5 with correct tool format', () => {
@@ -1306,7 +1348,12 @@ describe('MessageList V5 Support', () => {
         expect(v5UIBack).toHaveLength(1);
         const v5FilePart = v5UIBack[0].parts.find(p => p.type === 'file');
         expect(v5FilePart).toBeDefined();
-        expect(v5FilePart?.providerMetadata).toEqual(providerMetadata);
+        expect(v5FilePart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...providerMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
       });
 
       it('should preserve providerMetadata on text parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
@@ -1342,7 +1389,12 @@ describe('MessageList V5 Support', () => {
         expect(v5UIBack).toHaveLength(1);
         const v5TextPart = v5UIBack[0].parts.find(p => p.type === 'text');
         expect(v5TextPart).toBeDefined();
-        expect(v5TextPart?.providerMetadata).toEqual(providerMetadata);
+        expect(v5TextPart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...providerMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
       });
 
       it('should preserve providerMetadata on reasoning parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
@@ -1379,7 +1431,12 @@ describe('MessageList V5 Support', () => {
         expect(v5UIBack).toHaveLength(1);
         const v5ReasoningPart = v5UIBack[0].parts.find(p => p.type === 'reasoning');
         expect(v5ReasoningPart).toBeDefined();
-        expect(v5ReasoningPart?.providerMetadata).toEqual(providerMetadata);
+        expect(v5ReasoningPart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...providerMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
       });
 
       it('should preserve callProviderMetadata on tool invocations during V5 UI -> V2 -> V5 UI roundtrip', () => {
@@ -1422,7 +1479,12 @@ describe('MessageList V5 Support', () => {
         if (!isToolUIPart(v5ToolPart!) || !(`callProviderMetadata` in v5ToolPart)) {
           throw new Error(`should be a tool part with callProviderMetadata`);
         }
-        expect(v5ToolPart?.callProviderMetadata).toEqual(callProviderMetadata);
+        expect(v5ToolPart?.callProviderMetadata).toEqual(
+          expect.objectContaining({
+            ...callProviderMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
       });
 
       it('should preserve providerMetadata on source-url parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
@@ -1461,7 +1523,12 @@ describe('MessageList V5 Support', () => {
         expect(v5UIBack).toHaveLength(1);
         const v5SourcePart = v5UIBack[0].parts.find(p => p.type === 'source-url');
         expect(v5SourcePart).toBeDefined();
-        expect(v5SourcePart?.providerMetadata).toEqual(providerMetadata);
+        expect(v5SourcePart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...providerMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
       });
 
       it('should preserve providerMetadata when mixing multiple part types', () => {
@@ -1514,13 +1581,28 @@ describe('MessageList V5 Support', () => {
         const v5Parts = v5UIBack[0].parts;
 
         const v5TextPart = v5Parts.find(p => p.type === 'text');
-        expect(v5TextPart?.providerMetadata).toEqual(textProviderMetadata);
+        expect(v5TextPart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...textProviderMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
 
         const v5FilePart = v5Parts.find(p => p.type === 'file');
-        expect(v5FilePart?.providerMetadata).toEqual(fileProviderMetadata);
+        expect(v5FilePart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...fileProviderMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
 
         const v5ReasoningPart = v5Parts.find(p => p.type === 'reasoning');
-        expect(v5ReasoningPart?.providerMetadata).toEqual(reasoningProviderMetadata);
+        expect(v5ReasoningPart?.providerMetadata).toEqual(
+          expect.objectContaining({
+            ...reasoningProviderMetadata,
+            mastra: { createdAt: expect.any(Number) },
+          }),
+        );
       });
     });
   });

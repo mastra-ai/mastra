@@ -1,6 +1,6 @@
 ---
 title: "Deployment | Studio"
-description: Learn how to deploy Studio on your own infrastructure or on Mastra Cloud
+description: Learn how to deploy Studio on your own infrastructure or on Mastra platform
 packages:
   - "@mastra/core"
 ---
@@ -14,8 +14,8 @@ Studio is a React-based Single Page Application (SPA) that runs in the browser a
 
 You can deploy Studio in two primary ways:
 
-- [Cloud](/docs/mastra-cloud/overview) hosts Studio for you and allows you to share access with your team via link
-- You can self-host Studio on your own infrastructure, either alongside your Mastra server or separately as a standalone SPA
+- The Mastra platform provides a hosted Studio for you and allows you to share access with your team via link
+- Self-host Studio on your own infrastructure, either alongside your Mastra server or separately as a standalone SPA
 
 On this page you'll learn how to deploy Studio on your own infrastructure. As the finer details of deployment can vary widely based on your needs and setup, we'll cover the general principles and options available to you.
 
@@ -39,6 +39,10 @@ mastra studio
 
 Open [localhost:3000](http://localhost:3000) in your browser to see the Studio UI. By default, it will attempt to connect to a Mastra server running at `http://localhost:4111`. If it doesn't find one there, you'll see a form where you can enter your Mastra instance URL and API prefix.
 
+The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
+
+:::note
+
 If you're hosting Studio under a subpath (for example `/agents` behind Nginx), set `MASTRA_STUDIO_BASE_PATH` before starting Studio:
 
 ```bash
@@ -47,7 +51,51 @@ MASTRA_STUDIO_BASE_PATH=/agents mastra studio
 
 This updates the HTML base URL and static asset routing so the standalone Studio works correctly under that subpath.
 
-The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
+:::
+
+## Mastra platform
+
+The [Mastra platform](/docs/mastra-platform/overview) allows you to deploy your Studio to the cloud. Run a single CLI command, and the platform handles provisioning, deployment, and hosting.
+
+Run the following command:
+
+```bash
+mastra studio deploy
+```
+
+:::note
+
+See the [CLI reference](/reference/cli/mastra#mastra-studio-deploy) for the full list of flags and CI/CD usage.
+
+:::
+
+This builds your project (compiling `src/mastra/` into `.mastra/output`), packages it as an artifact ZIP, uploads it, and deploys it to a cloud sandbox.
+
+If this is your first deploy, the CLI will prompt you to create a new project or select an existing one. The `.mastra-project.json` file is written automatically.
+
+A deploy transitions through **queued → uploading → starting → running** (or **failed** if something goes wrong). If a sandbox is already running for your project, the platform hot-updates it in place with no downtime. Otherwise it creates a fresh sandbox. Your instance URL is assigned per project slug and remains stable across deploys.
+
+### Env file requirement
+
+The deploy bundles environment variables from a `.env` or `.env.*` file in the project directory. If no env file is present, the deploy errors with `No env file found for deploy.` after the build step. Add at least an empty `.env` file before running the command.
+
+When multiple env files are present, the CLI prompts you to pick one. To select non-interactively, pass `--env-file`:
+
+```bash
+mastra studio deploy --env-file .env.production --yes
+```
+
+This is also how you target multiple environments from a single codebase: maintain one env file per environment (for example `.env.staging`, `.env.production`) and pass the right one to each deploy. Each environment still requires its own Mastra platform project — see [Configuration](/docs/mastra-platform/configuration) for the multi-environment pattern.
+
+### Create a new project non-interactively
+
+`mastra studio deploy` can create a project on first run. If `--project <name>` does not match an existing project, the CLI uses the value as the new project name and creates it after confirmation. Combined with `--yes`, this is fully scriptable:
+
+```bash
+mastra studio deploy --project "my-new-project" --yes
+```
+
+Use this from CI or AI coding agents instead of `mastra studio projects create`, which is interactive only.
 
 ## Running a server
 

@@ -26,51 +26,40 @@ test('renders settings form', async ({ page }) => {
 test('shows theme selector with dark default', async ({ page }) => {
   await page.goto('/settings');
 
-  const themeSection = page.getByText('Theme mode').locator('..');
-  const selector = themeSection.getByRole('combobox');
+  const selector = page.getByLabel('Theme mode');
 
   await expect(selector).toBeVisible();
   await expect(selector).toContainText('Dark');
 });
 
-test('applies selected light theme only after saving configuration', async ({ page }) => {
+test('applies selected light theme', async ({ page }) => {
   await page.goto('/settings');
 
-  const themeSection = page.getByText('Theme mode').locator('..');
-  const selector = themeSection.getByRole('combobox');
+  const selector = page.getByLabel('Theme mode');
 
   await selector.click();
   await page.getByRole('option', { name: 'Light' }).click();
 
   await expect(selector).toContainText('Light');
-  await expect(page.locator('html')).toHaveClass(/dark/);
-
-  await page.getByRole('button', { name: 'Save Configuration' }).click();
-
   await expect(page.locator('html')).toHaveClass(/light/);
 
   await page.reload();
 
   await expect(page.locator('html')).toHaveClass(/light/);
-  const reloadedThemeSection = page.getByText('Theme mode').locator('..');
-  await expect(reloadedThemeSection.getByRole('combobox')).toContainText('Light');
+  await expect(page.getByLabel('Theme mode')).toContainText('Light');
 });
 
-test('persists system theme mode when saved', async ({ page }) => {
+test('persists system theme mode', async ({ page }) => {
   await page.goto('/settings');
 
-  const themeSection = page.getByText('Theme mode').locator('..');
-  const selector = themeSection.getByRole('combobox');
+  const selector = page.getByLabel('Theme mode');
 
   await selector.click();
   await page.getByRole('option', { name: 'System' }).click();
 
   await expect(selector).toContainText('System');
 
-  await page.getByRole('button', { name: 'Save Configuration' }).click();
-
   await page.reload();
 
-  const reloadedThemeSection = page.getByText('Theme mode').locator('..');
-  await expect(reloadedThemeSection.getByRole('combobox')).toContainText('System');
+  await expect(page.getByLabel('Theme mode')).toContainText('System');
 });

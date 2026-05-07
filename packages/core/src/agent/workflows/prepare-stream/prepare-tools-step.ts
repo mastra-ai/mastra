@@ -20,6 +20,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
+  backgroundTaskEnabled?: boolean;
 }
 
 export function createPrepareToolsStep<OUTPUT = undefined>({
@@ -32,6 +33,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
   agentSpan,
   methodType,
   memory: _memory,
+  backgroundTaskEnabled,
 }: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
@@ -53,6 +55,8 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         memoryConfig: options.memory?.options,
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
         delegation: options.delegation,
+        backgroundTaskEnabled,
+        inputProcessors: options.inputProcessors,
       });
 
       // Update the agent span with available tool names for observability

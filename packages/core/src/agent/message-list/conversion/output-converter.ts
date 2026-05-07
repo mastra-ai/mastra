@@ -2,15 +2,16 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
-import { AIV4Adapter, AIV5Adapter } from '../adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
-import type { AIV5Type } from '../types';
+import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
+import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
- * Merges text parts that share the same OpenAI itemId.
+ * Merges text parts that share the same OpenAI-compatible itemId.
  *
  * When OpenAI streams a response with web search, it interleaves `source` chunks
  * with text-deltas. If the streaming pipeline flushes text on these source chunks,
@@ -21,45 +22,60 @@ import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
  * the request with: "Duplicate item found with id msg_*"
  *
  * This function merges consecutive text parts with the same itemId into a single part,
- * concatenating their text content and keeping the metadata from the first part.
+ * allowing source annotations between those text flushes, concatenating their text
+ * content, and keeping the metadata from the first part.
  */
+function isTextMergePassThroughPart(part: { type: string }): boolean {
+  // Only source annotations are transparent for text-item merging. Tool,
+  // reasoning, file, and step parts are merge boundaries.
+  return part.type.startsWith('source-');
+}
+
 function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
   const result: T[] = [];
 
   for (const part of parts) {
-    // Only process text parts with OpenAI itemId
+    // Only process text parts with OpenAI-compatible itemId
     if (part.type !== 'text') {
       result.push(part);
       continue;
     }
 
     const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
-    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
-      | string
-      | undefined;
+    const itemId = getResponseProviderItemKey(textPart.providerMetadata);
     if (!itemId) {
       result.push(part);
       continue;
     }
 
-    // Find an existing text part in result with the same itemId
-    const existingIndex = result.findIndex(p => {
-      if (p.type !== 'text') return false;
-      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
-      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
-      return existingItemId === itemId;
-    });
+    let merged = false;
+    for (let index = result.length - 1; index >= 0; index--) {
+      const previous = result[index]!;
+      if (previous.type === 'text') {
+        const previousTextPart = previous as T & { text: string; providerMetadata?: Record<string, unknown> };
+        const previousItemId = getResponseProviderItemKey(previousTextPart.providerMetadata);
 
-    if (existingIndex !== -1) {
-      // Merge: concatenate text into the existing part
-      const existing = result[existingIndex] as T & { text: string };
-      result[existingIndex] = {
-        ...existing,
-        text: existing.text + textPart.text,
-      };
-    } else {
-      result.push(part);
+        if (previousItemId === itemId) {
+          result[index] = {
+            ...previousTextPart,
+            text: previousTextPart.text + textPart.text,
+          };
+          merged = true;
+        }
+
+        break;
+      }
+
+      if (!isTextMergePassThroughPart(previous)) {
+        break;
+      }
     }
+
+    if (merged) {
+      continue;
+    }
+
+    result.push(part);
   }
 
   return result;
@@ -108,84 +124,96 @@ export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
   filterIncompleteToolCalls = false,
 ): AIV5Type.UIMessage[] {
+  // Precompute the index of the last user message. A deferred provider-executed
+  // tool call (e.g. Anthropic non-deterministically defers web_search across
+  // steps N→N+1 within the same run) may legitimately carry `input-available`
+  // state ONLY on the most recent surviving assistant message, AND only if no
+  // user turn has followed it. On any earlier assistant turn (or after a later
+  // user message) an unresolved provider-executed call is an orphan — provider
+  // dropped the result chunk (#15668), run aborted mid-stream (#14148), or a
+  // stale call from an earlier step (#14192) — and must be dropped to keep the
+  // tool-call/tool-result invariant.
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+
+  const getSafeParts = (m: AIV5Type.UIMessage, assistantTurnStillOpen: boolean) =>
+    m.parts.filter(p => {
+      // Filter out data-* parts (custom streaming data from writer.custom())
+      // These are Mastra extensions not supported by LLM providers.
+      // If not filtered, convertToModelMessages produces empty content arrays
+      // which causes some models to fail with "must include at least one parts field"
+      if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+        return false;
+      }
+
+      // Filter out empty text parts to handle legacy data from before this filtering was implemented.
+      // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
+      // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
+      if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+        // Always filter empty text parts from user messages
+        if (m.role === 'user') return false;
+
+        // For non-user messages, only filter if there are other non-empty parts
+        const hasNonEmptyParts = m.parts.some(
+          part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
+        );
+        if (hasNonEmptyParts) return false;
+      }
+
+      if (!AIV5.isToolUIPart(p)) return true;
+
+      // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
+      // Filter out incomplete client-side tool calls (input-available without providerExecuted)
+      // and input-streaming states.
+      if (filterIncompleteToolCalls) {
+        // Completed tools (client or provider) — keep them
+        if (p.state === 'output-available' || p.state === 'output-error') return true;
+        // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
+        // defers web_search when mixed with client tool calls). Keep these so the provider API sees
+        // the server_tool_use block on the next request — but ONLY on the most recent surviving
+        // assistant message. On any earlier assistant turn an unresolved provider-executed call is
+        // an orphan (provider dropped the result chunk, or the run aborted mid-stream) and must be
+        // dropped to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
+        if (p.state === 'input-available' && p.providerExecuted && assistantTurnStillOpen) return true;
+        return false;
+      }
+
+      // When processing response messages FROM the LLM: keep input-available states
+      // (tool calls waiting for client-side execution) but filter out input-streaming
+      return p.state !== 'input-streaming';
+    });
+
+  let lastSurvivingAssistantIdx = -1;
+  if (lastUserIdx !== messages.length - 1) {
+    for (let i = messages.length - 1; i > lastUserIdx; i--) {
+      const message = messages[i]!;
+      if (message.role !== 'assistant' || message.parts.length === 0) continue;
+      if (getSafeParts(message, true).length > 0) {
+        lastSurvivingAssistantIdx = i;
+        break;
+      }
+    }
+  }
+
   const msgs = messages
-    .map(m => {
+    .map((m, idx) => {
       if (m.parts.length === 0) return false;
 
-      // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
-      // check if this message contains OpenAI reasoning parts (rs_* itemIds).
-      // If so, we need to strip them AND clear providerMetadata.openai from remaining
-      // parts to prevent item_reference linking to the stripped reasoning items.
-      const hasOpenAIReasoning =
-        filterIncompleteToolCalls &&
-        m.parts.some(
-          p =>
-            p.type === 'reasoning' &&
-            'providerMetadata' in p &&
-            p.providerMetadata &&
-            typeof p.providerMetadata === 'object' &&
-            'openai' in (p.providerMetadata as Record<string, unknown>),
-        );
+      // Deferred-provider-tool behavior is ONLY valid on the most recent surviving
+      // assistant message AND only when no user turn has followed it.
+      const assistantTurnStillOpen = m.role === 'assistant' && idx === lastSurvivingAssistantIdx;
 
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
-      const safeParts = m.parts.filter(p => {
-        // Filter out data-* parts (custom streaming data from writer.custom())
-        // These are Mastra extensions not supported by LLM providers.
-        // If not filtered, convertToModelMessages produces empty content arrays
-        // which causes some models to fail with "must include at least one parts field"
-        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
-          return false;
-        }
-
-        // Strip OpenAI reasoning parts when building a prompt TO the LLM.
-        // OpenAI's Responses API uses item_reference linking (rs_*/msg_* itemIds) that
-        // creates mandatory pairing between reasoning and message items. Replaying
-        // reasoning from history causes:
-        //   "Item 'rs_*' of type 'reasoning' was provided without its required following item"
-        //   "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
-        // Reasoning data is preserved in the database — only stripped from LLM input.
-        // See: https://github.com/mastra-ai/mastra/issues/12980
-        if (p.type === 'reasoning' && hasOpenAIReasoning) {
-          return false;
-        }
-
-        // Filter out empty text parts to handle legacy data from before this filtering was implemented.
-        // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
-        // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
-        if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
-          // Always filter empty text parts from user messages
-          if (m.role === 'user') return false;
-
-          // For non-user messages, only filter if there are other non-empty parts
-          const hasNonEmptyParts = m.parts.some(
-            part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
-          );
-          if (hasNonEmptyParts) return false;
-        }
-
-        if (!AIV5.isToolUIPart(p)) return true;
-
-        // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
-        // Filter out incomplete client-side tool calls (input-available without providerExecuted)
-        // and input-streaming states.
-        if (filterIncompleteToolCalls) {
-          // Completed tools (client or provider) — keep them
-          if (p.state === 'output-available' || p.state === 'output-error') return true;
-          // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
-          // defers web_search when mixed with client tool calls). Keep these so the provider API sees
-          // the server_tool_use block on the next request.
-          if (p.state === 'input-available' && p.providerExecuted) return true;
-          return false;
-        }
-
-        // When processing response messages FROM the LLM: keep input-available states
-        // (tool calls waiting for client-side execution) but filter out input-streaming
-        return p.state !== 'input-streaming';
-      });
+      const safeParts = getSafeParts(m, assistantTurnStillOpen);
 
       if (!safeParts.length) return false;
 
-      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
+      // Merge text parts with duplicate OpenAI-compatible itemIds to prevent "Duplicate item found" errors.
       // This can happen when streaming flushes text multiple times for the same response
       // (e.g., when source citations are interleaved with text-deltas).
       const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);
@@ -193,39 +221,6 @@ export function sanitizeV5UIMessages(
       const sanitized = {
         ...m,
         parts: mergedParts.map(part => {
-          // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
-          // parts so the SDK sends inline content instead of item_reference. This covers:
-          //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
-          //   - callProviderMetadata.openai on tool parts (fc_* itemIds used by convertToModelMessages)
-          // Without paired reasoning items, OpenAI rejects orphaned item_references with:
-          //   "function_call was provided without its required reasoning item"
-          if (hasOpenAIReasoning) {
-            if ('providerMetadata' in part && part.providerMetadata) {
-              const meta = part.providerMetadata as Record<string, unknown>;
-              if ('openai' in meta) {
-                const { openai: _, ...restMeta } = meta;
-                part = {
-                  ...part,
-                  providerMetadata:
-                    Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
-                };
-              }
-            }
-            if ('callProviderMetadata' in part && part.callProviderMetadata) {
-              const callMeta = part.callProviderMetadata as Record<string, unknown>;
-              if ('openai' in callMeta) {
-                const { openai: _, ...restCallMeta } = callMeta;
-                part = {
-                  ...part,
-                  callProviderMetadata:
-                    Object.keys(restCallMeta).length > 0
-                      ? (restCallMeta as typeof part.callProviderMetadata)
-                      : undefined,
-                } as typeof part;
-              }
-            }
-          }
-
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
@@ -401,10 +396,15 @@ export function aiV4CoreMessagesToAIV5ModelMessages(
  * Supports string, MastraDBMessage, or AI SDK message types.
  */
 export function systemMessageToAIV4Core(
-  message: CoreMessageV4 | AIV5Type.ModelMessage | MastraDBMessage | string,
+  message: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | MastraDBMessage | string,
 ): CoreMessageV4 {
   if (typeof message === `string`) {
     return { role: 'system', content: message };
+  }
+
+  if (TypeDetector.isAIV6CoreMessage(message)) {
+    const dbMsg = AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, 'system');
+    return AIV4Adapter.systemToV4Core(dbMsg);
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {

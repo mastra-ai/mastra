@@ -36,7 +36,14 @@ export interface TokenLimiterOptions {
  * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
  * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor<'token-limiter', { systemTokens: number; limit: number }> {
+type TokenLimiterTripWireMetadata = {
+  systemTokens: number;
+  limit: number;
+  remainingBudget?: number;
+  messageCount?: number;
+};
+
+export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private encoderPromise: Promise<Tiktoken> | undefined;
@@ -84,6 +91,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       }
     }
     return this.encoderPromise;
+  }
+
+  private countTokens(encoder: Tiktoken, text: string): number {
+    return encoder.encode(text, 'all').length;
   }
 
   /**
@@ -152,6 +163,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       }
     }
 
+    if (messagesToKeep.length === 0) {
+      throw new TripWire(
+        'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
+        {
+          retry: false,
+          metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
+        },
+      );
+    }
+
     // Remove messages that don't fit within the token budget
     const keepIds = new Set(messagesToKeep.map(m => m.id));
     const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
@@ -178,7 +199,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
     const encoder = await this.getEncoder();
     const tokenString = message.role + message.content;
 
-    return encoder.encode(tokenString).length + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    return this.countTokens(encoder, tokenString) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
 
   /**
@@ -249,7 +270,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       overhead += toolResultCount * TokenLimiterProcessor.TOKENS_PER_MESSAGE;
     }
 
-    const tokenCount = encoder.encode(tokenString).length;
+    const tokenCount = this.countTokens(encoder, tokenString);
     const total = tokenCount + overhead;
     return total;
   }
@@ -309,12 +330,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
     const encoder = await this.getEncoder();
     if (part.type === 'text-delta') {
       // For text chunks, count the text content directly
-      return encoder.encode(part.payload.text).length;
+      return this.countTokens(encoder, part.payload.text);
     } else if (part.type === 'object') {
       // For object chunks, count the JSON representation
       // This is similar to how the memory processor handles object content
       const objectString = JSON.stringify(part.object);
-      return encoder.encode(objectString).length;
+      return this.countTokens(encoder, objectString);
     } else if (part.type === 'tool-call') {
       // For tool-call chunks, count tool name and args
       let tokenString = part.payload.toolName;
@@ -325,7 +346,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
           tokenString += JSON.stringify(part.payload.args);
         }
       }
-      return encoder.encode(tokenString).length;
+      return this.countTokens(encoder, tokenString);
     } else if (part.type === 'tool-result') {
       // For tool-result chunks, count the result
       let tokenString = '';
@@ -336,10 +357,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
           tokenString += JSON.stringify(part.payload.result);
         }
       }
-      return encoder.encode(tokenString).length;
+      return this.countTokens(encoder, tokenString);
     } else {
       // For other part types, count the JSON representation
-      return encoder.encode(JSON.stringify(part)).length;
+      return this.countTokens(encoder, JSON.stringify(part));
     }
   }
 
@@ -367,7 +388,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       const processedParts = message.content.parts.map(part => {
         if (part.type === 'text') {
           const textContent = part.text;
-          const tokens = encoder.encode(textContent).length;
+          const tokens = this.countTokens(encoder, textContent);
 
           // Check if adding this part's tokens would exceed the cumulative limit
           if (cumulativeTokens + tokens <= limit) {
@@ -391,7 +412,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
               while (left <= right) {
                 const mid = Math.floor((left + right) / 2);
                 const testText = textContent.slice(0, mid);
-                const testTokens = encoder.encode(testText).length;
+                const testTokens = this.countTokens(encoder, testText);
 
                 if (testTokens <= remainingTokens) {
                   // This length fits, try to find a longer one

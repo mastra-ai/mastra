@@ -21,7 +21,8 @@
           "instructions": "You are a test agent"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Hello",
         "output": {
@@ -47,9 +48,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -66,7 +65,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -128,9 +128,19 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
-                "input": {},
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Hello"
+                  }
+                ],
                 "output": {
                   "text": "Mock V2 stream response",
                   "toolCalls": []
@@ -154,7 +164,8 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Mock V2 stream response"
