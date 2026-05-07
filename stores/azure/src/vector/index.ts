@@ -1214,8 +1214,29 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
       const searchClient = this.getSearchClient(indexName);
-      await searchClient.deleteDocuments([{ id }] as any); // Type assertion for Azure SDK compatibility
+      const deleteResult = await searchClient.deleteDocuments([{ id }] as any); // Type assertion for Azure SDK compatibility
+      const deleteFailure = deleteResult.results.find(result => !result.succeeded);
+
+      if (deleteFailure) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTOR_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              id,
+              failedKey: deleteFailure.key || 'unknown',
+              error: deleteFailure.errorMessage || 'No error message',
+            },
+          },
+          new Error(`Document ${deleteFailure.key || id} failed to delete`),
+        );
+      }
     } catch (error: unknown) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       // Don't throw error if document doesn't exist (404)
       if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 404) {
         return;

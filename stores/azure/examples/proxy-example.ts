@@ -7,6 +7,7 @@
 
 import { AzureAISearchVector } from '../src/vector';
 import type { PipelinePolicy } from '@azure/core-rest-pipeline';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Create a custom proxy policy
@@ -108,7 +109,7 @@ async function main() {
 }
 
 // Run example if executed directly
-if (require.main === module) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch(console.error);
 }
 

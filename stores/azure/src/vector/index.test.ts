@@ -496,12 +496,80 @@ describe('AzureAISearchVector Unit Tests', () => {
       expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }]);
     });
 
-    it('should handle non-existent document gracefully', async () => {
+    it('should handle 404 for non-existent document gracefully', async () => {
+      const error = new Error('Document not found') as Error & { statusCode: number };
+      error.statusCode = 404;
+      mockSearchClientInstance.deleteDocuments.mockRejectedValue(error);
+
+      await azureVector.deleteVector({
+        indexName: 'test-index',
+        id: 'non-existent',
+      });
+    });
+
+    it('should throw when Azure reports a per-document delete failure', async () => {
       mockSearchClientInstance.deleteDocuments.mockResolvedValue({
-        results: [{ succeeded: false, key: 'non-existent' }],
+        results: [{ succeeded: false, key: 'doc1', errorMessage: 'Delete failed' }],
       });
 
-      // Should not throw error
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toThrow('Document doc1 failed to delete');
+    });
+
+    it('should wrap delete errors', async () => {
+      mockSearchClientInstance.deleteDocuments.mockRejectedValue(new Error('Delete failed'));
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toThrow('Delete failed');
+    });
+
+    it('should wrap per-document delete failures with MastraError details', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: false, key: 'doc1', errorMessage: 'Rejected by Azure' }],
+      });
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toMatchObject({
+        id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTOR_PARTIAL_FAILURE',
+        details: {
+          indexName: 'test-index',
+          id: 'doc1',
+          failedKey: 'doc1',
+          error: 'Rejected by Azure',
+        },
+      });
+    });
+
+    it('should fall back to requested id when delete failure has no key', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: false }],
+      });
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'doc1',
+        }),
+      ).rejects.toThrow('Document doc1 failed to delete');
+    });
+
+    it('should not throw when Azure confirms a missing document delete', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'non-existent' }],
+      });
+
       await azureVector.deleteVector({
         indexName: 'test-index',
         id: 'non-existent',
