@@ -2,7 +2,9 @@ import { createAzure } from '@ai-sdk/azure';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
-import { MastraModelGateway } from './base.js';
+import { createOpenAIWebSocketFetch } from '../openai-websocket-fetch.js';
+import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
+import { MASTRA_GATEWAY_STREAM_TRANSPORT, MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 import { MASTRA_USER_AGENT } from './constants.js';
 
@@ -537,15 +539,38 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     };
   }
 
+  private createAzureResponsesWebSocketFetch({
+    useEntraId,
+    responsesWebSocket,
+  }: {
+    useEntraId: boolean;
+    responsesWebSocket?: ResponsesWebSocketOptions;
+  }): typeof globalThis.fetch & { close(): void } {
+    const websocketFetch = createOpenAIWebSocketFetch({
+      url: responsesWebSocket?.url ?? `wss://${this.config.resourceName}.openai.azure.com/openai/v1/responses`,
+      headers: responsesWebSocket?.headers,
+      apiKeyQueryParam: useEntraId ? false : 'api-key',
+      betaHeader: false,
+    });
+
+    return useEntraId
+      ? Object.assign(this.createEntraIdFetch(websocketFetch), { close: websocketFetch.close })
+      : websocketFetch;
+  }
+
   async resolveLanguageModel({
     modelId,
     apiKey,
     headers,
+    transport,
+    responsesWebSocket,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
+    transport?: OpenAITransport;
+    responsesWebSocket?: ResponsesWebSocketOptions;
   }): Promise<LanguageModelV2> {
     const useResponsesAPI = this.config.useResponsesAPI ?? false;
     const apiVersion =
@@ -553,6 +578,13 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       (useResponsesAPI || this.config.useDeploymentBasedUrls === false ? 'v1' : '2024-04-01-preview');
     const useDeploymentBasedUrls = this.config.useDeploymentBasedUrls ?? (useResponsesAPI ? false : true);
     const useEntraId = this.config.authentication?.type === 'entraId';
+    const useWebSocket = useResponsesAPI && transport === 'websocket';
+    const websocketFetch = useWebSocket
+      ? this.createAzureResponsesWebSocketFetch({
+          useEntraId,
+          responsesWebSocket,
+        })
+      : undefined;
     const azureConfig = {
       resourceName: this.config.resourceName,
       apiKey: useEntraId ? '' : apiKey,
@@ -562,19 +594,31 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       // to use the newer Azure OpenAI v1 route.
       useDeploymentBasedUrls,
       headers: { 'User-Agent': MASTRA_USER_AGENT, ...headers },
+      ...(websocketFetch && !useEntraId ? { fetch: websocketFetch } : {}),
     };
 
     const azureProvider = createAzure(
       useEntraId
         ? {
             ...azureConfig,
-            fetch: this.createEntraIdFetch(),
+            fetch: websocketFetch ?? this.createEntraIdFetch(),
           }
         : azureConfig,
     );
 
     if (useResponsesAPI) {
-      return withAzureResponsesInputCompatibility(azureProvider.responses(modelId));
+      const model = withAzureResponsesInputCompatibility(azureProvider.responses(modelId));
+      if (websocketFetch) {
+        Object.defineProperty(model, MASTRA_GATEWAY_STREAM_TRANSPORT, {
+          configurable: true,
+          value: {
+            type: 'openai-websocket',
+            close: websocketFetch.close,
+          },
+        });
+      }
+
+      return model;
     }
 
     return azureProvider(modelId);
