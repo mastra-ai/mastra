@@ -54,6 +54,13 @@ Worker review fixes:
   rejections instead of `console.error`.
 - `BackgroundTaskWorker.start()` now throws if `init()` was not called,
   matching the contract of the other workers.
+- Cross-process integration tests now spawn a single user-owned project
+  (`test-fixtures/cli-project/src/mastra/index.ts`) through two generic
+  entries that mirror what `BuildBundler` and `WorkerBundler` emit. The
+  previous one-off `server.entry.ts` / `worker.entry.ts` /
+  `scheduler.entry.ts` / `background.entry.ts` files have been deleted —
+  they implied users hand-roll entry files, which they don't. Worker role
+  is selected via `MASTRA_WORKERS` exactly as in production.
 
 Push-capable PubSub:
 

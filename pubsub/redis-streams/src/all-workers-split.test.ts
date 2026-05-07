@@ -15,10 +15,10 @@ import {
 } from '../test-fixtures/harness';
 import type { ManagedProcess } from '../test-fixtures/harness';
 
-const SERVER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/server.entry.ts');
-const ORCH_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/worker.entry.ts');
-const SCHEDULER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/scheduler.entry.ts');
-const BACKGROUND_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/background.entry.ts');
+const SERVER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.server.entry.ts');
+const ORCH_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.worker.entry.ts');
+const SCHEDULER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.worker.entry.ts');
+const BACKGROUND_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.worker.entry.ts');
 
 /**
  * Headline test: server + orchestration + scheduler + background-task

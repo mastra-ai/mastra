@@ -15,9 +15,9 @@ import {
 } from '../test-fixtures/harness';
 import type { ManagedProcess } from '../test-fixtures/harness';
 
-const SERVER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/server.entry.ts');
-const WORKER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/worker.entry.ts');
-const SCHEDULER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/scheduler.entry.ts');
+const SERVER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.server.entry.ts');
+const WORKER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.worker.entry.ts');
+const SCHEDULER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.worker.entry.ts');
 
 /**
  * Verifies that a SchedulerWorker running in a process separate from

@@ -14,8 +14,8 @@ import {
 } from '../test-fixtures/harness';
 import type { ManagedProcess } from '../test-fixtures/harness';
 
-const SERVER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/server.entry.ts');
-const WORKER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/worker.entry.ts');
+const SERVER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.server.entry.ts');
+const WORKER_ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/app.worker.entry.ts');
 
 describe('cross-process workflow execution via Redis Streams', () => {
   let storage: { dir: string; storageUrl: string; cleanup: () => Promise<void> };
