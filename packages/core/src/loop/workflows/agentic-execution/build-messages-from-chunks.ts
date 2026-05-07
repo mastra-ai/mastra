@@ -5,16 +5,16 @@ import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
- * A raw chunk collected during the stream.
- * Derived from ChunkType — strips BaseChunkType fields (runId, from, metadata)
- * while preserving the discriminated union so switch cases auto-narrow payload types.
- * Only includes variants that have a `payload` property (excludes object, data, etc.).
+ * Subset of ChunkType that only requires `type` and `payload`.
+ * Strips BaseChunkType fields (runId, from, metadata) while preserving the
+ * discriminated union so switch cases auto-narrow payload types.
  */
-export type CollectedChunk = ChunkType extends infer T
-  ? T extends { type: infer U; payload: infer P }
-    ? { type: U; payload: P }
-    : never
-  : never;
+export type CollectedChunk =
+  Extract<ChunkType<any>, { payload: any }> extends infer T
+    ? T extends { type: infer U; payload: infer P }
+      ? { type: U; payload: P }
+      : never
+    : never;
 
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.

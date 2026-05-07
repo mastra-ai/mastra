@@ -216,9 +216,10 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     // Collect every chunk for post-stream message building.
-    // Only chunks with a payload property produce message parts — data/object chunks are excluded.
+    // ChunkType includes extra BaseChunkType fields (runId, from) that
+    // CollectedChunk doesn't need — the structural subset is always valid.
     if ('payload' in chunk) {
-      collectedChunks.push({ type: chunk.type, payload: chunk.payload } as CollectedChunk);
+      collectedChunks.push(chunk as CollectedChunk);
     }
 
     switch (chunk.type) {
