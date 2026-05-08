@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Mastra } from '@mastra/core';
-import { queryRolloutScoreStats } from '@mastra/core/agent';
 import type { AgentsStorage, ObservabilityStorage, RolloutsStorage, ScoresStorage } from '@mastra/core/storage';
 
 import { HTTPException } from '../http-exception';
@@ -20,6 +19,7 @@ import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
+import { queryRolloutScoreStats } from './rollout-utils';
 
 // ============================================================================
 // Helpers

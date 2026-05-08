@@ -1,4 +1,4 @@
-import { Agent, isDurableAgentLike, resolveVersionFromRollout } from '@mastra/core/agent';
+import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
@@ -61,6 +61,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { resolveVersionFromRollout } from './rollout-utils';
 import {
   sanitizeBody,
   validateBody,
@@ -808,7 +809,7 @@ async function resolveRolloutVersionOptions(
     const rollout = await rolloutsStore.getActiveRollout(agentId);
     if (!rollout) return undefined;
 
-    const versionId = resolveVersionFromRollout(rollout, requestContext);
+    const versionId = await resolveVersionFromRollout(rollout, requestContext);
     logger.debug('Resolved version from rollout', { agentId, rolloutId: rollout.id, versionId });
 
     // Opportunistic, throttled rollback evaluation backed by the observability
