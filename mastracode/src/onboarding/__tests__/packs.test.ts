@@ -11,6 +11,7 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      'github-copilot': false,
     });
 
     expect(packs.find(pack => pack.id === 'openai')?.models).toEqual({
@@ -33,7 +34,7 @@ describe('getAvailableModePacks', () => {
     expect(PROVIDER_DEFAULT_MODELS['openai-codex']).toBe(packs.find(pack => pack.id === 'openai')?.models.build);
   });
 
-  it('exposes a GitHub Copilot pack that uses only OpenAI-compatible models', () => {
+  it('exposes a GitHub Copilot pack with defaults for build, plan, and fast modes', () => {
     const packs = getAvailableModePacks({
       anthropic: false,
       openai: false,
@@ -45,14 +46,10 @@ describe('getAvailableModePacks', () => {
 
     const pack = packs.find(p => p.id === 'github-copilot');
     expect(pack).toBeDefined();
-    // Every slot is gpt-4.1: it's the only Copilot model that works through the
-    // current OpenAI `/chat/completions` adapter, is on every paid Copilot tier,
-    // and is free (0x premium-request multiplier). Anthropic-shaped Claude
-    // models would error today because they live on `/v1/messages`.
     expect(pack?.models).toEqual({
-      plan: 'github-copilot/gpt-4.1',
+      plan: 'github-copilot/gemini-2.5-pro',
       build: 'github-copilot/gpt-4.1',
-      fast: 'github-copilot/gpt-4.1',
+      fast: 'github-copilot/grok-code-fast-1',
     });
   });
 

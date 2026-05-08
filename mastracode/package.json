@@ -59,6 +59,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.74",
     "@ai-sdk/openai": "^3.0.58",
+    "@ai-sdk/openai-compatible": "^2.0.45",
     "@ast-grep/napi": "^0.42.0",
     "@mariozechner/pi-tui": "^0.60.0",
     "@mastra/agent-browser": "workspace:*",
@@ -70,6 +71,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
     "ai": "^6.0.174",

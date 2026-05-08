@@ -54,11 +54,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
-import {
-  getCopilotModelCatalog,
-  isCopilotModelOpenAICompatible,
-  setAuthStorage as setGitHubCopilotAuthStorage,
-} from './providers/github-copilot.js';
+import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
@@ -618,16 +614,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       // The catalog is cached + refreshed in the background, so steady-state cost is
       // a single Map lookup.
       //
-      // We further filter to models compatible with the OpenAI `/chat/completions`
-      // adapter wired in `providers/github-copilot.ts`. Claude models live on
-      // `/v1/messages` and Gemini speaks its own shape — surfacing them in the
-      // picker today would let the user pick a model that fails on the first
-      // message ("Invalid request: The requested model is not supported").
-      // When per-vendor routing lands, drop this filter.
+      // The provider uses the generic OpenAI-compatible adapter pointed at
+      // GitHub Copilot's API, so expose the full live model catalog returned by
+      // Copilot instead of filtering by vendor family here.
       try {
         const copilotModels = await getCopilotModelCatalog({ authStorage });
         for (const m of copilotModels) {
-          if (!isCopilotModelOpenAICompatible(m)) continue;
           customModels.push({
             id: `github-copilot/${m.id}`,
             provider: 'github-copilot',

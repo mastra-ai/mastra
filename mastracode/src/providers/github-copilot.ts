@@ -2,17 +2,19 @@
  * GitHub Copilot OAuth Provider
  *
  * Uses OAuth tokens from AuthStorage to authenticate with GitHub Copilot's chat API.
- * The Copilot API speaks OpenAI's Chat Completions / Responses format, so we plug
- * `@ai-sdk/openai` into a custom fetch that injects the bearer token and Copilot-specific
- * headers and rewrites the base URL based on the `proxy-ep` claim in the token.
+ * The Copilot API speaks an OpenAI-compatible chat format, so we plug
+ * `@ai-sdk/openai-compatible` into Copilot's API URL and use a custom fetch to inject
+ * the bearer token and Copilot-specific headers.
  *
  * Inspired by:
  *   - opencode: https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/plugin/github-copilot/copilot.ts
  *   - pi-mono:  https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/github-copilot.ts
  */
 
-import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import type { JSONSchema7 } from '@mastra/schema-compat';
+import { applyCompatLayer, GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
@@ -208,55 +210,89 @@ function rewriteToCopilotBase(url: string | URL | Request, token: string, enterp
   return new URL(`${pathname}${original.search}`, base);
 }
 
-/**
- * Middleware that prevents the @ai-sdk/openai provider from sending parameters that
- * Copilot's OpenAI-compatible endpoint rejects. Copilot ignores `topP` when temperature
- * is set, and it also treats `store` as required-false on the Responses API.
- */
-const copilotMiddleware: LanguageModelMiddleware = {
-  specificationVersion: 'v3',
-  transformParams: async ({ params }) => {
-    if (params.temperature !== undefined && params.temperature !== null) {
-      delete params.topP;
+function isGeminiModel(modelId: string): boolean {
+  return modelId.startsWith('gemini-');
+}
+
+function applyGeminiSchemaCompatToTools(modelId: string, tools: unknown): unknown {
+  if (!Array.isArray(tools)) {
+    return tools;
+  }
+
+  const compatLayer = new GoogleSchemaCompatLayer({
+    provider: COPILOT_PROVIDER_ID,
+    modelId,
+    supportsStructuredOutputs: false,
+  });
+
+  return tools.map(tool => {
+    if (!tool || typeof tool !== 'object' || (tool as { type?: unknown }).type !== 'function') {
+      return tool;
     }
-    return params;
-  },
-};
+
+    const functionTool = tool as { inputSchema?: JSONSchema7 };
+    if (!functionTool.inputSchema) {
+      return tool;
+    }
+
+    return {
+      ...functionTool,
+      inputSchema: applyCompatLayer({
+        schema: functionTool.inputSchema,
+        compatLayers: [compatLayer],
+        mode: 'aiSdkSchema',
+      }).jsonSchema as JSONSchema7,
+    };
+  });
+}
+
+/** Middleware that prevents sending parameters Copilot's endpoint rejects. */
+function createCopilotMiddleware(modelId: string): LanguageModelMiddleware {
+  return {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      if (params.temperature !== undefined && params.temperature !== null) {
+        delete params.topP;
+      }
+
+      if (isGeminiModel(modelId)) {
+        (params as { tools?: unknown }).tools = applyGeminiSchemaCompatToTools(
+          modelId,
+          (params as { tools?: unknown }).tools,
+        );
+      }
+
+      return params;
+    },
+  };
+}
 
 /**
  * Creates a model that talks to GitHub Copilot using OAuth credentials.
  *
- * Copilot's `/chat/completions` endpoint is compatible with OpenAI's chat-completions
- * API, so we wire `@ai-sdk/openai` to it via {@link buildGitHubCopilotOAuthFetch}.
+ * Copilot's `/chat/completions` endpoint is OpenAI-compatible, but GitHub Copilot
+ * is not OpenAI. Use the generic OpenAI-compatible adapter with Copilot's base URL
+ * instead of the OpenAI provider plus URL rewriting.
  */
 export function githubCopilotProvider(
   modelId: string = 'gpt-4.1',
   options?: { headers?: Record<string, string> },
 ): MastraModelConfig {
   const headers = options?.headers;
-
-  // Test environment: avoid touching real auth storage.
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    const openai = createOpenAI({
-      apiKey: 'test-api-key',
-      headers,
-    });
-    return wrapLanguageModel({
-      model: openai.chat(modelId),
-      middleware: [copilotMiddleware],
-    });
-  }
-
-  const openai = createOpenAI({
-    // Real auth comes from the custom fetch; the SDK still requires *some* apiKey.
-    apiKey: 'oauth-placeholder',
+  const copilot = createOpenAICompatible({
+    name: COPILOT_PROVIDER_ID,
+    baseURL: 'https://api.githubcopilot.com',
+    apiKey: process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-api-key' : 'oauth-placeholder',
     headers,
-    fetch: buildGitHubCopilotOAuthFetch() as any,
+    fetch:
+      process.env.NODE_ENV === 'test' || process.env.VITEST
+        ? undefined
+        : (buildGitHubCopilotOAuthFetch({ rewriteUrl: false }) as any),
   });
 
   return wrapLanguageModel({
-    model: openai.chat(modelId),
-    middleware: [copilotMiddleware],
+    model: copilot.chatModel(modelId),
+    middleware: [createCopilotMiddleware(modelId)],
   });
 }
 
@@ -266,10 +302,8 @@ export function githubCopilotProvider(
 
 /**
  * Hard-coded fallback advertised when the live `/models` request fails (network
- * down, expired token, etc.). Only includes models that route through the OpenAI
- * `/chat/completions` adapter implemented here — Anthropic-shaped Copilot models
- * (Claude on `/v1/messages`) and Gemini are NOT included since calling them via
- * `/chat/completions` returns "model not supported" / "Bad Request" at runtime.
+ * down, expired token, etc.). Keep this conservative because the live catalog is
+ * the source of truth for the user's currently-enabled Copilot models.
  *
  * Available across all paid Copilot tiers and free of premium-request charges.
  */
@@ -284,22 +318,6 @@ const COPILOT_FALLBACK_MODELS: CopilotModelEntry[] = [
     supportsToolCalls: true,
   },
 ];
-
-/**
- * True when this Copilot model can be called through the OpenAI chat-completions
- * adapter that backs `githubCopilotProvider()`.
- *
- * Copilot exposes Anthropic models on `/v1/messages` and Gemini on its own shape;
- * neither speaks `/chat/completions`, so calling them through this provider fails
- * with "model not supported" (Anthropic) or "Bad Request" (Gemini). Filter those
- * out of the picker until we add per-vendor routing.
- */
-export function isCopilotModelOpenAICompatible(entry: CopilotModelEntry): boolean {
-  // Legacy / missing metadata: assume compatible (older API responses don't include
-  // `supported_endpoints`, and historically every listed model spoke chat/completions).
-  if (entry.supportedEndpoints.length === 0) return true;
-  return entry.supportedEndpoints.includes('/chat/completions');
-}
 
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 const CATALOG_FAILURE_TTL_MS = 60 * 1000;
