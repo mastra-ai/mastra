@@ -32,7 +32,9 @@ The `messageRange` parameter controls how much context is included with each mat
 
 The `scope` parameter determines whether to search within the current thread (`'thread'`) or across all threads owned by a resource (`'resource'`). Using `scope: 'resource'` allows the agent to recall information from any of the user's past conversations.
 
-The `filter` parameter allows you to restrict semantic recall results to specific metadata criteria, enabling ChatGPT-style "Projects" functionality. This is particularly useful when you want to organize conversations by project, category, or any other metadata field.
+The `filter` parameter restricts semantic recall results to messages with matching thread metadata, such as a project ID or category.
+
+Filters match metadata stored on message embeddings when messages are saved. If thread metadata changes later, existing embeddings keep their previous metadata until those messages are saved or indexed again.
 
 **Supported filter operators:**
 
@@ -51,21 +53,13 @@ The `filter` parameter allows you to restrict semantic recall results to specifi
 
 ```typescript
 // Filter by project
-filter: {
-  projectId: {
-    $eq: "my-project";
-  }
-}
+filter: { projectId: { $eq: "my-project" } }
 
 // Filter by multiple categories
-filter: {
-  category: {
-    $in: ["work", "research"];
-  }
-}
+filter: { category: { $in: ["work", "research"] } }
 
 // Complex filtering
 filter: {
-  $and: [{ projectId: { $eq: "project-a" } }, { priority: { $gte: 3 } }];
+  $and: [{ projectId: { $eq: "project-a" } }, { priority: { $gte: 3 } }],
 }
 ```

@@ -67,32 +67,34 @@ const agent = new Agent({
 });
 ```
 
-<<<<<<< HEAD
-Note: currently, `scope: 'resource'` for semantic recall is supported by the following storage adapters: LibSQL, Postgres, and Upstash.
+Note: currently, `scope: "resource"` for semantic recall is supported by the following storage adapters: LibSQL, Postgres, and Upstash.
 
-### Metadata Filtering
+### Metadata filtering
 
-The `filter` parameter allows you to restrict semantic recall results to specific metadata criteria, enabling ChatGPT-style "Projects" functionality. This is particularly useful when you want to organize conversations by project, category, or any other metadata field.
+The `filter` parameter restricts semantic recall results to messages with matching thread metadata, such as a project ID or category.
 
 ```typescript {5-10}
 const agent = new Agent({
   memory: new Memory({
     options: {
       semanticRecall: {
-        scope: 'resource',
+        scope: "resource",
         filter: {
-          projectId: { $eq: 'project-a' },
-          category: { $in: ['work', 'personal'] }
-        }
+          projectId: { $eq: "project-a" },
+          category: { $in: ["work", "personal"] },
+        },
       },
     },
   }),
 });
 ```
 
+Filters match metadata stored on message embeddings when messages are saved. If thread metadata changes later, existing embeddings keep their previous metadata until those messages are saved or indexed again.
+
 **Supported filter operators:**
+
 - `$eq`: Equal to
-- `$ne`: Not equal to  
+- `$ne`: Not equal to
 - `$in`: In array
 - `$nin`: Not in array
 - `$gt`: Greater than
@@ -103,24 +105,20 @@ const agent = new Agent({
 - `$or`: Logical OR
 
 **Example use cases:**
+
 ```typescript
 // Filter by project
-filter: { projectId: { $eq: 'my-project' } }
+filter: { projectId: { $eq: "my-project" } }
 
 // Filter by multiple categories
-filter: { category: { $in: ['work', 'research'] } }
+filter: { category: { $in: ["work", "research"] } }
 
 // Complex filtering
 filter: {
-  $and: [
-    { projectId: { $eq: 'project-a' } },
-    { priority: { $gte: 3 } }
-  ]
+  $and: [{ projectId: { $eq: "project-a" } }, { priority: { $gte: 3 } }],
 }
 ```
 
-=======
->>>>>>> origin/main
 ### Storage configuration
 
 Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.

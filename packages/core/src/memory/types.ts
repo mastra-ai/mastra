@@ -296,6 +296,8 @@ export type SemanticRecall = {
    * ```
    */
   filter?: VectorFilter;
+
+  /**
    * Minimum similarity score threshold (0-1).
    * Messages below this threshold will be filtered out from semantic search results.
    *
