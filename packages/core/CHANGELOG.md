@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 1.33.0-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#16126](https://github.com/mastra-ai/mastra/pull/16126))
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v5@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v5/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)
+
+- Added A2A Agent Card signing config types for server configuration. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const mastra = new Mastra({
+    server: {
+      a2a: {
+        agentCardSigning: {
+          privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
+          protectedHeader: {
+            alg: 'ES256',
+            kid: 'agent-card-key',
+          },
+        },
+      },
+    },
+  });
+  ```
+
+- Fixed TokenLimiterProcessor crashing when counting text that contains special token strings. ([#16302](https://github.com/mastra-ai/mastra/pull/16302))
+
+- Fix nested loops in evented workflow ([#16312](https://github.com/mastra-ai/mastra/pull/16312))
+
+- Background tasks now run as evented workflows. Each task is dispatched as a workflow run that owns executor invocation, retries, and suspend/resume; pubsub topics, lifecycle event shapes, concurrency gating, and the `BackgroundTaskManager.stream()` contract are unchanged. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+  Add suspend/resume to background tasks. Tools can call `ctx.agent.suspend(data)` from `execute` to pause a task and release the concurrency slot; resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)` or `agent.resumeStreamUntilIdle(resumeData, { runId, toolCallId })`. Surfaces `background-task-suspended` / `background-task-resumed` chunks on `backgroundTaskManager.stream()` and `agent.streamUntilIdle().fullStream`.
+
+- Fixed message part ordering in agent streaming responses. Message parts (text, reasoning, tool calls) now appear in the correct order they arrived in the stream, preventing incorrect step sequencing and agent loop behavior issues. ([#16073](https://github.com/mastra-ai/mastra/pull/16073))
+
 ## 1.33.0-alpha.3
 
 ### Minor Changes

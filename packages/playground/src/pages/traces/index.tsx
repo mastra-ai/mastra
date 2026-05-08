@@ -2,7 +2,7 @@ import { EntityType } from '@mastra/core/observability';
 import {
   ButtonWithTooltip,
   DateTimeRangePicker,
-  NoDataPageLayout,
+  NoTracesInfo,
   PageHeader,
   PageLayout,
   PropertyFilterCreator,
@@ -169,14 +169,6 @@ export default function TracesPage() {
     url.handleSpanTabChange('scoring');
   }, [lightSpans, url]);
 
-  if (tracesError) {
-    return (
-      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
-        <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
-      </NoDataPageLayout>
-    );
-  }
-
   const filtersApplied =
     !!url.selectedEntityOption ||
     !!url.selectedStatus ||
@@ -184,68 +176,96 @@ export default function TracesPage() {
     url.datePreset !== 'last-24h' ||
     !!url.selectedDateTo;
 
+  const pageTopArea = (
+    <PageLayout.TopArea>
+      <PageLayout.Row>
+        <PageLayout.Column>
+          <PageHeader>
+            <PageHeader.Title isLoading={isTracesLoading}>
+              <EyeIcon /> Traces
+            </PageHeader.Title>
+          </PageHeader>
+        </PageLayout.Column>
+        <PageLayout.Column className="flex justify-end items-center gap-2">
+          <DateTimeRangePicker
+            preset={url.datePreset}
+            onPresetChange={url.handleDatePresetChange}
+            dateFrom={url.selectedDateFrom}
+            dateTo={url.selectedDateTo}
+            onDateChange={url.handleDateChange}
+            disabled={isTracesLoading}
+            presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+          />
+          <PropertyFilterCreator
+            fields={filterFields}
+            tokens={url.filterTokens}
+            onTokensChange={url.handleFilterTokensChange}
+            disabled={isTracesLoading}
+            onStartTextFilter={setAutoFocusFilterFieldId}
+          />
+          <ButtonWithTooltip
+            disabled={isTracesLoading}
+            aria-pressed={groupByThread}
+            aria-label={groupByThread ? 'Ungroup traces' : 'Group traces by thread'}
+            tooltipContent={groupByThread ? 'Ungroup traces' : 'Group traces by thread'}
+            onClick={() => setGroupByThread(prev => !prev)}
+          >
+            {groupByThread ? <ListIcon /> : <ListTreeIcon />}
+          </ButtonWithTooltip>
+          <ButtonWithTooltip
+            as="a"
+            href="https://mastra.ai/en/docs/observability/tracing/overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Traces documentation"
+            tooltipContent="Go to Traces documentation"
+          >
+            <BookIcon />
+          </ButtonWithTooltip>
+        </PageLayout.Column>
+      </PageLayout.Row>
+
+      <TracesToolbar
+        isLoading={isTracesLoading}
+        filterFields={filterFields}
+        filterTokens={url.filterTokens}
+        onFilterTokensChange={url.handleFilterTokensChange}
+        onClear={handleClear}
+        onRemoveAll={url.handleRemoveAll}
+        onSave={persistence.handleSave}
+        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
+        autoFocusFilterFieldId={autoFocusFilterFieldId}
+      />
+    </PageLayout.TopArea>
+  );
+
+  if (tracesError) {
+    return (
+      <PageLayout width="wide" height="full">
+        {pageTopArea}
+        <PageLayout.MainArea isCentered>
+          <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
+        </PageLayout.MainArea>
+      </PageLayout>
+    );
+  }
+
+  const contentFiltersApplied = !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0;
+
+  if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied) {
+    return (
+      <PageLayout width="wide" height="full">
+        {pageTopArea}
+        <PageLayout.MainArea isCentered>
+          <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
+        </PageLayout.MainArea>
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isTracesLoading}>
-                <EyeIcon /> Traces
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end items-center gap-2">
-            <DateTimeRangePicker
-              preset={url.datePreset}
-              onPresetChange={url.handleDatePresetChange}
-              dateFrom={url.selectedDateFrom}
-              dateTo={url.selectedDateTo}
-              onDateChange={url.handleDateChange}
-              disabled={isTracesLoading}
-              presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-            />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={url.filterTokens}
-              onTokensChange={url.handleFilterTokensChange}
-              disabled={isTracesLoading}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-            />
-            <ButtonWithTooltip
-              disabled={isTracesLoading}
-              aria-pressed={groupByThread}
-              aria-label={groupByThread ? 'Ungroup traces' : 'Group traces by thread'}
-              tooltipContent={groupByThread ? 'Ungroup traces' : 'Group traces by thread'}
-              onClick={() => setGroupByThread(prev => !prev)}
-            >
-              {groupByThread ? <ListIcon /> : <ListTreeIcon />}
-            </ButtonWithTooltip>
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/observability/tracing/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Traces documentation"
-              tooltipContent="Go to Traces documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
-
-        <TracesToolbar
-          isLoading={isTracesLoading}
-          filterFields={filterFields}
-          filterTokens={url.filterTokens}
-          onFilterTokensChange={url.handleFilterTokensChange}
-          onClear={handleClear}
-          onRemoveAll={url.handleRemoveAll}
-          onSave={persistence.handleSave}
-          onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
-      </PageLayout.TopArea>
+      {pageTopArea}
 
       <TracesLayout
         traceCollapsed={traceCollapsed}

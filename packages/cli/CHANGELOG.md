@@ -1,5 +1,36 @@
 # mastra
 
+## 1.9.0-alpha.4
+
+### Minor Changes
+
+- Updated the Studio observability UI with a filterable metrics dashboard and saved filter persistence. ([#15747](https://github.com/mastra-ai/mastra/pull/15747))
+
+  **Metrics dashboard filters**
+
+  The metrics page now includes a dimensional filter toolbar for `rootEntityType`, `entityName`, `entityId`, `tags`, `serviceName`, `environment`, and common identity/correlation IDs such as `threadId`, `resourceId`, `userId`, `organizationId`, `runId`, `sessionId`, `requestId`, and `experimentId`. Active metrics filters are reflected in the URL and can be saved to the Metrics page's own localStorage key.
+
+  **Memory card**
+
+  A new **Memory** card shows thread and resource activity in one tabbed card. Rows include run counts, token usage, and cost for the active date range and filters. The dashboard also restores the Total Threads and Total Resources KPI cards.
+
+  **Drilldowns**
+
+  Metrics cards can now link into Traces or Logs while preserving the active date range and relevant filters:
+  - Latency, Trace Volume, Token Usage by Agent, and Model Usage & Cost expose header drilldown actions.
+  - Token Usage by Agent, Trace Volume, and Model Usage & Cost rows/bars drill into Traces scoped to the clicked entity.
+  - Trace Volume error segments can drill into Logs with `level=error`.
+  - Memory rows drill into Traces scoped to the clicked `threadId` or `resourceId`.
+  - Latency chart points narrow Traces to the clicked time bucket.
+
+  Metrics-to-Traces drilldowns open the branch-oriented trace list so nested agent, workflow, and tool spans are visible. KPI cards remain non-clickable.
+
+### Patch Changes
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a)]:
+  - @mastra/core@1.33.0-alpha.4
+  - @mastra/deployer@1.33.0-alpha.4
+
 ## 1.9.0-alpha.3
 
 ### Minor Changes

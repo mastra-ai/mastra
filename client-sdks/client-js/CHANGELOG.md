@@ -1,5 +1,35 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.4
+
+### Minor Changes
+
+- Added experimental A2A Agent Card signature verification to `getAgentCard`. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const card = await a2a.getAgentCard({
+    verifySignature: {
+      algorithms: ['ES256'],
+      keyProvider: async ({ kid, jku }) => {
+        return fetchTrustedPublicJwk({ kid, jku });
+      },
+    },
+  });
+  ```
+
+  When verification is configured, `client-js` now verifies signed Agent Cards when the server includes `signatures`. Unsigned cards are still returned unchanged.
+
+  This also adds the new exported types `GetAgentCardOptions`, `VerifyAgentCardSignatureOptions`, `AgentCardVerificationKey`, and `AgentCardSignatureKeyProviderInput`.
+
+- Add `agent.resumeStreamUntilIdle()` to resume a suspended agent stream and keep the SSE connection open through the follow-up turn. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+### Patch Changes
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a)]:
+  - @mastra/core@1.33.0-alpha.4
+
 ## 1.17.2-alpha.3
 
 ### Patch Changes

@@ -16421,6 +16421,17 @@ export type GetWellKnownAgentIdAgentCardJson_Response = {
   defaultInputModes: string[];
   defaultOutputModes: string[];
   supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
   skills: {
     id: string;
     name: string;
