@@ -4,7 +4,7 @@ import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
   return (
-    <Header>
+    <Header border={false}>
       <Breadcrumb>
         <Crumb as={Link} to={`/agents`}>
           <Icon>

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   superHandleInput: vi.fn(),
   superRender: vi.fn(() => ['────', 'hello', '────']),
+  editorSetText: vi.fn(),
   getClipboardImage: vi.fn(),
   getClipboardText: vi.fn(),
   matchesKey: vi.fn((_data: string, _key: string) => false),
@@ -32,6 +33,10 @@ vi.mock('@mariozechner/pi-tui', () => {
 
     getText(): string {
       return '';
+    }
+
+    setText(text: string): void {
+      mocks.editorSetText(text);
     }
 
     isShowingAutocomplete(): boolean {
@@ -102,6 +107,22 @@ describe('CustomEditor image paste handling', () => {
     editor.handleInput('\r');
 
     expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(followUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the slash before submitting a slash autocomplete selection that inserts without one', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const followUp = vi.fn(() => true);
+    editor.onAction('followUp', followUp);
+    editor.getText = vi.fn().mockReturnValueOnce('/goal/pr').mockReturnValue('goal/pr-triage ');
+    editor.isShowingAutocomplete = vi.fn(() => true);
+
+    editor.handleInput('\r');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(mocks.editorSetText).toHaveBeenCalledWith('/goal/pr-triage ');
     expect(followUp).toHaveBeenCalledTimes(1);
   });
 

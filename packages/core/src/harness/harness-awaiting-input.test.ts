@@ -225,11 +225,23 @@ describe('Harness awaiting input durability', () => {
         runId: 'approval-run',
         toolCallId: 'approval-call',
         suspendPayload: {
-          type: 'approval',
-          toolCallId: 'approval-call',
-          toolName: 'writeFile',
-          args: { path: 'README.md' },
-          resumeSchema: '{"type":"object"}',
+          requireToolApproval: {
+            toolCallId: 'approval-call',
+            toolName: 'writeFile',
+            args: { path: 'README.md' },
+          },
+          __streamState: {
+            toolCalls: [
+              {
+                payload: {
+                  toolCallId: 'approval-call',
+                  toolName: 'writeFile',
+                  args: { path: 'README.md' },
+                  resumeSchema: '{"type":"object"}',
+                },
+              },
+            ],
+          },
         },
       }),
     });
@@ -237,10 +249,11 @@ describe('Harness awaiting input durability', () => {
       runId: 'prototype-shadow-run',
       toolCallId: 'shadow-call',
       suspendPayload: {
-        type: 'approval',
-        toolCallId: 'shadow-call',
-        toolName: 'wrongTool',
-        args: { path: 'SHADOW.md' },
+        requireToolApproval: {
+          toolCallId: 'shadow-call',
+          toolName: 'wrongTool',
+          args: { path: 'SHADOW.md' },
+        },
       },
     });
     prototypeShadowSnapshot.resumeLabels = {};
@@ -372,5 +385,76 @@ describe('Harness awaiting input durability', () => {
 
     const result = await harness.resumeAwaitingInput({ id: 'q-1', resumeData: 'Yes' });
     expect(result.status).toBe('live_session_only');
+  });
+
+  it('prefers live tool approvals by id when an active run is still waiting', async () => {
+    const storage = new InMemoryStore();
+    await storage.init();
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error('Expected workflows store to be available for live awaiting-input test setup');
+    }
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: 'live-run',
+      resourceId: 'resource-1',
+      snapshot: createSuspendedSnapshot({
+        runId: 'live-run',
+        toolCallId: 'live-call',
+        suspendPayload: {
+          type: 'approval',
+          toolCallId: 'live-call',
+          toolName: 'writeFile',
+          args: { path: 'README.md' },
+        },
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'live-approval-agent',
+      name: 'Live Approval Agent',
+      instructions: 'You approve tools.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+    const resumeStreamSpy = vi.spyOn(agent, 'resumeStream');
+
+    const harness = new Harness({
+      id: 'live-approval-harness',
+      resourceId: 'resource-1',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { yolo: false } as any,
+    });
+    await harness.init();
+
+    (harness as any).currentRunId = 'live-run';
+    (harness as any).currentThreadId = 'thread-1';
+    (harness as any).displayState.pendingApproval = {
+      toolCallId: 'live-call',
+      toolName: 'writeFile',
+      args: { path: 'README.md' },
+    };
+    const pendingApprovalResolve = vi.fn();
+    (harness as any).pendingApprovalResolve = pendingApprovalResolve;
+    (harness as any).pendingApprovalToolName = 'writeFile';
+
+    const result = await harness.resumeAwaitingInput({
+      id: 'live-call',
+      resumeData: 'decline',
+    });
+
+    expect(result.status).toBe('resumed');
+    expect(result.awaitingInput).toMatchObject({
+      kind: 'tool_approval',
+      durable: false,
+      runId: 'live-run',
+      toolCallId: 'live-call',
+      toolName: 'writeFile',
+    });
+    expect(pendingApprovalResolve).toHaveBeenCalledWith({ decision: 'decline', requestContext: undefined });
+    expect((harness as any).pendingApprovalResolve).toBeNull();
+    expect(resumeStreamSpy).not.toHaveBeenCalled();
   });
 });

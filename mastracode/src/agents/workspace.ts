@@ -130,6 +130,17 @@ export const skillPaths = [
 
 export const allowedSkillPaths = skillPaths;
 
+/**
+ * Paths the agent is always allowed to access (in addition to the project root
+ * and any per-thread sandboxAllowedPaths).  The OS temp directory is included
+ * so the agent can use it as a scratchpad without requesting access every time.
+ */
+const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp'].reduce<string[]>((acc, p) => {
+  const resolved = path.resolve(p);
+  if (!acc.includes(resolved)) acc.push(resolved);
+  return acc;
+}, []);
+
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
 /**
@@ -159,7 +170,11 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const projectPath = path.resolve(rawProjectPath);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...allowedSkillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const allowedPaths = [
+    ...allowedSkillPaths,
+    ...DEFAULT_ALLOWED_PATHS,
+    ...sandboxPaths.map((p: string) => path.resolve(p)),
+  ];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {

@@ -75,7 +75,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
 
   const durableAgent = createDurableAgent({ agent: baseAgent });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mastra = new Mastra({
       agents: { 'bg-e2e-agent': durableAgent as any },
       backgroundTasks: {
@@ -85,6 +85,10 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
+    // Wire the workflow event processor pubsub subscriptions so the
+    // bg-task workflow (engine='workflow', the default) can run to
+    // completion. Without this, runs hang and the agent stream times out.
+    await mastra.startEventEngine();
   });
 
   afterEach(async () => {
@@ -92,6 +96,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
     if (manager) {
       await manager.shutdown();
     }
+    await mastra.stopEventEngine();
     const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
     await backgroundTasksStore?.dangerouslyClearAll();
   });
@@ -224,6 +229,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
+    await memoryMastra.startEventEngine();
 
     try {
       const stream1 = await memoryDurableAgent.stream('Please research "neural networks" for me', {
@@ -296,6 +302,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       expect(allContent).toContain('bob');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
+      await memoryMastra.stopEventEngine();
     }
   }, 60_000);
 
@@ -328,6 +335,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
+    await memoryMastra.startEventEngine();
 
     try {
       const result = await memoryDurableAgent.streamUntilIdle('Please research "quantum computing" for me', {
@@ -366,8 +374,136 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       result.cleanup();
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
+      await memoryMastra.stopEventEngine();
     }
   }, 60_000);
+
+  it('streamUntilIdle: bg task suspends, resume via manager.resume completes it; follow-up turn reads the result', async () => {
+    const mockMemory = new MockMemory();
+    const threadId = 'durable-bg-suspend-thread';
+    const resourceId = 'durable-bg-suspend-user';
+
+    // Suspends on first call, returns a real summary after manager.resume
+    // injects { approved: true, notes? } as resumeData.
+    const researchWithApproval = createTool({
+      id: 'research-with-approval',
+      description: 'Research a topic. Requires analyst approval before running.',
+      inputSchema: z.object({ topic: z.string().describe('The topic to research') }),
+      outputSchema: z.object({ summary: z.string() }),
+      background: { enabled: true },
+      execute: async ({ topic }, options) => {
+        const ctx = options as
+          | {
+              agent?: {
+                suspend?: (data?: unknown) => Promise<void>;
+                resumeData?: { approved?: boolean; notes?: string };
+              };
+            }
+          | undefined;
+        const resumeData = ctx?.agent?.resumeData;
+        if (!resumeData) {
+          await ctx?.agent?.suspend?.({ awaiting: 'analyst-approval', topic });
+          return { summary: '' };
+        }
+        if (resumeData.approved !== true) {
+          throw new Error(`Research on "${topic}" was declined`);
+        }
+        return {
+          summary: `Research complete on "${topic}": ${resumeData.notes ?? 'approved by analyst'}.`,
+        };
+      },
+    });
+
+    const memoryBaseAgent = new Agent({
+      id: 'durable-bg-suspend-agent',
+      name: 'Durable Bg Suspend Agent',
+      instructions:
+        'You are a helpful assistant. ' +
+        'When the user asks to research something, use the research-with-approval tool. ' +
+        'After you see the research result, briefly summarize it for the user.',
+      model: openai('gpt-4o-mini'),
+      tools: { researchWithApproval },
+      memory: mockMemory,
+      backgroundTasks: { tools: { researchWithApproval: true } },
+    });
+
+    const memoryDurableAgent = createDurableAgent({ agent: memoryBaseAgent });
+
+    const memoryMastra = new Mastra({
+      agents: { 'durable-bg-suspend-agent': memoryDurableAgent as any },
+      backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
+      storage: testStorage,
+    });
+    await memoryMastra.startEventEngine();
+
+    try {
+      // --- Initial turn: dispatches bg task, which suspends ---
+      const stream1 = await memoryDurableAgent.streamUntilIdle('Please research "solana" for me', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+
+      const chunks1: any[] = [];
+      for await (const chunk of stream1.fullStream) {
+        chunks1.push(chunk);
+      }
+
+      const bgStarted = chunks1.find(c => c.type === 'background-task-started');
+      expect(bgStarted).toBeDefined();
+      expect(bgStarted.payload.toolName).toBe('researchWithApproval');
+
+      const bgSuspended = chunks1.find(c => c.type === 'background-task-suspended');
+      expect(bgSuspended).toBeDefined();
+      expect(bgSuspended.payload.taskId).toBe(bgStarted.payload.taskId);
+      expect(bgSuspended.payload.suspendPayload).toMatchObject({ awaiting: 'analyst-approval' });
+
+      expect(chunks1.find(c => c.type === 'background-task-completed')).toBeUndefined();
+
+      const manager = memoryMastra.backgroundTaskManager!;
+      const taskId = bgStarted.payload.taskId as string;
+      const suspendedTask = await manager.getTask(taskId);
+      expect(suspendedTask?.status).toBe('suspended');
+      expect(suspendedTask?.suspendPayload).toMatchObject({ awaiting: 'analyst-approval' });
+
+      stream1.cleanup();
+
+      // --- Out-of-band: analyst approves, bg task resumes and completes ---
+      await manager.resume(taskId, { approved: true, notes: 'looks promising' });
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const completedTask = await manager.getTask(taskId);
+      expect(completedTask?.status).toBe('completed');
+      expect((completedTask?.result as { summary: string }).summary).toContain('solana');
+      expect((completedTask?.result as { summary: string }).summary).toContain('looks promising');
+      expect(completedTask?.suspendPayload).toBeUndefined();
+
+      // --- Follow-up turn: streamUntilIdle picks up the resumed result from memory ---
+      const stream2 = await memoryDurableAgent.streamUntilIdle(
+        'What did the research find about solana? Mention the analyst notes.',
+        {
+          memory: { thread: threadId, resource: resourceId },
+        },
+      );
+
+      const chunks2: any[] = [];
+      for await (const chunk of stream2.fullStream) {
+        chunks2.push(chunk);
+      }
+
+      const text = chunks2
+        .filter(c => c?.type === 'text-delta')
+        .map(c => c.payload?.text ?? c.delta ?? '')
+        .join('')
+        .toLowerCase();
+      expect(text).toContain('solana');
+      expect(text).toContain('promising');
+
+      stream2.cleanup();
+    } finally {
+      await memoryMastra.backgroundTaskManager?.shutdown();
+      await memoryMastra.stopEventEngine();
+    }
+  }, 90_000);
 
   it('streamUntilIdle closes after the initial turn when no background tasks are dispatched', async () => {
     const mockMemory = new MockMemory();
@@ -396,6 +532,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
+    await memoryMastra.startEventEngine();
 
     try {
       const result = await memoryDurableAgent.streamUntilIdle('Greet someone named Carol', {
@@ -426,6 +563,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       result.cleanup();
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
+      await memoryMastra.stopEventEngine();
     }
   }, 30_000);
 });

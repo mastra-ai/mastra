@@ -551,8 +551,13 @@ export class CustomEditor extends Editor {
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
         if (this.isShowingAutocomplete()) {
+          const wasSlashCommand = this.getText().trimStart().startsWith('/');
           super.handleInput('\t');
-          if (this.getText().trimStart().startsWith('/') && handler() !== false) {
+          const completedText = this.getText();
+          if (wasSlashCommand && !completedText.trimStart().startsWith('/')) {
+            this.setText(`/${completedText.trimStart()}`);
+          }
+          if (wasSlashCommand && handler() !== false) {
             return;
           }
           return;
