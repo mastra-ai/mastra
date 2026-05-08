@@ -1686,8 +1686,13 @@ Every event has the same four base fields plus a discriminated payload keyed by 
 
 ```ts
 interface HarnessEventBase {
-  id: string;                        // Per-session monotonic event ID (see §10.5).
-                                     // Harness-scoped events have a separate harness-scoped sequence.
+  id: string;                        // Epoch-prefixed, per-session monotonic event ID, of the form
+                                     // `<epoch>-<seq>`. `epoch` is regenerated on every cold start
+                                     // of the in-memory Session instance (initial hydration, or
+                                     // re-hydration after eviction), and `seq` is a monotonic int
+                                     // within that epoch. Harness-scoped events use a parallel
+                                     // harness-scoped epoch+seq. See §10.5 for the replay contract
+                                     // and how stale IDs from a previous epoch are detected.
   type: string;                      // Discriminator. Built-in types listed below;
                                      // custom types use a dotted prefix (e.g. `myorg.foo`).
   sessionId?: string;                // Set for session-scoped events; absent for harness-scoped.
@@ -1815,9 +1820,20 @@ Custom events go through the same base-field, ordering, and replay rules as buil
 Each session keeps a ring buffer of recent events (`sessions.eventBufferSize`, default 1000; see §9). The buffer feeds two consumers:
 
 - **`session.subscribe(...)` after the fact.** If the session is currently in a turn when a new subscriber attaches, the subscriber sees future events only — no automatic backfill. Callers that need to recover from a missed window should use `session.listMessages(...)` for content and the SSE replay path for live event continuation.
-- **SSE replay over the wire.** The Mastra Server adapter (§13) honours `Last-Event-ID` on the SSE endpoint. The server replays buffer entries with `id > Last-Event-ID`, then live-tails. If `Last-Event-ID` is older than the buffer's oldest entry, the server returns `412 Precondition Failed` and the client is expected to refetch state via `GET /sessions/:sessionId` and resubscribe. See §13.3.
+- **SSE replay over the wire.** The Mastra Server adapter (§13) honours `Last-Event-ID` on the SSE endpoint. The server replays buffer entries newer than `Last-Event-ID`, then live-tails. See the replay rules below.
 
-The buffer is in-memory only. On session eviction or harness shutdown the buffer is dropped — durable replay across restarts is *not* a goal of v1, and clients reconnecting after a server restart should treat any prior `Last-Event-ID` as stale (the new buffer is empty, so the `412` path always fires).
+**Epoch and event IDs.** Each in-memory Session instance has an `epoch` token, generated fresh whenever the instance is constructed — first hydration, re-hydration after eviction, or hydration after a process restart. Event `id` is `<epoch>-<seq>`, where `seq` is monotonic within the epoch and resets when the epoch changes. Two events from different epochs are never comparable as a sequence, even if they share the same `seq`. Harness-scoped events use the same `<epoch>-<seq>` shape against the harness's own epoch+sequence.
+
+**Replay rules.** On reconnect with `Last-Event-ID: <epoch>-<seq>`:
+
+- If the epoch matches the current Session instance and `seq` is within the buffer, the server replays entries newer than the supplied ID and live-tails.
+- If the epoch matches but `seq` is older than the buffer's oldest entry, the buffer has overflowed; the server returns `412 Precondition Failed`.
+- If the epoch does not match the current Session instance, the prior epoch's buffer is gone (eviction or process restart). The server returns `412 Precondition Failed`.
+- If `Last-Event-ID` is malformed (not `<epoch>-<seq>`) or absent, the server starts the SSE stream from the live tail with no replay.
+
+In every `412` case the client is expected to refetch state via `GET /sessions/:sessionId` and resubscribe.
+
+**Scope.** The buffer is in-memory only. On session eviction or harness shutdown the buffer is dropped along with its epoch — **durable replay across restarts is not a goal of v1**. The epoch contract makes the "stale ID after restart or eviction" path deterministic: any `Last-Event-ID` from a previous epoch is detected at the server and yields `412`, even if a new event happens to share the same `seq`. Synthesizing replay from message storage or any other persisted state is explicitly out of scope; SSE replay is best-effort over the live in-memory ring buffer only. Clients that need durable history beyond a single epoch should use `GET /sessions/:sessionId/messages` (§13.3) for the persisted message log and treat the SSE stream as live-only.
 
 ### 10.6 Subagent attribution
 
@@ -2740,12 +2756,21 @@ For larger payloads, the route also accepts `multipart/form-data`: a JSON `paylo
 **Event envelope** for SSE streams:
 
 ```
-id: <monotonic-int>
+id: <epoch>-<seq>
 event: <event-type>
 data: <json>
 ```
 
-Each event includes a session-scoped monotonic ID so clients can resume via `Last-Event-ID` after disconnection. Server keeps a ring buffer (configurable, default 1000 events) plus durable replay from message storage for events older than the buffer.
+Each event includes an epoch-prefixed, session-scoped ID (see §10.5). `epoch` is regenerated on every cold start of the in-memory Session instance — initial hydration, re-hydration after eviction, or hydration after a process restart — and `seq` is monotonic within the epoch.
+
+Resume on reconnect uses the standard `Last-Event-ID` header. The server keeps an in-memory ring buffer per Session instance (configurable, default 1000 events; `sessions.eventBufferSize` in §9) and applies the replay rules from §10.5:
+
+- Same epoch, `seq` inside the buffer → replay newer entries, then live-tail.
+- Same epoch, `seq` older than the buffer → `412 Precondition Failed` (buffer overflow).
+- Different epoch → `412 Precondition Failed` (the previous in-memory buffer is gone).
+- Missing or malformed `Last-Event-ID` → live-tail from now, no replay.
+
+In any `412` case the client is expected to refetch state via `GET /sessions/:sessionId` and resubscribe. Durable replay across restarts is **not** a v1 feature; the SSE buffer is in-memory and best-effort. Clients that need history beyond the live buffer should fetch `GET /sessions/:sessionId/messages` for the persisted message log.
 
 **Error envelope:**
 
@@ -2785,7 +2810,7 @@ await session.queue({ content: 'Refactor auth' });
 
 Methods listed in §13.5 (raw `getWorkspace`, function-valued `addTools`, `onInterval`, cross-session subscriptions, non-JSON `setState`) are absent from the `RemoteSession` type. Reaching for them on a remote session fails to type-check.
 
-**Reconnection** is automatic. If the SSE stream drops, the client reconnects with `Last-Event-ID` and replays events newer than the last seen ID. If the resume window has been exceeded, the client receives a `412` and re-fetches state via `GET /sessions/:sessionId`.
+**Reconnection** is automatic. If the SSE stream drops, the client reconnects with `Last-Event-ID` and replays events newer than the last seen ID. If the supplied ID is from a previous epoch (server restart or session eviction) or older than the live buffer, the server returns `412 Precondition Failed`; the client transparently re-fetches state via `GET /sessions/:sessionId` and resumes from the new tail. See §10.5 for the full contract.
 
 **Type compatibility.** Both `Session` (in-process) and `RemoteSession` implement `RemoteSafeSession`. Portable code should accept `RemoteSafeSession`. Code that needs the full local surface (workspace handles, interval handlers, function-valued tools) should accept `Session` and is not deployable as-is to a remote SDK consumer.
 
