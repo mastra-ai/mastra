@@ -16,13 +16,20 @@ export interface SkillsShOrigin {
   skillName: string;
 }
 
-export type SkillOrigin = SkillsShOrigin;
+export interface LibraryForkOrigin {
+  type: 'library-fork';
+  sourceSkillId: string;
+  sourceSkillName: string;
+  sourceAuthorId?: string;
+}
+
+export type SkillOrigin = SkillsShOrigin | LibraryForkOrigin;
 
 export function getSkillOrigin(metadata: Record<string, unknown> | undefined | null): SkillOrigin | null {
   if (!metadata || typeof metadata !== 'object') return null;
   const origin = (metadata as { origin?: unknown }).origin;
   if (!origin || typeof origin !== 'object') return null;
-  const candidate = origin as { type?: unknown; owner?: unknown; repo?: unknown; skillName?: unknown };
+  const candidate = origin as Record<string, unknown>;
   if (
     candidate.type === 'skills-sh' &&
     typeof candidate.owner === 'string' &&
@@ -36,6 +43,18 @@ export function getSkillOrigin(metadata: Record<string, unknown> | undefined | n
       skillName: candidate.skillName,
     };
   }
+  if (
+    candidate.type === 'library-fork' &&
+    typeof candidate.sourceSkillId === 'string' &&
+    typeof candidate.sourceSkillName === 'string'
+  ) {
+    return {
+      type: 'library-fork',
+      sourceSkillId: candidate.sourceSkillId,
+      sourceSkillName: candidate.sourceSkillName,
+      sourceAuthorId: typeof candidate.sourceAuthorId === 'string' ? candidate.sourceAuthorId : undefined,
+    };
+  }
   return null;
 }
 
@@ -46,6 +65,8 @@ export function formatSkillOriginLabel(origin: SkillOrigin): string {
   switch (origin.type) {
     case 'skills-sh':
       return `skills.sh · ${origin.owner}/${origin.repo}`;
+    case 'library-fork':
+      return `Forked from "${origin.sourceSkillName}"`;
     default:
       return 'imported';
   }
@@ -58,6 +79,8 @@ export function getSkillOriginUrl(origin: SkillOrigin): string | null {
   switch (origin.type) {
     case 'skills-sh':
       return `https://skills.sh/${origin.owner}/${origin.repo}/${origin.skillName}`;
+    case 'library-fork':
+      return null;
     default:
       return null;
   }

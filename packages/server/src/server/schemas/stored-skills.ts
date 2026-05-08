@@ -83,6 +83,13 @@ export const skillOriginSchema = z.discriminatedUnion('type', [
     skillName: z.string().describe('Original skill name on skills.sh'),
     installedAt: z.string().describe('ISO-8601 timestamp of the install'),
   }),
+  z.object({
+    type: z.literal('library-fork'),
+    sourceSkillId: z.string().describe('ID of the public Library skill this was forked from'),
+    sourceSkillName: z.string().describe('Name of the source skill at fork time'),
+    sourceAuthorId: z.string().optional().describe('Author of the source skill at fork time, when known'),
+    forkedAt: z.string().describe('ISO-8601 timestamp of the fork'),
+  }),
 ]);
 
 export type SkillOrigin = z.infer<typeof skillOriginSchema>;

@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
-import { DownloadIcon, LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
+import { DownloadIcon, GitForkIcon, LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
 import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
@@ -85,21 +85,25 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
                 {(() => {
                   const origin = getSkillOrigin(skill.metadata);
                   if (!origin) return null;
+                  const isFork = origin.type === 'library-fork';
                   return (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface5 text-neutral4 shrink-0"
-                          aria-label="Imported skill"
+                          aria-label={isFork ? 'Forked skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >
-                          <DownloadIcon className="h-2.5 w-2.5" />
-                          {origin.type === 'skills-sh' ? 'skills.sh' : 'imported'}
+                          {isFork ? <GitForkIcon className="h-2.5 w-2.5" /> : <DownloadIcon className="h-2.5 w-2.5" />}
+                          {origin.type === 'skills-sh' ? 'skills.sh' : isFork ? 'forked' : 'imported'}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        Imported from{' '}
-                        {origin.type === 'skills-sh' ? `${origin.owner}/${origin.repo}` : 'external registry'}
+                        {origin.type === 'skills-sh'
+                          ? `Imported from ${origin.owner}/${origin.repo}`
+                          : isFork
+                            ? `Forked from "${origin.sourceSkillName}"`
+                            : 'Imported from external registry'}
                       </TooltipContent>
                     </Tooltip>
                   );

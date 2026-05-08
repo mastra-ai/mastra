@@ -9,6 +9,7 @@ import {
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
+  toast,
 } from '@mastra/playground-ui';
 import { LibraryIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -22,7 +23,9 @@ import {
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
+import { ForkSkillDialog } from '@/domains/agents/components/agent-cms-pages/fork-skill-dialog';
 import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
+import { useForkSkill } from '@/domains/agents/hooks/use-fork-skill';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -34,6 +37,7 @@ export default function AgentBuilderLibraryPage() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('agents');
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
+  const [forkSource, setForkSource] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
   const { canUseFavorites } = useBuilderAgentAccess();
   const { data: currentUser } = useCurrentUser();
@@ -49,6 +53,13 @@ export default function AgentBuilderLibraryPage() {
     isLoading: skillsLoading,
     error: skillsError,
   } = useStoredSkills(skillListParams, { enabled: tab === 'skills' && features.skills });
+
+  // Fetch the user's existing skills only when needed (i.e. they have fork-write capability),
+  // so we can suggest a non-colliding fork name and detect collisions before submit.
+  const { data: ownSkillsData } = useStoredSkills(undefined, { enabled: canWriteSkills });
+  const ownSkillNames = useMemo(() => (ownSkillsData?.skills ?? []).map(s => s.name), [ownSkillsData]);
+
+  const forkSkill = useForkSkill();
 
   const agents = agentsData?.agents ?? [];
   const skills = skillsData?.skills ?? [];
@@ -170,6 +181,37 @@ export default function AgentBuilderLibraryPage() {
           skill={selectedSkill}
           currentUserId={currentUser?.id}
           isAdmin={canWriteSkills}
+          onFork={
+            canWriteSkills
+              ? skill => {
+                  setForkSource(skill);
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {forkSource && (
+        <ForkSkillDialog
+          open={!!forkSource}
+          onOpenChange={open => {
+            if (!open && !forkSkill.isPending) setForkSource(null);
+          }}
+          sourceName={forkSource.name}
+          existingNames={ownSkillNames}
+          isPending={forkSkill.isPending}
+          onConfirm={async name => {
+            try {
+              await forkSkill.mutateAsync({ source: forkSource, name });
+              setForkSource(null);
+              setSelectedSkill(null);
+            } catch (err) {
+              if (err instanceof Error && err.message.toLowerCase().includes('already exists')) {
+                toast.error(`A skill named "${name}" already exists. Try a different name.`);
+              }
+              // Other errors are surfaced via the mutation's onError toast.
+            }
+          }}
         />
       )}
     </>

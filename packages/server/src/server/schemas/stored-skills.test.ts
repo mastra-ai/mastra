@@ -33,6 +33,35 @@ describe('skillOriginSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts a library-fork origin with optional sourceAuthorId', () => {
+    const origin: SkillOrigin = {
+      type: 'library-fork',
+      sourceSkillId: 'public-skill-1',
+      sourceSkillName: 'Public Skill',
+      sourceAuthorId: 'user-42',
+      forkedAt: '2026-05-08T18:00:00Z',
+    };
+    expect(skillOriginSchema.parse(origin)).toEqual(origin);
+  });
+
+  it('accepts a library-fork origin without sourceAuthorId', () => {
+    const origin: SkillOrigin = {
+      type: 'library-fork',
+      sourceSkillId: 'public-skill-1',
+      sourceSkillName: 'Public Skill',
+      forkedAt: '2026-05-08T18:00:00Z',
+    };
+    expect(skillOriginSchema.parse(origin)).toEqual(origin);
+  });
+
+  it('rejects library-fork with missing required fields', () => {
+    const result = skillOriginSchema.safeParse({
+      type: 'library-fork',
+      sourceSkillId: 'public-skill-1',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('readSkillOrigin', () => {

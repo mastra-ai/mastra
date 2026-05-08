@@ -12,7 +12,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@mastra/playground-ui';
-import { AlertTriangle, ChevronDown, ChevronRight, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  GitForkIcon,
+  Globe,
+  LockIcon,
+  Pencil,
+  Settings2,
+} from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -47,6 +56,11 @@ export interface SkillEditDialogProps {
   currentUserId?: string;
   /** Whether the current user is an admin (enables advanced file-tree mode) */
   isAdmin?: boolean;
+  /**
+   * Optional fork action shown when viewing a public skill the user does not own.
+   * Call site is responsible for prompting for a name and invoking the fork mutation.
+   */
+  onFork?: (skill: StoredSkillResponse) => void;
 }
 
 export function SkillEditDialog({
@@ -57,6 +71,7 @@ export function SkillEditDialog({
   skill,
   currentUserId,
   isAdmin,
+  onFork,
 }: SkillEditDialogProps) {
   const [mode, setMode] = useState<DialogMode>('simple');
   const [isEditing, setIsEditing] = useState(false);
@@ -262,6 +277,16 @@ export function SkillEditDialog({
             <Button variant="secondary" size="sm" onClick={() => setIsEditing(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
+          )}
+          {isViewMode && !isOwner && onFork && skill && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="secondary" size="sm" onClick={() => onFork(skill)}>
+                  <GitForkIcon className="h-3.5 w-3.5" /> Fork
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Make your own private copy you can edit</TooltipContent>
+            </Tooltip>
           )}
           {!isReadOnly && (
             <>

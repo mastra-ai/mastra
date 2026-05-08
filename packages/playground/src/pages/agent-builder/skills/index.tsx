@@ -103,7 +103,7 @@ export default function AgentBuilderSkillsPage() {
                       variant="default"
                       onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
                     >
-                      <DownloadIcon /> Browse {enabledRegistry.label}
+                      <DownloadIcon /> Browse registry
                     </Button>
                   )}
                 </div>
@@ -135,7 +135,7 @@ export default function AgentBuilderSkillsPage() {
                     variant="default"
                     onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
                   >
-                    <DownloadIcon /> Browse {enabledRegistry.label}
+                    <DownloadIcon /> Browse registry
                   </Button>
                 )}
                 <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
