@@ -19,8 +19,8 @@ class TestServerAdapter extends MastraServer<Record<string, never>, unknown, unk
   registerHttpLoggingMiddleware() {}
 
   // Exposes the protected bridge for focused unit coverage.
-  async writeResponse(response: Response, nodeRes: any) {
-    await this.writeCustomRouteResponse(response, nodeRes);
+  async writeResponse(response: Response, nodeRes: any, signal?: AbortSignal) {
+    await this.writeCustomRouteResponse(response, nodeRes, signal);
   }
 }
 
@@ -310,5 +310,36 @@ describe('custom route response bridge', () => {
         nodeRes,
       ),
     ).rejects.toMatchObject({ code: 'ECONNRESET' });
+  });
+
+  it('rethrows response body abort errors when they happen before response close aborts the signal', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const controller = new AbortController();
+    const upstreamError = new DOMException('upstream aborted', 'AbortError');
+
+    nodeRes.on('close', () => {
+      if (!nodeRes.writableEnded) {
+        controller.abort();
+      }
+    });
+    nodeRes.on('error', () => {});
+
+    await expect(
+      adapter.writeResponse(
+        new Response(
+          new ReadableStream({
+            start(streamController) {
+              streamController.enqueue(new TextEncoder().encode('chunk\n'));
+              queueMicrotask(() => {
+                streamController.error(upstreamError);
+              });
+            },
+          }),
+        ),
+        nodeRes,
+        controller.signal,
+      ),
+    ).rejects.toBe(upstreamError);
   });
 });

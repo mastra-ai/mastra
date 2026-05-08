@@ -723,12 +723,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           await pipeline(responseStream, nodeRes);
         }
       } catch (error) {
-        const expectedSignalAbort = signal?.aborted && isAbortSignalError(error);
+        const expectedSignalAbort =
+          signal?.aborted && isAbortSignalError(error) && (!responseBodyError || responseBodyErrorAfterResponseClosed);
         const expectedResponseClose =
           (!responseBodyError || responseBodyErrorAfterResponseClosed) &&
           isResponseClosed(nodeRes) &&
           isExpectedResponseCloseError(error);
-        // If the request signal aborted, cancellation wins over late body errors.
+        // Request cancellation is expected unless the response body already reported its own error.
         if (!expectedSignalAbort && !expectedResponseClose) {
           throw error;
         }
