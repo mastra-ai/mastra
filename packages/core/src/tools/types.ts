@@ -74,33 +74,9 @@ export type ToolPayloadTransform<TInput = unknown, TOutput = unknown, TError = u
   Record<ToolPayloadTransformTarget, ToolPayloadTransformTargetConfig<TInput, TOutput, TError>>
 >;
 
-export type ToolPayloadProjectionTarget = ToolPayloadTransformTarget;
-export type ToolPayloadProjectionPhase = ToolPayloadTransformPhase;
-export type ToolPayloadProjectionContext<
-  TInput = unknown,
-  TOutput = unknown,
-  TError = unknown,
-> = ToolPayloadTransformContext<TInput, TOutput, TError>;
-export type ToolPayloadProjectionResult = ToolPayloadTransformResult;
-export type ToolPayloadProjectionFunction<
-  TInput = unknown,
-  TOutput = unknown,
-  TError = unknown,
-> = ToolPayloadTransformFunction<TInput, TOutput, TError>;
-export type ToolPayloadProjectionTargetConfig<
-  TInput = unknown,
-  TOutput = unknown,
-  TError = unknown,
-> = ToolPayloadTransformTargetConfig<TInput, TOutput, TError>;
-export type ToolPayloadProjection<TInput = unknown, TOutput = unknown, TError = unknown> = ToolPayloadTransform<
-  TInput,
-  TOutput,
-  TError
->;
-
-export type ToolPayloadProjectionPolicy = {
-  projectToolPayload?: ToolPayloadProjectionFunction;
-  targets?: ToolPayloadProjectionTarget[];
+export type ToolPayloadTransformPolicy = {
+  transformToolPayload?: ToolPayloadTransformFunction;
+  targets?: ToolPayloadTransformTarget[];
 };
 
 /**

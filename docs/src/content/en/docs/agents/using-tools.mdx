@@ -248,7 +248,7 @@ Use `transform` when a tool returns raw data your application needs, but browser
 
 If a transform is configured and it fails, Mastra does not fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
 
-See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `toolPayloadProjection` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
+See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
 
 ## Control tool selection
 

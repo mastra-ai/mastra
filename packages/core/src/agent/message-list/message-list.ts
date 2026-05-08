@@ -5,7 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import { getProjectedToolPayload, hasProjectedToolPayload } from '../../tools/payload-projection';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -84,11 +84,11 @@ export class MessageList {
   private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
 
-  private toAIV5UIMessages(messages: MastraDBMessage[], options?: { projectToolPayloads?: boolean }) {
+  private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
     return messages.map(message => AIV5Adapter.toUIMessage(message, options));
   }
 
-  private toAIV4UIMessages(messages: MastraDBMessage[], options?: { projectToolPayloads?: boolean }) {
+  private toAIV4UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
     return messages.map(message => AIV4Adapter.toUIMessage(message, options));
   }
 
@@ -366,7 +366,7 @@ export class MessageList {
     aiV5: {
       model: (): AIV5Type.ModelMessage[] =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.all.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.all.db(), { transformToolPayloads: false }),
           this.messages,
         ),
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.all.db()),
@@ -380,7 +380,7 @@ export class MessageList {
           this.messages,
         );
         const modelMessages = convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.all.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.all.db(), { transformToolPayloads: false }),
           this.messages,
           this.filterIncompleteToolCalls,
         );
@@ -402,7 +402,7 @@ export class MessageList {
         },
       ): Promise<LanguageModelV2Prompt> => {
         const modelMessages = convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.all.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.all.db(), { transformToolPayloads: false }),
           this.messages,
           this.filterIncompleteToolCalls,
         );
@@ -530,11 +530,11 @@ export class MessageList {
     ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
     /* @deprecated use list.get.all.aiV4.core() */
     core: (): CoreMessageV4[] =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { projectToolPayloads: false })),
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { transformToolPayloads: false })),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
       core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { projectToolPayloads: false })),
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { transformToolPayloads: false })),
 
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
@@ -565,7 +565,7 @@ export class MessageList {
     aiV5: {
       model: () =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.remembered.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.remembered.db(), { transformToolPayloads: false }),
           this.messages,
         ),
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.remembered.db()),
@@ -578,11 +578,11 @@ export class MessageList {
     ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
     /* @deprecated use list.get.remembered.aiV4.core() */
     core: (): CoreMessageV4[] =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { projectToolPayloads: false })),
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { transformToolPayloads: false })),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.remembered.db()),
       core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { projectToolPayloads: false })),
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.remembered.db(), { transformToolPayloads: false })),
     },
   };
   private rememberedPersisted = {
@@ -592,7 +592,7 @@ export class MessageList {
     aiV5: {
       model: () =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.rememberedPersisted.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
           this.messages,
         ),
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.rememberedPersisted.db()),
@@ -606,13 +606,13 @@ export class MessageList {
     /* @deprecated use list.getPersisted.remembered.aiV4.core() */
     core: () =>
       aiV4UIMessagesToAIV4CoreMessages(
-        this.toAIV4UIMessages(this.rememberedPersisted.db(), { projectToolPayloads: false }),
+        this.toAIV4UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
       ),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.rememberedPersisted.db()),
       core: (): CoreMessageV4[] =>
         aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.rememberedPersisted.db(), { projectToolPayloads: false }),
+          this.toAIV4UIMessages(this.rememberedPersisted.db(), { transformToolPayloads: false }),
         ),
     },
   };
@@ -624,7 +624,7 @@ export class MessageList {
     aiV5: {
       model: () =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.input.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.input.db(), { transformToolPayloads: false }),
           this.messages,
         ),
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.input.db()),
@@ -637,11 +637,11 @@ export class MessageList {
     ui: () => this.toAIV4UIMessages(this.input.db()),
     /* @deprecated use list.get.core.aiV4.ui() instead */
     core: () =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { projectToolPayloads: false })),
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { transformToolPayloads: false })),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.input.db()),
       core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { projectToolPayloads: false })),
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.input.db(), { transformToolPayloads: false })),
     },
   };
   private inputPersisted = {
@@ -651,7 +651,7 @@ export class MessageList {
     aiV5: {
       model: () =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.inputPersisted.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
           this.messages,
         ),
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.inputPersisted.db()),
@@ -664,12 +664,12 @@ export class MessageList {
     ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
     /* @deprecated use list.getPersisted.input.aiV4.core() */
     core: () =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.inputPersisted.db(), { projectToolPayloads: false })),
+      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false })),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
       core: (): CoreMessageV4[] =>
         aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.inputPersisted.db(), { projectToolPayloads: false }),
+          this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
         ),
     },
   };
@@ -682,7 +682,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.response.db()),
       model: (): AIV5ResponseMessage[] =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.response.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
           this.messages,
         ).filter(m => m.role === `tool` || m.role === `assistant`),
       modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
@@ -711,7 +711,7 @@ export class MessageList {
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.response.db()),
       core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.response.db(), { projectToolPayloads: false })),
+        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.response.db(), { transformToolPayloads: false })),
     },
   };
   private responsePersisted = {
@@ -720,7 +720,7 @@ export class MessageList {
     aiV5: {
       model: () =>
         convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.responsePersisted.db(), { projectToolPayloads: false }),
+          this.toAIV5UIMessages(this.responsePersisted.db(), { transformToolPayloads: false }),
           this.messages,
         ),
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.responsePersisted.db()),
@@ -735,7 +735,7 @@ export class MessageList {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.responsePersisted.db()),
       core: (): CoreMessageV4[] =>
         aiV4UIMessagesToAIV4CoreMessages(
-          this.toAIV4UIMessages(this.responsePersisted.db(), { projectToolPayloads: false }),
+          this.toAIV4UIMessages(this.responsePersisted.db(), { transformToolPayloads: false }),
         ),
     },
   };
@@ -744,92 +744,92 @@ export class MessageList {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages.map(message => this.projectMessageForTranscript(message));
+    return messages.map(message => this.transformMessageForTranscript(message));
   }
 
-  private projectToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
+  private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;
     }
 
     const stateData = data as Record<string, unknown>;
     const metadata = stateData.metadata ?? stateData.providerMetadata;
-    const phaseProjection = getProjectedToolPayload(metadata, 'transcript', phase);
-    const inputProjection = getProjectedToolPayload(metadata, 'transcript', 'input-available');
-    const projectedArgs =
+    const phaseTransform = getTransformedToolPayload(metadata, 'transcript', phase);
+    const inputTransform = getTransformedToolPayload(metadata, 'transcript', 'input-available');
+    const transformedArgs =
       phase === 'approval'
-        ? hasProjectedToolPayload(phaseProjection)
-          ? phaseProjection.projected
-          : hasProjectedToolPayload(inputProjection)
-            ? inputProjection.projected
+        ? hasTransformedToolPayload(phaseTransform)
+          ? phaseTransform.transformed
+          : hasTransformedToolPayload(inputTransform)
+            ? inputTransform.transformed
             : undefined
-        : hasProjectedToolPayload(inputProjection)
-          ? inputProjection.projected
-          : hasProjectedToolPayload(phaseProjection)
-            ? phaseProjection.projected
+        : hasTransformedToolPayload(inputTransform)
+          ? inputTransform.transformed
+          : hasTransformedToolPayload(phaseTransform)
+            ? phaseTransform.transformed
             : undefined;
-    const projectedSuspendPayload =
-      phase === 'suspend' && hasProjectedToolPayload(phaseProjection) ? phaseProjection.projected : undefined;
+    const transformedSuspendPayload =
+      phase === 'suspend' && hasTransformedToolPayload(phaseTransform) ? phaseTransform.transformed : undefined;
 
     return {
       ...stateData,
-      ...(projectedArgs !== undefined ? { args: projectedArgs } : {}),
-      ...(projectedSuspendPayload !== undefined ? { suspendPayload: projectedSuspendPayload } : {}),
+      ...(transformedArgs !== undefined ? { args: transformedArgs } : {}),
+      ...(transformedSuspendPayload !== undefined ? { suspendPayload: transformedSuspendPayload } : {}),
     };
   }
 
-  private projectMessageForTranscript(message: MastraDBMessage): MastraDBMessage {
+  private transformMessageForTranscript(message: MastraDBMessage): MastraDBMessage {
     if (message.content?.format !== 2 || !message.content.parts) {
       return message;
     }
 
     let changed = false;
-    const projectedByToolCallId = new Map<string, { args?: unknown; result?: unknown; errorText?: string }>();
+    const transformedByToolCallId = new Map<string, { args?: unknown; result?: unknown; errorText?: string }>();
 
     const parts = message.content.parts.map(part => {
       if (part.type === 'tool-invocation' && part.toolInvocation) {
-        const inputProjection = getProjectedToolPayload(part.providerMetadata, 'transcript', 'input-available');
-        const outputProjection =
+        const inputTransform = getTransformedToolPayload(part.providerMetadata, 'transcript', 'input-available');
+        const outputTransform =
           part.toolInvocation.state === 'result'
-            ? (getProjectedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
-              getProjectedToolPayload(part.providerMetadata, 'transcript', 'error'))
+            ? (getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
+              getTransformedToolPayload(part.providerMetadata, 'transcript', 'error'))
             : part.toolInvocation.state === 'output-error'
-              ? getProjectedToolPayload(part.providerMetadata, 'transcript', 'error')
+              ? getTransformedToolPayload(part.providerMetadata, 'transcript', 'error')
               : undefined;
 
-        if (!inputProjection && !outputProjection) {
+        if (!inputTransform && !outputTransform) {
           return part;
         }
 
         changed = true;
-        const projectedArgs = hasProjectedToolPayload(inputProjection)
-          ? inputProjection.projected
+        const transformedArgs = hasTransformedToolPayload(inputTransform)
+          ? inputTransform.transformed
           : part.toolInvocation.args;
-        const projectedResult =
+        const transformedResult =
           part.toolInvocation.state === 'result'
-            ? hasProjectedToolPayload(outputProjection)
-              ? outputProjection.projected
+            ? hasTransformedToolPayload(outputTransform)
+              ? outputTransform.transformed
               : part.toolInvocation.result
             : undefined;
-        const projectedErrorText =
+        const transformedErrorText =
           part.toolInvocation.state === 'output-error'
-            ? hasProjectedToolPayload(outputProjection)
-              ? (outputProjection.projected as string)
+            ? hasTransformedToolPayload(outputTransform)
+              ? (outputTransform.transformed as string)
               : part.toolInvocation.errorText
             : undefined;
-        projectedByToolCallId.set(part.toolInvocation.toolCallId, {
-          args: projectedArgs,
-          ...(part.toolInvocation.state === 'result' ? { result: projectedResult } : {}),
-          ...(part.toolInvocation.state === 'output-error' ? { errorText: projectedErrorText } : {}),
+        transformedByToolCallId.set(part.toolInvocation.toolCallId, {
+          args: transformedArgs,
+          ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
+          ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
         });
 
         return {
           ...part,
           toolInvocation: {
             ...part.toolInvocation,
-            args: projectedArgs,
-            ...(part.toolInvocation.state === 'result' ? { result: projectedResult } : {}),
-            ...(part.toolInvocation.state === 'output-error' ? { errorText: projectedErrorText } : {}),
+            args: transformedArgs,
+            ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
+            ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
           },
         };
       }
@@ -838,7 +838,7 @@ export class MessageList {
         changed = true;
         return {
           ...part,
-          data: this.projectToolStateDataForTranscript(
+          data: this.transformToolStateDataForTranscript(
             part.data,
             part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
           ),
@@ -849,8 +849,8 @@ export class MessageList {
     });
 
     const toolInvocations = message.content.toolInvocations?.map(invocation => {
-      const projected = projectedByToolCallId.get(invocation.toolCallId);
-      if (!projected) {
+      const transformed = transformedByToolCallId.get(invocation.toolCallId);
+      if (!transformed) {
         return invocation;
       }
 
@@ -858,10 +858,10 @@ export class MessageList {
       changed = true;
       return {
         ...invocation,
-        ...(projected.args !== undefined ? { args: projected.args } : {}),
-        ...(invocation.state === 'result' && projected.result !== undefined ? { result: projected.result } : {}),
-        ...(invocationState === 'output-error' && projected.errorText !== undefined
-          ? { errorText: projected.errorText }
+        ...(transformed.args !== undefined ? { args: transformed.args } : {}),
+        ...(invocation.state === 'result' && transformed.result !== undefined ? { result: transformed.result } : {}),
+        ...(invocationState === 'output-error' && transformed.errorText !== undefined
+          ? { errorText: transformed.errorText }
           : {}),
       };
     });
@@ -883,7 +883,7 @@ export class MessageList {
         metadata[key] = Object.fromEntries(
           Object.entries(toolStates as Record<string, unknown>).map(([toolName, state]) => [
             toolName,
-            this.projectToolStateDataForTranscript(state, phase),
+            this.transformToolStateDataForTranscript(state, phase),
           ]),
         );
       }

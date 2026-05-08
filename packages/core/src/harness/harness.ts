@@ -12,8 +12,8 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
-import { getProjectedToolPayload, hasProjectedToolPayload } from '../tools/payload-projection';
-import type { ToolPayloadProjectionPhase } from '../tools/types';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
+import type { ToolPayloadTransformPhase } from '../tools/types';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
@@ -76,9 +76,9 @@ function addOptionalUsageField(
   }
 }
 
-function getDisplayProjection(metadata: unknown, phase: ToolPayloadProjectionPhase, fallback: unknown) {
-  const projection = getProjectedToolPayload(metadata, 'display', phase);
-  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
+function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase, fallback: unknown) {
+  const transform = getTransformedToolPayload(metadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
 /**
@@ -1931,12 +1931,12 @@ export class Harness<TState = {}> {
 
         case 'tool-call-delta': {
           const { toolCallId, argsTextDelta, toolName } = chunk.payload;
-          const projection = getProjectedToolPayload(chunk.metadata, 'display', 'input-delta');
-          if (!projection?.suppress) {
+          const transform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
+          if (!transform?.suppress) {
             this.emit({
               type: 'tool_input_delta',
               toolCallId,
-              argsTextDelta: hasProjectedToolPayload(projection) ? projection.projected : argsTextDelta,
+              argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
               toolName,
             });
           }
@@ -1955,13 +1955,13 @@ export class Harness<TState = {}> {
             type: 'tool_call',
             id: toolCall.toolCallId,
             name: toolCall.toolName,
-            args: getDisplayProjection(chunk.metadata, 'input-available', toolCall.args),
+            args: getDisplayTransform(chunk.metadata, 'input-available', toolCall.args),
           });
           this.emit({
             type: 'tool_start',
             toolCallId: toolCall.toolCallId,
             toolName: toolCall.toolName,
-            args: getDisplayProjection(chunk.metadata, 'input-available', toolCall.args),
+            args: getDisplayTransform(chunk.metadata, 'input-available', toolCall.args),
           });
           this.emit({ type: 'message_update', message: { ...currentMessage } });
           break;
@@ -1973,13 +1973,13 @@ export class Harness<TState = {}> {
             type: 'tool_result',
             id: toolResult.toolCallId,
             name: toolResult.toolName,
-            result: getDisplayProjection(chunk.metadata, 'output-available', toolResult.result),
+            result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
             isError: toolResult.isError ?? false,
           });
           this.emit({
             type: 'tool_end',
             toolCallId: toolResult.toolCallId,
-            result: getDisplayProjection(chunk.metadata, 'output-available', toolResult.result),
+            result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
             isError: toolResult.isError ?? false,
           });
           this.emit({ type: 'message_update', message: { ...currentMessage } });
@@ -1991,7 +1991,7 @@ export class Harness<TState = {}> {
           this.emit({
             type: 'tool_end',
             toolCallId: toolError.toolCallId,
-            result: getDisplayProjection(chunk.metadata, 'error', toolError.error),
+            result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
             isError: true,
           });
           break;
@@ -2000,10 +2000,10 @@ export class Harness<TState = {}> {
         case 'tool-call-approval': {
           const toolCallId = chunk.payload.toolCallId;
           const toolName = chunk.payload.toolName;
-          const approvalProjection = getProjectedToolPayload(chunk.metadata, 'display', 'approval');
-          const toolArgs = hasProjectedToolPayload(approvalProjection)
-            ? approvalProjection.projected
-            : getDisplayProjection(chunk.metadata, 'input-available', chunk.payload.args);
+          const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+          const toolArgs = hasTransformedToolPayload(approvalTransform)
+            ? approvalTransform.transformed
+            : getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
 
           const policy = this.resolveToolApproval(toolName);
 
@@ -2049,8 +2049,8 @@ export class Harness<TState = {}> {
         case 'tool-call-suspended': {
           const suspToolCallId = chunk.payload.toolCallId;
           const suspToolName = chunk.payload.toolName;
-          const suspArgs = getDisplayProjection(chunk.metadata, 'input-available', chunk.payload.args);
-          const suspPayload = getDisplayProjection(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
+          const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
+          const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
           const suspResumeSchema = chunk.payload.resumeSchema;
 
           this.emit({

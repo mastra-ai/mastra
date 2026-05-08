@@ -11,12 +11,12 @@ import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import {
-  getProjectedToolPayload,
-  hasProjectedToolPayload,
-  projectToolPayloadForTargets,
-  withToolPayloadProjectionMetadata,
-  withToolPayloadProjectionProviderMetadata,
-} from '../../../tools/payload-projection';
+  getTransformedToolPayload,
+  hasTransformedToolPayload,
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -72,54 +72,54 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         stepTools?.[inputData.toolName] ||
         findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
-      const projectionSource = {
-        policy: _internal?.toolPayloadProjection,
-        toolProjection: (tool as { transform?: unknown } | undefined)?.transform as any,
+      const transformSource = {
+        policy: _internal?.toolPayloadTransform,
+        toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
       };
-      const projectChunk = async (
+      const transformChunk = async (
         chunk: ChunkType<OUTPUT>,
         phase: 'input-available' | 'approval' | 'suspend' | 'output-available' | 'error',
         extra?: { output?: unknown; error?: unknown; suspendPayload?: unknown },
       ): Promise<ChunkType<OUTPUT>> => {
         const payload = 'payload' in chunk ? (chunk.payload as Record<string, any>) : {};
-        const projectionInput = payload.args ?? inputData.args;
-        const projectionToolName = typeof payload.toolName === 'string' ? payload.toolName : inputData.toolName;
-        const projectionToolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : inputData.toolCallId;
-        const projectionProviderMetadata =
+        const transformInput = payload.args ?? inputData.args;
+        const transformToolName = typeof payload.toolName === 'string' ? payload.toolName : inputData.toolName;
+        const transformToolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : inputData.toolCallId;
+        const transformProviderMetadata =
           (payload.providerMetadata as Record<string, unknown> | undefined) ??
           (inputData.providerMetadata as Record<string, unknown> | undefined);
 
-        const inputProjection = await projectToolPayloadForTargets(
+        const inputTransform = await transformToolPayloadForTargets(
           {
             phase: 'input-available',
-            toolName: projectionToolName,
-            toolCallId: projectionToolCallId,
-            input: projectionInput,
-            providerMetadata: projectionProviderMetadata,
+            toolName: transformToolName,
+            toolCallId: transformToolCallId,
+            input: transformInput,
+            providerMetadata: transformProviderMetadata,
           },
-          projectionSource,
+          transformSource,
           logger,
         );
         const transform =
           phase === 'input-available'
             ? undefined
-            : await projectToolPayloadForTargets(
+            : await transformToolPayloadForTargets(
                 {
                   phase,
-                  toolName: projectionToolName,
-                  toolCallId: projectionToolCallId,
-                  input: projectionInput,
+                  toolName: transformToolName,
+                  toolCallId: transformToolCallId,
+                  input: transformInput,
                   output: extra?.output,
                   error: extra?.error,
                   suspendPayload: extra?.suspendPayload,
-                  providerMetadata: projectionProviderMetadata,
+                  providerMetadata: transformProviderMetadata,
                 },
-                projectionSource,
+                transformSource,
                 logger,
               );
 
-        return withToolPayloadProjectionMetadata(
-          withToolPayloadProjectionMetadata(chunk, inputProjection),
+        return withToolPayloadTransformMetadata(
+          withToolPayloadTransformMetadata(chunk, inputTransform),
           transform,
         ) as ChunkType<OUTPUT>;
       };
@@ -132,7 +132,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
-        metadata: toolStateProjectionMetadata,
+        metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
@@ -149,35 +149,35 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
           // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
-          const inputProjection = getProjectedToolPayload(
-            toolStateProjectionMetadata,
+          const inputTransform = getTransformedToolPayload(
+            toolStateTransformMetadata,
             'transcript',
             'input-available',
-          )?.projected;
-          const approvalProjection = getProjectedToolPayload(
-            toolStateProjectionMetadata,
+          )?.transformed;
+          const approvalTransform = getTransformedToolPayload(
+            toolStateTransformMetadata,
             'transcript',
             'approval',
-          )?.projected;
-          const suspendProjection = getProjectedToolPayload(
-            toolStateProjectionMetadata,
+          )?.transformed;
+          const suspendTransform = getTransformedToolPayload(
+            toolStateTransformMetadata,
             'transcript',
             'suspend',
-          )?.projected;
-          const projectedArgs =
+          )?.transformed;
+          const transformedArgs =
             type === 'approval'
-              ? (approvalProjection ?? inputProjection ?? args)
-              : (inputProjection ?? suspendProjection ?? args);
-          const projectedSuspendPayload = type === 'suspension' ? (suspendProjection ?? suspendPayload) : undefined;
+              ? (approvalTransform ?? inputTransform ?? args)
+              : (inputTransform ?? suspendTransform ?? args);
+          const transformedSuspendPayload = type === 'suspension' ? (suspendTransform ?? suspendPayload) : undefined;
           metadata[metadataKey][toolName] = {
             toolCallId,
             toolName,
-            args: projectedArgs,
+            args: transformedArgs,
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
-            ...(type === 'suspension' ? { suspendPayload: projectedSuspendPayload } : {}),
+            ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
-            ...(toolStateProjectionMetadata ? { metadata: toolStateProjectionMetadata } : {}),
+            ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
           };
           lastAssistantMessage.content.metadata = metadata;
         }
@@ -399,7 +399,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (toolRequiresApproval) {
           if (!resumeData) {
-            const approvalChunk = await projectChunk(
+            const approvalChunk = await transformChunk(
               {
                 type: 'tool-call-approval',
                 runId,
@@ -487,7 +487,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
-              const approvalChunk = await projectChunk(
+              const approvalChunk = await transformChunk(
                 {
                   type: 'tool-call-approval',
                   runId,
@@ -555,7 +555,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
               );
             } else {
-              const suspensionChunk = await projectChunk(
+              const suspensionChunk = await transformChunk(
                 {
                   type: 'tool-call-suspended',
                   runId,
@@ -717,7 +717,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (!resolvedTool?.execute) {
               throw new ToolNotFoundError(inputData.toolName);
             }
-            let backgroundChunkProjectionQueue: Promise<void> = Promise.resolve();
+            let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
 
             // Create a self-contained background task with per-stream hooks
@@ -771,7 +771,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // chunks so UIs rendering this stream can show the tool's
                 // outcome inline with the conversation.
                 onChunk: chunk => {
-                  backgroundChunkProjectionQueue = backgroundChunkProjectionQueue
+                  backgroundChunkTransformQueue = backgroundChunkTransformQueue
                     .then(async () => {
                       const bgRunId = chunk.payload.runId;
                       const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
@@ -781,7 +781,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       ) {
                         safeEnqueue(
                           controller,
-                          await projectChunk(
+                          await transformChunk(
                             {
                               type: 'tool-call',
                               runId: bgRunId,
@@ -803,7 +803,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       if (chunk.type === 'background-task-completed') {
                         safeEnqueue(
                           controller,
-                          await projectChunk(
+                          await transformChunk(
                             {
                               type: 'tool-result',
                               runId: bgRunId,
@@ -824,7 +824,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       } else if (chunk.type === 'background-task-failed') {
                         safeEnqueue(
                           controller,
-                          await projectChunk(
+                          await transformChunk(
                             {
                               type: 'tool-error',
                               runId: bgRunId,
@@ -845,7 +845,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       }
                     })
                     .catch(error => {
-                      logger?.warn?.('Error projecting background task stream chunk', {
+                      logger?.warn?.('Error transforming background task stream chunk', {
                         toolCallId: chunk.payload.toolCallId,
                         toolName: chunk.payload.toolName,
                         runId: chunk.payload.runId,
@@ -869,9 +869,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     params.status === 'failed'
                       ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
                       : params.result;
-                  let projectionCarrier = withToolPayloadProjectionMetadata(
+                  let transformCarrier = withToolPayloadTransformMetadata(
                     { metadata: {} as Record<string, any> },
-                    await projectToolPayloadForTargets(
+                    await transformToolPayloadForTargets(
                       {
                         phase: 'input-available',
                         toolName: params.toolName,
@@ -879,13 +879,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         input: args,
                         providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
                       },
-                      projectionSource,
+                      transformSource,
                       logger,
                     ),
                   );
-                  projectionCarrier = withToolPayloadProjectionMetadata(
-                    projectionCarrier,
-                    await projectToolPayloadForTargets(
+                  transformCarrier = withToolPayloadTransformMetadata(
+                    transformCarrier,
+                    await transformToolPayloadForTargets(
                       {
                         phase: params.status === 'failed' ? 'error' : 'output-available',
                         toolName: params.toolName,
@@ -895,29 +895,29 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         error: params.status === 'failed' ? params.error : undefined,
                         providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
                       },
-                      projectionSource,
+                      transformSource,
                       logger,
                     ),
                   );
-                  const transcriptArgsProjection = getProjectedToolPayload(
-                    projectionCarrier.metadata,
+                  const transcriptArgsTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
                     'transcript',
                     'input-available',
                   );
-                  const transcriptResultProjection = getProjectedToolPayload(
-                    projectionCarrier.metadata,
+                  const transcriptResultTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
                     'transcript',
                     params.status === 'failed' ? 'error' : 'output-available',
                   );
-                  const transcriptArgs = hasProjectedToolPayload(transcriptArgsProjection)
-                    ? transcriptArgsProjection.projected
+                  const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
+                    ? transcriptArgsTransform.transformed
                     : args;
-                  const transcriptResult = hasProjectedToolPayload(transcriptResultProjection)
-                    ? transcriptResultProjection.projected
+                  const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
+                    ? transcriptResultTransform.transformed
                     : result;
-                  const providerMetadata = withToolPayloadProjectionProviderMetadata(
+                  const providerMetadata = withToolPayloadTransformProviderMetadata(
                     inputData.providerMetadata as ProviderMetadata | undefined,
-                    projectionCarrier.metadata,
+                    transformCarrier.metadata,
                   ) as ProviderMetadata | undefined;
 
                   const updated = messageList.updateToolInvocation(
@@ -1004,7 +1004,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // Execution injector — updates the existing tool-invocation in the
                 // message list (keyed by toolCallId) background task startedAt.
                 onExecution: async params => {
-                  const inputProjection = await projectToolPayloadForTargets(
+                  const inputTransform = await transformToolPayloadForTargets(
                     {
                       phase: 'input-available',
                       toolName: params.toolName,
@@ -1012,16 +1012,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       input: args,
                       providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
                     },
-                    projectionSource,
+                    transformSource,
                     logger,
                   );
-                  const projectionCarrier = withToolPayloadProjectionMetadata(
+                  const transformCarrier = withToolPayloadTransformMetadata(
                     { metadata: {} as Record<string, any> },
-                    inputProjection,
+                    inputTransform,
                   );
-                  const providerMetadata = withToolPayloadProjectionProviderMetadata(
+                  const providerMetadata = withToolPayloadTransformProviderMetadata(
                     inputData.providerMetadata as ProviderMetadata | undefined,
-                    projectionCarrier.metadata,
+                    transformCarrier.metadata,
                   ) as ProviderMetadata | undefined;
 
                   messageList.updateToolInvocation(

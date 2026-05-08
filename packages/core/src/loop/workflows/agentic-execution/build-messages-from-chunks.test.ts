@@ -456,7 +456,7 @@ describe('buildMessagesFromChunks', () => {
     expect(msgs[0]!.content.metadata).toEqual({ modelId: 'gpt-5.4', provider: 'openai.responses' });
   });
 
-  it('uses transcript projections for tool input and output', () => {
+  it('uses transcript transforms for tool input and output', () => {
     const result = parts([
       {
         type: 'tool-call',
@@ -467,9 +467,9 @@ describe('buildMessagesFromChunks', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               transcript: {
-                'input-available': { projected: { customerId: 'cus_123' } },
+                'input-available': { transformed: { customerId: 'cus_123' } },
               },
             },
           },
@@ -485,10 +485,10 @@ describe('buildMessagesFromChunks', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               transcript: {
-                'input-available': { projected: { customerId: 'cus_123' } },
-                'output-available': { projected: { displayName: 'Acme' } },
+                'input-available': { transformed: { customerId: 'cus_123' } },
+                'output-available': { transformed: { displayName: 'Acme' } },
               },
             },
           },
@@ -506,7 +506,7 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
-  it('preserves raw tool payloads when transcript projection metadata is absent', () => {
+  it('preserves raw tool payloads when transcript transform metadata is absent', () => {
     const result = parts([
       {
         type: 'tool-call',

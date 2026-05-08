@@ -1,7 +1,7 @@
 import * as AIV5 from '@internal/ai-sdk-v5';
 import * as AIV6 from '@internal/ai-v6';
 
-import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -30,13 +30,13 @@ function withOptionalFields<T extends Record<string, unknown>, U extends Record<
   return target as T & Partial<U>;
 }
 
-function getDisplayProjection(
+function getDisplayTransform(
   providerMetadata: unknown,
   phase: 'input-available' | 'output-available' | 'error',
   fallback: unknown,
 ) {
-  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
-  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
+  const transform = getTransformedToolPayload(providerMetadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
 function getToolNameFromType(type: string): string {
@@ -417,21 +417,21 @@ export class AIV6Adapter {
           return {
             ...base,
             state: 'input-streaming',
-            input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
           } as AIV6Type.UIMessage['parts'][number];
 
         case 'call':
           return {
             ...base,
             state: 'input-available',
-            input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
           } as AIV6Type.UIMessage['parts'][number];
 
         case 'approval-requested':
           return {
             ...base,
             state: 'approval-requested',
-            input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
             approval: {
               id: part.toolInvocation.approval?.id || part.toolInvocation.toolCallId,
             },
@@ -441,7 +441,7 @@ export class AIV6Adapter {
           return {
             ...base,
             state: 'approval-responded',
-            input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
             approval: {
               id: part.toolInvocation.approval?.id || part.toolInvocation.toolCallId,
               approved: part.toolInvocation.approval?.approved ?? false,
@@ -454,8 +454,8 @@ export class AIV6Adapter {
             {
               ...base,
               state: 'output-error',
-              input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
-              errorText: getDisplayProjection(
+              input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
+              errorText: getDisplayTransform(
                 part.providerMetadata,
                 'error',
                 part.toolInvocation.errorText || '',
@@ -478,7 +478,7 @@ export class AIV6Adapter {
           return {
             ...base,
             state: 'output-denied',
-            input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
             approval: {
               id: part.toolInvocation.approval?.id || part.toolInvocation.toolCallId,
               approved: false,
@@ -491,11 +491,11 @@ export class AIV6Adapter {
             {
               ...base,
               state: 'output-available',
-              input: getDisplayProjection(part.providerMetadata, 'input-available', part.toolInvocation.args),
-              output: getDisplayProjection(
+              input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
+              output: getDisplayTransform(
                 part.providerMetadata,
                 'output-available',
-                getDisplayProjection(part.providerMetadata, 'error', part.toolInvocation.result),
+                getDisplayTransform(part.providerMetadata, 'error', part.toolInvocation.result),
               ),
             },
             {

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import { convertMastraChunkToAISDKv5 } from './helpers';
 
-describe('tool payload projection conversion', () => {
-  it('uses display projections for tool-call input', () => {
+describe('tool payload transform conversion', () => {
+  it('uses display transforms for tool-call input', () => {
     const result = convertMastraChunkToAISDKv5({
       chunk: {
         type: 'tool-call',
@@ -17,9 +17,9 @@ describe('tool payload projection conversion', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               display: {
-                'input-available': { projected: { customerId: 'cus_123' } },
+                'input-available': { transformed: { customerId: 'cus_123' } },
               },
             },
           },
@@ -30,7 +30,7 @@ describe('tool payload projection conversion', () => {
     expect(result.input).toEqual({ customerId: 'cus_123' });
   });
 
-  it('uses separate display projections for tool-result input and output', () => {
+  it('uses separate display transforms for tool-result input and output', () => {
     const result = convertMastraChunkToAISDKv5({
       chunk: {
         type: 'tool-result',
@@ -44,10 +44,10 @@ describe('tool payload projection conversion', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               display: {
-                'input-available': { projected: { customerId: 'cus_123' } },
-                'output-available': { projected: { displayName: 'Acme' } },
+                'input-available': { transformed: { customerId: 'cus_123' } },
+                'output-available': { transformed: { displayName: 'Acme' } },
               },
             },
           },
@@ -59,7 +59,7 @@ describe('tool payload projection conversion', () => {
     expect(result.output).toEqual({ displayName: 'Acme' });
   });
 
-  it('preserves explicit null display projections', () => {
+  it('preserves explicit null display transforms', () => {
     const result = convertMastraChunkToAISDKv5({
       chunk: {
         type: 'tool-result',
@@ -73,10 +73,10 @@ describe('tool payload projection conversion', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               display: {
-                'input-available': { projected: null },
-                'output-available': { projected: null },
+                'input-available': { transformed: null },
+                'output-available': { transformed: null },
               },
             },
           },
@@ -88,7 +88,7 @@ describe('tool payload projection conversion', () => {
     expect(result.output).toBeNull();
   });
 
-  it('suppresses projected input deltas marked as unsafe', () => {
+  it('suppresses transformed input deltas marked as unsafe', () => {
     const result = convertMastraChunkToAISDKv5({
       chunk: {
         type: 'tool-call-delta',
@@ -101,7 +101,7 @@ describe('tool payload projection conversion', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               display: {
                 'input-delta': { suppress: true },
               },
@@ -114,7 +114,7 @@ describe('tool payload projection conversion', () => {
     expect(result).toBeUndefined();
   });
 
-  it('uses projected tool errors', () => {
+  it('uses transformed tool errors', () => {
     const result = convertMastraChunkToAISDKv5({
       chunk: {
         type: 'tool-error',
@@ -128,10 +128,10 @@ describe('tool payload projection conversion', () => {
         },
         metadata: {
           mastra: {
-            toolPayloadProjection: {
+            toolPayloadTransform: {
               display: {
-                'input-available': { projected: { customerId: 'cus_123' } },
-                error: { projected: { message: 'Tool failed' } },
+                'input-available': { transformed: { customerId: 'cus_123' } },
+                error: { transformed: { message: 'Tool failed' } },
               },
             },
           },

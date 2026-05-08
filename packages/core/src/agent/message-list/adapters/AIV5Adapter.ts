@@ -2,7 +2,7 @@ import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
-import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
@@ -83,7 +83,7 @@ function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): numbe
   return typeof createdAt === 'number' ? createdAt : undefined;
 }
 
-function getDisplayProjection(
+function getDisplayTransform(
   providerMetadata: unknown,
   phase: 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend',
   fallback: unknown,
@@ -92,11 +92,11 @@ function getDisplayProjection(
   if (!enabled) {
     return fallback;
   }
-  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
-  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
+  const transform = getTransformedToolPayload(providerMetadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
-function projectToolStateDataForDisplay(data: unknown, phase: 'approval' | 'suspend', enabled = true): unknown {
+function transformToolStateDataForDisplay(data: unknown, phase: 'approval' | 'suspend', enabled = true): unknown {
   if (!enabled) {
     return data;
   }
@@ -106,27 +106,27 @@ function projectToolStateDataForDisplay(data: unknown, phase: 'approval' | 'susp
 
   const stateData = data as Record<string, unknown>;
   const metadata = stateData.metadata ?? stateData.providerMetadata;
-  const argsProjection = getProjectedToolPayload(metadata, 'display', phase);
-  const inputProjection = getProjectedToolPayload(metadata, 'display', 'input-available');
-  const projectedArgs =
+  const argsTransform = getTransformedToolPayload(metadata, 'display', phase);
+  const inputTransform = getTransformedToolPayload(metadata, 'display', 'input-available');
+  const transformedArgs =
     phase === 'approval'
-      ? hasProjectedToolPayload(argsProjection)
-        ? argsProjection.projected
-        : hasProjectedToolPayload(inputProjection)
-          ? inputProjection.projected
+      ? hasTransformedToolPayload(argsTransform)
+        ? argsTransform.transformed
+        : hasTransformedToolPayload(inputTransform)
+          ? inputTransform.transformed
           : undefined
-      : hasProjectedToolPayload(inputProjection)
-        ? inputProjection.projected
-        : hasProjectedToolPayload(argsProjection)
-          ? argsProjection.projected
+      : hasTransformedToolPayload(inputTransform)
+        ? inputTransform.transformed
+        : hasTransformedToolPayload(argsTransform)
+          ? argsTransform.transformed
           : undefined;
-  const projectedSuspendPayload =
-    phase === 'suspend' && hasProjectedToolPayload(argsProjection) ? argsProjection.projected : undefined;
+  const transformedSuspendPayload =
+    phase === 'suspend' && hasTransformedToolPayload(argsTransform) ? argsTransform.transformed : undefined;
 
   return {
     ...stateData,
-    ...(projectedArgs !== undefined ? { args: projectedArgs } : {}),
-    ...(projectedSuspendPayload !== undefined ? { suspendPayload: projectedSuspendPayload } : {}),
+    ...(transformedArgs !== undefined ? { args: transformedArgs } : {}),
+    ...(transformedSuspendPayload !== undefined ? { suspendPayload: transformedSuspendPayload } : {}),
   };
 }
 
@@ -145,8 +145,8 @@ export class AIV5Adapter {
   /**
    * Direct conversion from MastraDBMessage to AIV5 UIMessage
    */
-  static toUIMessage(dbMsg: MastraDBMessage, options?: { projectToolPayloads?: boolean }): AIV5Type.UIMessage {
-    const projectToolPayloads = options?.projectToolPayloads ?? true;
+  static toUIMessage(dbMsg: MastraDBMessage, options?: { transformToolPayloads?: boolean }): AIV5Type.UIMessage {
+    const transformToolPayloads = options?.transformToolPayloads ?? true;
     const parts: AIV5Type.UIMessage['parts'] = [];
     const metadata: Record<string, unknown> = { ...(dbMsg.content.metadata || {}) };
 
@@ -220,12 +220,12 @@ export class AIV5Adapter {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
-              input: getDisplayProjection(part.providerMetadata, 'input-available', inv.args, projectToolPayloads),
-              output: getDisplayProjection(
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              output: getDisplayTransform(
                 part.providerMetadata,
                 'output-available',
-                getDisplayProjection(part.providerMetadata, 'error', inv.result, projectToolPayloads),
-                projectToolPayloads,
+                getDisplayTransform(part.providerMetadata, 'error', inv.result, transformToolPayloads),
+                transformToolPayloads,
               ),
               state: 'output-available',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
@@ -235,12 +235,12 @@ export class AIV5Adapter {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
-              input: getDisplayProjection(part.providerMetadata, 'input-available', inv.args, projectToolPayloads),
-              errorText: getDisplayProjection(
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              errorText: getDisplayTransform(
                 part.providerMetadata,
                 'error',
                 inv.errorText || '',
-                projectToolPayloads,
+                transformToolPayloads,
               ) as string,
               state: 'output-error',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
@@ -250,7 +250,7 @@ export class AIV5Adapter {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
-              input: getDisplayProjection(part.providerMetadata, 'input-available', inv.args, projectToolPayloads),
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
               state: 'input-available',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
@@ -364,10 +364,10 @@ export class AIV5Adapter {
         } else if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
           parts.push({
             ...part,
-            data: projectToolStateDataForDisplay(
+            data: transformToolStateDataForDisplay(
               part.data,
               part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
-              projectToolPayloads,
+              transformToolPayloads,
             ),
           });
         } else {
@@ -423,7 +423,7 @@ export class AIV5Adapter {
 
         insertToolStateDataPart(toolCallId, {
           type: 'data-tool-call-suspended',
-          data: projectToolStateDataForDisplay(suspendedTool, 'suspend', projectToolPayloads),
+          data: transformToolStateDataForDisplay(suspendedTool, 'suspend', transformToolPayloads),
         } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
         existingToolStateDataPartIds.add(toolCallId);
       }
@@ -443,7 +443,7 @@ export class AIV5Adapter {
 
         insertToolStateDataPart(toolCallId, {
           type: 'data-tool-call-approval',
-          data: projectToolStateDataForDisplay(pendingToolApproval, 'approval', projectToolPayloads),
+          data: transformToolStateDataForDisplay(pendingToolApproval, 'approval', transformToolPayloads),
         } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
         existingToolStateDataPartIds.add(toolCallId);
       }

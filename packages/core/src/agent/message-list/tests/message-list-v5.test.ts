@@ -1841,11 +1841,11 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
     });
 
-    it('should apply payload projections to UI and drained transcript without mutating model messages', () => {
+    it('should apply payload transforms to UI and drained transcript without mutating model messages', () => {
       const list = new MessageList({ threadId, resourceId });
 
       const toolResultMessage: MastraDBMessage = {
-        id: 'msg-projected-tool',
+        id: 'msg-transformed-tool',
         role: 'assistant',
         createdAt: new Date(),
         threadId,
@@ -1856,7 +1856,7 @@ describe('MessageList V5 Support', () => {
             {
               type: 'tool-invocation',
               toolInvocation: {
-                toolCallId: 'call-projected',
+                toolCallId: 'call-transformed',
                 toolName: 'lookupCustomer',
                 state: 'result',
                 args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
@@ -1864,14 +1864,14 @@ describe('MessageList V5 Support', () => {
               },
               providerMetadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-available': { projected: { customerId: 'cus_123' } },
-                      'output-available': { projected: { displayName: 'Acme' } },
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      'output-available': { transformed: { displayName: 'Acme' } },
                     },
                     transcript: {
-                      'input-available': { projected: { customerId: 'cus_123' } },
-                      'output-available': { projected: { displayName: 'Acme' } },
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      'output-available': { transformed: { displayName: 'Acme' } },
                     },
                   },
                 },
@@ -1880,7 +1880,7 @@ describe('MessageList V5 Support', () => {
             {
               type: 'tool-invocation',
               toolInvocation: {
-                toolCallId: 'call-projected-error',
+                toolCallId: 'call-transformed-error',
                 toolName: 'lookupCustomer',
                 state: 'output-error',
                 args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
@@ -1888,14 +1888,14 @@ describe('MessageList V5 Support', () => {
               },
               providerMetadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-available': { projected: { customerId: 'cus_123' } },
-                      error: { projected: { message: 'Tool failed' } },
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      error: { transformed: { message: 'Tool failed' } },
                     },
                     transcript: {
-                      'input-available': { projected: { customerId: 'cus_123' } },
-                      error: { projected: { message: 'Tool failed' } },
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                      error: { transformed: { message: 'Tool failed' } },
                     },
                   },
                 },
@@ -1915,28 +1915,28 @@ describe('MessageList V5 Support', () => {
       });
 
       const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
-      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-projected') as any;
+      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-transformed') as any;
       expect(uiToolPart.input).toEqual({ customerId: 'cus_123' });
       expect(uiToolPart.output).toEqual({ displayName: 'Acme' });
-      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-projected-error') as any;
+      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-transformed-error') as any;
       expect(uiErrorToolPart.input).toEqual({ customerId: 'cus_123' });
       expect(uiErrorToolPart.errorText).toEqual({ message: 'Tool failed' });
 
       const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
       const drainedToolPart = drainedParts.find(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected',
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed',
       ) as any;
       expect(drainedToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
       expect(drainedToolPart.toolInvocation.result).toEqual({ displayName: 'Acme' });
       const drainedErrorToolPart = drainedParts.find(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected-error',
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed-error',
       ) as any;
       expect(drainedErrorToolPart.toolInvocation.args).toEqual({ customerId: 'cus_123' });
       expect(drainedErrorToolPart.toolInvocation.errorText).toEqual({ message: 'Tool failed' });
 
       const rawParts = list.get.all.db()[0]!.content.parts!;
       const rawToolPart = rawParts.find(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected',
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed',
       ) as any;
       expect(rawToolPart.toolInvocation.args).toEqual({
         customerId: 'cus_123',
@@ -1944,7 +1944,7 @@ describe('MessageList V5 Support', () => {
       });
       expect(rawToolPart.toolInvocation.result).toEqual({ displayName: 'Acme', apiKey: 'secret-value' });
       const rawErrorToolPart = rawParts.find(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-projected-error',
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-transformed-error',
       ) as any;
       expect(rawErrorToolPart.toolInvocation.args).toEqual({
         customerId: 'cus_123',
@@ -1953,11 +1953,11 @@ describe('MessageList V5 Support', () => {
       expect(rawErrorToolPart.toolInvocation.errorText).toBe('stack with /private/customer.json');
     });
 
-    it('should preserve explicit null payload projections in UI and drained transcript', () => {
+    it('should preserve explicit null payload transforms in UI and drained transcript', () => {
       const list = new MessageList({ threadId, resourceId });
 
       const toolResultMessage: MastraDBMessage = {
-        id: 'msg-null-projected-tool',
+        id: 'msg-null-transformed-tool',
         role: 'assistant',
         createdAt: new Date(),
         threadId,
@@ -1968,7 +1968,7 @@ describe('MessageList V5 Support', () => {
             {
               type: 'tool-invocation',
               toolInvocation: {
-                toolCallId: 'call-null-projected',
+                toolCallId: 'call-null-transformed',
                 toolName: 'lookupCustomer',
                 state: 'result',
                 args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
@@ -1976,14 +1976,14 @@ describe('MessageList V5 Support', () => {
               },
               providerMetadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-available': { projected: null },
-                      'output-available': { projected: null },
+                      'input-available': { transformed: null },
+                      'output-available': { transformed: null },
                     },
                     transcript: {
-                      'input-available': { projected: null },
-                      'output-available': { projected: null },
+                      'input-available': { transformed: null },
+                      'output-available': { transformed: null },
                     },
                   },
                 },
@@ -1992,7 +1992,7 @@ describe('MessageList V5 Support', () => {
             {
               type: 'tool-invocation',
               toolInvocation: {
-                toolCallId: 'call-null-projected-error',
+                toolCallId: 'call-null-transformed-error',
                 toolName: 'lookupCustomer',
                 state: 'output-error',
                 args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
@@ -2000,14 +2000,14 @@ describe('MessageList V5 Support', () => {
               },
               providerMetadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-available': { projected: null },
-                      error: { projected: null },
+                      'input-available': { transformed: null },
+                      error: { transformed: null },
                     },
                     transcript: {
-                      'input-available': { projected: null },
-                      error: { projected: null },
+                      'input-available': { transformed: null },
+                      error: { transformed: null },
                     },
                   },
                 },
@@ -2019,9 +2019,9 @@ describe('MessageList V5 Support', () => {
                 args: { customerId: 'cus_123', internalPath: '/private/customer.json' },
                 metadata: {
                   mastra: {
-                    toolPayloadProjection: {
+                    toolPayloadTransform: {
                       transcript: {
-                        approval: { projected: null },
+                        approval: { transformed: null },
                       },
                     },
                   },
@@ -2035,21 +2035,21 @@ describe('MessageList V5 Support', () => {
       list.add(toolResultMessage, 'response');
 
       const uiToolParts = list.get.all.aiV5.ui()[0]!.parts.filter(part => 'toolCallId' in part) as any[];
-      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-projected') as any;
+      const uiToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-transformed') as any;
       expect(uiToolPart.input).toBeNull();
       expect(uiToolPart.output).toBeNull();
-      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-projected-error') as any;
+      const uiErrorToolPart = uiToolParts.find(part => part.toolCallId === 'call-null-transformed-error') as any;
       expect(uiErrorToolPart.input).toBeNull();
       expect(uiErrorToolPart.errorText).toBeNull();
 
       const drainedParts = list.drainUnsavedMessages()[0]!.content.parts!;
       const drainedToolPart = drainedParts.find(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-projected',
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-transformed',
       ) as any;
       expect(drainedToolPart.toolInvocation.args).toBeNull();
       expect(drainedToolPart.toolInvocation.result).toBeNull();
       const drainedErrorToolPart = drainedParts.find(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-projected-error',
+        part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-null-transformed-error',
       ) as any;
       expect(drainedErrorToolPart.toolInvocation.args).toBeNull();
       expect(drainedErrorToolPart.toolInvocation.errorText).toBeNull();

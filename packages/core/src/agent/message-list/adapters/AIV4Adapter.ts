@@ -5,7 +5,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
-import { getProjectedToolPayload, hasProjectedToolPayload } from '../../../tools/payload-projection';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { TypeDetector } from '../detection/TypeDetector';
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri, imageContentToString } from '../prompt/image-utils';
@@ -19,7 +19,7 @@ import type {
 } from '../state/types';
 import { findToolCallArgs } from '../utils/provider-compat';
 
-function getDisplayProjection(
+function getDisplayTransform(
   providerMetadata: unknown,
   phase: 'input-available' | 'output-available' | 'error',
   fallback: unknown,
@@ -28,24 +28,24 @@ function getDisplayProjection(
   if (!enabled) {
     return fallback;
   }
-  const projection = getProjectedToolPayload(providerMetadata, 'display', phase);
-  return hasProjectedToolPayload(projection) ? projection.projected : fallback;
+  const transform = getTransformedToolPayload(providerMetadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
-function projectV4ToolInvocationForDisplay(
+function transformV4ToolInvocationForDisplay(
   invocation: NonNullable<MastraMessageContentV2['toolInvocations']>[number],
   providerMetadata: unknown,
   enabled: boolean,
 ) {
   return {
     ...invocation,
-    args: getDisplayProjection(providerMetadata, 'input-available', invocation.args, enabled),
+    args: getDisplayTransform(providerMetadata, 'input-available', invocation.args, enabled),
     ...(invocation.state === 'result'
       ? {
-          result: getDisplayProjection(
+          result: getDisplayTransform(
             providerMetadata,
             'output-available',
-            getDisplayProjection(providerMetadata, 'error', invocation.result, enabled),
+            getDisplayTransform(providerMetadata, 'error', invocation.result, enabled),
             enabled,
           ),
         }
@@ -100,8 +100,8 @@ export class AIV4Adapter {
   /**
    * Convert MastraDBMessage to AI SDK V4 UIMessage
    */
-  static toUIMessage(m: MastraDBMessage, options?: { projectToolPayloads?: boolean }): UIMessageWithMetadata {
-    const projectToolPayloads = options?.projectToolPayloads ?? true;
+  static toUIMessage(m: MastraDBMessage, options?: { transformToolPayloads?: boolean }): UIMessageWithMetadata {
+    const transformToolPayloads = options?.transformToolPayloads ?? true;
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]
@@ -153,24 +153,24 @@ export class AIV4Adapter {
           // Handle tool invocations with step number logic
           const toolInvocation = {
             ...part.toolInvocation,
-            args: getDisplayProjection(
+            args: getDisplayTransform(
               part.providerMetadata,
               'input-available',
               part.toolInvocation.args,
-              projectToolPayloads,
+              transformToolPayloads,
             ),
             ...(part.toolInvocation.state === 'result'
               ? {
-                  result: getDisplayProjection(
+                  result: getDisplayTransform(
                     part.providerMetadata,
                     'output-available',
-                    getDisplayProjection(
+                    getDisplayTransform(
                       part.providerMetadata,
                       'error',
                       part.toolInvocation.result,
-                      projectToolPayloads,
+                      transformToolPayloads,
                     ),
-                    projectToolPayloads,
+                    transformToolPayloads,
                   ),
                 }
               : {}),
@@ -252,7 +252,7 @@ export class AIV4Adapter {
                     part =>
                       part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolInvocation.toolCallId,
                   )?.providerMetadata;
-                  return projectV4ToolInvocationForDisplay(toolInvocation, partProviderMetadata, projectToolPayloads);
+                  return transformV4ToolInvocationForDisplay(toolInvocation, partProviderMetadata, transformToolPayloads);
                 })
             : undefined,
       };

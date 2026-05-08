@@ -344,7 +344,7 @@ describe('tool lifecycle', () => {
     });
   });
 
-  it('uses display projections while processing tool stream chunks', async () => {
+  it('uses display transforms while processing tool stream chunks', async () => {
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
@@ -363,9 +363,9 @@ describe('tool lifecycle', () => {
               },
               metadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-available': { projected: { customerId: 'cus_123' } },
+                      'input-available': { transformed: { customerId: 'cus_123' } },
                     },
                   },
                 },
@@ -382,9 +382,9 @@ describe('tool lifecycle', () => {
               },
               metadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'output-available': { projected: { displayName: 'Acme' } },
+                      'output-available': { transformed: { displayName: 'Acme' } },
                     },
                   },
                 },
@@ -415,7 +415,7 @@ describe('tool lifecycle', () => {
     );
   });
 
-  it('preserves explicit null display projections', async () => {
+  it('preserves explicit null display transforms', async () => {
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
@@ -434,9 +434,9 @@ describe('tool lifecycle', () => {
               },
               metadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-delta': { projected: null },
+                      'input-delta': { transformed: null },
                     },
                   },
                 },
@@ -453,9 +453,9 @@ describe('tool lifecycle', () => {
               },
               metadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'input-available': { projected: null },
+                      'input-available': { transformed: null },
                     },
                   },
                 },
@@ -472,9 +472,9 @@ describe('tool lifecycle', () => {
               },
               metadata: {
                 mastra: {
-                  toolPayloadProjection: {
+                  toolPayloadTransform: {
                     display: {
-                      'output-available': { projected: null },
+                      'output-available': { transformed: null },
                     },
                   },
                 },

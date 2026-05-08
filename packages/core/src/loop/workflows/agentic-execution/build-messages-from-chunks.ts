@@ -11,7 +11,7 @@ import type {
   ToolCallPayload,
   ToolResultPayload,
 } from '../../../stream/types';
-import { withToolPayloadProjectionProviderMetadata } from '../../../tools/payload-projection';
+import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
@@ -61,7 +61,7 @@ export function buildMessagesFromChunks({
       toolResults.set(p.toolCallId, {
         result: p.result,
         args: p.args,
-        providerMetadata: withToolPayloadProjectionProviderMetadata(p.providerMetadata, chunk.metadata),
+        providerMetadata: withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata),
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
       });
@@ -236,7 +236,7 @@ export function buildMessagesFromChunks({
         const p = chunk.payload as ToolCallPayload;
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
-        const providerMetadata = withToolPayloadProjectionProviderMetadata(p.providerMetadata, chunk.metadata);
+        const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
 
         // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);

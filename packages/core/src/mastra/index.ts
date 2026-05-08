@@ -43,7 +43,8 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
-import type { ToolAction, ToolPayloadProjectionPolicy } from '../tools';
+import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
+import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
@@ -442,10 +443,10 @@ export interface Config<
    */
   environment?: string;
   /**
-   * Optional central projection policy for tool payloads before they are
+   * Optional central transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.
    */
-  toolPayloadProjection?: ToolPayloadProjectionPolicy;
+  transform?: ToolPayloadTransformPolicy;
 }
 
 /**
@@ -538,7 +539,7 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
-  #toolPayloadProjection?: ToolPayloadProjectionPolicy;
+  #toolPayloadTransform?: ToolPayloadTransformPolicy;
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -669,8 +670,8 @@ export class Mastra<
     return this.#environment;
   }
 
-  public getToolPayloadProjection(): ToolPayloadProjectionPolicy | undefined {
-    return this.#toolPayloadProjection;
+  public getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
   }
 
   /**
@@ -862,7 +863,9 @@ export class Mastra<
     // Resolve deployment environment: explicit config wins, else fall back to
     // NODE_ENV. Leave undefined if neither is set rather than guessing.
     this.#environment = config?.environment ?? process.env.NODE_ENV;
-    this.#toolPayloadProjection = config?.toolPayloadProjection;
+    this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
+      config?.transform ?? (config as any)?.toolPayloadProjection,
+    );
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;

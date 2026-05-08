@@ -8,7 +8,7 @@ import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { ToolPayloadProjectionPolicy } from '../../../tools';
+import type { ToolPayloadTransformPolicy } from '../../../tools';
 import { createWorkflow } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -46,7 +46,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
-  toolPayloadProjection?: ToolPayloadProjectionPolicy;
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   /**
    * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
    * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
@@ -78,7 +78,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
-  toolPayloadProjection,
+  toolPayloadTransform,
   skipBgTaskWait,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
@@ -127,7 +127,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     workspace,
     backgroundTaskManager,
     agentBackgroundConfig,
-    toolPayloadProjection,
+    toolPayloadTransform,
     skipBgTaskWait,
   });
 

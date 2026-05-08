@@ -34,10 +34,10 @@ import type {
 } from '../../../stream/types';
 import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
 import {
-  projectToolPayloadForTargets,
-  withToolPayloadProjectionMetadata,
-  withToolPayloadProjectionProviderMetadata,
-} from '../../../tools/payload-projection';
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
@@ -96,10 +96,10 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
-  toolPayloadProjection?: NonNullable<OuterLLMRun['_internal']>['toolPayloadProjection'];
+  toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
 };
 
-async function addToolPayloadProjectionToChunk<OUTPUT>(
+async function addToolPayloadTransformToChunk<OUTPUT>(
   chunk: ChunkType<OUTPUT>,
   {
     tools,
@@ -107,7 +107,7 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
     logger,
   }: {
     tools?: ToolSet;
-    policy?: NonNullable<OuterLLMRun['_internal']>['toolPayloadProjection'];
+    policy?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
     logger?: IMastraLogger;
   },
 ): Promise<ChunkType<OUTPUT>> {
@@ -128,12 +128,12 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
     Object.values(tools || {}).find((candidate: any) => `id` in candidate && candidate.id === toolName);
   const source = {
     policy,
-    toolProjection: (tool as { transform?: unknown } | undefined)?.transform as any,
+    toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
   };
-  let projection;
+  let transform;
 
   if (chunk.type === 'tool-call') {
-    projection = await projectToolPayloadForTargets(
+    transform = await transformToolPayloadForTargets(
       {
         phase: 'input-available',
         toolName,
@@ -145,7 +145,7 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
       logger,
     );
   } else if (chunk.type === 'tool-call-delta') {
-    projection = await projectToolPayloadForTargets(
+    transform = await transformToolPayloadForTargets(
       {
         phase: 'input-delta',
         toolName,
@@ -157,9 +157,9 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
       logger,
     );
   } else if (chunk.type === 'tool-result') {
-    chunk = withToolPayloadProjectionMetadata(
+    chunk = withToolPayloadTransformMetadata(
       chunk,
-      await projectToolPayloadForTargets(
+      await transformToolPayloadForTargets(
         {
           phase: 'input-available',
           toolName,
@@ -171,7 +171,7 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
         logger,
       ),
     );
-    projection = await projectToolPayloadForTargets(
+    transform = await transformToolPayloadForTargets(
       {
         phase: 'output-available',
         toolName,
@@ -184,9 +184,9 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
       logger,
     );
   } else if (chunk.type === 'tool-error') {
-    chunk = withToolPayloadProjectionMetadata(
+    chunk = withToolPayloadTransformMetadata(
       chunk,
-      await projectToolPayloadForTargets(
+      await transformToolPayloadForTargets(
         {
           phase: 'input-available',
           toolName,
@@ -198,7 +198,7 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
         logger,
       ),
     );
-    projection = await projectToolPayloadForTargets(
+    transform = await transformToolPayloadForTargets(
       {
         phase: 'error',
         toolName,
@@ -212,7 +212,7 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
     );
   }
 
-  return withToolPayloadProjectionMetadata(chunk, projection);
+  return withToolPayloadTransformMetadata(chunk, transform);
 }
 
 function buildResponseModelMetadata(
@@ -307,7 +307,7 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
-  toolPayloadProjection,
+  toolPayloadTransform,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -338,9 +338,9 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    chunk = await addToolPayloadProjectionToChunk(chunk, {
+    chunk = await addToolPayloadTransformToChunk(chunk, {
       tools,
-      policy: toolPayloadProjection,
+      policy: toolPayloadTransform,
       logger,
     });
 
@@ -467,7 +467,7 @@ async function processOutputStream<OUTPUT = undefined>({
               args: chunk.payload.args,
               result: chunk.payload.result,
             },
-            providerMetadata: withToolPayloadProjectionProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
+            providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
@@ -1120,7 +1120,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger,
               transportRef: _internal?.transportRef,
               transportResolver,
-              toolPayloadProjection: _internal?.toolPayloadProjection,
+              toolPayloadTransform: _internal?.toolPayloadTransform,
             });
 
             // Build messages from the full chunk sequence and add to messageList.

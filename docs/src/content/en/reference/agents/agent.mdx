@@ -157,11 +157,11 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description: 'Tools that the agent can access. Can be provided statically or resolved dynamically.',
   },
   {
-    name: 'toolPayloadProjection',
-    type: 'ToolPayloadProjectionPolicy',
+    name: 'transform',
+    type: 'ToolPayloadTransformPolicy',
     isOptional: true,
     description:
-      'Shared policy for projecting tool payloads before display streams or user-visible transcript messages receive them. Use per-tool `transform` on `createTool()` for tool-local rules.',
+      'Shared policy for transforming tool payloads before display streams or user-visible transcript messages receive them. Use per-tool `transform` on `createTool()` for tool-local rules.',
   },
   {
     name: 'workflows',
