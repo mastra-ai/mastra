@@ -4,9 +4,9 @@ import z from 'zod';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
-import type { WorkflowRunState } from '../workflows';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { createTool } from '../tools';
+import type { WorkflowRunState } from '../workflows';
 
 import { Harness } from './harness';
 
