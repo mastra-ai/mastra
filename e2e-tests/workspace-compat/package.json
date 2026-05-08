@@ -9,7 +9,7 @@
   "devDependencies": {
     "execa": "^9.6.1",
     "get-port": "^7.1.0",
-    "globby": "^14.1.0",
+    "tinyglobby": "^0.2.16",
     "typescript": "catalog:",
     "verdaccio": "^6.3.2",
     "verdaccio-auth-memory": "^10.3.1",

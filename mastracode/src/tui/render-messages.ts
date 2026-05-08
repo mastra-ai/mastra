@@ -5,8 +5,8 @@
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
-import { parseSubagentMeta } from '@mastra/core/harness';
+import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
+import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
@@ -19,7 +19,7 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
-import { formatToolResult } from './handlers/tool.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
@@ -35,7 +35,7 @@ export { formatToolResult };
  */
 export function renderCompletedTasksInline(
   state: TUIState,
-  tasks: TaskItem[],
+  tasks: TaskItemSnapshot[],
   insertIndex = -1,
   collapsed = false,
 ): void {
@@ -76,7 +76,7 @@ export function renderCompletedTasksInline(
 /**
  * Render inline display when tasks are cleared.
  */
-export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem[], insertIndex = -1): void {
+export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
   const container = new Container();
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
@@ -93,6 +93,31 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   } else {
     state.chatContainer.addChild(container);
   }
+}
+
+function renderTaskTransitionFromHistory(
+  state: TUIState,
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
+  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
+
+  if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
+    if (!wasAllCompleted) {
+      renderCompletedTasksInline(state, nextTasks, -1, state.quietMode);
+    }
+    return { tasks: nextTasks, replacedWithInline: true };
+  }
+
+  if (nextTasks.length === 0) {
+    if (previousTasks.length > 0) {
+      renderClearedTasksInline(state, previousTasks);
+      return { tasks: [], replacedWithInline: true };
+    }
+    return { tasks: [], replacedWithInline: false };
+  }
+
+  return { tasks: nextTasks, replacedWithInline: true };
 }
 
 // =============================================================================
@@ -239,6 +264,106 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   }
 }
 
+function getTaskResultTasks(result: unknown): TaskItemInput[] | undefined {
+  if (typeof result !== 'object' || result === null || !('tasks' in result)) return undefined;
+  const tasks = (result as { tasks?: unknown }).tasks;
+  return Array.isArray(tasks) ? (tasks as TaskItemInput[]) : undefined;
+}
+
+function areTasksEqual(left: readonly TaskItemSnapshot[] | undefined, right: readonly TaskItemSnapshot[]): boolean {
+  if (!left || left.length !== right.length) return false;
+  return left.every((task, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      task.id === other.id &&
+      task.content === other.content &&
+      task.status === other.status &&
+      task.activeForm === other.activeForm
+    );
+  });
+}
+
+function applyTaskPatchFallback(
+  tasks: TaskItemSnapshot[],
+  args: unknown,
+  status?: TaskItemSnapshot['status'],
+): TaskItemSnapshot[] {
+  if (
+    typeof args !== 'object' ||
+    args === null ||
+    !('id' in args) ||
+    typeof (args as { id?: unknown }).id !== 'string'
+  ) {
+    return tasks;
+  }
+
+  const patch = args as { id: string; content?: string; status?: TaskItemSnapshot['status']; activeForm?: string };
+  return tasks.map(task => (task.id === patch.id ? { ...task, ...patch, ...(status ? { status } : {}) } : task));
+}
+
+function applyTaskToolResult(
+  tasks: TaskItemSnapshot[],
+  toolName: string,
+  args: unknown,
+  result: unknown,
+  isError: boolean,
+): TaskItemSnapshot[] {
+  if (isError) return tasks;
+
+  if (toolName === 'task_write') {
+    const resultTasks = getTaskResultTasks(result);
+    const inputTasks = (args as { tasks?: TaskItemInput[] } | undefined)?.tasks;
+    const rawTasks = resultTasks ?? inputTasks;
+    const nextTasks = rawTasks ? assignTaskIds(rawTasks, tasks) : undefined;
+    return nextTasks ? [...nextTasks] : [];
+  }
+
+  if (toolName === 'task_update' || toolName === 'task_complete') {
+    const resultTasks = getTaskResultTasks(result);
+    // Current task patch tools return structured task snapshots. Keep this
+    // fallback only for early persisted histories created before that snapshot
+    // field existed.
+    return resultTasks
+      ? assignTaskIds(resultTasks, tasks)
+      : applyTaskPatchFallback(tasks, args, toolName === 'task_complete' ? 'completed' : undefined);
+  }
+
+  if (toolName === 'task_check') {
+    const resultTasks = getTaskResultTasks(result);
+    return resultTasks ? assignTaskIds(resultTasks, tasks) : tasks;
+  }
+
+  return tasks;
+}
+
+function replayTaskState(messages: HarnessMessage[]): TaskItemSnapshot[] {
+  let tasks: TaskItemSnapshot[] = [];
+
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+
+    for (const content of message.content) {
+      if (content.type !== 'tool_call') continue;
+      if (
+        content.name !== 'task_write' &&
+        content.name !== 'task_update' &&
+        content.name !== 'task_complete' &&
+        content.name !== 'task_check'
+      ) {
+        continue;
+      }
+
+      const toolResult = message.content.find(c => c.type === 'tool_result' && c.id === content.id);
+      if (toolResult?.type !== 'tool_result') continue;
+
+      tasks = applyTaskToolResult(tasks, content.name, content.args, toolResult.result, toolResult.isError);
+    }
+  }
+
+  return tasks;
+}
+
 // =============================================================================
 // renderExistingMessages
 // =============================================================================
@@ -248,18 +373,23 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: 40 });
+  const allMessages = await state.harness.listMessages();
+  const messages = allMessages.slice(-40);
+  const messagesBeforeVisibleWindow = allMessages.slice(0, Math.max(0, allMessages.length - messages.length));
 
   state.chatContainer.clear();
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
   state.allShellComponents = [];
 
-  // Local accumulator for detecting task clears during history reconstruction
-  let previousTasksAcc: TaskItem[] = [];
+  // Local accumulator for detecting task clears during visible history reconstruction.
+  // Seed it from the full prior history so long threads keep task state even when
+  // the original task_write is outside the rendered message window.
+  let previousTasksAcc = replayTaskState(messagesBeforeVisibleWindow);
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -381,25 +511,30 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             );
           }
 
-          // If this was task_write with all completed or cleared, show inline instead of tool component
+          // Successful task transition tools render through the pinned task UI,
+          // not as regular tool result boxes.
           let replacedWithInline = false;
-          if (content.name === 'task_write' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-            const args = content.args as { tasks?: TaskItem[] } | undefined;
-            const tasks = args?.tasks;
-            if (tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed')) {
-              renderCompletedTasksInline(state, tasks);
-              replacedWithInline = true;
-            } else if (!tasks || tasks.length === 0) {
-              // Tasks were cleared - show with previous tasks if we have them
-              if (previousTasksAcc.length > 0) {
-                renderClearedTasksInline(state, previousTasksAcc);
-                previousTasksAcc = [];
-                replacedWithInline = true;
-              }
-            } else {
-              // Track for detecting clears
-              previousTasksAcc = [...tasks];
-            }
+          if (isTaskMutationTool(content.name) && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            const nextTasks = applyTaskToolResult(
+              previousTasksAcc,
+              content.name,
+              content.args,
+              toolResult.result,
+              toolResult.isError,
+            );
+            const transition = renderTaskTransitionFromHistory(state, previousTasksAcc, nextTasks);
+            previousTasksAcc = transition.tasks;
+            replacedWithInline = transition.replacedWithInline;
+          }
+
+          if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            previousTasksAcc = applyTaskToolResult(
+              previousTasksAcc,
+              content.name,
+              content.args,
+              toolResult.result,
+              toolResult.isError,
+            );
           }
 
           // If this was submit_plan, show the plan with approval status
@@ -507,10 +642,26 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     }
   }
 
-  // Restore pinned task list from the last active task_write in history
-  if (previousTasksAcc.length > 0 && state.taskProgress) {
+  // Restore or clear the pinned task list from history replay.
+  if (state.taskProgress) {
     state.taskProgress.updateTasks(previousTasksAcc);
   }
+  const currentTasks =
+    typeof state.harness.getState === 'function'
+      ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
+      : undefined;
+  if (!areTasksEqual(currentTasks, previousTasksAcc)) {
+    try {
+      await state.harness.setState({ tasks: previousTasksAcc });
+    } catch {
+      // Custom harness state schemas may not accept TUI replayed task state.
+      // Keep the reconstructed task list local to display state in that case.
+    }
+  }
+  const harnessWithReplayTasks = state.harness as typeof state.harness & {
+    restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
+  };
+  harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
 
   state.ui.requestRender();
 }

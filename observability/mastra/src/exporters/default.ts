@@ -7,6 +7,9 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  ObservabilityDropEvent,
+  ObservabilityDropReason,
+  ObservabilityDropSignal,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import type { ObservabilityStorage, TracingStorageStrategy, MastraCompositeStore } from '@mastra/core/storage';
@@ -78,9 +81,10 @@ export class DefaultExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
-  #unsupportedSignals: Set<string> = new Set();
+  #unsupportedSignals: Set<ObservabilityDropSignal> = new Set();
 
   constructor(config: DefaultExporterConfig = {}) {
     super(config);
@@ -105,6 +109,7 @@ export class DefaultExporter extends BaseExporter {
   async init(options: InitExporterOptions): Promise<void> {
     try {
       this.#isInitializing = true;
+      this.#emitDropEvent = options.emitDropEvent;
 
       this.#storage = options.mastra?.getStorage();
       if (!this.#storage) {
@@ -211,17 +216,60 @@ export class DefaultExporter extends BaseExporter {
     }
   }
 
+  private sanitizeDropError(error: unknown): ObservabilityDropEvent['error'] {
+    if (error instanceof MastraError) {
+      return {
+        id: error.id,
+        domain: String(error.domain),
+        message: error.message,
+      };
+    }
+
+    if (error instanceof Error) {
+      return { message: error.message };
+    }
+
+    return { message: String(error) };
+  }
+
+  private emitDrop(
+    signal: ObservabilityDropSignal,
+    reason: ObservabilityDropReason,
+    count: number,
+    error?: unknown,
+  ): void {
+    if (count === 0) return;
+
+    const dropEvent: ObservabilityDropEvent = {
+      type: 'drop',
+      signal,
+      reason,
+      count,
+      timestamp: new Date(),
+      exporterName: this.name,
+      ...(this.#observabilityStorage ? { storageName: this.#observabilityStorage.constructor.name } : {}),
+      ...(error === undefined ? {} : { error: this.sanitizeDropError(error) }),
+    };
+
+    this.#emitDropEvent?.(dropEvent);
+  }
+
   /**
    * Flush a batch of create events for a single signal type.
    * On "not implemented" errors, disables the signal for future flushes.
    * On other errors, re-adds events to the buffer for retry.
    */
   private async flushCreates<T extends BufferedEvent>(
-    signal: string,
+    signal: ObservabilityDropSignal,
     events: T[],
     storageCall: (events: T[]) => Promise<void>,
   ): Promise<void> {
-    if (this.#unsupportedSignals.has(signal) || events.length === 0) return;
+    if (events.length === 0) return;
+    if (this.#unsupportedSignals.has(signal)) {
+      this.emitDrop(signal, 'unsupported-storage', events.length);
+      return;
+    }
+
     try {
       await storageCall(events);
     } catch (error) {
@@ -232,8 +280,10 @@ export class DefaultExporter extends BaseExporter {
       ) {
         this.logger.warn(error.message);
         this.#unsupportedSignals.add(signal);
+        this.emitDrop(signal, 'unsupported-storage', events.length, error);
       } else {
-        this.#eventBuffer.reAddCreates(events);
+        const dropped = this.#eventBuffer.reAddCreates(events);
+        this.emitDrop(signal, 'retry-exhausted', dropped.length, error);
       }
     }
   }
@@ -247,7 +297,12 @@ export class DefaultExporter extends BaseExporter {
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
   ): Promise<void> {
-    if (this.#unsupportedSignals.has('tracing') || events.length === 0) return;
+    const deferredCountAtEntry = deferredUpdates.length;
+    if (events.length === 0) return;
+    if (this.#unsupportedSignals.has('tracing')) {
+      this.emitDrop('tracing', 'unsupported-storage', events.length);
+      return;
+    }
 
     const partials: UpdateSpanPartial[] = [];
     for (const event of events) {
@@ -278,10 +333,13 @@ export class DefaultExporter extends BaseExporter {
       ) {
         this.logger.warn(error.message);
         this.#unsupportedSignals.add('tracing');
+        deferredUpdates.length = 0;
+        this.emitDrop('tracing', 'unsupported-storage', events.length + deferredCountAtEntry, error);
       } else {
         // Clear deferred to avoid double-adding — re-add all original events instead
         deferredUpdates.length = 0;
-        this.#eventBuffer.reAddUpdates(events);
+        const dropped = this.#eventBuffer.reAddUpdates(events);
+        this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       }
     }
   }
@@ -367,13 +425,13 @@ export class DefaultExporter extends BaseExporter {
       this.flushCreates('feedback', createFeedbackEvents, events =>
         this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
       ),
-      this.flushCreates('logs', createLogEvents, events =>
+      this.flushCreates('log', createLogEvents, events =>
         this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
       ),
-      this.flushCreates('metrics', createMetricEvents, events =>
+      this.flushCreates('metric', createMetricEvents, events =>
         this.#observabilityStorage!.batchCreateMetrics({ metrics: events.map(m => buildMetricRecord(m)) }),
       ),
-      this.flushCreates('scores', createScoreEvents, events =>
+      this.flushCreates('score', createScoreEvents, events =>
         this.#observabilityStorage!.batchCreateScores({ scores: events.map(s => buildScoreRecord(s)) }),
       ),
       this.flushCreates('tracing', createSpanEvents, async events => {
@@ -390,7 +448,13 @@ export class DefaultExporter extends BaseExporter {
     await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true);
 
     if (deferredUpdates.length > 0) {
-      this.#eventBuffer.reAddUpdates(deferredUpdates);
+      if (this.#unsupportedSignals.has('tracing')) {
+        this.emitDrop('tracing', 'unsupported-storage', deferredUpdates.length);
+        deferredUpdates.length = 0;
+      } else {
+        const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
+        this.emitDrop('tracing', 'retry-exhausted', dropped.length);
+      }
     }
 
     const elapsed = Date.now() - startTime;
