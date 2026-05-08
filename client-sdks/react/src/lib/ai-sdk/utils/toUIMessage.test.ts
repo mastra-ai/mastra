@@ -3,7 +3,7 @@ import { ChunkFrom } from '@mastra/core/stream';
 import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
-import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import type { MastraExtendedTextPart, MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 
 describe('toUIMessage', () => {
@@ -820,6 +820,71 @@ describe('toUIMessage', () => {
         metadata: baseMetadata,
       });
       expect(result[0].id).toMatch(/^reasoning-run-123/);
+    });
+
+    it('should create separate reasoning parts when interleaved with tool calls and text', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'First thought.',
+              state: 'streaming',
+            },
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+            {
+              type: 'reasoning',
+              text: 'Second thought.',
+              state: 'streaming',
+            },
+            {
+              type: 'text',
+              text: 'Partial answer.',
+              state: 'streaming',
+              textId: 'text-1',
+            } as MastraExtendedTextPart,
+          ],
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: {
+          type: 'reasoning-delta',
+          payload: {
+            id: 'reasoning-1',
+            text: 'Third thought.',
+            providerMetadata: { model: { name: 'o1' } },
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts.map(part => part.type)).toEqual([
+        'reasoning',
+        'dynamic-tool',
+        'reasoning',
+        'text',
+        'reasoning',
+      ]);
+      expect(result[0].parts[0]).toMatchObject({ text: 'First thought.' });
+      expect(result[0].parts[2]).toMatchObject({ text: 'Second thought.' });
+      expect(result[0].parts[4]).toMatchObject({
+        type: 'reasoning',
+        text: 'Third thought.',
+        state: 'streaming',
+        providerMetadata: { model: { name: 'o1' } },
+      });
     });
   });
 

@@ -13,6 +13,7 @@ Learn more in the [documentation](https://code.mastra.ai/) and [announcement pos
 - **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
 - **Persistent conversations**: Threads are saved per-project and resume automatically
 - **Coding tools**: View files, edit code, run shell commands
+- **Goals**: Pursue longer-running objectives with configurable judge models and goal-enabled commands/skills
 - **Plan persistence**: Approved plans are saved as markdown files for future reference
 - **Token tracking**: Monitor usage with persistent token counts per thread
 - **Beautiful TUI**: Polished terminal interface with streaming responses
@@ -89,6 +90,8 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/subagents`        | Configure subagent model defaults                                           |
 | `/om`               | Configure Observational Memory models                                       |
 | `/think`            | Set thinking level (Anthropic)                                              |
+| `/judge`            | Configure the default judge model and max attempts for goals                |
+| `/goal`             | Start or manage an autonomous goal                                          |
 | `/skills`           | List available skills                                                       |
 | `/diff`             | Show modified files or git diff                                             |
 | `/name`             | Rename current thread                                                       |
@@ -107,6 +110,48 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |
 | `/exit`             | Exit the TUI                                                                |
+
+### Goals
+
+Use `/goal <objective>` to have Mastra Code keep working toward an objective across turns. Goals use a judge model to decide whether the goal is complete, should continue, or should wait for an explicit user checkpoint. Configure defaults with `/judge`.
+
+Goal objectives can span multiple lines:
+
+```text
+/goal Fix the failing release checks
+and open a PR when everything passes.
+```
+
+When a plan is submitted with `submit_plan`, the inline approval UI also includes **Use as /goal**. That saves/approves the plan and starts a goal using the plan text as the objective.
+
+Custom slash commands can opt into goal mode with top-level frontmatter:
+
+```md
+---
+name: pr-triage
+description: Triage open PRs
+goal: true
+---
+
+Inspect every open PR before pair-reviewing candidates.
+```
+
+Run goal-enabled commands with `/goal/<command-name>`. The processed command content becomes the goal objective, so `$ARGUMENTS` and other command template features still apply.
+
+Skills can opt into goal mode with skill metadata:
+
+```md
+---
+name: review-prs
+description: Review pull requests
+metadata:
+  goal: true
+---
+
+Review PRs until all relevant candidates have been categorized.
+```
+
+Run goal-enabled skills with `/goal/<skill-name>`. Skill instructions become the goal objective; any extra arguments are included as context.
 
 ### Keyboard shortcuts
 
@@ -179,7 +224,7 @@ export MASTRACODE_DISABLE_CAFFEINATE=1
 
 ### Plan persistence
 
-When you approve a plan (via `submit_plan`), it is saved as a markdown file in the app data directory:
+When you approve a plan (via `submit_plan`) or choose **Use as /goal** from the inline plan approval UI, it is saved as a markdown file in the app data directory:
 
 - **macOS**: `~/Library/Application Support/mastracode/plans/<resourceId>/`
 - **Linux**: `~/.local/share/mastracode/plans/<resourceId>/`

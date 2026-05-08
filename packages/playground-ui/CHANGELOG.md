@@ -1,5 +1,73 @@
 # @mastra/playground-ui
 
+## 27.0.0-alpha.6
+
+### Patch Changes
+
+- Fixed Studio streaming render behavior for interleaved reasoning and improved chat autoscroll during rapid output. ([#16331](https://github.com/mastra-ai/mastra/pull/16331))
+
+- Updated dependencies [[`b560d6f`](https://github.com/mastra-ai/mastra/commit/b560d6f88b9b904b15c10f75c949eb145bc27684), [`f176145`](https://github.com/mastra-ai/mastra/commit/f1761458eaa602f59c5499bd0855ae7a5fd9baf3), [`d416efd`](https://github.com/mastra-ai/mastra/commit/d416efdee26c1755328e21cc62584f8566e21432), [`36b3bbf`](https://github.com/mastra-ai/mastra/commit/36b3bbf5a8d59f7e23d47e29340e76c681b4929c), [`b275631`](https://github.com/mastra-ai/mastra/commit/b275631dc10541a482b2e2d4a3e3cfa843bd5fa1)]:
+  - @mastra/core@1.33.0-alpha.6
+  - @mastra/react@0.2.36-alpha.6
+  - @mastra/client-js@1.18.0-alpha.6
+
+## 27.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962)]:
+  - @mastra/core@1.33.0-alpha.5
+  - @mastra/client-js@1.18.0-alpha.5
+  - @mastra/react@0.2.36-alpha.5
+
+## 27.0.0-alpha.4
+
+### Minor Changes
+
+- Added opt-in interactivity and per-page filter persistence support for observability UI components. ([#15747](https://github.com/mastra-ai/mastra/pull/15747))
+  - `MetricsLineChart` accepts an `onPointClick` callback so chart points can drive drilldowns.
+  - `HorizontalBars` accepts row-level and segment-level hrefs for linked metric bars without nested anchors.
+  - `MetricsDataTable` accepts `getRowHref(row)` for linked rows with consistent hover and focus styling.
+  - `MetricsCard` exposes an `Actions` slot in the top bar for contextual icon links.
+  - Observability filter helpers for Metrics, Traces, and Logs each keep their own saved-filters storage key so pages remember filters independently.
+
+  All additions are optional, so existing consumers continue to render the same way unless they pass the new props.
+
+  ```tsx
+  <MetricsLineChart
+    data={points}
+    series={series}
+    onPointClick={point => navigate(`/observability?dateFrom=${point.from}&dateTo=${point.to}`)}
+  />
+
+  <HorizontalBars data={[{ name: 'agent-a', values: [42, 3], href: '/observability?filterEntityName=agent-a' }]} />
+
+  <MetricsDataTable columns={cols} data={rows} getRowHref={row => `/observability?filterThreadId=${row.threadId}`} />
+
+  <MetricsCard>
+    <MetricsCard.TopBar>
+      <MetricsCard.TitleAndDescription title="Latency" />
+      <MetricsCard.Actions>
+        <IconButton href="/observability" />
+      </MetricsCard.Actions>
+    </MetricsCard.TopBar>
+  </MetricsCard>
+  ```
+
+### Patch Changes
+
+- Fixed three issues on the Logs and Traces pages: ([#16306](https://github.com/mastra-ai/mastra/pull/16306))
+  - Column widths now stay stable while scrolling — they no longer jump as different rows scroll into view.
+  - Scrolling far down the Logs list no longer scrambles rows (duplicates, gaps, or empty rows after additional pages load).
+  - Changing a filter or the date range now scrolls the list back to the top, instead of leaving an empty band above the new data until you nudge the scroll. Logs and Traces now behave the same way on filter changes.
+
+- Added `NoTracesInfo` component that informs the user there are no traces for the active date range. ([#16303](https://github.com/mastra-ai/mastra/pull/16303))
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a)]:
+  - @mastra/core@1.33.0-alpha.4
+  - @mastra/client-js@1.18.0-alpha.4
+  - @mastra/react@0.2.36-alpha.4
+
 ## 26.1.0-alpha.3
 
 ### Patch Changes

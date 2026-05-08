@@ -3,6 +3,7 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
@@ -1137,6 +1138,75 @@ describe('PIIDetector', () => {
 
       const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages); // Should return original messages on failure
+    });
+  });
+
+  describe('structured output schema compatibility', () => {
+    it('should not send number bounds to Anthropic in score or confidence schemas', async () => {
+      const mockResult = createMockPIIResult();
+      const mockModel = new MastraLanguageModelV2Mock({
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify(mockResult) }],
+          warnings: [],
+        }),
+      });
+
+      const detector = new PIIDetector({ model: mockModel });
+
+      await detector.processInput({ messages: [createTestMessage('Hello world')], abort: vi.fn() as any });
+
+      const responseFormat = mockModel.doGenerateCalls[0].responseFormat;
+      expect(responseFormat?.type).toBe('json');
+      const schema = responseFormat?.type === 'json' ? responseFormat.schema : undefined;
+      const schemaJson = JSON.stringify(schema);
+      expect(schemaJson).toContain('score');
+      expect(schemaJson).toContain('confidence');
+      expect(schemaJson).not.toContain('minimum');
+      expect(schemaJson).not.toContain('maximum');
+    });
+
+    it('should reject scores outside the 0-1 range at runtime', async () => {
+      const model = setupMockModel({
+        categories: [{ type: 'email', score: 1.2 }],
+        detections: null,
+      });
+      const detector = new PIIDetector({ model, strategy: 'warn', threshold: 1.1 });
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await detector.processInput({
+        messages: [createTestMessage('Hello world')],
+        abort: vi.fn() as any,
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PIIDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should reject confidence values outside the 0-1 range at runtime', async () => {
+      const model = setupMockModel({
+        categories: null,
+        detections: [{ type: 'email', value: 'test@example.com', confidence: -0.2, start: 0, end: 16 }],
+      });
+      const detector = new PIIDetector({ model, strategy: 'warn', threshold: 0 });
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await detector.processInput({ messages: [createTestMessage('Hello world')], abort: vi.fn() as any });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PIIDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });
