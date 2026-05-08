@@ -268,6 +268,11 @@ Body content.`;
     expect(createdSkill.id).toBe('my-demo');
     expect(createdSkill.name).toBe('My Demo');
     expect(createdSkill.description).toBe('Demo skill imported from skills.sh');
+    // Frontmatter must be stripped from the agent-facing instructions field;
+    // it's already lifted into name/description columns above. Per the Agent
+    // Skills spec, frontmatter is metadata, not instructions.
+    expect(createdSkill.instructions).toBe('Body content.');
+    expect(createdSkill.instructions).not.toMatch(/^---/);
     expect(createdSkill.metadata).toEqual({
       origin: { type: 'skills-sh', owner: 'a', repo: 'b', skillName: 'demo-skill' },
     });
@@ -304,6 +309,34 @@ Body content.`;
     expect(result.storedSkillId).toBe('plain-skill');
     const createdSkill = skillStore.create.mock.calls[0]![0]!.skill;
     expect(createdSkill.description).toBe('Imported from a/b');
+    // No SKILL.md at all -> instructions falls back to the description so
+    // resolved.snapshot.instructions stays non-empty.
+    expect(createdSkill.instructions).toBe('Imported from a/b');
+  });
+
+  it('preserves SKILL.md body verbatim when there is no frontmatter to strip', async () => {
+    const skillMd = '# Plain Skill\n\nNo frontmatter, just body.';
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        skillId: 'no-frontmatter-skill',
+        owner: 'a',
+        repo: 'b',
+        branch: 'main',
+        files: [{ path: 'SKILL.md', content: skillMd, encoding: 'utf-8' }],
+      }),
+    });
+
+    const skillStore = buildSkillStore();
+    const mastra = buildMastra({ storage: buildStorage(skillStore) });
+
+    await BUILDER_REGISTRY_INSTALL_ROUTE.handler({
+      mastra,
+      ...ctx({ registryId: 'skills-sh', owner: 'a', repo: 'b', skillName: 'no-frontmatter-skill' }),
+    });
+
+    const createdSkill = skillStore.create.mock.calls[0]![0]!.skill;
+    expect(createdSkill.instructions).toBe(skillMd);
   });
 
   it('409s when a skill with the derived id already exists', async () => {

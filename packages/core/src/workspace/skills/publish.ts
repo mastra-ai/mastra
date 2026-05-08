@@ -149,6 +149,61 @@ function collectSubdirPaths(allPaths: string[], subdir: string): string[] {
 // =============================================================================
 
 /**
+ * A flat file entry used by snapshot parsing helpers.
+ * Path is the skill-relative path (e.g. `SKILL.md`, `references/foo.md`).
+ */
+export interface SkillSnapshotFile {
+  path: string;
+  content: string | Buffer;
+}
+
+/**
+ * Parse a flat array of skill files into a denormalized snapshot.
+ *
+ * Finds `SKILL.md`, parses its YAML frontmatter into structured fields
+ * (name, description, license, compatibility, metadata), and uses the
+ * markdown body as `instructions`. Discovers `references/`, `scripts/`,
+ * and `assets/` subdirectory paths from the file list.
+ *
+ * Used by both the publish flow (which has files from a SkillSource walk)
+ * and the registry install flow (which has files fetched from an external
+ * registry like skills.sh). The Agent Skills spec puts metadata in
+ * frontmatter and agent-facing prose in the body — this helper enforces
+ * that split so frontmatter never leaks into the runtime instructions.
+ *
+ * @throws if `SKILL.md` is missing from the file list
+ */
+export function parseSkillSnapshotFromFiles(files: SkillSnapshotFile[]): Omit<StorageSkillSnapshotType, 'tree'> {
+  const skillMdFile = files.find(f => f.path === 'SKILL.md');
+  if (!skillMdFile) {
+    throw new Error('SKILL.md not found in skill files');
+  }
+
+  const skillMdContent =
+    typeof skillMdFile.content === 'string' ? skillMdFile.content : skillMdFile.content.toString('utf-8');
+  const parsed = matter(skillMdContent);
+  const frontmatter = parsed.data;
+  const instructions = parsed.content.trim();
+
+  const allPaths = files.map(f => f.path);
+  const references = collectSubdirPaths(allPaths, 'references');
+  const scripts = collectSubdirPaths(allPaths, 'scripts');
+  const assets = collectSubdirPaths(allPaths, 'assets');
+
+  return {
+    name: frontmatter.name,
+    description: frontmatter.description,
+    instructions,
+    license: frontmatter.license,
+    compatibility: frontmatter.compatibility,
+    metadata: frontmatter.metadata,
+    ...(references.length > 0 ? { references } : {}),
+    ...(scripts.length > 0 ? { scripts } : {}),
+    ...(assets.length > 0 ? { assets } : {}),
+  };
+}
+
+/**
  * Collect a skill from a SkillSource for publishing.
  * Walks the skill directory, hashes all files, parses SKILL.md frontmatter,
  * and returns everything needed to create a new version.
@@ -217,34 +272,17 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   const tree: SkillVersionTree = { entries: treeEntries };
   const blobs = Array.from(blobMap.values());
 
-  // 3. Parse SKILL.md with gray-matter for denormalized fields
-  const skillMdFile = files.find(f => f.path === 'SKILL.md');
-  if (!skillMdFile) {
-    throw new Error(`SKILL.md not found in ${skillPath}`);
+  // 3. Parse SKILL.md frontmatter and discover references/scripts/assets paths
+  let snapshot: Omit<StorageSkillSnapshotType, 'tree'>;
+  try {
+    snapshot = parseSkillSnapshotFromFiles(files);
+  } catch (err) {
+    // Surface the skill path to make the error easier to debug
+    if (err instanceof Error && err.message.includes('SKILL.md not found')) {
+      throw new Error(`SKILL.md not found in ${skillPath}`);
+    }
+    throw err;
   }
-
-  const parsed = matter(skillMdFile.content as string);
-  const frontmatter = parsed.data;
-  const instructions = parsed.content.trim();
-
-  // 4. Discover references/, scripts/, assets/ subdirectories for the path arrays
-  const allPaths = files.map(f => f.path);
-  const references = collectSubdirPaths(allPaths, 'references');
-  const scripts = collectSubdirPaths(allPaths, 'scripts');
-  const assets = collectSubdirPaths(allPaths, 'assets');
-
-  // 5. Build snapshot
-  const snapshot: Omit<StorageSkillSnapshotType, 'tree'> = {
-    name: frontmatter.name,
-    description: frontmatter.description,
-    instructions,
-    license: frontmatter.license,
-    compatibility: frontmatter.compatibility,
-    metadata: frontmatter.metadata,
-    ...(references.length > 0 ? { references } : {}),
-    ...(scripts.length > 0 ? { scripts } : {}),
-    ...(assets.length > 0 ? { assets } : {}),
-  };
 
   return { snapshot, tree, blobs };
 }

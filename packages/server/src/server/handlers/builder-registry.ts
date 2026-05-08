@@ -133,33 +133,57 @@ function buildFileTree(
 }
 
 /**
- * Pull `name` and `description` out of an inline SKILL.md frontmatter block.
- * Returns nulls when the file is missing or has no frontmatter — callers fall
- * back to the registry-provided skillName / a generated description.
+ * Locally-bound SKILL.md frontmatter parser.
+ *
+ * Mirrors `parseSkillSnapshotFromFiles` from `@mastra/core/workspace`, but
+ * inlined here because the server package's `@mastra/core` peer floor
+ * (>=1.32.0) predates that helper. Once the floor is bumped to a release
+ * containing the helper, this can be replaced by the shared core import.
+ *
+ * Only SKILL.md is consulted — frontmatter is split from the body using a
+ * minimal YAML key:value reader sufficient for the fields registries
+ * actually use (name, description). The body is everything after the
+ * second `---` line, trimmed.
  */
-function parseSkillMetadata(files: StorageSkillFileNode[]): {
-  name: string | null;
-  description: string | null;
-} {
-  const skillMd = files.find(f => f.type === 'file' && f.name.toLowerCase() === 'skill.md');
-  if (!skillMd || !skillMd.content) return { name: null, description: null };
+type ParsedSkillSnapshot = {
+  name?: string;
+  description?: string;
+  instructions: string;
+};
 
-  const match = skillMd.content.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (!match) return { name: null, description: null };
+function parseSkillSnapshot(
+  files: Array<{ path: string; content: string; encoding: 'utf-8' | 'base64' }>,
+): ParsedSkillSnapshot | null {
+  const skillMd = files.find(f => f.path === 'SKILL.md');
+  if (!skillMd) return null;
 
-  const frontmatter = match[1]!;
-  const readField = (key: string): string | null => {
-    const re = new RegExp(`^${key}\\s*:\\s*(.+?)\\s*$`, 'm');
-    const m = frontmatter.match(re);
-    if (!m) return null;
-    let value = m[1]!.trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    return value || null;
+  const raw =
+    skillMd.encoding === 'base64' ? Buffer.from(skillMd.content, 'base64').toString('utf-8') : skillMd.content;
+
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!fmMatch) {
+    return { instructions: raw.trim() };
+  }
+
+  const fmBlock = fmMatch[1] ?? '';
+  const body = fmMatch[2] ?? '';
+  const frontmatter: Record<string, string> = {};
+  for (const line of fmBlock.split(/\r?\n/)) {
+    const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    const value = m[2] ?? '';
+    if (!key) continue;
+    // Strip surrounding quotes, leave the rest as-is. Registry SKILL.md
+    // frontmatter is consistently flat string fields in practice.
+    frontmatter[key] = value.trim().replace(/^["'](.*)["']$/, '$1');
+  }
+
+  return {
+    name: frontmatter.name,
+    description: frontmatter.description,
+    instructions: body.trim(),
   };
-
-  return { name: readField('name'), description: readField('description') };
 }
 
 // =============================================================================
@@ -326,10 +350,16 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
 
       const safeSkillId = assertSafeSkillName(result.skillId);
       const files = buildFileTree(result.files);
-      const meta = parseSkillMetadata(files);
 
-      const resolvedName = meta.name ?? safeSkillId;
-      const description = meta.description ?? `Imported from ${owner}/${repo}`;
+      // Parse SKILL.md frontmatter into structured fields. Splitting
+      // frontmatter (name/description) from the markdown body keeps the
+      // body as the agent-facing `instructions` instead of polluting it
+      // with raw YAML metadata. SKILL.md missing or unparseable simply
+      // yields a null snapshot — registry-provided values then fill in.
+      const snapshot = parseSkillSnapshot(result.files);
+
+      const resolvedName = snapshot?.name ?? safeSkillId;
+      const description = snapshot?.description ?? `Imported from ${owner}/${repo}`;
       const id = toSlug(resolvedName) || safeSkillId;
 
       if (!id) {
@@ -352,11 +382,12 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
       const visibility: 'private' | 'public' = authorId ? (bodyVisibility ?? 'private') : 'public';
 
-      // Find a SKILL.md to use as the canonical instructions field; otherwise
-      // fall back to the description so resolved.snapshot.instructions stays
-      // non-empty.
-      const skillMd = files.find(f => f.type === 'file' && f.name.toLowerCase() === 'skill.md');
-      const instructions = skillMd?.content ?? description;
+      // Use the SKILL.md body (post-frontmatter) as instructions. Frontmatter
+      // values are already lifted into structured columns above, so re-storing
+      // them in `instructions` would both duplicate metadata and feed YAML
+      // into the agent's prompt. Fall back to description when no usable body
+      // exists so `resolved.snapshot.instructions` stays non-empty.
+      const instructions = snapshot?.instructions?.trim() ? snapshot.instructions : description;
 
       await skillStore.create({
         skill: {
