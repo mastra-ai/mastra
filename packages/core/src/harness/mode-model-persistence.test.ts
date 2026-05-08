@@ -128,7 +128,7 @@ describe('Harness mode-model persistence across restarts', () => {
     expect(restoreEvent?.previousModeId).toBe('build');
   });
 
-  it('approving a plan switches to the default mode without aborting the suspended plan tool', async () => {
+  it('approving a plan resolves the suspended plan tool before aborting for the mode switch', async () => {
     const session = createHarness(storage);
     await session.init();
     await session.createThread();
@@ -138,16 +138,19 @@ describe('Harness mode-model persistence across restarts', () => {
     (session as unknown as { abortController: AbortController | null }).abortController = controller;
 
     let resolved: { action: 'approved' | 'rejected'; feedback?: string } | undefined;
+    let wasAbortedWhenResolved: boolean | undefined;
     session.registerPlanApproval({
       planId: 'plan-1',
       resolve: result => {
+        wasAbortedWhenResolved = controller.signal.aborted;
         resolved = result;
       },
     });
 
     await session.respondToPlanApproval({ planId: 'plan-1', response: { action: 'approved' } });
 
-    expect(controller.signal.aborted).toBe(false);
+    expect(wasAbortedWhenResolved).toBe(false);
+    expect(controller.signal.aborted).toBe(true);
     expect(session.getCurrentModeId()).toBe('build');
     expect(resolved).toEqual({ action: 'approved' });
   });

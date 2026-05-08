@@ -386,17 +386,15 @@ export class Harness<TState = {}> {
 
   /**
    * Switch to a different mode.
-   * Aborts any in-progress generation by default and switches to the mode's default model.
+   * Aborts any in-progress generation and switches to the mode's default model.
    */
-  async switchMode({ modeId, abortCurrent = true }: { modeId: string; abortCurrent?: boolean }): Promise<void> {
+  async switchMode({ modeId }: { modeId: string }): Promise<void> {
     const mode = this.config.modes.find(m => m.id === modeId);
     if (!mode) {
       throw new Error(`Mode not found: ${modeId}`);
     }
 
-    if (abortCurrent) {
-      this.abort();
-    }
+    this.abort();
 
     // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
@@ -2541,7 +2539,7 @@ export class Harness<TState = {}> {
 
   /**
    * Respond to a pending plan approval.
-   * On approval: switches to the default mode without aborting the suspended plan tool, then resolves the promise.
+   * On approval: resolves the suspended plan tool, then switches to the default mode.
    * On rejection: resolves with feedback (stays in current mode).
    */
   async respondToPlanApproval({
@@ -2554,15 +2552,16 @@ export class Harness<TState = {}> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
+    this.pendingPlanApprovals.delete(planId);
+    resolve(response);
+
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
-        await this.switchMode({ modeId: defaultMode.id, abortCurrent: false });
+        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+        await this.switchMode({ modeId: defaultMode.id });
       }
     }
-
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
   }
 
   private async handleToolApprove({
