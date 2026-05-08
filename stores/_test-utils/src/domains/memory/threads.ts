@@ -84,7 +84,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const resourceId = `tenant-${randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
-        
+
         const result = await memoryStorage.getThreadById({ threadId: id, resourceId });
         expect(result).not.toBeNull();
         expect(result?.id).toBe(id);
@@ -96,7 +96,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const otherResourceId = `tenant-other-${randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
-        
+
         const result = await memoryStorage.getThreadById({ threadId: id, resourceId: otherResourceId });
         expect(result).toBeNull();
       });
@@ -106,7 +106,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const resourceId = `tenant-${randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
-        
+
         const result = await memoryStorage.getThreadById({ threadId: id });
         expect(result).not.toBeNull();
         expect(result?.id).toBe(id);
