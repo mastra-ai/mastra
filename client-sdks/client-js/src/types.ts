@@ -2880,3 +2880,81 @@ export interface InfrastructureStatusResponse {
     };
   };
 }
+
+// ============================================================================
+// Builder registries (skills.sh and other external skill catalogs)
+// ============================================================================
+
+/**
+ * One known skill registry surfaced from the Agent Builder config.
+ */
+export interface BuilderRegistryDescriptor {
+  id: string;
+  enabled: boolean;
+  label: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries`.
+ */
+export interface ListBuilderRegistriesResponse {
+  registries: BuilderRegistryDescriptor[];
+}
+
+/**
+ * Single skill summary returned from a registry search/popular endpoint.
+ * Wire shape matches the upstream skills.sh proxy.
+ */
+export interface BuilderRegistrySkillSummary {
+  id: string;
+  name: string;
+  installs: number;
+  /** Repository identifier in `owner/repo` or `owner/repo/path` form. */
+  topSource: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/search`.
+ */
+export interface BuilderRegistrySearchResponse {
+  query: string;
+  searchType: string;
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/popular`.
+ */
+export interface BuilderRegistryPopularResponse {
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/preview`.
+ */
+export interface BuilderRegistryPreviewResponse {
+  content: string;
+}
+
+/**
+ * Body for `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallBody {
+  owner: string;
+  repo: string;
+  skillName: string;
+  visibility?: 'private' | 'public';
+}
+
+/**
+ * Response from `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallResponse {
+  storedSkillId: string;
+  name: string;
+  filesWritten: number;
+}
