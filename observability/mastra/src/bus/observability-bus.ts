@@ -69,8 +69,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
 
-  private isFlushingHandlerBuffers = false;
-  private emittedDropEventDuringHandlerFlush = false;
+  private handlerBufferFlushDepth = 0;
+  private dropEventsEmittedDuringHandlerFlush = 0;
 
   /** Resolved deepClean options applied to non-tracing events before fan-out. */
   private deepCleanOptions: DeepCleanOptions;
@@ -183,8 +183,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * are intentionally not delivered to generic event-bus subscribers.
    */
   emitDropEvent(event: ObservabilityDropEvent): void {
-    if (this.isFlushingHandlerBuffers) {
-      this.emittedDropEventDuringHandlerFlush = true;
+    if (this.handlerBufferFlushDepth > 0) {
+      this.dropEventsEmittedDuringHandlerFlush++;
     }
 
     for (const exporter of this.exporters) {
@@ -231,8 +231,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   /** Drain exporter and bridge SDK-internal buffers. */
   private async flushHandlerBuffers(): Promise<boolean> {
-    this.emittedDropEventDuringHandlerFlush = false;
-    this.isFlushingHandlerBuffers = true;
+    const initialDropCount = this.dropEventsEmittedDuringHandlerFlush;
+    this.handlerBufferFlushDepth++;
     try {
       const bufferFlushPromises: Promise<void>[] = this.exporters.map(e => e.flush());
       if (this.bridge) {
@@ -241,9 +241,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
       if (bufferFlushPromises.length > 0) {
         await Promise.allSettled(bufferFlushPromises);
       }
-      return this.emittedDropEventDuringHandlerFlush;
+      return this.dropEventsEmittedDuringHandlerFlush > initialDropCount;
     } finally {
-      this.isFlushingHandlerBuffers = false;
+      this.handlerBufferFlushDepth--;
     }
   }
 
