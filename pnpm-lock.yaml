@@ -3441,6 +3441,9 @@ importers:
       '@types/babel__traverse':
         specifier: ^7.28.0
         version: 7.28.0
+      empathic:
+        specifier: ^2.0.0
+        version: 2.0.0
       esbuild:
         specifier: ^0.27.4
         version: 0.27.7
