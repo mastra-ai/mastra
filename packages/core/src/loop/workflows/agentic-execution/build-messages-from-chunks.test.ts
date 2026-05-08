@@ -455,4 +455,85 @@ describe('buildMessagesFromChunks', () => {
     // Verify the configured modelId is preserved in the message metadata
     expect(msgs[0]!.content.metadata).toEqual({ modelId: 'gpt-5.4', provider: 'openai.responses' });
   });
+
+  it('uses transcript transforms for tool input and output', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+        },
+        metadata: {
+          mastra: {
+            toolPayloadTransform: {
+              transcript: {
+                'input-available': { transformed: { customerId: 'cus_123' } },
+              },
+            },
+          },
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+          result: { displayName: 'Acme', apiKey: 'secret-output' },
+        },
+        metadata: {
+          mastra: {
+            toolPayloadTransform: {
+              transcript: {
+                'input-available': { transformed: { customerId: 'cus_123' } },
+                'output-available': { transformed: { displayName: 'Acme' } },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        args: { customerId: 'cus_123' },
+        result: { displayName: 'Acme' },
+      },
+    });
+  });
+
+  it('preserves raw tool payloads when transcript transform metadata is absent', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+          result: { displayName: 'Acme', apiKey: 'secret-output' },
+        },
+      },
+    ]);
+
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+        result: { displayName: 'Acme', apiKey: 'secret-output' },
+      },
+    });
+  });
 });

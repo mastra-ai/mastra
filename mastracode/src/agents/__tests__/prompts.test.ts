@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Keep prompt tests independent from optional web-search package artifacts.
+vi.mock('../../tools/index.js', () => ({
+  hasTavilyKey: () => false,
+}));
+
 import { buildFullPrompt } from '../prompts/index.js';
 
 describe('buildFullPrompt', () => {

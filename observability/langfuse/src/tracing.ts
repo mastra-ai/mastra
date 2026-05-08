@@ -9,7 +9,7 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -146,7 +146,60 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Add a score to a trace via the Langfuse client.
+   * Submit a score to Langfuse. Used by both the new `onScoreEvent` path and the
+   * deprecated `addScoreToTrace` wrapper.
+   */
+  private submitScore(args: {
+    id: string;
+    traceId: string;
+    spanId?: string;
+    name: string;
+    value: number;
+    comment?: string;
+    metadata?: Record<string, unknown>;
+  }): void {
+    if (!this.#client) return;
+
+    const { id, traceId, spanId, name, value, comment, metadata } = args;
+    try {
+      this.#client.score.create({
+        id,
+        traceId,
+        ...(spanId ? { observationId: spanId } : {}),
+        name,
+        value,
+        ...(comment ? { comment } : {}),
+        ...(metadata ? { metadata } : {}),
+        dataType: 'NUMERIC' as const,
+      });
+    } catch (error) {
+      this.logger.error(`${LOG_PREFIX} Error submitting score`, {
+        error,
+        traceId,
+        spanId,
+        name,
+      });
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    const { score } = event;
+    if (!score.traceId) return;
+    this.submitScore({
+      id: score.scoreId,
+      traceId: score.traceId,
+      spanId: score.spanId,
+      name: score.scorerName ?? score.scorerId,
+      value: score.score,
+      comment: score.reason,
+      metadata: score.metadata,
+    });
+  }
+
+  /**
+   * @deprecated Use the observability score event pipeline (`mastra.observability.addScore`)
+   * instead. This method is preserved for backwards compatibility and forwards to the same
+   * underlying client call as `onScoreEvent`.
    */
   async addScoreToTrace({
     traceId,
@@ -163,27 +216,15 @@ export class LangfuseExporter extends BaseExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void> {
-    if (!this.#client) return;
-
-    try {
-      this.#client.score.create({
-        id: `${traceId}-${spanId || ''}-${scorerName}`,
-        traceId,
-        ...(spanId ? { observationId: spanId } : {}),
-        name: scorerName,
-        value: score,
-        ...(reason ? { comment: reason } : {}),
-        ...(metadata ? { metadata } : {}),
-        dataType: 'NUMERIC' as const,
-      });
-    } catch (error) {
-      this.logger.error(`${LOG_PREFIX} Error adding score to trace`, {
-        error,
-        traceId,
-        spanId,
-        scorerName,
-      });
-    }
+    this.submitScore({
+      id: `${traceId}-${spanId || ''}-${scorerName}`,
+      traceId,
+      spanId,
+      name: scorerName,
+      value: score,
+      comment: reason,
+      metadata,
+    });
   }
 
   async flush(): Promise<void> {

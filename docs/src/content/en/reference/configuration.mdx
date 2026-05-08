@@ -293,20 +293,20 @@ This is used internally by Mastra for creating IDs for workflow runs, agent conv
 :::
 
 ```typescript title="src/mastra/index.ts"
+import { v4 as uuid } from '@lukeed/uuid'
 import { Mastra } from '@mastra/core'
-import { nanoid } from 'nanoid'
 
 export const mastra = new Mastra({
   idGenerator: context => {
     if (context?.idType === 'message' && context?.threadId) {
-      return `msg-${context.threadId}-${nanoid(8)}`
+      return `msg-${context.threadId}-${uuid()}`
     }
 
     if (context?.idType === 'run' && context?.source && context?.entityId) {
-      return `${context.source}-run-${context.entityId}-${nanoid(6)}`
+      return `${context.source}-run-${context.entityId}-${uuid()}`
     }
 
-    return nanoid()
+    return uuid()
   },
 })
 ```

@@ -146,6 +146,214 @@ function createInMemoryStorage(): InMemoryMemory {
   return new InMemoryMemory({ db });
 }
 
+describe('ObservationalMemoryProcessor read-only mode', () => {
+  it('loads stored context without starting observation side effects', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'read-only-om-thread';
+    const resourceId = 'read-only-om-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Read-only OM',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'stored-user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Stored read-only context' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId,
+          resourceId,
+        } as any,
+      ],
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 1 },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- User prefers read-only observational context',
+      tokenCount: 8,
+      lastObservedAt: new Date('2025-01-01T08:30:00Z'),
+    });
+
+    const baseMemoryProvider = createMemoryProvider(om);
+    const memoryProvider: MemoryContextProvider = {
+      getContext: vi.fn(async opts => {
+        const ctx = await baseMemoryProvider.getContext(opts);
+        return {
+          ...ctx,
+          systemMessage: `${ctx.systemMessage}\n\nWORKING_MEMORY_SYSTEM_INSTRUCTION:\nCall updateWorkingMemory.`,
+        };
+      }),
+      persistMessages: vi.fn(baseMemoryProvider.persistMessages),
+    };
+
+    const beginTurnSpy = vi.spyOn(om, 'beginTurn');
+    const observeSpy = vi.spyOn(om, 'observe');
+    const bufferSpy = vi.spyOn(om, 'buffer');
+    const persistSpy = vi.spyOn(om, 'persistMessages');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+      memoryConfig: { readOnly: true },
+    });
+
+    const state: Record<string, unknown> = {};
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(memoryProvider.getContext).toHaveBeenCalledTimes(1);
+    expect(memoryProvider.getContext).toHaveBeenCalledWith({ threadId, resourceId });
+    expect(messageList.get.all.db().map(m => m.id)).toContain('stored-user-1');
+    expect(messageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect(
+      messageList
+        .getSystemMessages('observational-memory')
+        .map(m => m.content)
+        .join('\n'),
+    ).toContain('User prefers read-only observational context');
+    expect(
+      messageList
+        .getSystemMessages('observational-memory')
+        .map(m => m.content)
+        .join('\n'),
+    ).not.toContain('updateWorkingMemory');
+
+    expect(state.__omTurn).toBeUndefined();
+    expect(beginTurnSpy).not.toHaveBeenCalled();
+    expect(observeSpy).not.toHaveBeenCalled();
+    expect(bufferSpy).not.toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+    expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
+    expect(emitProgressSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not add observational continuation for non-observation system context', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'read-only-working-memory-thread';
+    const resourceId = 'read-only-working-memory-resource';
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 1 },
+    });
+    const memoryProvider: MemoryContextProvider = {
+      getContext: vi.fn(async () => ({
+        systemMessage: 'Working memory context only',
+        messages: [
+          {
+            ...createTestMessage('Stored working-memory read-only context', 'user', 'stored-user-1'),
+            threadId,
+            resourceId,
+          },
+        ],
+        hasObservations: false,
+        omRecord: null,
+        continuationMessage: undefined,
+        otherThreadsContext: undefined,
+      })),
+      persistMessages: vi.fn(async () => {}),
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+      memoryConfig: { readOnly: true },
+    });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(messageList.get.all.db().map(m => m.id)).toContain('stored-user-1');
+    expect(messageList.get.all.db().map(m => m.id)).not.toContain('om-continuation');
+    expect(messageList.getSystemMessages('observational-memory')).toEqual([]);
+    expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
+  });
+});
+
 function createStreamCapableMockModel(config: Record<string, any>) {
   if (config.doGenerate && !config.doStream) {
     const originalDoGenerate = config.doGenerate;
@@ -5586,7 +5794,7 @@ describe('Locking Behavior', () => {
     expect(updatedRecord!.isReflecting).toBe(false);
   });
 
-  it('should force reflection when activateAfterIdle has expired even below threshold', async () => {
+  it('should not force reflection when activateAfterIdle has expired below threshold', async () => {
     vi.useFakeTimers();
 
     try {
@@ -5657,7 +5865,7 @@ describe('Locking Behavior', () => {
         threadId: 'thread-ttl',
       });
 
-      expect(reflectorCalled).toBe(true);
+      expect(reflectorCalled).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -5667,6 +5875,8 @@ describe('Locking Behavior', () => {
     const setupBufferedReflectionEnv = async (opts: {
       activateAfterIdle?: string | number;
       activateOnProviderChange?: boolean;
+      reflectionActivateAfterIdle?: string | number;
+      reflectionActivateOnProviderChange?: boolean;
       reflectionObservationTokens?: number;
     }) => {
       const storage = createInMemoryStorage();
@@ -5695,6 +5905,8 @@ describe('Locking Behavior', () => {
         reflection: {
           observationTokens: opts.reflectionObservationTokens ?? 40000,
           bufferActivation: 0.5,
+          activateAfterIdle: opts.reflectionActivateAfterIdle,
+          activateOnProviderChange: opts.reflectionActivateOnProviderChange,
           model: mockReflectorModel as any,
         },
         scope: 'thread',
@@ -5777,7 +5989,7 @@ describe('Locking Behavior', () => {
       }
     });
 
-    it('should proceed with TTL activation when unreflected tail is at least the buffered reflection size', async () => {
+    it('should not activate buffered reflection on TTL before the threshold', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
@@ -5830,14 +6042,11 @@ describe('Locking Behavior', () => {
         });
 
         const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
-        expect(afterRecord.bufferedReflection).toBeFalsy();
-        expect(afterRecord.activeObservations).toContain('Condensed reflection');
-        expect(afterRecord.activeObservations).toContain('Tail observation line 1');
-        expect(afterRecord.activeObservations).not.toContain('Reflected line 1');
-        expect(getReflectorCalled()).toBe(false); // activation path, not sync reflection
+        expect(afterRecord.bufferedReflection).toBe(reflection);
+        expect(afterRecord.activeObservations).toBe(activeObservations);
+        expect(getReflectorCalled()).toBe(false);
         const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
-        expect(activationMarkers).toHaveLength(1);
-        expect(activationMarkers[0]?.data?.triggeredBy).toBe('ttl');
+        expect(activationMarkers).toHaveLength(0);
       } finally {
         vi.useRealTimers();
       }
@@ -5908,7 +6117,7 @@ describe('Locking Behavior', () => {
       expect(activationMarkers).toHaveLength(0);
     });
 
-    it('should proceed with provider-change activation when unreflected tail is at least the buffered reflection size', async () => {
+    it('should not activate buffered reflection on provider change before the threshold', async () => {
       const { MessageList } = await import('@mastra/core/agent');
 
       const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
@@ -5971,9 +6180,77 @@ describe('Locking Behavior', () => {
       });
 
       const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+      expect(afterRecord.bufferedReflection).toBe(reflection);
+      expect(afterRecord.activeObservations).toBe(activeObservations);
+      expect(getReflectorCalled()).toBe(false);
+      const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+      expect(activationMarkers).toHaveLength(0);
+    });
+
+    it('should activate buffered reflection on provider change when reflection.activateOnProviderChange opts in', async () => {
+      const { MessageList } = await import('@mastra/core/agent');
+
+      const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+        reflectionActivateOnProviderChange: true,
+        reflectionObservationTokens: 500,
+      });
+
+      const threadId = 'thread-overshoot';
+      const resourceId = 'resource-overshoot';
+      const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+      const reflectedLines = ['- 🔴 Reflected line 1', '- 🟡 Reflected line 2'];
+      const tailLines = Array.from({ length: 40 }, (_, i) => `- 🟢 Tail observation line ${i + 1}`);
+      const activeObservations = [...reflectedLines, ...tailLines].join('\n');
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: activeObservations,
+        tokenCount: om.getTokenCounter().countObservations(activeObservations),
+        lastObservedAt: new Date(),
+      });
+
+      const reflection = '- 🔴 Condensed reflection';
+      const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+      await storage.updateBufferedReflection({
+        id: record.id,
+        reflection,
+        tokenCount: reflectionTokens,
+        inputTokenCount: reflectionTokens * 3,
+        reflectedObservationLineCount: reflectedLines.length,
+      });
+
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(
+        {
+          id: 'assistant-prev',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Prior response' },
+              { type: 'step-start', createdAt: Date.now(), model: 'openai/gpt-4o' },
+            ],
+          },
+          createdAt: new Date(),
+        } as any,
+        'response',
+      );
+
+      const { writer, customCalls } = makeCapturingWriter();
+
+      const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+      await om.reflector.maybeReflect({
+        record: freshRecord,
+        observationTokens: freshRecord.observationTokenCount ?? 0,
+        threadId,
+        writer,
+        messageList,
+        currentModel: { provider: 'cerebras', modelId: 'zai-glm-4.5' },
+      });
+
+      const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
       expect(afterRecord.bufferedReflection).toBeFalsy();
       expect(afterRecord.activeObservations).toContain('Condensed reflection');
-      expect(afterRecord.activeObservations).toContain('Tail observation line 1');
       expect(getReflectorCalled()).toBe(false);
       const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
       expect(activationMarkers).toHaveLength(1);
@@ -6044,7 +6321,7 @@ describe('Locking Behavior', () => {
       }
     });
 
-    it('should proceed with TTL activation when combined reflection + tail clears the size floor', async () => {
+    it('should not activate buffered reflection on TTL when combined reflection + tail clears the old size floor', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
@@ -6094,9 +6371,66 @@ describe('Locking Behavior', () => {
         });
 
         const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterRecord.bufferedReflection).toBe(reflection);
+        expect(afterRecord.activeObservations).toBe(activeObservations);
+        expect(getReflectorCalled()).toBe(false);
+        const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+        expect(activationMarkers).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should activate buffered reflection on TTL when reflection.activateAfterIdle opts in', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          reflectionActivateAfterIdle: '5m',
+          reflectionObservationTokens: 500,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+        const reflectedLines = ['- 🔴 Reflected line 1', '- 🟡 Reflected line 2'];
+        const tailLines = Array.from({ length: 40 }, (_, i) => `- 🟢 Tail observation line ${i + 1}`);
+        const allLines = [...reflectedLines, ...tailLines];
+        const activeObservations = allLines.join('\n');
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+
+        const reflection = '- 🔴 Condensed reflection';
+        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        await storage.updateBufferedReflection({
+          id: record.id,
+          reflection,
+          tokenCount: reflectionTokens,
+          inputTokenCount: reflectionTokens * 3,
+          reflectedObservationLineCount: reflectedLines.length,
+        });
+
+        const { writer, customCalls } = makeCapturingWriter();
+
+        const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: freshRecord,
+          observationTokens: freshRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer,
+        });
+
+        const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
         expect(afterRecord.bufferedReflection).toBeFalsy();
         expect(afterRecord.activeObservations).toContain('Condensed reflection');
-        expect(afterRecord.activeObservations).toContain('Tail observation line 1');
         expect(getReflectorCalled()).toBe(false);
         const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
         expect(activationMarkers).toHaveLength(1);

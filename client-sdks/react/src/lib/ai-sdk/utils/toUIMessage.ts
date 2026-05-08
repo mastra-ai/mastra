@@ -322,26 +322,25 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         return [...result, newMessage];
       }
 
-      // Find or create reasoning part
+      // Continue the current reasoning part only while reasoning chunks are contiguous.
+      // Interleaved tool calls/text should keep their own reasoning blocks in order.
       const parts = [...lastMessage.parts];
-      let reasoningPartIndex = parts.findIndex(part => part.type === 'reasoning');
+      const lastPartIndex = parts.length - 1;
+      const lastPart = parts[lastPartIndex];
 
-      if (reasoningPartIndex === -1) {
+      if (lastPart?.type === 'reasoning') {
+        parts[lastPartIndex] = {
+          ...lastPart,
+          text: lastPart.text + chunk.payload.text,
+          state: 'streaming',
+        };
+      } else {
         parts.push({
           type: 'reasoning',
           text: chunk.payload.text,
           state: 'streaming',
           providerMetadata: chunk.payload.providerMetadata,
         });
-      } else {
-        const reasoningPart = parts[reasoningPartIndex];
-        if (reasoningPart.type === 'reasoning') {
-          parts[reasoningPartIndex] = {
-            ...reasoningPart,
-            text: reasoningPart.text + chunk.payload.text,
-            state: 'streaming',
-          };
-        }
       }
 
       return [

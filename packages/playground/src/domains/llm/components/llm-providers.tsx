@@ -40,7 +40,7 @@ export const LLMProviders = ({
       label: provider.name,
       value: provider.id,
       start: (
-        <div className="relative">
+        <div className="relative shrink-0">
           <ProviderLogo providerId={provider.id} size={16} />
           <div
             className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
