@@ -260,8 +260,14 @@ export class MastraClient extends BaseResource {
     if (params.agentId) queryParams.set('agentId', params.agentId);
     if (params.page !== undefined) queryParams.set('page', params.page.toString());
     if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());
-    if (params.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
@@ -1922,6 +1928,8 @@ export class MastraClient extends BaseResource {
     if (params.runId) searchParams.set('runId', params.runId);
     if (params.threadId) searchParams.set('threadId', params.threadId);
     if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.toolName) searchParams.set('toolName', params.toolName);
+    if (params.toolCallId) searchParams.set('toolCallId', params.toolCallId);
     if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
     if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
     if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);

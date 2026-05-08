@@ -15,10 +15,10 @@ export interface ModelUsageRow {
 
 export function useModelUsageCostMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { filters, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'model-usage-cost', datePreset, customRange],
+    queryKey: ['metrics', 'model-usage-cost', filterKey],
     queryFn: async (): Promise<ModelUsageRow[]> => {
       const metrics = [
         'mastra_model_total_input_tokens',
@@ -33,7 +33,8 @@ export function useModelUsageCostMetrics() {
             name: [name],
             groupBy: ['model'],
             aggregation: 'sum',
-            filters: { timestamp },
+            orderDirection: 'DESC',
+            filters,
           }),
         ),
       );

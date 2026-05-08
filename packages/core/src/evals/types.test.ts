@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SpanType } from '../observability';
 import type { SpanRecord } from '../storage';
-import { extractTrajectoryFromTrace } from './types';
+import { extractTrajectoryFromTrace, saveScorePayloadSchema } from './types';
 
 function createSpan(overrides: Partial<SpanRecord> & { spanId: string; spanType: SpanRecord['spanType'] }): SpanRecord {
   return {
@@ -750,5 +750,31 @@ describe('extractTrajectoryFromTrace', () => {
       expect(step.toolResult).toEqual({ results: [] });
       expect(step.success).toBe(true);
     }
+  });
+});
+
+describe('saveScorePayloadSchema', () => {
+  const buildPayload = (entityType: string) => ({
+    scorerId: 'test-scorer',
+    entityId: 'test-entity',
+    runId: 'run-1',
+    output: { result: 'ok' },
+    score: 0.85,
+    scorer: { id: 'test-scorer', name: 'test-scorer' },
+    source: 'TEST' as const,
+    entity: { id: 'test-entity' },
+    entityType,
+  });
+
+  it.each(['AGENT', 'WORKFLOW', 'TRAJECTORY', 'STEP'])('accepts entityType %s emitted by runEvals', entityType => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload(entityType))).not.toThrow();
+  });
+
+  it('accepts SpanType values forwarded from observability', () => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload(SpanType.AGENT_RUN))).not.toThrow();
+  });
+
+  it('rejects entityType values outside the allowed set', () => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload('NOT_A_REAL_TYPE'))).toThrow();
   });
 });

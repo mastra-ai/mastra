@@ -387,6 +387,7 @@ const sidebars = {
           id: 'processors/prompt-injection-detector',
           label: 'PromptInjectionDetector',
         },
+        { type: 'doc', id: 'processors/provider-history-compat', label: 'ProviderHistoryCompat' },
         { type: 'doc', id: 'processors/regex-filter-processor', label: 'RegexFilterProcessor' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
@@ -577,6 +578,7 @@ const sidebars = {
         { type: 'doc', id: 'workflows/run', label: 'Run Class' },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
+        { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {
           type: 'category',
           label: 'Methods',

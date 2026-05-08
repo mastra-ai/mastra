@@ -5,6 +5,62 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
+ * Safely serializes a value to JSON string with pre-sanitization.
+ * Handles RPC proxies (Cloudflare Workers), functions, symbols, BigInt, and circular references.
+ *
+ * Pre-sanitization is required because RPC proxies throw on toJSON property access,
+ * which happens before JSON.stringify's replacer can intervene.
+ *
+ * @param value - The value to serialize
+ * @returns JSON string representation, with non-serializable values removed
+ */
+export const safeStringify = (value: unknown): string => {
+  const seen = new WeakSet<object>();
+
+  const sanitize = (val: unknown): unknown => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === 'function') return undefined;
+    if (typeof val === 'symbol') return undefined;
+    if (typeof val === 'bigint') return val.toString();
+    if (typeof val !== 'object') return val;
+
+    // Circular reference check
+    if (seen.has(val)) return undefined;
+    seen.add(val);
+
+    // Check for RPC proxy (throws on property access including toJSON)
+    try {
+      (val as Record<string, unknown>).toJSON;
+      Object.keys(val);
+    } catch {
+      return undefined;
+    }
+
+    // Call toJSON if available (like RequestContext)
+    if (typeof (val as Record<string, unknown>).toJSON === 'function') {
+      return sanitize((val as { toJSON: () => unknown }).toJSON());
+    }
+
+    // Recursively sanitize arrays
+    if (Array.isArray(val)) {
+      return val.map(item => sanitize(item));
+    }
+
+    // Recursively sanitize objects
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(val)) {
+      const sanitized = sanitize((val as Record<string, unknown>)[key]);
+      if (sanitized !== undefined) {
+        result[key] = sanitized;
+      }
+    }
+    return result;
+  };
+
+  return JSON.stringify(sanitize(value)) ?? 'null';
+};
+
+/**
  * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()
  * to convert binary JSONB to TEXT.
  *
@@ -113,16 +169,17 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
       // returning an undefined value will cause libsql to throw
       return null;
     }
-    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
-    // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+    // For jsonb columns, always stringify (even primitives need to be valid JSON)
+    // Must check jsonb BEFORE Date, because stringify properly serializes Dates
+    // Use safeStringify to handle non-serializable values like RPC proxies
     const colDef = schema[col];
     if (colDef?.type === 'jsonb') {
-      return JSON.stringify(v);
+      return safeStringify(v);
     }
     if (v instanceof Date) {
       return v.toISOString();
     }
-    return typeof v === 'object' ? JSON.stringify(v) : v;
+    return typeof v === 'object' ? safeStringify(v) : v;
   });
   const placeholders = columnNames
     .map(col => {
@@ -183,15 +240,16 @@ export function transformToSqlValue(value: any, forceJsonStringify: boolean = fa
   if (typeof value === 'undefined' || value === null) {
     return null;
   }
-  // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
-  // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+  // For jsonb columns, always stringify (even primitives need to be valid JSON)
+  // Must check jsonb BEFORE Date, because stringify properly serializes Dates
+  // Use safeStringify to handle non-serializable values like RPC proxies
   if (forceJsonStringify) {
-    return JSON.stringify(value);
+    return safeStringify(value);
   }
   if (value instanceof Date) {
     return value.toISOString();
   }
-  return typeof value === 'object' ? JSON.stringify(value) : value;
+  return typeof value === 'object' ? safeStringify(value) : value;
 }
 
 export function prepareDeleteStatement({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): {
