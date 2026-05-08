@@ -1,4 +1,4 @@
-import { RequestContext } from '../../di';
+import type { RequestContext } from '../../di';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
@@ -139,8 +139,7 @@ export async function persistStepUpdate(
       return;
     }
 
-    const ctx = requestContext instanceof RequestContext ? requestContext : new RequestContext(requestContext);
-    const requestContextObj: Record<string, any> = ctx.toJSON();
+    const requestContextObj = engine.serializeRequestContext(requestContext);
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({

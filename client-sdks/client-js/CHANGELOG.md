@@ -1,5 +1,42 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.6
+
+### Minor Changes
+
+- Fix `orderBy` shape mismatch for paginated list methods. ([#16323](https://github.com/mastra-ai/mastra/pull/16323))
+
+  The server expects `orderBy` as a structured object (`{ field, direction }`),
+  but several SDK methods were sending `orderBy` and `sortDirection` as flat
+  strings, which caused server-side schema validation to fail.
+
+  Affected methods:
+  - `MastraClient.listMemoryThreads`
+  - `Agent.listVersions`
+  - `StoredAgent.listVersions`
+  - `StoredPromptBlock.listVersions`
+  - `StoredScorer.listVersions`
+
+  Before:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: 'createdAt', sortDirection: 'DESC' });
+  ```
+
+  After:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: { field: 'createdAt', direction: 'DESC' } });
+  ```
+
+  The flat `sortDirection` parameter has been removed from the affected param
+  types in favor of the nested `orderBy.direction` field.
+
+### Patch Changes
+
+- Updated dependencies [[`b560d6f`](https://github.com/mastra-ai/mastra/commit/b560d6f88b9b904b15c10f75c949eb145bc27684), [`36b3bbf`](https://github.com/mastra-ai/mastra/commit/36b3bbf5a8d59f7e23d47e29340e76c681b4929c), [`b275631`](https://github.com/mastra-ai/mastra/commit/b275631dc10541a482b2e2d4a3e3cfa843bd5fa1)]:
+  - @mastra/core@1.33.0-alpha.6
+
 ## 1.18.0-alpha.5
 
 ### Patch Changes
