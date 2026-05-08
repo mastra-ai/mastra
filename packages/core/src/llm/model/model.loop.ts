@@ -186,6 +186,17 @@ export class MastraLLMVNext extends MastraBase {
     // Create model span tracker that will be shared across all LLM execution steps
     const modelSpanTracker = modelSpan?.createTracker();
 
+    // Apply request-side context to MODEL_INFERENCE spans the tracker creates.
+    // setInferenceContext is optional on the interface; older trackers without
+    // the method gracefully no-op.
+    modelSpanTracker?.setInferenceContext?.({
+      parameters: modelSettings as Record<string, unknown> | undefined,
+      providerOptions: providerOptions as Record<string, unknown> | undefined,
+      availableTools: tools ? Object.keys(tools) : undefined,
+      toolChoice,
+      responseFormat: structuredOutput ? 'json_schema' : undefined,
+    });
+
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
