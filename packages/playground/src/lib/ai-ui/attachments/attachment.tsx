@@ -2,7 +2,7 @@ import type { AttachmentState } from '@assistant-ui/react';
 import { AttachmentPrimitive, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
 import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger, Icon, fileToBase64 } from '@mastra/playground-ui';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { CircleXIcon } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useAttachmentSrc } from '../hooks/use-attachment-src';
@@ -97,12 +97,12 @@ const AttachmentRemove = () => {
     <AttachmentPrimitive.Remove asChild>
       <Button
         variant="default"
-        size="icon-md"
+        size="icon-sm"
         tooltip="Remove file"
-        className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2 rounded-full p-1"
+        className="absolute -right-2 -top-2 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2"
       >
         <Icon>
-          <CircleXIcon />
+          <X />
         </Icon>
       </Button>
     </AttachmentPrimitive.Remove>
@@ -115,8 +115,12 @@ export const ComposerAttachments = () => {
   if (!hasAttachments) return null;
 
   return (
-    <div className="flex w-full flex-row items-center gap-4 pb-2">
-      <ComposerPrimitive.Attachments components={{ Attachment: AttachmentThumbnail }} />
+    <div className="absolute bottom-full inset-x-0 px-2" data-attachments-row>
+      <div className="max-w-3xl w-full mx-auto overflow-x-auto">
+        <div className="flex flex-row items-center gap-4 px-3 pt-3 pb-1">
+          <ComposerPrimitive.Attachments components={{ Attachment: AttachmentThumbnail }} />
+        </div>
+      </div>
     </div>
   );
 };

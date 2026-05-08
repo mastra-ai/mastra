@@ -3831,6 +3831,55 @@ describe('ObservationalMemory Integration', () => {
       expect(result.messages.map(m => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
     });
 
+    it('should filter system messages from loaded unobserved messages', async () => {
+      const om = new ObservationalMemory({
+        storage,
+        observation: { messageTokens: 1000, model: 'test-model' },
+        reflection: { observationTokens: 100_000, model: 'test-model' },
+      });
+      const systemMessage = {
+        ...createTestMessage('System instructions', 'user', 'system-msg'),
+        role: 'system',
+        threadId,
+        resourceId,
+      } as MastraDBMessage;
+      const userMessage = { ...createTestMessage('User message', 'user', 'user-msg'), threadId, resourceId };
+
+      await storage.saveMessages({ messages: [systemMessage, userMessage] });
+
+      const messages = await om.loadUnobservedMessages({ threadId, resourceId });
+
+      expect(messages.map(m => m.id)).toEqual(['user-msg']);
+      expect(messages.every(m => m.role !== 'system')).toBe(true);
+    });
+
+    it('should filter system messages from resource-scoped loaded unobserved messages', async () => {
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'resource',
+        observation: { messageTokens: 1000, model: 'test-model' },
+        reflection: { observationTokens: 100_000, model: 'test-model' },
+      });
+      const systemMessage = {
+        ...createTestMessage('System instructions', 'user', 'resource-system-msg'),
+        role: 'system',
+        threadId,
+        resourceId,
+      } as MastraDBMessage;
+      const userMessage = {
+        ...createTestMessage('Resource user message', 'user', 'resource-user-msg'),
+        threadId,
+        resourceId,
+      };
+
+      await storage.saveMessages({ messages: [systemMessage, userMessage] });
+
+      const messages = await om.loadUnobservedMessages({ threadId, resourceId });
+
+      expect(messages.map(m => m.id)).toEqual(['resource-user-msg']);
+      expect(messages.every(m => m.role !== 'system')).toBe(true);
+    });
+
     it('should handle messages created at exact same timestamp as lastObservedAt', async () => {
       // Edge case: message created at exact same time as lastObservedAt
       const exactTime = new Date('2025-01-01T12:00:00Z');

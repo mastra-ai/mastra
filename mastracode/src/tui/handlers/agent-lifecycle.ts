@@ -120,13 +120,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Pause the goal loop on user-initiated abort
-  if (state.userInitiatedAbort && state.goalManager.isActive()) {
-    state.goalManager.pause();
-    state.goalManager.saveToThread(state).catch(() => {});
-    showInfo(state, 'Goal paused (interrupted). Use /goal resume to continue.');
-  }
-
   // Update streaming message to show it was interrupted
   if (state.streamingComponent && state.streamingMessage) {
     state.streamingMessage.stopReason = 'aborted';
