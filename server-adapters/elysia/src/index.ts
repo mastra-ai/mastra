@@ -2,11 +2,13 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -15,10 +17,27 @@ import type Elysia from 'elysia';
 import { sse } from 'elysia';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import { ZodError } from 'zod';
-import { authPlugin } from './auth-middleware';
+export { createAuthMiddleware } from './auth-middleware';
+export type { ElysiaAuthMiddlewareOptions } from './auth-middleware';
 
 // Export helper functions for OpenAPI integration
 export { getMastraOpenAPIDoc, clearMastraOpenAPICache } from './helper';
+
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/elysia] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
 
 // Export type definitions for Elysia app configuration
 export interface ElysiaContext {
@@ -43,6 +62,7 @@ export interface ElysiaApp {
   delete(path: string, handler: any, options?: any): ElysiaApp;
   patch(path: string, handler: any, options?: any): ElysiaApp;
   all(path: string, handler: any, options?: any): ElysiaApp;
+  onAfterHandle(handler: (context: any) => any): ElysiaApp;
   onError(handler: (context: any) => any): ElysiaApp;
 }
 
@@ -351,13 +371,30 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         getHeader: (name: string) => ctx.request.headers.get(name) || undefined,
         getQuery: (name: string) => ctx.query?.[name],
         requestContext: ctx.requestContext,
+        request: ctx.request,
+        buildAuthorizeContext: () => ctx,
       });
 
       if (authError) {
         return new Response(JSON.stringify({ error: authError.error }), {
           status: authError.status,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authError.headers },
         });
+      }
+
+      const authConfig = this.mastra.getServer()?.auth;
+      if (authConfig) {
+        const hasPermission = await loadHasPermission();
+        if (hasPermission) {
+          const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          if (permissionError) {
+            return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+              status: permissionError.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
       }
 
       // Extract params - with Elysia, params are pre-parsed
@@ -475,6 +512,18 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         }
       }
 
+      const fgaError = await checkRouteFGA(this.mastra, route, ctx.requestContext, {
+        ...params.urlParams,
+        ...params.queryParams,
+        ...(typeof params.body === 'object' ? params.body : {}),
+      });
+      if (fgaError) {
+        return new Response(JSON.stringify({ error: fgaError.error, message: fgaError.message }), {
+          status: fgaError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       const handlerParams = {
         ...params.urlParams,
         ...params.queryParams,
@@ -528,30 +577,104 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    // Build custom route handler
     if (!(await this.buildCustomRouteHandler())) return;
 
-    // Register catch-all route to forward to custom route handler
-    this.app.all('*', async (ctx: any) => {
-      // Convert Headers object to plain object
-      const headers: Record<string, string | string[] | undefined> = {};
-      ctx.request.headers.forEach((value: string, key: string) => {
-        headers[key] = value;
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+
+    for (const route of routes) {
+      const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
+      (this.app as ElysiaApp)[method](route.path, async (ctx: any) => {
+        const path = new URL(ctx.request.url).pathname;
+        const requestMethod = ctx.request.method;
+        const matchedRoute = findMatchingCustomRoute(
+          path,
+          requestMethod,
+          this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
+        );
+        const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, requestMethod, this.customRouteAuthConfig);
+        const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
+
+        if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
+          const serverRoute: ServerRoute = {
+            method: (matchedRoute?.route.method ?? requestMethod) as any,
+            path: matchedRoute?.route.path ?? path,
+            responseType: 'json',
+            handler: async () => {},
+            requiresAuth: matchedRoute?.route.requiresAuth,
+            requiresPermission: matchedRoute?.route.requiresPermission,
+            fga: matchedRoute?.route.fga,
+          };
+
+          if (shouldRunCustomRouteAuth) {
+            const authError = await this.checkRouteAuth(serverRoute, {
+              path,
+              method: requestMethod,
+              getHeader: (name: string) => ctx.request.headers.get(name) || undefined,
+              getQuery: (name: string) => ctx.query?.[name],
+              requestContext: ctx.requestContext,
+              request: ctx.request,
+              buildAuthorizeContext: () => ctx,
+            });
+
+            if (authError) {
+              return new Response(JSON.stringify({ error: authError.error }), {
+                status: authError.status,
+                headers: { 'Content-Type': 'application/json', ...authError.headers },
+              });
+            }
+
+            const authConfig = this.mastra.getServer()?.auth;
+            if (authConfig) {
+              const hasPermission = await loadHasPermission();
+              if (hasPermission) {
+                const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+                const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+                if (permissionError) {
+                  return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+                    status: permissionError.status,
+                    headers: { 'Content-Type': 'application/json' },
+                  });
+                }
+              }
+            }
+          }
+
+          const fgaError = await checkRouteFGA(this.mastra, serverRoute, ctx.requestContext, {
+            ...(matchedRoute?.params ?? {}),
+            ...(ctx.query as Record<string, string>),
+            ...(typeof ctx.body === 'object' && ctx.body !== null ? ctx.body : {}),
+          });
+          if (fgaError) {
+            return new Response(JSON.stringify({ error: fgaError.error, message: fgaError.message }), {
+              status: fgaError.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        const headers: Record<string, string | string[] | undefined> = {};
+        ctx.request.headers.forEach((value: string, key: string) => {
+          headers[key] = value;
+        });
+
+        const response = await this.handleCustomRouteRequest(
+          ctx.request.url,
+          ctx.request.method,
+          headers,
+          ctx.body,
+          ctx.requestContext,
+        );
+
+        if (!response) {
+          return new Response(JSON.stringify({ error: 'Not Found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        return response;
       });
-
-      const response = await this.handleCustomRouteRequest(
-        ctx.request.url,
-        ctx.request.method,
-        headers,
-        ctx.body,
-        ctx.requestContext,
-      );
-
-      // If response is null, this is not a custom route - continue
-      if (!response) return;
-
-      return response;
-    });
+    }
   }
 
   registerContextMiddleware(): void {
@@ -559,13 +682,61 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
       return;
     }
 
-    // Register auth plugin using Elysia's use() method
-    this.app.use(authPlugin);
+    this.app.derive(async (ctx: any) => {
+      const path = new URL(ctx.request.url).pathname;
+      if (!this.shouldLogRequest(path)) {
+        return {};
+      }
+
+      return {
+        httpLogStart: Date.now(),
+      };
+    });
+
+    this.app.onAfterHandle((ctx: any) => {
+      const path = new URL(ctx.request.url).pathname;
+      if (!this.shouldLogRequest(path)) {
+        return;
+      }
+
+      const duration = Date.now() - (ctx.httpLogStart ?? Date.now());
+      const method = ctx.request.method;
+      const status = ctx.set?.status ?? ctx.response?.status ?? 200;
+      const level = this.httpLoggingConfig?.level || 'info';
+
+      const logData: Record<string, any> = {
+        method,
+        path,
+        status,
+        duration: `${duration}ms`,
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = ctx.query || {};
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = Object.fromEntries(ctx.request.headers.entries());
+        const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+        redactHeaders.forEach(h => {
+          const key = h.toLowerCase();
+          if (headers[key] !== undefined) {
+            headers[key] = '[REDACTED]';
+          }
+        });
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+    });
   }
 }
