@@ -70,10 +70,6 @@ createWorkflowTestSuite({
     executionFlowNotDefined: true,
     executionGraphNotCommitted: true,
 
-    // Foreach - timing flaky, empty array timeout
-    foreachPartialConcurrencyTiming: true,
-    emptyForeach: true,
-
     // Abort - returns 'success' not 'canceled', timeout on signal wait
     abortStatus: true,
     abortDuringStep: true,
