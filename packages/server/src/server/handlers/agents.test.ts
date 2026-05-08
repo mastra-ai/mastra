@@ -11,6 +11,7 @@ import {
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { sendAgentSignalBodySchema } from '../schemas/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -1026,6 +1027,79 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('SIGNAL_ROUTES', () => {
+    it('should validate typed user-message signal contents and attributes', () => {
+      const body = {
+        signal: {
+          type: 'user-message',
+          contents: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'describe these files' },
+                { type: 'image', image: 'data:image/png;base64,image-data', mediaType: 'image/png' },
+                { type: 'file', data: 'file-data', mimeType: 'application/pdf', filename: 'brief.pdf' },
+              ],
+              metadata: { source: 'studio' },
+            },
+          ],
+          attributes: { intent: 'follow-up', count: 1, urgent: false, empty: null },
+        },
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      };
+
+      expect(sendAgentSignalBodySchema.safeParse(body).success).toBe(true);
+    });
+
+    it('should validate string and string-array user-message signal contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: ['hello', 'again'] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should reject malformed user-message content parts', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: {
+            type: 'user-message',
+            contents: { role: 'user', content: [{ type: 'image' }] },
+          },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should require non-user signals to use string contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: '<system-reminder>Use the tool result</system-reminder>' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: [{ role: 'user', content: 'not allowed' }] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
     it('should send a signal using context resource and thread values', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-from-context',
@@ -1039,7 +1113,7 @@ describe('Agent Routes Authorization', () => {
       let capturedSignal: any;
       let capturedTarget: any;
 
-      vi.spyOn(mockAgent, 'sendSignal').mockImplementation((signal, target) => {
+      (mockAgent as any).sendSignal = vi.fn((signal, target) => {
         capturedSignal = signal;
         capturedTarget = target;
         return { accepted: true, runId: 'signal-run-id' };
@@ -1049,13 +1123,17 @@ describe('Agent Routes Authorization', () => {
         mastra,
         agentId: 'test-agent',
         requestContext,
-        signal: { type: 'user-message', contents: 'hello' },
+        signal: { type: 'user-message', contents: 'hello', attributes: { source: 'test', attempt: 1 } },
         resourceId: 'user-b',
         threadId: 'client-thread',
       } as any);
 
       expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
-      expect(capturedSignal).toEqual({ type: 'user-message', contents: 'hello' });
+      expect(capturedSignal).toEqual({
+        type: 'user-message',
+        contents: 'hello',
+        attributes: { source: 'test', attempt: 1 },
+      });
       expect(capturedTarget).toMatchObject({
         resourceId: 'user-a',
         threadId: 'signal-thread-from-context',
@@ -1101,7 +1179,7 @@ describe('Agent Routes Authorization', () => {
         payload: { id: 'text-1', text: 'hello' },
       };
 
-      vi.spyOn(mockAgent, 'subscribeToThread').mockImplementation(async target => {
+      (mockAgent as any).subscribeToThread = vi.fn(async target => {
         capturedTarget = target;
         return {
           activeRunId: () => null,

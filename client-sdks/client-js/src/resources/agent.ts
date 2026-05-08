@@ -283,12 +283,40 @@ export class Agent extends BaseResource {
     });
   }
 
-  subscribeToThread(params: SubscribeAgentThreadParams): Promise<Response> {
-    return this.request(`/agents/${this.agentId}/threads/subscribe`, {
+  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
       method: 'POST',
       body: params,
       stream: true,
-    });
+    })) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+        signal: this.options.abortSignal,
+      });
+    };
+
+    return streamResponse;
   }
 
   /**

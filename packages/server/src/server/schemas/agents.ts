@@ -2,6 +2,129 @@ import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
+
+const commonMessageFieldsSchema = {
+  id: z.string().optional(),
+  name: z.string().optional(),
+  metadata: jsonRecordSchema.optional(),
+  providerMetadata: jsonRecordSchema.optional(),
+  providerOptions: jsonRecordSchema.optional(),
+  experimental_providerMetadata: jsonRecordSchema.optional(),
+};
+
+const textContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('text'),
+  text: z.string(),
+});
+
+const imageContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('image'),
+  image: z.union([z.string(), jsonRecordSchema]),
+  mediaType: z.string().optional(),
+  mimeType: z.string().optional(),
+});
+
+const fileContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('file'),
+  data: z.union([z.string(), jsonRecordSchema]).optional(),
+  file: z.union([z.string(), jsonRecordSchema]).optional(),
+  url: z.string().optional(),
+  mediaType: z.string().optional(),
+  mimeType: z.string().optional(),
+  filename: z.string().optional(),
+});
+
+const toolCallContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('tool-call'),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: jsonValueSchema.optional(),
+  input: jsonValueSchema.optional(),
+});
+
+const toolResultContentPartSchema = z.object({
+  ...commonMessageFieldsSchema,
+  type: z.literal('tool-result'),
+  toolCallId: z.string(),
+  toolName: z.string().optional(),
+  result: jsonValueSchema.optional(),
+  output: jsonValueSchema.optional(),
+});
+
+const messageContentPartSchema = z.union([
+  textContentPartSchema,
+  imageContentPartSchema,
+  fileContentPartSchema,
+  toolCallContentPartSchema,
+  toolResultContentPartSchema,
+]);
+const messageContentSchema = z.union([z.string(), z.array(messageContentPartSchema)]);
+
+const modelMessageSchema = z.object({
+  ...commonMessageFieldsSchema,
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: messageContentSchema,
+});
+
+const uiMessageSchema = z.object({
+  ...commonMessageFieldsSchema,
+  role: z.enum(['system', 'user', 'assistant', 'tool', 'data']),
+  content: messageContentSchema.optional(),
+  parts: z.array(messageContentPartSchema).optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+});
+
+const messageInputSchema = z.union([modelMessageSchema, uiMessageSchema]);
+const messageListInputSchema = z.union([
+  z.string(),
+  z.array(z.string()),
+  messageInputSchema,
+  z.array(messageInputSchema),
+]);
+
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]),
+);
+
+const baseSignalSchema = z.object({
+  id: z.string().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  metadata: jsonRecordSchema.optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+const userMessageSignalSchema = baseSignalSchema.extend({
+  type: z.literal('user-message'),
+  contents: messageListInputSchema,
+});
+
+const contextSignalSchema = baseSignalSchema.extend({
+  type: z.string().refine(type => type !== 'user-message', {
+    message: 'non-user-message signals must not use type "user-message"',
+  }),
+  contents: z.string(),
+});
+
+const agentSignalSchema = z.union([userMessageSignalSchema, contextSignalSchema]);
+
 // Path parameter schemas
 export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
@@ -515,13 +638,7 @@ export const observeAgentBodySchema = z.object({
 });
 
 export const sendAgentSignalBodySchema = z.object({
-  signal: z.object({
-    id: z.string().optional(),
-    type: z.string(),
-    contents: z.string(),
-    createdAt: z.union([z.string(), z.date()]).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-  }),
+  signal: agentSignalSchema,
   runId: z.string().optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),

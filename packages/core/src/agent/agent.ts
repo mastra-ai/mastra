@@ -6309,6 +6309,10 @@ export class Agent<
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    await this.#getThreadStreamRuntime().waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+    );
     const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(
       mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
     );

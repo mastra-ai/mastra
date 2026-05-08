@@ -1,5 +1,5 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
-import type { AgentModelManagerConfig, DurableAgentLike } from '@mastra/core/agent';
+import type { AgentModelManagerConfig, AgentSignalInput, DurableAgentLike } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
@@ -57,6 +57,7 @@ import {
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
+import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -1560,13 +1561,30 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   },
 });
 
-export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
+const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string }> = z.object({
+  accepted: z.literal(true),
+  runId: z.string(),
+});
+
+export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
+  InferParams<typeof agentIdPathParams, undefined, typeof sendAgentSignalBodySchema>,
+  z.infer<typeof sendAgentSignalResponseSchema>,
+  'json',
+  RouteSchemas<
+    typeof agentIdPathParams,
+    undefined,
+    typeof sendAgentSignalBodySchema,
+    typeof sendAgentSignalResponseSchema
+  >,
+  'POST',
+  '/agents/:agentId/signals'
+> = createRoute({
   method: 'POST',
   path: '/agents/:agentId/signals',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: sendAgentSignalBodySchema,
-  responseSchema: z.object({ accepted: z.literal(true), runId: z.string() }),
+  responseSchema: sendAgentSignalResponseSchema,
   summary: 'Send agent signal',
   description: 'Sends a signal to an active agent run or starts a memory thread run when the thread is idle',
   tags: ['Agents', 'Streaming'],
@@ -1598,8 +1616,10 @@ export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
         }
       }
 
+      const agentSignal = signal as AgentSignalInput;
+
       if (runId) {
-        return agent.sendSignal(signal, {
+        return agent.sendSignal(agentSignal, {
           runId,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
@@ -1608,10 +1628,10 @@ export const SEND_AGENT_SIGNAL_ROUTE = createRoute({
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
-        throw new Error('resourceId and threadId are required when runId is not provided');
+        throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
       }
 
-      return agent.sendSignal(signal, {
+      return agent.sendSignal(agentSignal, {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...ifIdleWithContext,
@@ -1642,7 +1662,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
-        throw new Error('threadId is required');
+        throw new HTTPException(400, { message: 'threadId is required' });
       }
 
       if (effectiveResourceId) {
@@ -1661,6 +1681,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       return new ReadableStream({
         async start(controller) {
           const cleanup = () => {
+            subscription.abort();
             subscription.unsubscribe();
             try {
               controller.close();
@@ -1678,6 +1699,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
           }
         },
         cancel() {
+          subscription.abort();
           subscription.unsubscribe();
         },
       });
