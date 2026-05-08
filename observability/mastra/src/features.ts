@@ -12,24 +12,19 @@
  *
  * @example Old-version-safe usage
  *
- * Static imports of this module hard-fail at module load when paired with
- * an `@mastra/observability` that predates the `./features` subpath:
- * - importing `@mastra/observability/features` throws
- *   `ERR_PACKAGE_PATH_NOT_EXPORTED` (no `./features` in package exports)
- * - a named import of `observabilityFeatures` from the main entry can throw
- *   a link-time `SyntaxError` in strict Node ESM if the symbol is missing
- *
- * Use a dynamic import with try/catch so the exporter degrades gracefully
- * against any `@mastra/observability` version:
+ * A static named import of `observabilityFeatures` will throw a link-time
+ * `SyntaxError` in strict Node ESM when paired with an `@mastra/observability`
+ * that predates this export. Use a dynamic import so the exporter degrades
+ * gracefully against any version of `@mastra/observability`:
  *
  * ```ts
  * import { coreFeatures } from "@mastra/core/features"
  *
  * let observabilityFeatures: Set<string> | undefined
  * try {
- *   ({ observabilityFeatures } = await import("@mastra/observability/features"))
+ *   ({ observabilityFeatures } = await import("@mastra/observability"))
  * } catch {
- *   // older @mastra/observability without the features subpath
+ *   // older @mastra/observability that does not export this symbol
  * }
  *
  * if (
