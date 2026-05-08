@@ -59,7 +59,7 @@ describe('handleAskQuestion goal mode', () => {
 });
 
 describe('handlePlanApproval goal mode', () => {
-  it('approves the plan and starts a goal without sending the normal approval reminder', async () => {
+  it('approves the plan and starts a goal with a begin-executing preamble', async () => {
     const state = {
       harness: {
         setState: vi.fn().mockResolvedValue(undefined),
@@ -93,7 +93,12 @@ describe('handlePlanApproval goal mode', () => {
       planId: 'plan-1',
       response: { action: 'approved' },
     });
-    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', {
+      preamble: '<system-reminder>The user has approved the plan, begin executing.</system-reminder>',
+    });
+    // The startGoal flow owns sending the begin-executing preamble alongside
+    // the goal reminder, so the handler should not double-fire fireMessage or
+    // addUserMessage like the normal approve path does.
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
   });

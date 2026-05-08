@@ -119,16 +119,27 @@ interface JudgeDefaults {
   maxTurns: number;
 }
 
+export interface StartGoalOptions {
+  /**
+   * Optional system-reminder text prepended to the goal start message sent to
+   * the agent. Used by the plan-approval "Use as /goal" flow to also signal
+   * "begin executing" alongside the goal context, mirroring the normal plan
+   * approval flow.
+   */
+  preamble?: string;
+}
+
 export async function startGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
+  options: StartGoalOptions = {},
 ): Promise<void> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
+  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns, options);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -210,6 +221,7 @@ async function startGoal(
   objective: string,
   judgeModelId: string,
   maxTurns: number,
+  options: StartGoalOptions = {},
 ): Promise<void> {
   const { state } = ctx;
   const goalManager = state.goalManager;
@@ -229,7 +241,9 @@ async function startGoal(
   ctx.addUserMessage(createGoalReminderMessage(goal.id, objective, goal.maxTurns, judgeModelId));
 
   try {
-    await state.harness.sendMessage({ content: toSystemReminderXml('goal', objective) });
+    const goalReminder = toSystemReminderXml('goal', objective);
+    const content = options.preamble ? `${options.preamble}\n${goalReminder}` : goalReminder;
+    await state.harness.sendMessage({ content });
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
