@@ -1,34 +1,95 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  checkRouteFGA,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
+import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { HonoAuthMiddlewareOptions } from './auth-middleware';
+// Browser stream setup (Hono-specific WebSocket implementation)
+export { setupBrowserStream } from './browser-stream';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/hono] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
 
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools: Record<string, Tool>;
+  registeredTools: ToolsInput;
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
-  playground?: boolean;
-  isDev?: boolean;
+  cachedBody?: unknown;
 };
 
 export type HonoBindings = {};
 
-export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequest, Context> {
+/**
+ * Generic handler function type compatible across Hono versions.
+ * Uses a minimal signature that all Hono middleware handlers satisfy.
+ */
+type HonoRouteHandler = (...args: any[]) => any;
+
+/**
+ * Minimal interface representing what MastraServer needs from a Hono app.
+ * This allows any Hono app instance to be passed without strict generic matching,
+ * avoiding the version mismatch issues that occur with Hono's strict generic types.
+ */
+export interface HonoApp {
+  use(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  get(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  post(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  put(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  delete(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  patch(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  all(path: string, ...handlers: HonoRouteHandler[]): unknown;
+}
+
+export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
+      // Patch req.json() to prevent "Body is unusable" errors when the body is read multiple times
+      // e.g. by middleware and then by an agent.
+      const originalJson = c.req.json.bind(c.req);
+      let jsonPromise: Promise<any> | undefined;
+
+      c.req.json = () => {
+        if (!jsonPromise) {
+          jsonPromise = originalJson().then(body => {
+            // Cache in context if needed explicitly, though the promise memoization handles the reuse
+            c.set('cachedBody', body);
+            return body;
+          });
+        }
+        return jsonPromise;
+      };
+
       // Parse request context from request body and add to context
 
       let bodyRequestContext: Record<string, any> | undefined;
@@ -37,10 +98,11 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       // Parse request context from request body (POST/PUT)
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
         const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
+        const contentLength = c.req.header('content-length');
+        // Only parse if content-type is JSON and body is not empty
+        if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
-            const clonedReq = c.req.raw.clone();
-            const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
+            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }
@@ -78,10 +140,8 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
       c.set('mastra', this.mastra);
-      c.set('tools', this.tools || {});
+      c.set('registeredTools', this.tools || {});
       c.set('taskStore', this.taskStore);
-      c.set('playground', this.playground === true);
-      c.set('isDev', this.isDev === true);
       c.set('abortSignal', c.req.raw.signal);
       c.set('customRouteAuthConfig', this.customRouteAuthConfig);
 
@@ -89,10 +149,17 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     };
   }
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
-    res.header('Content-Type', 'text/plain');
-    res.header('Transfer-Encoding', 'chunked');
-
     const streamFormat = route.streamFormat || 'stream';
+
+    if (streamFormat === 'sse') {
+      res.header('Content-Type', 'text/event-stream');
+      res.header('Cache-Control', 'no-cache');
+      res.header('Connection', 'keep-alive');
+      res.header('X-Accel-Buffering', 'no');
+    } else {
+      res.header('Content-Type', 'text/plain');
+    }
+    res.header('Transfer-Encoding', 'chunked');
 
     return stream(
       res,
@@ -121,35 +188,114 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
             }
           }
 
-          await stream.write('data: [DONE]\n\n');
+          if (streamFormat === 'sse') {
+            await stream.write('data: [DONE]\n\n');
+          }
         } catch (error) {
-          console.error(error);
+          this.mastra.getLogger()?.error('Error in stream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
           await stream.close();
         }
       },
       async err => {
-        console.error(err);
+        this.mastra.getLogger()?.error('Stream error callback', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        });
       },
     );
   }
 
-  async getParams(
-    route: ServerRoute,
-    request: HonoRequest,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+  async getParams(route: ServerRoute, request: HonoRequest): Promise<ParsedRequestParams> {
     const urlParams = request.param();
-    const queryParams = request.query();
+    // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
+    const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
-      try {
-        body = await request.json();
-      } catch {}
+    let bodyParseError: { message: string } | undefined;
+
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
+      const contentType = request.header('content-type') || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          body = await this.parseFormData(formData);
+        } catch (error) {
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
+        }
+      } else if (contentType.includes('application/json')) {
+        // Clone the request to read the body text first
+        // This allows us to check if there's actual content before parsing
+        const clonedReq = request.raw.clone();
+        const bodyText = await clonedReq.text();
+
+        if (bodyText && bodyText.trim().length > 0) {
+          // There's actual content - try to parse it as JSON
+          try {
+            body = JSON.parse(bodyText);
+          } catch (error) {
+            this.mastra.getLogger()?.error('Failed to parse JSON body', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
+            // Track JSON parse error to return 400 Bad Request
+            bodyParseError = {
+              message: error instanceof Error ? error.message : 'Invalid JSON in request body',
+            };
+          }
+        }
+        // Empty body is ok - body remains undefined
+      }
     }
-    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
-  async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {
+  /**
+   * Parse FormData into a plain object, converting File objects to Buffers.
+   */
+  private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        const arrayBuffer = await value.arrayBuffer();
+        result[key] = Buffer.from(arrayBuffer);
+      } else if (typeof value === 'string') {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[key] = JSON.parse(value);
+        } catch {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        response.header(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
@@ -159,31 +305,44 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       return fetchResponse;
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
-      try {
-        await server.startHTTP({
+      // Merge class-level mcpOptions with route-specific options (route takes precedence)
+      const options = { ...this.mcpOptions, ...routeMcpOptions };
+
+      // Do NOT await startHTTP — let it run in the background so SSE
+      // notifications stream to the client as they are written.
+      // toFetchResponse resolves when headers are sent, not when the body finishes.
+      server
+        .startHTTP({
           url: new URL(response.req.url),
-          httpPath,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
+          options: Object.keys(options).length > 0 ? options : undefined,
+        })
+        .catch((e: unknown) => {
+          this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
+          try {
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  error: { code: -32603, message: 'Internal server error' },
+                  id: null,
+                }),
+              );
+            }
+          } catch {
+            // Response stream already closed or destroyed - nothing more to do
+          }
         });
-        return await toFetchResponse(res);
-      } catch {
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null,
-            }),
-          );
-          return await toFetchResponse(res);
-        }
-        return await toFetchResponse(res);
-      }
+
+      return await toFetchResponse(res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
@@ -191,8 +350,8 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       try {
         return await server.startHonoSSE({
           url: new URL(response.req.url),
-          ssePath,
-          messagePath,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           context: response,
         });
       } catch {
@@ -203,11 +362,14 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     }
   }
 
-  async registerRoute<E extends Env = any>(
-    app: Hono<E, any, any>,
+  async registerRoute(
+    app: HonoApp,
     route: ServerRoute,
-    { prefix }: { prefix?: string },
+    { prefix: prefixParam }: { prefix?: string } = {},
   ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -230,18 +392,59 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       `${prefix}${route.path}`,
       ...middlewares,
       async (c: Context) => {
+        // Check route-level authentication/authorization
+        const authResult = await this.checkRouteAuth(route, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+          request: c.req.raw,
+          buildAuthorizeContext: () => c,
+        });
+
+        if (authResult) {
+          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+          if (authResult.headers) {
+            for (const [key, value] of Object.entries(authResult.headers)) {
+              c.header(key, value as string);
+            }
+          }
+
+          // If this is an auth error (not just a success-with-headers), return error response
+          if (authResult.error) {
+            return c.json({ error: authResult.error }, authResult.status as any);
+          }
+        }
+
         const params = await this.getParams(route, c.req);
+
+        // Return 400 Bad Request if body parsing failed (e.g., malformed JSON)
+        if (params.bodyParseError) {
+          return c.json(
+            {
+              error: 'Invalid request body',
+              issues: [{ field: 'body', message: params.bodyParseError.message }],
+            },
+            400,
+          );
+        }
 
         if (params.queryParams) {
           try {
-            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+            params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
-            console.error('Error parsing query params', error);
-            // Zod validation errors should return 400 Bad Request, not 500
+            this.mastra.getLogger()?.error('Error parsing query params', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
+            if (error instanceof ZodError) {
+              const { status, body } = this.resolveValidationError(route, error, 'query');
+              return c.json(body as any, status as any);
+            }
             return c.json(
               {
                 error: 'Invalid query parameters',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );
@@ -252,12 +455,39 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
-            // Zod validation errors should return 400 Bad Request, not 500
+            this.mastra.getLogger()?.error('Error parsing body', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
+            if (error instanceof ZodError) {
+              const { status, body } = this.resolveValidationError(route, error, 'body');
+              return c.json(body as any, status as any);
+            }
             return c.json(
               {
                 error: 'Invalid request body',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              },
+              400,
+            );
+          }
+        }
+
+        // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+        if (params.urlParams) {
+          try {
+            params.urlParams = await this.parsePathParams(route, params.urlParams);
+          } catch (error) {
+            this.mastra.getLogger()?.error('Error parsing path params', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
+            if (error instanceof ZodError) {
+              const { status, body } = this.resolveValidationError(route, error, 'path');
+              return c.json(body as any, status as any);
+            }
+            return c.json(
+              {
+                error: 'Invalid path parameters',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );
@@ -270,22 +500,81 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,
-          tools: c.get('tools'),
+          registeredTools: c.get('registeredTools'),
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
+          routePrefix: prefix,
+          request: c.req.raw, // Standard Request object with headers/cookies
         };
+
+        // Check route permission requirement (EE feature)
+        // Uses convention-based permission derivation: permissions are auto-derived
+        // from route path/method unless explicitly set or route is public
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+            if (permissionError) {
+              return c.json(
+                {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                },
+                permissionError.status as any,
+              );
+            }
+          }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, route, c.get('requestContext'), {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+        }
 
         try {
           const result = await route.handler(handlerParams);
-          return this.sendResponse(route, c, result);
+          return this.sendResponse(route, c, result, prefix);
         } catch (error) {
-          console.error('Error calling handler', error);
+          this.mastra.getLogger()?.error('Error calling handler', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            path: route.path,
+            method: route.method,
+          });
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)
             if ('status' in error) {
               const status = (error as any).status;
-              return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
+              let safeCause: { failingItems: unknown[] } | undefined;
+              try {
+                const raw = error instanceof Error ? error.cause : undefined;
+                if (
+                  raw &&
+                  typeof raw === 'object' &&
+                  !Array.isArray(raw) &&
+                  'failingItems' in raw &&
+                  Array.isArray((raw as any).failingItems)
+                ) {
+                  safeCause = { failingItems: (raw as any).failingItems };
+                }
+              } catch {
+                // serialization or access error — omit cause
+              }
+              return c.json(
+                {
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                  ...(safeCause ? { cause: safeCause } : {}),
+                },
+                status,
+              );
             }
             // Check for MastraError with status in details
             if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
@@ -299,18 +588,166 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     );
   }
 
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+
+    for (const route of routes) {
+      const serverRoute: ServerRoute = {
+        method: route.method as any,
+        path: route.path,
+        responseType: 'json',
+        handler: async () => {},
+        requiresAuth: route.requiresAuth,
+        requiresPermission: route.requiresPermission,
+        fga: route.fga,
+      };
+
+      const routeHandler: MiddlewareHandler = async (c: Context) => {
+        // Per-route auth check (same pattern as registerRoute)
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+          request: c.req.raw,
+          buildAuthorizeContext: () => c,
+        });
+
+        if (authError) {
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              c.header(key, value as string);
+            }
+          }
+          if (authError.error) {
+            return c.json({ error: authError.error }, authError.status as any);
+          }
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const hasPermission = await loadHasPermission();
+          if (hasPermission) {
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              return c.json(
+                { error: permissionError.error, message: permissionError.message },
+                permissionError.status as any,
+              );
+            }
+          }
+        }
+
+        // Check FGA authorization (EE feature)
+        let bodyParams: Record<string, unknown> = {};
+        const contentType = c.req.header('content-type');
+        if (contentType?.includes('application/json')) {
+          try {
+            const body = (await c.req.raw.clone().json()) as unknown;
+            if (body && typeof body === 'object' && !Array.isArray(body)) {
+              bodyParams = body as Record<string, unknown>;
+            }
+          } catch {
+            bodyParams = {};
+          }
+        } else if (
+          contentType?.includes('application/x-www-form-urlencoded') ||
+          contentType?.includes('multipart/form-data')
+        ) {
+          try {
+            bodyParams = Object.fromEntries(await c.req.raw.clone().formData());
+          } catch {
+            bodyParams = {};
+          }
+        }
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
+          ...c.req.param(),
+          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+          ...bodyParams,
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+        }
+
+        const reqHeaders: Record<string, string | string[] | undefined> = {};
+        c.req.raw.headers.forEach((v, k) => {
+          reqHeaders[k] = v;
+        });
+        const response = await this.handleCustomRouteRequest(
+          c.req.url,
+          c.req.method,
+          reqHeaders,
+          c.req.raw.body,
+          c.get('requestContext'),
+        );
+        if (!response) {
+          return c.json({ error: 'Not Found' }, 404);
+        }
+        return response;
+      };
+
+      const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
+      this.app[method](route.path, routeHandler);
+    }
+  }
+
   registerContextMiddleware(): void {
     this.app.use('*', this.createContextMiddleware());
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
       return;
     }
 
-    this.app.use('*', authenticationMiddleware);
-    this.app.use('*', authorizationMiddleware);
+    this.app.use('*', async (c, next) => {
+      if (!this.shouldLogRequest(c.req.path)) {
+        return next();
+      }
+
+      const start = Date.now();
+      const method = c.req.method;
+      const path = c.req.path;
+
+      await next();
+
+      const duration = Date.now() - start;
+      const status = c.res.status;
+      const level = this.httpLoggingConfig?.level || 'info';
+
+      const logData: Record<string, any> = {
+        method,
+        path,
+        status,
+        duration: `${duration}ms`,
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = c.req.query();
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = Object.fromEntries(c.req.raw.headers.entries());
+        const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+        redactHeaders.forEach(h => {
+          const key = h.toLowerCase();
+          if (headers[key] !== undefined) {
+            headers[key] = '[REDACTED]';
+          }
+        });
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+    });
   }
 }

@@ -3,7 +3,7 @@ title: "Voice | v1 Migration Guide"
 description: "Learn how to migrate voice package changes when upgrading to v1."
 ---
 
-# Voice Packages
+# Voice
 
 Voice packages have been renamed from speech to voice with updated class names and API methods.
 
@@ -32,8 +32,8 @@ To migrate, update configuration property names when configuring agents with voi
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/voice-property-names .
+```bash
+npx @mastra/codemod@latest v1/voice-property-names .
 ```
 
 :::

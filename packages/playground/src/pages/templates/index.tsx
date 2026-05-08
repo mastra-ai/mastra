@@ -1,10 +1,11 @@
-import { Header, HeaderTitle, MainContentLayout, TemplatesTools, TemplatesList, Icon } from '@mastra/playground-ui';
+import { Header, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
+import { PackageIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
+import { TemplatesList } from '@/domains/templates/templates-list';
+import { TemplatesTools } from '@/domains/templates/templates-tools';
 import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router';
-
-import { useState } from 'react';
-import { PackageIcon } from 'lucide-react';
 
 export default function Templates() {
   const { data, isLoading } = useMastraTemplates();
@@ -13,11 +14,11 @@ export default function Templates() {
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  const tagOptions = [{ value: 'all', label: 'All' }];
+  const tagOptions = [{ value: 'all', label: 'Any tag' }];
   (tags || []).forEach(tag => {
     tagOptions.push({ value: tag, label: tag });
   });
-  const providerOptions = [{ value: 'all', label: 'All' }];
+  const providerOptions = [{ value: 'all', label: 'Any provider' }];
   (providers || []).forEach(provider => {
     providerOptions.push({ value: provider, label: provider });
   });
@@ -70,7 +71,7 @@ export default function Templates() {
         </HeaderTitle>
       </Header>
 
-      <div className={cn('overflow-y-auto w-full h-full px-[2rem] pb-[3rem] z-[1]')}>
+      <div className={cn('overflow-y-auto w-full h-full px-8 pb-12 z-10')}>
         <TemplatesTools
           selectedTag={selectedTag}
           onTagChange={value => handleFilterChange(value, 'tag')}

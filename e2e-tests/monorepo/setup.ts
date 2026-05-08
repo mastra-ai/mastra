@@ -17,7 +17,7 @@ export default async function setup(project: TestProject) {
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
   const port = await getPort();
-  const registryLocation = await mkdtemp(join(tmpdir(), 'mastra-create-test-registry'));
+  const registryLocation = await mkdtemp(join(tmpdir(), 'mastra-monorepo-test-registry'));
   console.log('registryLocation', registryLocation);
   console.log('verdaccioPath', verdaccioPath);
   await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));

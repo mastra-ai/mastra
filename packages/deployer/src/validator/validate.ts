@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
 import { dirname } from 'node:path';
-import { slash } from '../build/utils';
+import { pathToFileURL } from 'node:url';
 
 type ValidationArgs = {
   message: string;
@@ -31,7 +31,7 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
   return new Promise((resolve, reject) => {
     let validationError: ValidationArgs | null = null;
     const childProcess = nodeSpawn(command, args, {
-      // stdio: 'inherit',
+      stdio: ['ignore', 'ignore', 'pipe'],
       ...options,
     });
 
@@ -64,7 +64,11 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
 
 export function validate(
   file: string,
-  { injectESMShim = false, moduleResolveMapLocation }: { injectESMShim?: boolean; moduleResolveMapLocation: string },
+  {
+    injectESMShim = false,
+    moduleResolveMapLocation,
+    stubbedExternals = [],
+  }: { injectESMShim?: boolean; moduleResolveMapLocation: string; stubbedExternals?: string[] },
 ) {
   let prefixCode = '';
   if (injectESMShim) {
@@ -96,7 +100,7 @@ globalThis.__dirname = dirname(__filename);
       '--input-type=module',
       '--enable-source-maps',
       '-e',
-      `${prefixCode};import('file://${slash(file)}').catch(err => {
+      `${prefixCode};import('${pathToFileURL(file).href}').catch(err => {
         ${errorHandler.toString()}
         errorHandler(err);
       })`.replaceAll(/\n/g, ''),
@@ -105,6 +109,7 @@ globalThis.__dirname = dirname(__filename);
       env: {
         ...process.env,
         MODULE_MAP: `${moduleResolveMapLocation}`,
+        STUBBED_EXTERNALS: JSON.stringify(stubbedExternals),
       },
       cwd: dirname(file),
     },

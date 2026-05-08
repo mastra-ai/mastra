@@ -1,16 +1,24 @@
-import { analyzeEntry } from './analyzeEntry';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFile } from 'fs-extra';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
-import resolveFrom from 'resolve-from';
-import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { readFile } from 'fs-extra';
+import { resolveModule } from 'local-pkg';
+import type * as LocalPkgModule from 'local-pkg';
 import { rollup } from 'rollup';
+import type * as RollupModule from 'rollup';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { analyzeEntry } from './analyzeEntry';
 
 vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-vi.mock('resolve-from');
+vi.mock('local-pkg', async () => {
+  const actual = await vi.importActual<typeof LocalPkgModule>('local-pkg');
+  return {
+    ...actual,
+    resolveModule: vi.fn(),
+  };
+});
 vi.mock('rollup', async () => {
-  const actual = await vi.importActual<typeof import('rollup')>('rollup');
+  const actual = await vi.importActual<typeof RollupModule>('rollup');
   return {
     ...actual,
     rollup: vi.fn(actual.rollup),
@@ -21,7 +29,7 @@ describe('analyzeEntry', () => {
   beforeEach(() => {
     vi.mocked(rollup).mockClear();
     vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-    vi.mocked(resolveFrom).mockReset();
+    vi.mocked(resolveModule).mockReset();
   });
 
   it('should analyze the entry file', async () => {
@@ -122,13 +130,13 @@ describe('analyzeEntry', () => {
   it('should handle dynamic imports', async () => {
     const entryWithDynamicImport = `
       import { Mastra } from '@mastra/core/mastra';
-      
+
       export async function loadAgent() {
         const { Agent } = await import('@mastra/core/agent');
         const externalModule = await import('lodash');
         return new Agent();
       }
-      
+
       export const mastra = new Mastra({});
     `;
 
@@ -149,6 +157,29 @@ describe('analyzeEntry', () => {
 
     const lodashDep = result.dependencies.get('lodash');
     expect(lodashDep?.exports).toEqual(['*']);
+  });
+
+  it('should ignore protocol imports like cloudflare:workers and node builtins', async () => {
+    const entryWithProtocolImport = `
+      import { env } from 'cloudflare:workers';
+      import { readFile } from 'node:fs/promises';
+      import { Mastra } from '@mastra/core/mastra';
+
+      export const binding = env.TEST_BINDING;
+      export const fileReader = readFile;
+      export const mastra = new Mastra({});
+    `;
+
+    const result = await analyzeEntry({ entry: entryWithProtocolImport, isVirtualFile: true }, '', {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+    });
+
+    expect(result.dependencies.has('cloudflare:workers')).toBe(false);
+    expect(result.dependencies.has('node:fs/promises')).toBe(false);
+    expect(result.dependencies.has('@mastra/core/mastra')).toBe(true);
   });
 
   it('should generate sourcemaps when enabled', async () => {
@@ -173,11 +204,11 @@ describe('analyzeEntry', () => {
   it('should handle entry with no external dependencies', async () => {
     const entryWithNoDeps = `
       const message = "Hello World";
-      
+
       function greet(name) {
         return message + ", " + name + "!";
       }
-      
+
       export { greet };
     `;
 
@@ -197,7 +228,7 @@ describe('analyzeEntry', () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
 
-    vi.mocked(resolveFrom).mockImplementation((_, dep) => {
+    vi.mocked(resolveModule).mockImplementation(dep => {
       if (dep === '@internal/a') {
         return join(root, 'packages', 'a', 'src', 'index.ts');
       }
@@ -205,7 +236,7 @@ describe('analyzeEntry', () => {
         return join(root, 'packages', 'shared', 'src', 'index.ts');
       }
 
-      throw new Error(`Unknown dependency: ${dep}`);
+      return undefined;
     });
 
     // Create a workspace map that includes @mastra/core to test recursive transitive dependencies
@@ -252,5 +283,138 @@ describe('analyzeEntry', () => {
     // Verify that the analyzer doesn't get stuck in infinite loops.
     // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)
+  });
+
+  it('should deduplicate Rollup instances when analyzeCache is provided', async () => {
+    const entryFilePath = join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts');
+
+    const analyzeCache = new Map();
+    const opts = {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+      analyzeCache,
+    };
+
+    // First call: cache miss — creates a Rollup instance
+    const result1 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
+
+    // Second call with the same entry: cache hit — no new Rollup instance
+    const result2 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
+
+    // Only 1 Rollup instance created despite 2 analyzeEntry calls
+    expect(rollup).toHaveBeenCalledTimes(1);
+    // Both return the same result
+    expect(result1).toBe(result2);
+    expect(result1.dependencies.size).toBe(4);
+    // Cache populated
+    expect(analyzeCache.size).toBe(1);
+  });
+
+  it('should avoid re-analyzing sibling workspace packages that share a transitive dependency', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    vi.mocked(resolveModule).mockImplementation(dep => {
+      if (dep === '@internal/a') {
+        return join(root, 'packages', 'a', 'src', 'index.ts');
+      }
+      if (dep === '@internal/b') {
+        return join(root, 'packages', 'b', 'src', 'index.ts');
+      }
+      if (dep === '@internal/shared') {
+        return join(root, 'packages', 'shared', 'src', 'index.ts');
+      }
+
+      return undefined;
+    });
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/b',
+        {
+          location: `${root}/packages/b`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const baseOpts = {
+      shouldCheckTransitiveDependencies: true,
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap,
+      projectRoot: root,
+    };
+
+    const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
+    const uncachedCalls = vi.mocked(rollup).mock.calls.length;
+
+    expect(uncachedResult.dependencies.size).toBe(3);
+    expect(uncachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(uncachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    expect(uncachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+
+    vi.mocked(rollup).mockClear();
+
+    const analyzeCache = new Map();
+    const cachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+      ...baseOpts,
+      analyzeCache,
+    });
+    const cachedCalls = vi.mocked(rollup).mock.calls.length;
+
+    expect(cachedCalls).toBeLessThan(uncachedCalls);
+    expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
+    expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+    expect(analyzeCache.size).toBe(3);
+  });
+
+  it('should not cache virtual file entries', async () => {
+    const entryCode = `
+      import { Mastra } from '@mastra/core/mastra';
+      export const mastra = new Mastra({});
+    `;
+
+    const analyzeCache = new Map();
+    const opts = {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+      analyzeCache,
+    };
+
+    await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
+    await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
+
+    // Virtual files have no stable path — each call creates a new Rollup instance
+    expect(rollup).toHaveBeenCalledTimes(2);
+    expect(analyzeCache.size).toBe(0);
   });
 });

@@ -1,4 +1,6 @@
 import { Stagehand } from '@browserbasehq/stagehand';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env', quiet: true });
 
 class StagehandSessionManager {
   private static instance: StagehandSessionManager;
@@ -51,7 +53,7 @@ class StagehandSessionManager {
       }
 
       try {
-        const title = await this.stagehand.page.evaluate(() => document.title);
+        const title = await this.stagehand.context.pages()[0].evaluate(() => document.title);
         console.log('Session check successful, page title:', title);
         return this.stagehand;
       } catch (error) {

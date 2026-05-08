@@ -1,7 +1,7 @@
-import EventEmitter from 'node:events';
 import type { StepFlowEntry } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import type { ProcessorArgs } from '.';
 
@@ -18,6 +18,9 @@ export async function processWorkflowParallel(
     resumeData,
     parentWorkflow,
     requestContext,
+    perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -27,33 +30,43 @@ export async function processWorkflowParallel(
     step: Extract<StepFlowEntry, { type: 'parallel' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep?.type === 'step') {
       activeSteps[nestedStep.step.id] = true;
+      if (perStep) {
+        break;
+      }
     }
   }
 
   await Promise.all(
-    step.steps.map(async (_step, idx) => {
-      return pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          workflowId,
+    step.steps
+      ?.filter(step => activeSteps[step.step.id])
+      .map(async (_step, idx) => {
+        return pubsub.publish('workflows', {
+          type: 'workflow.step.run',
           runId,
-          executionPath: executionPath.concat([idx]),
-          resumeSteps,
-          stepResults,
-          prevResult,
-          resumeData,
-          timeTravel,
-          parentWorkflow,
-          activeSteps,
-          requestContext,
-        },
-      });
-    }),
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.concat([idx]),
+            resumeSteps,
+            stepResults,
+            prevResult,
+            resumeData,
+            timeTravel,
+            parentWorkflow,
+            activeSteps,
+            requestContext,
+            perStep,
+            state: currentState,
+            outputOptions,
+          },
+        });
+      }),
   );
 }
 
@@ -70,6 +83,9 @@ export async function processWorkflowConditional(
     resumeData,
     parentWorkflow,
     requestContext,
+    perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -81,15 +97,19 @@ export async function processWorkflowConditional(
     step: Extract<StepFlowEntry, { type: 'conditional' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = resolveCurrentState({ stepResults, state });
+
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
   const idxs = await stepExecutor.evaluateConditions({
     workflowId,
     step,
     runId,
     stepResults,
-    // TODO: implement state
-    state: {},
-    emitter: new EventEmitter() as any, // TODO
-    requestContext: new RequestContext(), // TODO
+    state: currentState,
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -99,47 +119,85 @@ export async function processWorkflowConditional(
     truthyIdxs[idxs[i]!] = true;
   }
 
-  await Promise.all(
-    step.steps.map(async (step, idx) => {
-      if (truthyIdxs[idx]) {
-        if (step?.type === 'step') {
-          activeSteps[step.step.id] = true;
+  let onlyStepToRun: Extract<StepFlowEntry, { type: 'step' }> | undefined;
+
+  if (perStep) {
+    const stepsToRun = step.steps.filter((_, idx) => truthyIdxs[idx]);
+    onlyStepToRun = stepsToRun[0];
+  }
+
+  if (onlyStepToRun) {
+    activeSteps[onlyStepToRun.step.id] = true;
+    const stepIndex = step.steps.findIndex(step => step.step.id === onlyStepToRun.step.id);
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.run',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        executionPath: executionPath.concat([stepIndex]),
+        resumeSteps,
+        stepResults,
+        timeTravel,
+        prevResult,
+        resumeData,
+        parentWorkflow,
+        activeSteps,
+        requestContext,
+        perStep,
+        state: currentState,
+        outputOptions,
+      },
+    });
+  } else {
+    await Promise.all(
+      step.steps.map(async (step, idx) => {
+        if (truthyIdxs[idx]) {
+          if (step?.type === 'step') {
+            activeSteps[step.step.id] = true;
+          }
+          return pubsub.publish('workflows', {
+            type: 'workflow.step.run',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resumeSteps,
+              stepResults,
+              timeTravel,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+              requestContext,
+              perStep,
+              state: currentState,
+              outputOptions,
+            },
+          });
+        } else {
+          return pubsub.publish('workflows', {
+            type: 'workflow.step.end',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resumeSteps,
+              stepResults,
+              prevResult: { status: 'skipped' },
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+              requestContext,
+              perStep,
+              state: currentState,
+              outputOptions,
+            },
+          });
         }
-        return pubsub.publish('workflows', {
-          type: 'workflow.step.run',
-          runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: executionPath.concat([idx]),
-            resumeSteps,
-            stepResults,
-            timeTravel,
-            prevResult,
-            resumeData,
-            parentWorkflow,
-            activeSteps,
-            requestContext,
-          },
-        });
-      } else {
-        return pubsub.publish('workflows', {
-          type: 'workflow.step.end',
-          runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: executionPath.concat([idx]),
-            resumeSteps,
-            stepResults,
-            prevResult: { status: 'skipped' },
-            resumeData,
-            parentWorkflow,
-            activeSteps,
-            requestContext,
-          },
-        });
-      }
-    }),
-  );
+      }),
+    );
+  }
 }

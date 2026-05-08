@@ -1,5 +1,5 @@
 import { TypeValidationError } from '@ai-sdk/provider-v5';
-import type { Schema } from 'ai-v5';
+import type { Schema } from '@internal/ai-sdk-v5';
 
 export type ValidationResult<T> =
   | {

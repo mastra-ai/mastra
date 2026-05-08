@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
+import type z from 'zod';
 import { resolveModel } from '../../utils';
 import { PlanningIterationResultSchema } from '../shared/schema';
 import { taskPlanningPrompts } from './prompts';
@@ -12,6 +13,8 @@ import {
   TaskApprovalResumeSchema,
   TaskApprovalSuspendSchema,
 } from './schema';
+
+type PlanningIterationResult = z.infer<typeof PlanningIterationResultSchema>;
 
 // Planning iteration step (with questions and user answers)
 const planningIterationStep = createStep({
@@ -52,10 +55,11 @@ const planningIterationStep = createStep({
     // Update existing Q&A pairs with new answers
     if (Object.keys(newAnswers).length > 0) {
       storedQAPairs = storedQAPairs.map(pair => {
-        if (newAnswers[pair.question.id]) {
+        const answerValue = newAnswers[pair.question.id];
+        if (answerValue) {
           return {
             ...pair,
-            answer: newAnswers[pair.question.id] || null,
+            answer: String(answerValue) || null,
             answeredAt: new Date().toISOString(),
           };
         }
@@ -120,7 +124,7 @@ const planningIterationStep = createStep({
         // maxSteps: 15,
       });
 
-      const planResult = await result.object;
+      const planResult = (await result.object) as unknown as PlanningIterationResult | null;
       if (!planResult) {
         return {
           tasks: [],

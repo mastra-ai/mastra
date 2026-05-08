@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { MastraUIMessage } from '../types';
 import { resolveInitialMessages, resolveToChildMessages } from './resolveInitialMessages';
-import { MastraUIMessage } from '../types';
 
 describe('resolveInitialMessages', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
@@ -120,24 +120,26 @@ describe('resolveInitialMessages', () => {
         input: 'Search query',
         finalResult: {
           text: 'Search results',
-          toolCalls: [
-            {
-              type: 'tool-call',
-              runId: 'run-1',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'web-search',
-                args: { query: 'test' },
-              },
-            },
-          ],
           messages: [
             {
               role: 'assistant',
               id: 'msg-inner-1',
               createdAt: '2024-01-01',
-              type: 'assistant',
+              type: 'tool-call',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'web-search',
+                  args: { query: 'test' },
+                },
+              ],
+            },
+            {
+              role: 'tool',
+              id: 'msg-inner-2',
+              createdAt: '2024-01-01',
+              type: 'tool-result',
               content: [
                 {
                   type: 'tool-result',
@@ -191,24 +193,26 @@ describe('resolveInitialMessages', () => {
         input: 'Run workflow',
         finalResult: {
           text: 'Workflow done',
-          toolCalls: [
-            {
-              type: 'tool-call',
-              runId: 'run-2',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'wf-call-1',
-                toolName: 'data-workflow',
-                args: { input: 'data' },
-              },
-            },
-          ],
           messages: [
             {
               role: 'assistant',
+              id: 'msg-inner-1',
+              createdAt: '2024-01-01',
+              type: 'tool-call',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'wf-call-1',
+                  toolName: 'data-workflow',
+                  args: { input: 'data' },
+                },
+              ],
+            },
+            {
+              role: 'tool',
               id: 'msg-inner-2',
               createdAt: '2024-01-01',
-              type: 'assistant',
+              type: 'tool-result',
               content: [
                 {
                   type: 'tool-result',
@@ -264,19 +268,23 @@ describe('resolveInitialMessages', () => {
         input: 'test',
         finalResult: {
           text: 'Done',
-          toolCalls: [
+          messages: [
             {
+              role: 'assistant',
+              id: 'msg-inner-1',
+              createdAt: '2024-01-01',
               type: 'tool-call',
-              runId: 'run-3',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'orphan-call',
-                toolName: 'orphan-tool',
-                args: {},
-              },
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'orphan-call',
+                  toolName: 'orphan-tool',
+                  args: {},
+                },
+              ],
             },
+            // No tool-result message - orphan tool call
           ],
-          messages: [],
         },
       };
 
@@ -305,7 +313,7 @@ describe('resolveInitialMessages', () => {
       });
     });
 
-    it('should handle empty tool calls array', () => {
+    it('should handle empty messages array', () => {
       const networkData = {
         isNetwork: true,
         primitiveType: 'agent',
@@ -313,7 +321,7 @@ describe('resolveInitialMessages', () => {
         input: 'test',
         finalResult: {
           text: 'Response',
-          toolCalls: [],
+          messages: [],
         },
       };
 
@@ -938,34 +946,32 @@ describe('resolveInitialMessages', () => {
         input: 'multi task',
         finalResult: {
           text: 'All done',
-          toolCalls: [
-            {
-              type: 'tool-call',
-              runId: 'run-6',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'call-a',
-                toolName: 'tool-a',
-                args: { param: 'a' },
-              },
-            },
-            {
-              type: 'tool-call',
-              runId: 'run-7',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'call-b',
-                toolName: 'tool-b',
-                args: { param: 'b' },
-              },
-            },
-          ],
           messages: [
             {
               role: 'assistant',
+              id: 'msg-inner-3',
+              createdAt: '2024-01-01',
+              type: 'tool-call',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-a',
+                  toolName: 'tool-a',
+                  args: { param: 'a' },
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-b',
+                  toolName: 'tool-b',
+                  args: { param: 'b' },
+                },
+              ],
+            },
+            {
+              role: 'tool',
               id: 'msg-inner-4',
               createdAt: '2024-01-01',
-              type: 'assistant',
+              type: 'tool-result',
               content: [
                 {
                   type: 'tool-result',
@@ -1350,6 +1356,131 @@ describe('resolveToChildMessages', () => {
       expect(result[0]).toMatchObject({ toolName: 'search' });
       expect(result[1]).toMatchObject({ toolName: 'calculator' });
       expect(result[2]).toMatchObject({ toolName: 'database' });
+    });
+
+    it('should exclude completed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13a',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'weather',
+              toolCallId: 'tool-1',
+              state: 'output-available',
+              input: { city: 'SF' },
+              output: { temp: 70 },
+            } as any,
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              weather: { toolCallId: 'tool-1', toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.weather).toBeUndefined();
+    });
+
+    it('should ignore malformed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13b',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              malformedNull: null,
+              malformedString: 'invalid',
+              malformedObject: { toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedNull).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedString).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedObject).toBeUndefined();
+    });
+
+    it('should preserve suspendedTools metadata with runId on page refresh', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-suspended',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'workflow-multi-step',
+              toolCallId: 'tool-1',
+              state: 'input-available',
+              input: { data: 'test' },
+            } as any,
+          ],
+          metadata: {
+            suspendedTools: {
+              'workflow-multi-step': {
+                toolCallId: 'tool-1',
+                toolName: 'workflow-multi-step',
+                args: { data: 'test' },
+                suspendPayload: { question: 'Step 2 question' },
+                runId: 'run-abc-123',
+              },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      // After page refresh, suspendedTools metadata must be preserved with runId
+      // so the frontend can resume the correct agentic-loop run (issue #14875)
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        suspendedTools: {
+          'workflow-multi-step': {
+            toolCallId: 'tool-1',
+            toolName: 'workflow-multi-step',
+            suspendPayload: { question: 'Step 2 question' },
+            runId: 'run-abc-123',
+          },
+        },
+      });
     });
 
     it('should handle empty text content', () => {

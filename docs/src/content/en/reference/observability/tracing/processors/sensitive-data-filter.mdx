@@ -1,6 +1,8 @@
 ---
 title: "Reference: SensitiveDataFilter | Observability"
 description: API reference for the SensitiveDataFilter processor
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -9,13 +11,35 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 A SpanOutputProcessor that redacts sensitive information from span fields.
 
-## Constructor
+## Auto-applied by default
+
+`Observability` automatically appends a `SensitiveDataFilter` to every configured instance's `spanOutputProcessors` so secrets are redacted before they reach exporters such as the Mastra cloud exporter. The filter runs last (after any user-provided processors) so that sensitive data introduced or surfaced by upstream processors is still redacted. You do not need to add it manually unless you want to customize its options.
+
+To opt out or customize the auto-applied filter, use the `sensitiveDataFilter` option on the [`Observability` registry config](/reference/observability/tracing/configuration#observabilityregistryconfig):
 
 ```typescript
+import { Observability } from '@mastra/observability'
+
+new Observability({
+  configs: {
+    /* ... */
+  },
+  // disable the auto-applied filter
+  sensitiveDataFilter: false,
+  // or customize it
+  // sensitiveDataFilter: { sensitiveFields: ['mySecret'], redactionStyle: 'partial' },
+})
+```
+
+If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values are not modified — add a `SensitiveDataFilter` to their processors yourself if needed.
+
+## Constructor
+
+```typescript prettier:false
 new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
 ```
 
-## SensitiveDataFilterOptions
+## `SensitiveDataFilterOptions`
 
 ```typescript
 interface SensitiveDataFilterOptions {
@@ -27,13 +51,13 @@ interface SensitiveDataFilterOptions {
    * authorization, bearer, bearertoken, jwt, credential,
    * clientsecret, privatekey, refresh, ssn.
    */
-  sensitiveFields?: string[];
+  sensitiveFields?: string[]
 
   /**
    * The token used for full redaction.
    * Default: "[REDACTED]"
    */
-  redactionToken?: string;
+  redactionToken?: string
 
   /**
    * Style of redaction to use:
@@ -41,45 +65,44 @@ interface SensitiveDataFilterOptions {
    * - "partial": show 3 characters from the start and end, redact the middle
    * Default: "full"
    */
-  redactionStyle?: RedactionStyle;
+  redactionStyle?: RedactionStyle
 }
 ```
 
 <PropertiesTable
   props={[
-    {
-      name: "sensitiveFields",
-      type: "string[]",
-      description:
-        "Field names to redact (case-insensitive, separator-agnostic)",
-      required: false,
-    },
-    {
-      name: "redactionToken",
-      type: "string",
-      description: "Replacement token for full redaction",
-      required: false,
-    },
-    {
-      name: "redactionStyle",
-      type: "'full' | 'partial'",
-      description: "Redaction style",
-      required: false,
-    },
-  ]}
+  {
+    name: 'sensitiveFields',
+    type: 'string[]',
+    description: 'Field names to redact (case-insensitive, separator-agnostic)',
+    required: false,
+  },
+  {
+    name: 'redactionToken',
+    type: 'string',
+    description: 'Replacement token for full redaction',
+    required: false,
+  },
+  {
+    name: 'redactionStyle',
+    type: "'full' | 'partial'",
+    description: 'Redaction style',
+    required: false,
+  },
+]}
 />
 
-## RedactionStyle
+## `RedactionStyle`
 
 ```typescript
-type RedactionStyle = "full" | "partial";
+type RedactionStyle = 'full' | 'partial'
 ```
 
 ## Methods
 
 ### process
 
-```typescript
+```typescript prettier:false
 process(span: AnySpan): AnySpan
 ```
 
@@ -87,20 +110,20 @@ Process a span by filtering sensitive data across its key fields: attributes, me
 
 <PropertiesTable
   props={[
-    {
-      name: "span",
-      type: "AnySpan",
-      description: "The input span to filter",
-      required: true,
-    },
-  ]}
+  {
+    name: 'span',
+    type: 'AnySpan',
+    description: 'The input span to filter',
+    required: true,
+  },
+]}
 />
 
 **Returns:** A new span with sensitive values redacted.
 
 ### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>
 ```
 
@@ -108,35 +131,35 @@ No cleanup needed for this processor.
 
 ## Properties
 
-```typescript
+```typescript prettier:false
 readonly name = 'sensitive-data-filter';
 ```
 
-## Default Sensitive Fields
+## Default sensitive fields
 
 When no custom fields are provided:
 
 ```typescript
 [
-  "password",
-  "token",
-  "secret",
-  "key",
-  "apikey",
-  "auth",
-  "authorization",
-  "bearer",
-  "bearertoken",
-  "jwt",
-  "credential",
-  "clientsecret",
-  "privatekey",
-  "refresh",
-  "ssn",
-];
+  'password',
+  'token',
+  'secret',
+  'key',
+  'apikey',
+  'auth',
+  'authorization',
+  'bearer',
+  'bearertoken',
+  'jwt',
+  'credential',
+  'clientsecret',
+  'privatekey',
+  'refresh',
+  'ssn',
+]
 ```
 
-## Processing Behavior
+## Processing behavior
 
 ### Field Matching
 
@@ -144,7 +167,7 @@ When no custom fields are provided:
 - **Separator-agnostic**: `api-key`, `api_key`, `apiKey` are treated identically
 - **Exact matching**: After normalization, fields must match exactly
   - `token` matches `token`, `Token`, `TOKEN`
-  - `token` does NOT match `promptTokens` or `tokenCount`
+  - `token` doesn't match `promptTokens` or `tokenCount`
 
 ### Redaction Styles
 
@@ -158,14 +181,14 @@ All matched values replaced with redactionToken.
 - Values ≤ 6 characters are fully redacted
 - Non-string values are converted to strings before partial redaction
 
-### Error Handling
+### Error handling
 
 If filtering a field fails, the field is replaced with:
 
 ```typescript
 {
   error: {
-    processor: "sensitive-data-filter";
+    processor: 'sensitive-data-filter'
   }
 }
 ```

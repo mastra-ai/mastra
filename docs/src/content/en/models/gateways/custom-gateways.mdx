@@ -1,9 +1,9 @@
 ---
-title: "Custom Gateways | Models | Mastra"
+title: "Custom gateways | Models | Mastra"
 description: "Create custom model gateways for private or specialized LLM deployments"
 ---
 
-# Custom Model Gateways
+# Custom model gateways
 
 Custom model gateways allow you to implement private or specialized LLM provider integrations by extending the `MastraModelGateway` base class.
 
@@ -139,10 +139,11 @@ mastra.addGateway(new MyPrivateGateway());
 Reference models from your custom gateway using the gateway ID as prefix:
 
 ```typescript
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'my-agent',
+  id: 'my-agent',
+  name: 'My Agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1', // Uses MyPrivateGateway
 });
@@ -181,8 +182,7 @@ When running in development mode (`MASTRA_DEV=true`), Mastra automatically gener
 4. **Autocomplete now works**:
    ```typescript
    const agent = new Agent({
-     model: 'my-gateway-id/my-provider/model-1', // ✅ Full autocomplete!
-
+     model: 'my-gateway-id/my-provider/model-1', // Full autocomplete!
    });
    ```
 
@@ -205,6 +205,7 @@ If you're not running in development mode or need immediate type updates:
 **Option 1: Use type assertion (simplest)**
 ```typescript
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1' as any, // Bypass type checking
@@ -225,6 +226,7 @@ type CustomModelId =
 type AllModelIds = ModelRouterModelId | CustomModelId;
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant',
   model: 'private/my-provider/model-1' satisfies AllModelIds,
@@ -323,7 +325,6 @@ Understanding the distinction:
 class VersionedGateway extends MastraModelGateway {
   readonly id = 'my-gateway-v2';     // Unique ID for versioning and prefixing
   readonly name = 'My Gateway';       // Display name
-\  // ... implementation
 }
 
 const mastra = new Mastra({
@@ -353,7 +354,7 @@ Models accessed through custom gateways follow this format:
 Examples:
 - `private/my-provider/model-1`
 
-## Advanced Example
+## Advanced example
 
 Token-based gateway with caching:
 
@@ -428,7 +429,7 @@ class TokenGateway extends MastraModelGateway {
 }
 ```
 
-## Error Handling
+## Error handling
 
 Provide descriptive errors for common failure scenarios:
 
@@ -509,7 +510,7 @@ describe('MyPrivateGateway', () => {
 });
 ```
 
-## Best Practices
+## Best practices
 
 1. **Use descriptive IDs for versioning**: Set explicit `id` values when you need to version your gateways
    ```typescript
@@ -537,4 +538,4 @@ Mastra includes built-in gateways as reference implementations:
 - **NetlifyGateway**: Netlify AI Gateway integration with token exchange
 - **ModelsDevGateway**: Registry of OpenAI-compatible providers from models.dev
 
-See [Netlify](/models/v1/gateways/netlify), [OpenRouter](/models/v1/gateways/openrouter), and [Vercel](/models/v1/gateways/vercel) for examples of gateway usage.
+See [Netlify](/models/gateways/netlify), [OpenRouter](/models/gateways/openrouter), and [Vercel](/models/gateways/vercel) for examples of gateway usage.

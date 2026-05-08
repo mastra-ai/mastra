@@ -421,6 +421,91 @@ export function createAdvancedOperationsTest(config: VectorTestConfig) {
           }),
         ).rejects.toThrow(/empty filter/i);
       });
+
+      it('should update only metadata by id, preserving vector', async () => {
+        const originalVector = createVector(42);
+        const ids = await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [originalVector],
+          metadata: [{ name: 'original', count: 1 }],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Update only metadata
+        await config.vector.updateVector({
+          indexName: testIndexName,
+          id: ids[0]!,
+          update: { metadata: { name: 'updated', count: 2 } },
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Query with includeVector to verify vector unchanged
+        const results = await config.vector.query({
+          indexName: testIndexName,
+          queryVector: originalVector,
+          topK: 1,
+          includeVector: true,
+        });
+
+        expect(results[0]?.metadata?.name).toBe('updated');
+        expect(results[0]?.metadata?.count).toBe(2);
+        // Vector should be unchanged (close to original based on high similarity)
+        expect(results[0]?.score).toBeGreaterThan(0.99);
+      });
+
+      it('should update only vector by id, preserving metadata', async () => {
+        const originalVector = createVector(1);
+        const newVector = createVector(100);
+
+        const ids = await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [originalVector],
+          metadata: [{ name: 'preserve-me', status: 'active', count: 42 }],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Update only vector
+        await config.vector.updateVector({
+          indexName: testIndexName,
+          id: ids[0]!,
+          update: { vector: newVector },
+        });
+
+        await waitForIndexing(testIndexName);
+
+        // Query with new vector should find the updated record
+        const results = await config.vector.query({
+          indexName: testIndexName,
+          queryVector: newVector,
+          topK: 1,
+        });
+
+        // Metadata should be preserved
+        expect(results[0]?.metadata?.name).toBe('preserve-me');
+        expect(results[0]?.metadata?.status).toBe('active');
+        expect(results[0]?.metadata?.count).toBe(42);
+      });
+
+      it('should reject update with no updates provided', async () => {
+        const ids = await config.vector.upsert({
+          indexName: testIndexName,
+          vectors: [createVector(1)],
+          metadata: [{ name: 'test' }],
+        });
+
+        await waitForIndexing(testIndexName);
+
+        await expect(
+          config.vector.updateVector({
+            indexName: testIndexName,
+            id: ids[0]!,
+            update: {},
+          }),
+        ).rejects.toThrow(/update.*required|no.*updates|empty.*update/i);
+      });
     }, 50000);
 
     describe('Real-world scenarios', () => {

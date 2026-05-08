@@ -1,5 +1,5 @@
-import type { Plugin } from 'rollup';
 import { getPackageInfo } from 'local-pkg';
+import type { Plugin } from 'rollup';
 
 export function nodeGypDetector(): Plugin {
   const modulesToTrack = new Set<string>();

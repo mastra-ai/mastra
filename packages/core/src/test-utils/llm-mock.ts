@@ -1,7 +1,8 @@
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 
+import type { StreamObjectResult, StreamReturn } from '../llm/model/base.types';
 import { MastraLLMV1 } from '../llm/model/model';
 import { MastraLanguageModelV2Mock } from '../loop/test-utils/MastraLanguageModelV2Mock';
 
@@ -102,9 +103,9 @@ export function createMockModel({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: finalText },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: finalText },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -185,31 +186,29 @@ export class MockProvider extends MastraLLMV1 {
     super({ model: mockModel });
   }
 
-  // @ts-ignore
+  // @ts-expect-error
   stream(...args: any): PromiseLike<StreamReturn<any, any, any>> {
-    // @ts-ignore
+    // @ts-expect-error
     const result = super.stream(...args);
 
     return {
       ...result,
-      // @ts-ignore on await read the stream
       then: (onfulfilled, onrejected) => {
-        // @ts-ignore
+        // @ts-expect-error
         return result.baseStream.pipeTo(new WritableStream()).then(onfulfilled, onrejected);
       },
     };
   }
 
-  // @ts-ignore
+  // @ts-expect-error
   __streamObject(...args): PromiseLike<StreamObjectResult<any>> {
-    // @ts-ignore
+    // @ts-expect-error
     const result = super.__streamObject(...args);
 
     return {
       ...result,
-      // @ts-ignore on await read the stream
       then: (onfulfilled, onrejected) => {
-        // @ts-ignore
+        // @ts-expect-error
         return result.baseStream.pipeTo(new WritableStream()).then(onfulfilled, onrejected);
       },
     };

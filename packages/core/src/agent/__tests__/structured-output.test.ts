@@ -1,13 +1,84 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
+import { MastraModelGateway } from '../../llm/model/gateways/base';
+import type { ProviderConfig } from '../../llm/model/gateways/base';
 import { Mastra } from '../../mastra';
 import { Agent } from '../agent';
 
-function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
-  let zodSchemaModel: MockLanguageModelV1 | MockLanguageModelV2;
-  let jsonSchemaModel: MockLanguageModelV1 | MockLanguageModelV2;
+class StructuredOutputTestGateway extends MastraModelGateway {
+  readonly id = 'structured-test';
+  readonly name = 'structured-output-test-gateway';
+  readonly prefix = 'structured-test';
+
+  async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    return {
+      'test-provider': {
+        name: 'Test Provider',
+        models: ['structuring-model'],
+        apiKeyEnvVar: 'TEST_API_KEY',
+        gateway: 'structured-output-test-gateway',
+        url: 'https://api.test.com/v1',
+      },
+    };
+  }
+
+  buildUrl(_modelId: string): string {
+    return 'https://api.test.com/v1';
+  }
+
+  async getApiKey(_modelId: string): Promise<string> {
+    return process.env.TEST_API_KEY || 'test-key';
+  }
+
+  async resolveLanguageModel(_args: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+    headers?: Record<string, string>;
+  }): Promise<MockLanguageModelV2> {
+    return new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          { type: 'text', text: JSON.stringify({ summary: 'There are 3 files in the directory.', filesFound: 3 }) },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'structuring-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: JSON.stringify({ summary: 'There are 3 files in the directory.', filesFound: 3 }),
+          },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+  }
+}
+
+function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
+  let zodSchemaModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
+  let jsonSchemaModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
   beforeEach(() => {
     if (version === 'v1') {
@@ -82,7 +153,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
           rawCall: { rawPrompt: null, rawSettings: {} },
         }),
       });
-    } else {
+    } else if (version === 'v2') {
       // V2 Mock for ZodSchema test - arrays must be wrapped in {"elements": [...]}
       zodSchemaModel = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -106,18 +177,18 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"elements": ' },
-            { type: 'text-delta', id: '1', delta: '[' },
-            { type: 'text-delta', id: '1', delta: '{ "year": "2012", ' },
-            { type: 'text-delta', id: '1', delta: '"winner": "Barack Obama" }' },
-            { type: 'text-delta', id: '1', delta: ', ' },
-            { type: 'text-delta', id: '1', delta: '{ "year": "2016", ' },
-            { type: 'text-delta', id: '1', delta: '"winner": "Donald Trump" }' },
-            { type: 'text-delta', id: '1', delta: ']' },
-            { type: 'text-delta', id: '1', delta: ' }' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"elements": ' },
+            { type: 'text-delta', id: 'text-1', delta: '[' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2012", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Barack Obama" }' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2016", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Donald Trump" }' },
+            { type: 'text-delta', id: 'text-1', delta: ']' },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -152,18 +223,18 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"winners": ' },
-            { type: 'text-delta', id: '1', delta: '[' },
-            { type: 'text-delta', id: '1', delta: '{ "year": "2012", ' },
-            { type: 'text-delta', id: '1', delta: '"winner": "Barack Obama" }' },
-            { type: 'text-delta', id: '1', delta: ', ' },
-            { type: 'text-delta', id: '1', delta: '{ "year": "2016", ' },
-            { type: 'text-delta', id: '1', delta: '"winner": "Donald Trump" }' },
-            { type: 'text-delta', id: '1', delta: ']' },
-            { type: 'text-delta', id: '1', delta: ' }' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winners": ' },
+            { type: 'text-delta', id: 'text-1', delta: '[' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2012", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Barack Obama" }' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2016", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Donald Trump" }' },
+            { type: 'text-delta', id: 'text-1', delta: ']' },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -172,6 +243,104 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
+        }),
+      });
+    } else {
+      // V3 Mock for ZodSchema test - arrays must be wrapped in {"elements": [...]}
+      zodSchemaModel = new MockLanguageModelV3({
+        doGenerate: async () => ({
+          finishReason: 'stop',
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: 20, reasoning: undefined },
+          },
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                elements: [
+                  { year: '2012', winner: 'Barack Obama' },
+                  { year: '2016', winner: 'Donald Trump' },
+                ],
+              }),
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"elements": ' },
+            { type: 'text-delta', id: 'text-1', delta: '[' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2012", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Barack Obama" }' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2016", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Donald Trump" }' },
+            { type: 'text-delta', id: 'text-1', delta: ']' },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
+            },
+          ]),
+        }),
+      });
+
+      // V3 Mock for JSONSchema7 test
+      jsonSchemaModel = new MockLanguageModelV3({
+        doGenerate: async () => ({
+          finishReason: 'stop',
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: 20, reasoning: undefined },
+          },
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                winners: [
+                  { year: '2012', winner: 'Barack Obama' },
+                  { year: '2016', winner: 'Donald Trump' },
+                ],
+              }),
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winners": ' },
+            { type: 'text-delta', id: 'text-1', delta: '[' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2012", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Barack Obama" }' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: '{ "year": "2016", ' },
+            { type: 'text-delta', id: 'text-1', delta: '"winner": "Donald Trump" }' },
+            { type: 'text-delta', id: 'text-1', delta: ']' },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
+            },
+          ]),
         }),
       });
     }
@@ -296,52 +465,290 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
       ]);
     });
 
-    if (version === 'v2') {
-      it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
-        const bedrockStyleModel = new MockLanguageModelV2({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'tool-calls',
-            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  primitiveId: 'weatherAgent',
-                  primitiveType: 'agent',
-                  prompt: 'What is the weather?',
-                  selectionReason: 'Selected for weather info',
+    if (version === 'v2' || version === 'v3') {
+      it('should use Mastra custom gateways for a separate structuring model', async () => {
+        process.env.TEST_API_KEY = 'test-api-key-123';
+
+        const primaryModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
                 }),
-              },
-            ],
-            warnings: [],
-          }),
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'bedrock-mock', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              {
-                type: 'text-delta',
-                id: '1',
-                delta: JSON.stringify({
-                  primitiveId: 'weatherAgent',
-                  primitiveType: 'agent',
-                  prompt: 'What is the weather?',
-                  selectionReason: 'Selected for weather info',
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  warnings: [],
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
                 }),
-              },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          }),
+              })
+            : new MockLanguageModelV3({
+                doGenerate: async () => ({
+                  finishReason: 'stop' as const,
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 20, text: 20, reasoning: undefined },
+                  },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  stream: convertArrayToReadableStreamV3([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
+                    },
+                  ]),
+                }),
+              });
+
+        const agent = new Agent({
+          id: `structured-output-custom-gateway-${version}`,
+          name: 'Structured Output Custom Gateway',
+          instructions: 'You are a helpful assistant.',
+          model: primaryModel,
         });
+
+        const mastra = new Mastra({
+          agents: { agent },
+          gateways: {
+            structuredTest: new StructuredOutputTestGateway(),
+          },
+          logger: false,
+        });
+
+        const registeredAgent = mastra.getAgent('agent');
+
+        const result = await registeredAgent.generate('Summarize: there are 3 files in the directory.', {
+          structuredOutput: {
+            schema: z.object({
+              summary: z.string(),
+              filesFound: z.number(),
+            }),
+            model: 'structured-test/test-provider/structuring-model',
+          },
+        });
+
+        expect(result.tripwire).toBeUndefined();
+        expect(result.object).toEqual({
+          summary: 'There are 3 files in the directory.',
+          filesFound: 3,
+        });
+      });
+
+      it('should surface separate structuring model errors from the processor', async () => {
+        const primaryModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  warnings: [],
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
+                }),
+              })
+            : new MockLanguageModelV3({
+                doGenerate: async () => ({
+                  finishReason: 'stop' as const,
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 20, text: 20, reasoning: undefined },
+                  },
+                  content: [{ type: 'text', text: 'There are 3 files in the directory.' }],
+                  warnings: [],
+                }),
+                doStream: async () => ({
+                  stream: convertArrayToReadableStreamV3([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'There are 3 files in the directory.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 20, text: 20, reasoning: undefined },
+                      },
+                    },
+                  ]),
+                }),
+              });
+
+        const structuringError = new Error('No recording found for gpt-5.4');
+        const structuringModel =
+          version === 'v2'
+            ? new MockLanguageModelV2({
+                doStream: async () => {
+                  throw structuringError;
+                },
+              })
+            : new MockLanguageModelV3({
+                doStream: async () => {
+                  throw structuringError;
+                },
+              });
+
+        const agent = new Agent({
+          id: `structured-output-separate-model-error-${version}`,
+          name: 'Structured Output Separate Model Error',
+          instructions: 'You are a helpful assistant.',
+          model: primaryModel,
+        });
+
+        const result = await agent.generate('Summarize: there are 3 files in the directory.', {
+          structuredOutput: {
+            schema: z.object({
+              summary: z.string(),
+              filesFound: z.number(),
+            }),
+            model: structuringModel,
+          },
+        });
+
+        expect(result.object).toBeUndefined();
+        expect(result.tripwire?.reason).toBe(
+          '[StructuredOutputProcessor] Structured output processing failed: [StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+        );
+      });
+
+      it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
+        let bedrockStyleModel: MockLanguageModelV2 | MockLanguageModelV3;
+        if (version === 'v2') {
+          bedrockStyleModel = new MockLanguageModelV2({
+            doGenerate: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    primitiveId: 'weatherAgent',
+                    primitiveType: 'agent',
+                    prompt: 'What is the weather?',
+                    selectionReason: 'Selected for weather info',
+                  }),
+                },
+              ],
+              warnings: [],
+            }),
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'bedrock-mock', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: JSON.stringify({
+                    primitiveId: 'weatherAgent',
+                    primitiveType: 'agent',
+                    prompt: 'What is the weather?',
+                    selectionReason: 'Selected for weather info',
+                  }),
+                },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+        } else {
+          bedrockStyleModel = new MockLanguageModelV3({
+            doGenerate: async () => ({
+              finishReason: 'tool-calls',
+              usage: {
+                inputTokens: { total: 100, noCache: 100, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 50, text: 50, reasoning: undefined },
+              },
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    primitiveId: 'weatherAgent',
+                    primitiveType: 'agent',
+                    prompt: 'What is the weather?',
+                    selectionReason: 'Selected for weather info',
+                  }),
+                },
+              ],
+              warnings: [],
+            }),
+            doStream: async () => ({
+              stream: convertArrayToReadableStreamV3([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'bedrock-mock', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                {
+                  type: 'text-delta',
+                  id: 'text-1',
+                  delta: JSON.stringify({
+                    primitiveId: 'weatherAgent',
+                    primitiveType: 'agent',
+                    prompt: 'What is the weather?',
+                    selectionReason: 'Selected for weather info',
+                  }),
+                },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: {
+                    inputTokens: { total: 100, noCache: 100, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 50, text: 50, reasoning: undefined },
+                  },
+                },
+              ]),
+            }),
+          });
+        }
 
         const routingAgent = new Agent({
           id: 'routing-agent',
@@ -371,36 +778,71 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (stream)', async () => {
-        const bedrockStyleModel = new MockLanguageModelV2({
-          doGenerate: async () => {
-            throw new Error('Generate not needed for stream test');
-          },
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'bedrock-mock', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              {
-                type: 'text-delta',
-                id: '1',
-                delta: JSON.stringify({
-                  primitiveId: 'weatherAgent',
-                  primitiveType: 'agent',
-                  prompt: 'What is the weather?',
-                  selectionReason: 'Selected for weather info',
-                }),
-              },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          }),
-        });
+        let bedrockStyleModel: MockLanguageModelV2 | MockLanguageModelV3;
+        if (version === 'v2') {
+          bedrockStyleModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw new Error('Generate not needed for stream test');
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'bedrock-mock', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: JSON.stringify({
+                    primitiveId: 'weatherAgent',
+                    primitiveType: 'agent',
+                    prompt: 'What is the weather?',
+                    selectionReason: 'Selected for weather info',
+                  }),
+                },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+        } else {
+          bedrockStyleModel = new MockLanguageModelV3({
+            doGenerate: async () => {
+              throw new Error('Generate not needed for stream test');
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStreamV3([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'bedrock-mock', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                {
+                  type: 'text-delta',
+                  id: 'text-1',
+                  delta: JSON.stringify({
+                    primitiveId: 'weatherAgent',
+                    primitiveType: 'agent',
+                    prompt: 'What is the weather?',
+                    selectionReason: 'Selected for weather info',
+                  }),
+                },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: {
+                    inputTokens: { total: 100, noCache: 100, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 50, text: 50, reasoning: undefined },
+                  },
+                },
+              ]),
+            }),
+          });
+        }
 
         const routingAgent = new Agent({
           id: 'routing-agent',
@@ -438,3 +880,4 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' }) {
 
 structuredOutputTests({ version: 'v1' });
 structuredOutputTests({ version: 'v2' });
+structuredOutputTests({ version: 'v3' });

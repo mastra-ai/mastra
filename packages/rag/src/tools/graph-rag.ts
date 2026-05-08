@@ -1,17 +1,28 @@
+import { createObservabilityContext, SpanType } from '@mastra/core/observability';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import { vectorQuerySearch, defaultGraphRagDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultGraphRagDescription,
+  filterSchema,
+  outputSchema,
+  baseSchema,
+  coerceTopK,
+  parseFilterValue,
+  resolveVectorStore,
+} from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
-import type { GraphRagToolOptions } from './types';
+import type { GraphRagToolOptions, ProviderOptions } from './types';
 import { defaultGraphOptions } from './types';
 
 export const createGraphRAGTool = (options: GraphRagToolOptions) => {
   const { model, id, description } = options;
+  const storeName = options['vectorStoreName'] ? options.vectorStoreName : 'DirectVectorStore';
 
-  const toolId = id || `GraphRAG ${options.vectorStoreName} ${options.indexName} Tool`;
+  const toolId = id || `GraphRAG ${storeName} ${options.indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription();
   const graphOptions = {
     ...defaultGraphOptions,
@@ -29,61 +40,46 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     outputSchema,
     description: toolDescription,
     execute: async (inputData, context) => {
-      const { requestContext, mastra } = context || {};
+      // See vector-query.ts for the same pattern: `context` from `createTool`
+      // is loosely typed; cast is safe because `createObservabilityContext`
+      // falls back to `noOpTracingContext` when `tracingContext` is undefined.
+      const { requestContext, mastra, tracingContext } = (context as any) || {};
+      const observabilityContext = createObservabilityContext(tracingContext);
+      const parentSpan = observabilityContext.tracingContext?.currentSpan;
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = requestContext?.get('vectorStoreName') ?? options.vectorStoreName;
+      const vectorStoreName: string =
+        'vectorStore' in options ? storeName : (requestContext?.get('vectorStoreName') ?? storeName);
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
       const includeSources: boolean = requestContext?.get('includeSources') ?? options.includeSources ?? true;
       const randomWalkSteps: number | undefined =
         requestContext?.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
       const restartProb: number | undefined = requestContext?.get('restartProb') ?? graphOptions.restartProb;
-      const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
-      const filter: Record<string, any> = requestContext?.get('filter') ?? (inputData.filter as Record<string, any>);
+      const topK: number = requestContext?.get('topK') ?? (inputData.topK as number) ?? 10;
+      const filter: unknown = requestContext?.get('filter') ?? inputData.filter;
       const queryText = inputData.queryText;
-      const providerOptions: Record<string, Record<string, any>> | undefined =
+      const providerOptions: ProviderOptions['providerOptions'] =
         requestContext?.get('providerOptions') ?? options.providerOptions;
 
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
-      if (!logger) {
-        console.warn(
-          '[GraphRAGTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
-        );
-      }
       if (logger) {
         logger.debug('[GraphRAGTool] execute called with:', { queryText, topK, filter });
       }
       try {
-        const topKValue =
-          typeof topK === 'number' && !isNaN(topK)
-            ? topK
-            : typeof topK === 'string' && !isNaN(Number(topK))
-              ? Number(topK)
-              : 10;
-        const vectorStore = mastra?.getVector(vectorStoreName);
+        const topKValue = coerceTopK(topK);
 
+        const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
           if (logger) {
-            logger.error('Vector store not found', { vectorStoreName });
+            logger.error('Vector store not found', { vectorStore: vectorStoreName });
           }
+          // Return empty results for graceful degradation when store is not found
           return { relevantContext: [], sources: [] };
         }
 
-        let queryFilter = {};
-        if (enableFilter) {
-          queryFilter = (() => {
-            try {
-              return typeof filter === 'string' ? JSON.parse(filter) : filter;
-            } catch (error) {
-              if (logger) {
-                logger.error('Invalid filter', { filter, error });
-              }
-              throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          })();
-        }
+        const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
         if (logger) {
           logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue });
         }
@@ -96,6 +92,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           topK: topKValue,
           includeVectors: true,
           providerOptions,
+          observabilityContext,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -115,19 +112,52 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           if (logger) {
             logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
           }
-          graphRag.createGraph(chunks, embeddings);
+          const buildSpan = parentSpan?.createChildSpan({
+            type: SpanType.GRAPH_ACTION,
+            name: 'graph build',
+            input: { nodeCount: chunks.length },
+            attributes: {
+              action: 'build',
+              nodeCount: chunks.length,
+              threshold: graphOptions.threshold,
+            },
+          });
+          try {
+            graphRag.createGraph(chunks, embeddings);
+          } catch (err) {
+            buildSpan?.error({ error: err as Error, endSpan: true });
+            throw err;
+          }
+          buildSpan?.end();
           isInitialized = true;
         } else if (logger) {
           logger.debug('Graph already initialized, skipping graph construction');
         }
 
         // Get reranked results using GraphRAG
-        const rerankedResults = graphRag.query({
-          query: queryEmbedding,
-          topK: topKValue,
-          randomWalkSteps,
-          restartProb,
+        const traverseSpan = parentSpan?.createChildSpan({
+          type: SpanType.GRAPH_ACTION,
+          name: 'graph traverse',
+          input: { topK: topKValue, randomWalkSteps, restartProb },
+          attributes: {
+            action: 'traverse',
+            startNodes: 1,
+            maxDepth: randomWalkSteps,
+          },
         });
+        let rerankedResults;
+        try {
+          rerankedResults = graphRag.query({
+            query: queryEmbedding,
+            topK: topKValue,
+            randomWalkSteps,
+            restartProb,
+          });
+        } catch (err) {
+          traverseSpan?.error({ error: err as Error, endSpan: true });
+          throw err;
+        }
+        traverseSpan?.end({ output: { returned: rerankedResults.length } });
         if (logger) {
           logger.debug('GraphRAG query returned results', { count: rerankedResults.length });
         }
@@ -144,7 +174,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         };
       } catch (err) {
         if (logger) {
-          logger.error('Unexpected error in VectorQueryTool execute', {
+          logger.error('Unexpected error in GraphRAGTool execute', {
             error: err,
             errorMessage: err instanceof Error ? err.message : String(err),
             errorStack: err instanceof Error ? err.stack : undefined,
@@ -154,5 +184,5 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
       }
     },
     // Use any for output schema as the structure of the output causes type inference issues
-  }) as RagTool<typeof inputSchema, any>;
+  }) as RagTool<z.infer<typeof inputSchema>, any>;
 };

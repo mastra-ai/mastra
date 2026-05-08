@@ -1,5 +1,693 @@
 # create-mastra
 
+## 1.9.0-alpha.6
+
+## 1.9.0-alpha.5
+
+## 1.9.0-alpha.4
+
+## 1.9.0-alpha.3
+
+## 1.8.2-alpha.2
+
+## 1.8.2-alpha.1
+
+## 1.8.2-alpha.0
+
+## 1.8.1
+
+## 1.8.1-alpha.0
+
+## 1.8.0
+
+## 1.8.0-alpha.4
+
+## 1.8.0-alpha.3
+
+## 1.7.4-alpha.2
+
+## 1.7.4-alpha.1
+
+## 1.7.4-alpha.0
+
+## 1.7.3
+
+## 1.7.3-alpha.6
+
+## 1.7.3-alpha.5
+
+## 1.7.3-alpha.4
+
+## 1.7.3-alpha.3
+
+## 1.7.3-alpha.2
+
+## 1.7.3-alpha.1
+
+## 1.7.3-alpha.0
+
+## 1.7.2
+
+## 1.7.2-alpha.1
+
+## 1.7.2-alpha.0
+
+## 1.7.1
+
+## 1.7.1-alpha.2
+
+## 1.7.1-alpha.1
+
+## 1.7.1-alpha.0
+
+## 1.7.0
+
+### Patch Changes
+
+- Removed Prettier from the CLI install path so generated project setup no longer pulls in the prettier dependency. ([#15711](https://github.com/mastra-ai/mastra/pull/15711))
+
+- Improved `create-mastra` package size by reducing runtime dependency overhead. ([#15721](https://github.com/mastra-ai/mastra/pull/15721))
+  This decreases install surface while preserving existing CLI behavior.
+
+## 1.7.0-alpha.6
+
+## 1.7.0-alpha.5
+
+## 1.7.0-alpha.4
+
+## 1.7.0-alpha.3
+
+## 1.6.4-alpha.2
+
+## 1.6.4-alpha.1
+
+## 1.6.4-alpha.0
+
+### Patch Changes
+
+- Removed Prettier from the CLI install path so generated project setup no longer pulls in the prettier dependency. ([#15711](https://github.com/mastra-ai/mastra/pull/15711))
+
+- Improved `create-mastra` package size by reducing runtime dependency overhead. ([#15721](https://github.com/mastra-ai/mastra/pull/15721))
+  This decreases install surface while preserving existing CLI behavior.
+
+## 1.6.3
+
+## 1.6.3-alpha.2
+
+## 1.6.3-alpha.1
+
+## 1.6.3-alpha.0
+
+## 1.6.2
+
+## 1.6.2-alpha.2
+
+## 1.6.2-alpha.1
+
+## 1.6.2-alpha.0
+
+## 1.6.1
+
+### Patch Changes
+
+- dependencies updates: ([#15525](https://github.com/mastra-ai/mastra/pull/15525))
+  - Updated dependency [`prettier@^3.8.3` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.3) (from `^3.8.1`, in `dependencies`)
+
+## 1.6.1-alpha.13
+
+## 1.6.1-alpha.12
+
+## 1.6.1-alpha.11
+
+## 1.6.1-alpha.10
+
+## 1.6.1-alpha.9
+
+### Patch Changes
+
+- dependencies updates: ([#15525](https://github.com/mastra-ai/mastra/pull/15525))
+  - Updated dependency [`prettier@^3.8.3` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.3) (from `^3.8.1`, in `dependencies`)
+
+## 1.6.1-alpha.8
+
+## 1.6.1-alpha.7
+
+## 1.6.1-alpha.6
+
+## 1.6.1-alpha.5
+
+## 1.6.1-alpha.4
+
+## 1.6.1-alpha.3
+
+## 1.6.1-alpha.2
+
+## 1.6.1-alpha.1
+
+## 1.6.1-alpha.0
+
+## 1.6.0
+
+## 1.6.0-alpha.5
+
+## 1.6.0-alpha.4
+
+## 1.5.1-alpha.3
+
+## 1.5.1-alpha.2
+
+## 1.5.1-alpha.1
+
+## 1.5.1-alpha.0
+
+## 1.5.0
+
+## 1.5.0-alpha.2
+
+## 1.5.0-alpha.1
+
+## 1.4.2-alpha.0
+
+## 1.4.1
+
+## 1.4.1-alpha.1
+
+## 1.4.1-alpha.0
+
+## 1.4.0
+
+## 1.4.0-alpha.10
+
+## 1.4.0-alpha.9
+
+## 1.4.0-alpha.8
+
+## 1.4.0-alpha.7
+
+## 1.4.0-alpha.6
+
+## 1.4.0-alpha.5
+
+## 1.4.0-alpha.4
+
+## 1.3.21-alpha.3
+
+## 1.3.21-alpha.2
+
+## 1.3.21-alpha.1
+
+## 1.3.21-alpha.0
+
+## 1.3.20
+
+## 1.3.20-alpha.3
+
+## 1.3.20-alpha.2
+
+## 1.3.20-alpha.1
+
+## 1.3.20-alpha.0
+
+## 1.3.19
+
+## 1.3.19-alpha.2
+
+## 1.3.19-alpha.1
+
+## 1.3.19-alpha.0
+
+## 1.3.18
+
+## 1.3.18-alpha.0
+
+## 1.3.17
+
+## 1.3.17-alpha.2
+
+## 1.3.17-alpha.1
+
+## 1.3.17-alpha.0
+
+## 1.3.16
+
+## 1.3.16-alpha.8
+
+## 1.3.16-alpha.7
+
+## 1.3.16-alpha.6
+
+## 1.3.16-alpha.5
+
+## 1.3.16-alpha.4
+
+## 1.3.16-alpha.3
+
+## 1.3.16-alpha.2
+
+## 1.3.16-alpha.1
+
+## 1.3.16-alpha.0
+
+## 1.3.15
+
+### Patch Changes
+
+- Improved Skills setup in `create-mastra` so agent selection is faster during project creation. Choosing an agent-specific setup now also installs the shared `Universal` skill. ([#14540](https://github.com/mastra-ai/mastra/pull/14540))
+
+## 1.3.15-alpha.5
+
+## 1.3.15-alpha.4
+
+## 1.3.15-alpha.3
+
+## 1.3.15-alpha.2
+
+## 1.3.15-alpha.1
+
+### Patch Changes
+
+- Improved Skills setup in `create-mastra` so agent selection is faster during project creation. Choosing an agent-specific setup now also installs the shared `Universal` skill. ([#14540](https://github.com/mastra-ai/mastra/pull/14540))
+
+## 1.3.15-alpha.0
+
+## 1.3.14
+
+## 1.3.14-alpha.4
+
+## 1.3.14-alpha.3
+
+## 1.3.14-alpha.2
+
+## 1.3.14-alpha.1
+
+## 1.3.14-alpha.0
+
+## 1.3.13
+
+## 1.3.13-alpha.3
+
+## 1.3.13-alpha.2
+
+## 1.3.13-alpha.1
+
+## 1.3.13-alpha.0
+
+## 1.3.12
+
+## 1.3.12-alpha.0
+
+## 1.3.11
+
+## 1.3.10
+
+## 1.3.10-alpha.0
+
+## 1.3.9
+
+## 1.3.9-alpha.1
+
+## 1.3.9-alpha.0
+
+## 1.3.8
+
+### Patch Changes
+
+- dependencies updates: ([#14062](https://github.com/mastra-ai/mastra/pull/14062))
+  - Updated dependency [`prettier@^3.8.1` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.1) (from `^3.7.4`, in `dependencies`)
+
+- dependencies updates: ([#14099](https://github.com/mastra-ai/mastra/pull/14099))
+  - Updated dependency [`fs-extra@^11.3.4` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.4) (from `^11.3.3`, in `dependencies`)
+
+## 1.3.8-alpha.2
+
+## 1.3.8-alpha.1
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#14062](https://github.com/mastra-ai/mastra/pull/14062))
+  - Updated dependency [`prettier@^3.8.1` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.1) (from `^3.7.4`, in `dependencies`)
+
+- dependencies updates: ([#14099](https://github.com/mastra-ai/mastra/pull/14099))
+  - Updated dependency [`fs-extra@^11.3.4` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.4) (from `^11.3.3`, in `dependencies`)
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.1
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.0
+
+## 1.3.6
+
+## 1.3.6-alpha.0
+
+## 1.3.5
+
+## 1.3.5-alpha.0
+
+## 1.3.4
+
+## 1.3.4-alpha.0
+
+## 1.3.3
+
+### Patch Changes
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+## 1.3.2
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
+## 1.3.2-alpha.1
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
+## 1.3.1
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.3.0
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
+## 1.3.0-alpha.3
+
+## 1.3.0-alpha.2
+
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
+## 1.2.1-alpha.0
+
+## 1.2.0
+
+## 1.2.0-alpha.1
+
+## 1.2.0-alpha.0
+
+## 1.1.0
+
+### Patch Changes
+
+- fix workflow run input caching bug in studio UI ([#11784](https://github.com/mastra-ai/mastra/pull/11784))
+
+## 1.1.0-alpha.3
+
+## 1.1.0-alpha.2
+
+## 1.1.0-alpha.1
+
+## 1.1.0-alpha.0
+
+### Patch Changes
+
+- fix workflow run input caching bug in studio UI ([#11784](https://github.com/mastra-ai/mastra/pull/11784))
+
+## 1.0.1
+
+## 1.0.1-alpha.0
+
+## 1.0.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Removed old tracing code based on OpenTelemetry ([#9237](https://github.com/mastra-ai/mastra/pull/9237))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Minor Changes
+
+- Add Antigravity IDE support to create-mastra CLI. Users can now select Antigravity during project initialization and automatically configure the global Mastra MCP server for the IDE, reducing manual setup and enabling immediate use of Mastra agents. ([#11374](https://github.com/mastra-ai/mastra/pull/11374))
+
+### Patch Changes
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Replace deprecated client.getTraces with a client.listTraces ([#11711](https://github.com/mastra-ai/mastra/pull/11711))
+
+- Fix select options overflow when list is long by adding maximum height ([#10813](https://github.com/mastra-ai/mastra/pull/10813))
+
+- dependencies updates: ([#10111](https://github.com/mastra-ai/mastra/pull/10111))
+  - Updated dependency [`pino@^10.1.0` ↗︎](https://www.npmjs.com/package/pino/v/10.1.0) (from `^9.7.0`, in `dependencies`)
+
+- dependencies updates: ([#11642](https://github.com/mastra-ai/mastra/pull/11642))
+  - Updated dependency [`fs-extra@^11.3.3` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.3) (from `^11.3.2`, in `dependencies`)
+
+- dependencies updates: ([#9781](https://github.com/mastra-ai/mastra/pull/9781))
+  - Updated dependency [`posthog-node@^5.11.2` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.11.2) (from `^4.18.0`, in `dependencies`)
+
+- Update MainSidebar component to fit required changes in Cloud CTA link ([#9318](https://github.com/mastra-ai/mastra/pull/9318))
+
+- Fix default value showing on workflow form after user submits ([#10983](https://github.com/mastra-ai/mastra/pull/10983))
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Make MainSidebar toggle button sticky to bottom, always visible ([#9682](https://github.com/mastra-ai/mastra/pull/9682))
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+- Fix peer dependency conflicts in browsing-agent template. Updated template dependencies to align with @browserbasehq/stagehand@2.5.6 requirements: ([#11346](https://github.com/mastra-ai/mastra/pull/11346))
+  - Updated `dotenv` from `^17.2.1` to `^16.4.5`
+  - Updated `zod` from `^3.25.76` to `^3.25.67`
+
+  This ensures `npx create-mastra@latest --template browsing-agent` can be installed and run without peer dependency errors.
+
+- Detect bun runtime and cleanup on failure ([#10242](https://github.com/mastra-ai/mastra/pull/10242))
+
+- Add `Run` instance to client-js. `workflow.createRun` returns the `Run` instance which can be used for the different run methods. ([#11207](https://github.com/mastra-ai/mastra/pull/11207))
+  With this change, run methods cannot be called directly on workflow instance anymore
+
+  ```diff
+  - const result = await workflow.stream({ runId: '123', inputData: { ... } });
+  + const run = await workflow.createRun({ runId: '123' });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10361](https://github.com/mastra-ai/mastra/pull/10361))
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+- Add initial state input to workflow form in studio ([#11560](https://github.com/mastra-ai/mastra/pull/11560))
+
+- Make initialState optional in studio ([#11744](https://github.com/mastra-ai/mastra/pull/11744))
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
+- Move useScorers down to trace page to trigger it once for all trace spans ([#10985](https://github.com/mastra-ai/mastra/pull/10985))
+
+- Update Observability Trace Spans list UI, so a user can expand/collapse span children/descendants and can filter the list by span type or name ([#10378](https://github.com/mastra-ai/mastra/pull/10378))
+
+- Fix workflow trigger form overflow ([#10986](https://github.com/mastra-ai/mastra/pull/10986))
+
+- Fix scorer filtering for SpanScoring, add error and info message for user ([#10160](https://github.com/mastra-ai/mastra/pull/10160))
+
+- Hide time travel on map steps in Studio ([#10631](https://github.com/mastra-ai/mastra/pull/10631))
+
+- Fix double scroll on agent chat container ([#10253](https://github.com/mastra-ai/mastra/pull/10253))
+
+- Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers ([#11562](https://github.com/mastra-ai/mastra/pull/11562))
+
+- fix isTopLevelSpan value definition on SpanScoring to properly recognize lack of span?.parentSpanId value (null or empty string) ([#11083](https://github.com/mastra-ai/mastra/pull/11083))
+
+## 1.0.0-beta.19
+
+## 1.0.0-beta.18
+
+## 1.0.0-beta.17
+
+## 1.0.0-beta.16
+
+## 1.0.0-beta.15
+
+### Patch Changes
+
+- Add human-in-the-loop (HITL) support to agent networks ([#11678](https://github.com/mastra-ai/mastra/pull/11678))
+  - Add suspend/resume capabilities to agent network
+  - Enable auto-resume for suspended network execution via `autoResumeSuspendedTools`
+
+  `agent.resumeNetwork`, `agent.approveNetworkToolCall`, `agent.declineNetworkToolCall`
+
+## 1.0.0-beta.14
+
+### Patch Changes
+
+- Replace deprecated client.getTraces with a client.listTraces ([#11711](https://github.com/mastra-ai/mastra/pull/11711))
+
+- dependencies updates: ([#11642](https://github.com/mastra-ai/mastra/pull/11642))
+  - Updated dependency [`fs-extra@^11.3.3` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.3) (from `^11.3.2`, in `dependencies`)
+
+- Make initialState optional in studio ([#11744](https://github.com/mastra-ai/mastra/pull/11744))
+
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Fix peer dependency conflicts in browsing-agent template. Updated template dependencies to align with @browserbasehq/stagehand@2.5.6 requirements: ([#11346](https://github.com/mastra-ai/mastra/pull/11346))
+  - Updated `dotenv` from `^17.2.1` to `^16.4.5`
+  - Updated `zod` from `^3.25.76` to `^3.25.67`
+
+  This ensures `npx create-mastra@latest --template browsing-agent` can be installed and run without peer dependency errors.
+
+- Add initial state input to workflow form in studio ([#11560](https://github.com/mastra-ai/mastra/pull/11560))
+
+- Display network completion validation results and scorer feedback in the Playground when viewing agent network runs, letting users see pass/fail status and actionable feedback from completion scorers ([#11562](https://github.com/mastra-ai/mastra/pull/11562))
+
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- Add Antigravity IDE support to create-mastra CLI. Users can now select Antigravity during project initialization and automatically configure the global Mastra MCP server for the IDE, reducing manual setup and enabling immediate use of Mastra agents. ([#11374](https://github.com/mastra-ai/mastra/pull/11374))
+
+### Patch Changes
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
+## 1.0.0-beta.11
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Add `Run` instance to client-js. `workflow.createRun` returns the `Run` instance which can be used for the different run methods. ([#11207](https://github.com/mastra-ai/mastra/pull/11207))
+  With this change, run methods cannot be called directly on workflow instance anymore
+
+  ```diff
+  - const result = await workflow.stream({ runId: '123', inputData: { ... } });
+  + const run = await workflow.createRun({ runId: '123' });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- fix isTopLevelSpan value definition on SpanScoring to properly recognize lack of span?.parentSpanId value (null or empty string) ([#11083](https://github.com/mastra-ai/mastra/pull/11083))
+
+## 1.0.0-beta.9
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Add delete workflow run API ([#10991](https://github.com/mastra-ai/mastra/pull/10991))
+
+  ```typescript
+  await workflow.deleteWorkflowRunById(runId);
+  ```
+
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Fix default value showing on workflow form after user submits ([#10983](https://github.com/mastra-ai/mastra/pull/10983))
+
+- Move useScorers down to trace page to trigger it once for all trace spans ([#10985](https://github.com/mastra-ai/mastra/pull/10985))
+
+- Update Observability Trace Spans list UI, so a user can expand/collapse span children/descendants and can filter the list by span type or name ([#10378](https://github.com/mastra-ai/mastra/pull/10378))
+
+- Fix workflow trigger form overflow ([#10986](https://github.com/mastra-ai/mastra/pull/10986))
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Fix select options overflow when list is long by adding maximum height ([#10813](https://github.com/mastra-ai/mastra/pull/10813))
+
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
+- Hide time travel on map steps in Studio ([#10631](https://github.com/mastra-ai/mastra/pull/10631))
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

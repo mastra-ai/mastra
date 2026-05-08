@@ -7,7 +7,6 @@ import { resultObjectTests } from './test-utils/resultObject';
 import { streamObjectTests } from './test-utils/streamObject';
 import { textStreamTests } from './test-utils/textStream';
 import { toolsTests } from './test-utils/tools';
-import { toUIMessageStreamTests } from './test-utils/toUIMessageStream';
 import { mockDate } from './test-utils/utils';
 
 describe('Loop Tests', () => {
@@ -23,14 +22,27 @@ describe('Loop Tests', () => {
     });
 
     textStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    fullStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    toUIMessageStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    resultObjectTests({ loopFn: loop, runId: 'test-run-id' });
+    fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
+    resultObjectTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
     toolsTests({ loopFn: loop, runId: 'test-run-id' });
 
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
+  });
+
+  describe('AISDK v6 (V3 models)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(mockDate);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
+    resultObjectTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });

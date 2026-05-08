@@ -1,0 +1,29 @@
+{
+  "name": "@internal/client-js-test-utils",
+  "version": "1.0.1",
+  "description": "Shared test utilities for client-js e2e tests",
+  "type": "module",
+  "main": "src/index.ts",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@mastra/client-js": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/hono": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/observability": "workspace:*",
+    "get-port": "^7.1.0",
+    "hono": "^4.12.8",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "zod": "^3.24.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { removeDeployer } from './remove-deployer';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
+import { describe, it, expect } from 'vitest';
+import { removeDeployer } from './remove-deployer';
 
 describe('Remove deployer', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));
@@ -12,6 +12,7 @@ describe('Remove deployer', () => {
     ['./__fixtures__/basic.js'],
     ['./__fixtures__/basic-with-const.js'],
     ['./__fixtures__/basic-with-import.js'],
+    ['./__fixtures__/basic-with-spread.js'],
     ['./__fixtures__/basic-with-function.js'],
   ])('should remove the deployer from %s', async ([fileName]) => {
     const file = join(_dirname, fileName);

@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage, MastraLanguageModel, MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Processor } from '@mastra/core/processors';
 
 /**
@@ -12,7 +13,7 @@ export class ToolSummaryProcessor implements Processor {
   private summaryAgent: Agent;
   private summaryCache: Map<string, string> = new Map();
 
-  constructor({ summaryModel }: { summaryModel: MastraLanguageModel }) {
+  constructor({ summaryModel }: { summaryModel: MastraModelConfig }) {
     this.summaryAgent = new Agent({
       id: 'tool-summary-agent',
       name: 'Tool Summary Agent',

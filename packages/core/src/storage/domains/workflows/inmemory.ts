@@ -1,20 +1,34 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { isPendingMarker } from '../../../workflows/evented/types';
 import { normalizePerPage } from '../../base';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
-import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
-import type { StoreOperations } from '../operations';
+import type {
+  StorageWorkflowRun,
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '../../types';
+import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 
-export type InMemoryWorkflows = Map<string, StorageWorkflowRun>;
-
 export class WorkflowsInMemory extends WorkflowsStorage {
-  operations: StoreOperations;
-  collection: InMemoryWorkflows;
+  private db: InMemoryDB;
 
-  constructor({ collection, operations }: { collection: InMemoryWorkflows; operations: StoreOperations }) {
+  constructor({ db }: { db: InMemoryDB }) {
     super();
-    this.collection = collection;
-    this.operations = operations;
+    this.db = db;
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.db.workflows.clear();
+  }
+
+  private getWorkflowKey(workflowName: string, runId: string): string {
+    return `${workflowName}-${runId}`;
   }
 
   async updateWorkflowResults({
@@ -30,14 +44,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
-    const run = this.collection.get(`${workflowName}-${runId}`);
+    const key = this.getWorkflowKey(workflowName, runId);
+    const run = this.db.workflows.get(key);
 
     if (!run) {
       return {};
     }
 
-    let snapshot;
+    let snapshot: WorkflowRunState;
     if (!run.snapshot) {
       snapshot = {
         context: {},
@@ -53,22 +67,74 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         runId: run.run_id,
       } as WorkflowRunState;
 
-      this.collection.set(`${workflowName}-${runId}`, {
+      this.db.workflows.set(key, {
         ...run,
         snapshot,
       });
+    } else {
+      snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
     }
-
-    snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
 
     if (!snapshot || !snapshot?.context) {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot.context[stepId] = result;
+    // For foreach steps with array outputs, merge the arrays atomically
+    // This handles concurrent iteration completions
+    const existingResult = snapshot.context[stepId];
+    if (
+      existingResult &&
+      'output' in existingResult &&
+      Array.isArray(existingResult.output) &&
+      result &&
+      typeof result === 'object' &&
+      'output' in result &&
+      Array.isArray(result.output)
+    ) {
+      const existingOutput = existingResult.output as unknown[];
+      const newOutput = result.output as unknown[];
+      // ForEach iteration result merge logic:
+      //
+      // When forEach runs with concurrency > 1, multiple iterations execute in parallel.
+      // Each iteration writes its result to the same output array. We need to merge carefully:
+      //
+      // - null in newOutput means "iteration started but not finished" - keep existing result
+      // - non-null in newOutput means "iteration completed" - use the new result
+      // - PendingMarker ({ __mastra_pending__: true }) means "force reset to null"
+      //
+      // The PendingMarker is needed for bulk resume: when resuming suspended iterations,
+      // we must reset them to null before re-running. Without the marker, the merge logic
+      // would preserve the old suspended result (since null means "keep existing").
+      //
+      // Why a string key instead of Symbol? Symbols don't survive JSON serialization.
+      // In distributed execution where state is persisted to storage and loaded by
+      // different engine instances, a Symbol marker would be silently dropped.
+      const mergedOutput = [...existingOutput];
+      for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
+        if (i < newOutput.length) {
+          const newVal = newOutput[i];
+          if (isPendingMarker(newVal)) {
+            // PendingMarker: force reset to null (for bulk resume of suspended iterations)
+            mergedOutput[i] = null;
+          } else if (newVal !== null) {
+            // Completed result: always use the new value
+            mergedOutput[i] = newVal;
+          }
+          // null: iteration in progress, keep existing result (from spread above)
+        }
+        // Index beyond newOutput length: keep existing (from spread above)
+      }
+      snapshot.context[stepId] = {
+        ...existingResult,
+        ...(result as any),
+        output: mergedOutput,
+      };
+    } else {
+      snapshot.context[stepId] = result;
+    }
     snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
-    this.collection.set(`${workflowName}-${runId}`, {
+    this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
     });
@@ -83,21 +149,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    const run = this.collection.get(`${workflowName}-${runId}`);
+    const key = this.getWorkflowKey(workflowName, runId);
+    const run = this.db.workflows.get(key);
 
     if (!run) {
       return;
     }
 
-    let snapshot;
+    let snapshot: WorkflowRunState;
     if (!run.snapshot) {
       snapshot = {
         context: {},
@@ -113,7 +174,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         runId: run.run_id,
       } as WorkflowRunState;
 
-      this.collection.set(`${workflowName}-${runId}`, {
+      this.db.workflows.set(key, {
         ...run,
         snapshot,
       });
@@ -126,7 +187,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
 
     snapshot = { ...snapshot, ...opts };
-    this.collection.set(`${workflowName}-${runId}`, {
+    this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
     });
@@ -139,25 +200,28 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
-  }) {
-    const data = {
+    createdAt?: Date;
+    updatedAt?: Date;
+  }): Promise<void> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const now = new Date();
+    const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
       snapshot,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: createdAt ?? now,
+      updatedAt: updatedAt ?? now,
     };
 
-    await this.operations.insert({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      record: data,
-    });
+    this.db.workflows.set(key, data);
   }
 
   async loadWorkflowSnapshot({
@@ -167,14 +231,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
-    const d = await this.operations.load<{ snapshot: WorkflowRunState }>({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
-    });
+    const key = this.getWorkflowKey(workflowName, runId);
+    const run = this.db.workflows.get(key);
 
+    if (!run) {
+      return null;
+    }
+
+    const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
     // Return a deep copy to prevent mutation
-    return d ? JSON.parse(JSON.stringify(d.snapshot)) : null;
+    return snapshot ? JSON.parse(JSON.stringify(snapshot)) : null;
   }
 
   async listWorkflowRuns({
@@ -190,7 +256,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error('page must be >= 0');
     }
 
-    let runs = Array.from(this.collection.values());
+    let runs = Array.from(this.db.workflows.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
     if (status) {
@@ -204,8 +270,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         if (typeof snapshot === 'string') {
           try {
             snapshot = JSON.parse(snapshot) as WorkflowRunState;
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          } catch (error) {
+          } catch {
             return false;
           }
         } else {
@@ -265,7 +330,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    const runs = Array.from(this.collection.values()).filter((r: any) => r.run_id === runId);
+    const runs = Array.from(this.db.workflows.values()).filter((r: any) => r.run_id === runId);
     let run = runs.find((r: any) => r.workflow_name === workflowName);
 
     if (!run) return null;
@@ -282,5 +347,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     return parsedRun as WorkflowRun;
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    this.db.workflows.delete(key);
   }
 }

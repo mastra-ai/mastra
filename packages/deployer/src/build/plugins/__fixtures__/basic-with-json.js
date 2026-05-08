@@ -1,5 +1,5 @@
-import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
+import { Mastra } from '@mastra/core/mastra';
 import { TestDeployer } from '@mastra/deployer/test';
 import { name } from './example.json';
 

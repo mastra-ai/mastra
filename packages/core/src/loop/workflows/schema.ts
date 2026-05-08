@@ -5,7 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
+import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
   StepResult,
   ModelMessage,
@@ -18,13 +18,13 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
   GeneratedFile,
-} from 'ai-v5';
-import z from 'zod';
-import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
+} from '@internal/ai-sdk-v5';
+import { z } from 'zod/v4';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
-  reason: LanguageModelV2FinishReason | 'abort';
+  /** Includes 'tripwire' and 'retry' for processor scenarios */
+  reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
   logprobs?: LanguageModelV1LogProbs;
@@ -34,7 +34,7 @@ export interface LLMIterationStepResult {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   text?: string;
   reasoning?: ReasoningPart[];
   reasoningText?: string;
@@ -48,7 +48,7 @@ export interface LLMIterationOutput<Tools extends ToolSet = ToolSet, OUTPUT exte
   dynamicToolResults?: DynamicToolResult[];
   usage: LanguageModelUsage;
   steps: StepResult<Tools>[];
-  object?: InferSchemaOutput<OUTPUT>;
+  object?: OUTPUT;
 }
 
 export interface LLMIterationMetadata {
@@ -66,7 +66,7 @@ export interface LLMIterationMetadata {
   request?: LanguageModelRequestMetadata;
 }
 
-export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
+export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   messageId: string;
   messages: {
     all: ModelMessage[];
@@ -76,16 +76,33 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT extend
   output: LLMIterationOutput<Tools, OUTPUT>;
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
+  /**
+   * Number of consecutive processor-triggered retries for the current generation.
+   * Used to enforce the processor retry safety cap.
+   */
+  processorRetryCount?: number;
+  /**
+   * Current fallback model index for the active generation.
+   * Preserved across processor-triggered retries so retries resume on the same fallback model.
+   */
+  fallbackModelIndex?: number;
+  processorRetryFeedback?: string;
+  /**
+   * True when a background task result was injected and the LLM needs another
+   * iteration to process it. When set, isTaskCompleteStep is skipped.
+   */
+  backgroundTaskPending?: boolean;
 }
 
 // Zod schemas for common types used in validation
 
 const languageModelUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
 });
 
 // Zod schemas for runtime validation
@@ -95,9 +112,9 @@ export const llmIterationStepResultSchema = z.object({
   isContinued: z.boolean(),
   logprobs: z.any().optional(),
   totalUsage: languageModelUsageSchema.optional(),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   messageId: z.string().optional(),
-  request: z.record(z.any()).optional(),
+  request: z.record(z.string(), z.any()).optional(),
 });
 
 export const llmIterationOutputSchema = z.object({
@@ -134,23 +151,28 @@ export const llmIterationOutputSchema = z.object({
       })
       .optional(),
     timestamp: z.date().optional(),
-    providerMetadata: z.record(z.any()).optional(),
-    headers: z.record(z.string()).optional(),
-    request: z.record(z.any()).optional(),
+    providerMetadata: z.record(z.string(), z.any()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    request: z.record(z.string(), z.any()).optional(),
   }),
   stepResult: llmIterationStepResultSchema,
+  processorRetryCount: z.number().optional(),
+  fallbackModelIndex: z.number().optional(),
+  processorRetryFeedback: z.string().optional(),
+  isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
+  backgroundTaskPending: z.boolean().optional(), // true if a background task result was injected and LLM needs to process it
 });
 
 export const toolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
-  args: z.record(z.any()),
-  providerMetadata: z.record(z.any()).optional(),
+  args: z.record(z.string(), z.any()),
+  providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({
-  result: z.any(),
+  result: z.any().optional(),
   error: z.any().optional(),
 });

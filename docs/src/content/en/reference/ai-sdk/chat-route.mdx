@@ -1,0 +1,156 @@
+---
+title: "Reference: chatRoute() | AI SDK"
+description: API reference for chatRoute(), a function to create chat route handlers for streaming agent conversations in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# chatRoute()
+
+Creates a chat route handler for streaming agent conversations using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/docs/server/custom-api-routes).
+
+Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a framework-agnostic handler.
+
+`chatRoute()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
+:::note Disconnect behavior
+
+`chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
+
+If you want the server to continue generation and persist the final response after disconnect, build a [custom API route](/docs/server/custom-api-routes#continue-generation-after-client-disconnect) around `agent.stream()` and call `consumeStream()` on the returned `MastraModelOutput`.
+
+:::
+
+## Usage example
+
+This example shows how to set up a chat route at the `/chat` endpoint that uses an agent with the ID `weatherAgent`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+      }),
+    ],
+  },
+})
+```
+
+You can also use dynamic agent routing based on an `agentId`. The URL `/chat/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
+  {
+    name: 'path',
+    type: 'string',
+    description: 'The route path (e.g., `/chat` or `/chat/:agentId`). Include `:agentId` for dynamic agent routing.',
+    isOptional: false,
+    defaultValue: "'/chat/:agentId'",
+  },
+  {
+    name: 'agent',
+    type: 'string',
+    description: "The ID of the agent to use for this chat route. Required if the path doesn't include `:agentId`.",
+    isOptional: true,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
+  },
+  {
+    name: 'defaultOptions',
+    type: 'AgentExecutionOptions',
+    description:
+      'Default options passed to agent execution. These can include instructions, memory configuration, maxSteps, and other execution settings.',
+    isOptional: true,
+  },
+  {
+    name: 'sendStart',
+    type: 'boolean',
+    description: 'Whether to send start events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendFinish',
+    type: 'boolean',
+    description: 'Whether to send finish events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendReasoning',
+    type: 'boolean',
+    description: 'Whether to include reasoning steps in the stream.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'sendSources',
+    type: 'boolean',
+    description: 'Whether to include source citations in the stream.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Additional configuration
+
+You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent:
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          messages,
+          // Pass memory config
+          memory: {
+            thread: 'user-1',
+            resource: 'user-1',
+          },
+        },
+      }
+    },
+  }),
+})
+```

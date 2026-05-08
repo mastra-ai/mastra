@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -11,10 +12,36 @@ import type {
   UpsertVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
+import type { ClientOptions } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';
 import type { OpenSearchVectorFilter } from './filter';
+
+/**
+ * Configuration for OpenSearchVector.
+ *
+ * Extends the OpenSearch ClientOptions with a required id.
+ * All OpenSearch client options are supported (node, auth, ssl, compression, etc.).
+ *
+ * @example
+ * ```typescript
+ * // Simple URL config
+ * const vector = new OpenSearchVector({
+ *   id: 'my-vector',
+ *   node: 'http://localhost:9200',
+ * });
+ *
+ * // With authentication
+ * const vector = new OpenSearchVector({
+ *   id: 'my-vector',
+ *   node: 'https://my-opensearch-cluster.com',
+ *   auth: { username: 'admin', password: 'secret' },
+ *   ssl: { rejectUnauthorized: false },
+ * });
+ * ```
+ */
+export type OpenSearchVectorConfig = ClientOptions & { id: string };
 
 const METRIC_MAPPING = {
   cosine: 'cosinesimil',
@@ -36,11 +63,12 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   /**
    * Creates a new OpenSearchVector client.
    *
-   * @param {string} url - The url of the OpenSearch node.
+   * @param config - OpenSearch client configuration options plus a required id.
+   * @see OpenSearchVectorConfig for all available options.
    */
-  constructor({ url, id }: { url: string } & { id: string }) {
+  constructor({ id, ...clientOptions }: OpenSearchVectorConfig) {
     super({ id });
-    this.client = new OpenSearchClient({ node: url });
+    this.client = new OpenSearchClient(clientOptions);
   }
 
   /**
@@ -54,7 +82,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_CREATE_INDEX_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'CREATE_INDEX', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Dimension must be a positive integer',
@@ -94,7 +122,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -120,7 +148,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -162,7 +190,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -184,6 +212,9 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
   async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
+    // Validate input parameters and vector values
+    validateUpsert('OPENSEARCH', vectors, metadata, ids, true);
+
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
 
@@ -220,7 +251,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors?.length || 0 },
@@ -247,6 +278,19 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     topK = 10,
     includeVector = false,
   }: OpenSearchVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('OPENSEARCH', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for OpenSearch queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    // Validate topK parameter
+    validateTopK('OPENSEARCH', topK);
+
     try {
       const translatedFilter = this.transformFilter(filter);
 
@@ -277,7 +321,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, topK },
@@ -327,7 +371,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     // Validate mutually exclusive parameters
     if ('id' in params && 'filter' in params && params.id && params.filter) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'id and filter are mutually exclusive',
@@ -337,7 +381,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_NO_UPDATES',
+        id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'NO_UPDATES'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
@@ -348,7 +392,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     // Validate empty filter
     if ('filter' in params && params.filter && Object.keys(params.filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot update with empty filter',
@@ -365,7 +409,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       await this.updateVectorsByFilter(indexName, params.filter, update);
     } else {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_MISSING_PARAMS',
+        id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either id or filter must be provided',
@@ -401,7 +445,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -449,7 +493,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -504,7 +548,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_BY_FILTER_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'UPDATE_VECTOR_BY_FILTER', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -538,7 +582,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -555,7 +599,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'ids and filter are mutually exclusive',
@@ -565,7 +609,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either filter or ids must be provided',
@@ -576,7 +620,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     // Validate non-empty arrays and objects
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'DELETE_VECTORS', 'EMPTY_IDS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot delete with empty ids array',
@@ -586,7 +630,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
 
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('OPENSEARCH', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Cannot delete with empty filter',
@@ -620,7 +664,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('OPENSEARCH', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

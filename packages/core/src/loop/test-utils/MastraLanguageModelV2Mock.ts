@@ -1,11 +1,10 @@
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraLanguageModelV2 } from '../../llm/model/shared.types';
-import type { LanguageModelV2StreamResult } from '../../stream/types';
 import { AISDKV5LanguageModel } from '../../llm/model/aisdk/v5/model';
 
 export class MastraLanguageModelV2Mock implements MastraLanguageModelV2 {
-  readonly specificationVersion = 'v2';
+  readonly specificationVersion = 'v2' as const;
   readonly provider: LanguageModelV2['provider'];
   readonly modelId: LanguageModelV2['modelId'];
   readonly supportedUrls: LanguageModelV2['supportedUrls'];
@@ -32,20 +31,18 @@ export class MastraLanguageModelV2Mock implements MastraLanguageModelV2 {
 
   doGenerate(options: LanguageModelV2CallOptions) {
     const aiSDKModel = new AISDKV5LanguageModel(this.#model);
-
     return aiSDKModel.doGenerate(options);
   }
 
   doStream(options: LanguageModelV2CallOptions) {
     const aiSDKModel = new AISDKV5LanguageModel(this.#model);
-
     return aiSDKModel.doStream(options);
   }
 
-  get doGenerateCalls() {
+  get doGenerateCalls(): LanguageModelV2CallOptions[] {
     return this.#model.doGenerateCalls;
   }
-  get doStreamCalls() {
+  get doStreamCalls(): LanguageModelV2CallOptions[] {
     return this.#model.doStreamCalls;
   }
 }

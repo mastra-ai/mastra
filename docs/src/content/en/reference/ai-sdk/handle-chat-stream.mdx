@@ -1,0 +1,176 @@
+---
+title: "Reference: handleChatStream() | AI SDK"
+description: API reference for handleChatStream(), a framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# handleChatStream()
+
+Framework-agnostic handler for streaming agent chat in AI SDK-compatible format. Use this function directly when you need to handle chat streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature.
+
+`handleChatStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
+
+`handleChatStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
+Use [`chatRoute()`](/reference/ai-sdk/chat-route) if you want to create a chat route inside a Mastra server.
+
+## Structured output in UI streams
+
+When you pass `structuredOutput` to the underlying agent execution, the final structured output object is emitted in the AI SDK-compatible UI stream as a custom data part:
+
+```json
+{
+  "type": "data-structured-output",
+  "data": {
+    "object": {}
+  }
+}
+```
+
+The `object` field contains your full structured output value. Mastra emits this event for the final structured output object only. Partial structured output chunks are not exposed in the UI stream.
+
+Read this event with AI SDK UI's custom data handling, such as `onData`, or render it from message data parts.
+
+## Usage example
+
+Next.js App Router example:
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
+
+export async function POST(req: Request) {
+  const params = await req.json()
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+    messageMetadata: () => ({ createdAt: new Date().toISOString() }),
+  })
+  return createUIMessageStreamResponse({ stream })
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance containing registered agents.',
+    isOptional: false,
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'The ID of the agent to use for chat.',
+    isOptional: false,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
+  },
+  {
+    name: 'params',
+    type: 'ChatStreamHandlerParams',
+    description: 'Parameters for the chat stream, including messages and optional resume data.',
+    isOptional: false,
+  },
+  {
+    name: 'params.messages',
+    type: 'UIMessage[]',
+    description: 'Array of messages in the conversation.',
+    isOptional: false,
+  },
+  {
+    name: 'params.resumeData',
+    type: 'Record<string, any>',
+    description: 'Data for resuming a suspended agent execution. Requires `runId` to be set.',
+    isOptional: true,
+  },
+  {
+    name: 'params.runId',
+    type: 'string',
+    description: 'The run ID. Required when `resumeData` is provided.',
+    isOptional: true,
+  },
+  {
+    name: 'params.providerOptions',
+    type: 'Record<string, Record<string, unknown>>',
+    description:
+      'Provider-specific options passed to the language model (e.g. `{ openai: { reasoningEffort: "high" } }`). Merged with `defaultOptions.providerOptions`, with `params` taking precedence.',
+    isOptional: true,
+  },
+  {
+    name: 'params.requestContext',
+    type: 'RequestContext',
+    description: 'Request context to pass to the agent execution.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultOptions',
+    type: 'AgentExecutionOptions',
+    description:
+      'Default options passed to agent execution. These are merged with params, with params taking precedence.',
+    isOptional: true,
+  },
+  {
+    name: 'sendStart',
+    type: 'boolean',
+    description: 'Whether to send start events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendFinish',
+    type: 'boolean',
+    description: 'Whether to send finish events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendReasoning',
+    type: 'boolean',
+    description: 'Whether to include reasoning steps in the stream.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'sendSources',
+    type: 'boolean',
+    description: 'Whether to include source citations in the stream.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown) => string',
+    description:
+      'Called when the stream encounters an error. Return the string that will be sent to the client as the error message. Use this to sanitize errors before they reach the client — for example, to prevent internal infrastructure details from leaking to end users.',
+    isOptional: true,
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    description:
+      'A function that receives the current stream part and returns metadata to attach to start and finish chunks. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.',
+    isOptional: true,
+  },
+]}
+/>

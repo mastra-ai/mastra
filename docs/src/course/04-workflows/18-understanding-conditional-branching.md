@@ -40,9 +40,9 @@ Conditions are functions that examine the input data:
 
 ```typescript
 // Example condition function
-async ({ inputData }) => {
-  return inputData.wordCount < 50;
-};
+;async ({ inputData }) => {
+  return inputData.wordCount < 50
+}
 ```
 
 ## Multiple Paths

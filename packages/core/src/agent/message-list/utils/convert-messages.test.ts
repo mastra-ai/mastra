@@ -1,5 +1,5 @@
 import type * as AIV4 from '@internal/ai-sdk-v4';
-import type * as AIV5 from 'ai-v5';
+import type * as AIV5 from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage } from '../index';
 import { convertMessages } from './convert-messages';
@@ -161,6 +161,191 @@ describe('convertMessages', () => {
         // @ts-expect-error - testing invalid format
         convertMessages({ role: 'user', content: 'test' }).to('INVALID');
       }).toThrow('Unsupported output format: INVALID');
+    });
+  });
+
+  describe('data-* parts preservation', () => {
+    const mastraV2MessageWithDataParts: MastraDBMessage = {
+      id: 'test-data-parts',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Processing your request...' },
+          {
+            type: 'data-progress',
+            data: {
+              taskName: 'file-upload',
+              progress: 50,
+              status: 'in-progress',
+            },
+          } as any,
+          {
+            type: 'data-file-reference',
+            data: {
+              fileId: 'file-123',
+              fileName: 'document.pdf',
+            },
+          } as any,
+        ],
+        content: 'Processing your request...',
+      },
+    };
+
+    it('should preserve data-* parts when converting Mastra V2 to AIV5 UI', () => {
+      const result = convertMessages(mastraV2MessageWithDataParts).to('AIV5.UI');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].role).toBe('assistant');
+
+      // Check that text part is preserved
+      const textPart = result[0].parts.find(p => p.type === 'text');
+      expect(textPart).toBeDefined();
+      expect((textPart as any).text).toBe('Processing your request...');
+
+      // Check that data-progress part is preserved
+      const progressPart = result[0].parts.find(p => p.type === 'data-progress');
+      expect(progressPart).toBeDefined();
+      expect((progressPart as any).data).toEqual({
+        taskName: 'file-upload',
+        progress: 50,
+        status: 'in-progress',
+      });
+
+      // Check that data-file-reference part is preserved
+      const fileRefPart = result[0].parts.find(p => p.type === 'data-file-reference');
+      expect(fileRefPart).toBeDefined();
+      expect((fileRefPart as any).data).toEqual({
+        fileId: 'file-123',
+        fileName: 'document.pdf',
+      });
+    });
+
+    it('should preserve data-* parts when converting Mastra V2 to AIV4 UI', () => {
+      const result = convertMessages(mastraV2MessageWithDataParts).to('AIV4.UI');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].role).toBe('assistant');
+
+      const textPart = result[0].parts.find(p => p.type === 'text');
+      expect(textPart).toBeDefined();
+
+      const progressPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(progressPart).toBeDefined();
+      expect((progressPart as any).data).toEqual({
+        taskName: 'file-upload',
+        progress: 50,
+        status: 'in-progress',
+      });
+
+      const fileRefPart = result[0].parts.find((p: any) => p.type === 'data-file-reference');
+      expect(fileRefPart).toBeDefined();
+      expect((fileRefPart as any).data).toEqual({
+        fileId: 'file-123',
+        fileName: 'document.pdf',
+      });
+    });
+
+    it('should preserve data-tool-call-suspended parts for HITL workflow resume', () => {
+      const suspendedMessage: MastraDBMessage = {
+        id: 'test-suspended',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Waiting for approval...' },
+            {
+              type: 'data-tool-call-suspended',
+              data: {
+                runId: 'run-abc-123',
+                toolCallId: 'tc-xyz-456',
+                suspendPayload: { question: 'Approve this action?' },
+                resumeSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+              },
+            } as any,
+          ],
+          content: 'Waiting for approval...',
+        },
+      };
+
+      const result = convertMessages(suspendedMessage).to('AIV4.UI');
+
+      expect(result).toHaveLength(1);
+      const suspendedPart = result[0].parts.find((p: any) => p.type === 'data-tool-call-suspended');
+      expect(suspendedPart).toBeDefined();
+      expect((suspendedPart as any).data).toEqual({
+        runId: 'run-abc-123',
+        toolCallId: 'tc-xyz-456',
+        suspendPayload: { question: 'Approve this action?' },
+        resumeSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+      });
+    });
+
+    it('should preserve data-* parts in Mastra V2 round-trip', () => {
+      // Convert to Mastra V2 and back - parts should be preserved
+      const v2Result = convertMessages(mastraV2MessageWithDataParts).to('Mastra.V2');
+
+      expect(v2Result).toHaveLength(1);
+      expect(v2Result[0].content.parts).toHaveLength(3);
+
+      // All parts including data-* should be preserved in V2 format
+      const progressPart = v2Result[0].content.parts.find((p: any) => p.type === 'data-progress');
+      expect(progressPart).toBeDefined();
+      expect((progressPart as any).data.progress).toBe(50);
+
+      const fileRefPart = v2Result[0].content.parts.find((p: any) => p.type === 'data-file-reference');
+      expect(fileRefPart).toBeDefined();
+      expect((fileRefPart as any).data.fileId).toBe('file-123');
+    });
+
+    it('should handle multiple messages with data-* parts', () => {
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Upload my file' }],
+            content: 'Upload my file',
+          },
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Uploading...' },
+              {
+                type: 'data-upload-progress',
+                data: { percent: 100, fileName: 'doc.pdf' },
+              } as any,
+            ],
+            content: 'Uploading...',
+          },
+        },
+      ];
+
+      const result = convertMessages(messages).to('AIV5.UI');
+
+      expect(result).toHaveLength(2);
+
+      // First message (user) should have text
+      expect(result[0].role).toBe('user');
+      expect(result[0].parts.find(p => p.type === 'text')).toBeDefined();
+
+      // Second message (assistant) should have both text and data-* parts
+      expect(result[1].role).toBe('assistant');
+      const assistantTextPart = result[1].parts.find(p => p.type === 'text');
+      expect(assistantTextPart).toBeDefined();
+
+      const uploadPart = result[1].parts.find(p => p.type === 'data-upload-progress');
+      expect(uploadPart).toBeDefined();
+      expect((uploadPart as any).data.percent).toBe(100);
     });
   });
 });

@@ -1,14 +1,17 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
-import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
+import { getSingleDummyResponseModel } from './mock-model';
 
-function toolhandlingTests(version: 'v1' | 'v2') {
+function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
   const dummyModel = getSingleDummyResponseModel(version);
-  const openaiModel = getOpenAIModel(version);
 
   describe(`${version} - agent tool handling`, () => {
     it('should handle tool name collisions caused by formatting', async () => {
@@ -17,7 +20,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
       const toolName1 = base + 'X'; // 64 chars
       const toolName2 = base + 'Y'; // 64 chars, but will be truncated to same as toolName1
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -28,7 +31,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -57,13 +60,43 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -98,7 +131,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should sanitize tool names with invalid characters', async () => {
       const badName = 'bad!@#tool$name';
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -109,7 +142,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -138,13 +171,43 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -173,7 +236,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should prefix tool names that do not start with a letter or underscore', async () => {
       const badStart = '1tool';
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -184,7 +247,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -213,13 +276,43 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -248,7 +341,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should truncate tool names longer than 63 characters', async () => {
       const longName = 'a'.repeat(70);
 
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
 
       if (version === 'v1') {
         testModel = new MockLanguageModelV1({
@@ -259,7 +352,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
             text: 'ok',
           }),
         });
-      } else {
+      } else if (version === 'v2') {
         testModel = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -288,13 +381,43 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          }),
+        });
+      } else {
+        // v3
+        testModel = new MockLanguageModelV3({
+          doGenerate: async () => ({
+            finishReason: { unified: 'stop', raw: 'stop' },
+            usage: {
+              inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
               },
             ]),
           }),
@@ -322,57 +445,167 @@ function toolhandlingTests(version: 'v1' | 'v2') {
   });
 
   describe('agents as tools', () => {
-    it('should expose sub-agents as tools when using generate/stream', async () => {
-      // Create a research agent that will be used as a tool
-      const researchAgent = new Agent({
-        id: 'research-agent',
-        name: 'research-agent',
-        instructions: 'You are a research agent. Provide concise, factual information.',
-        model: dummyModel,
-      });
+    it('should pass requestContext to sub-agent getModel when determining model version', async () => {
+      let receivedRequestContext: RequestContext | undefined;
 
-      // Create an orchestrator agent that has access to the research agent
-      const orchestratorAgent = new Agent({
-        id: 'orchestrator-agent',
-        name: 'orchestrator-agent',
-        instructions: 'You can delegate research tasks to specialized agents.',
-        model: openaiModel,
-        agents: {
-          researchAgent,
+      // Create a sub-agent with a function-based model that captures the requestContext
+      const subAgent = new Agent({
+        id: 'sub-agent',
+        name: 'sub-agent',
+        instructions: 'You are a sub-agent.',
+        model: ({ requestContext }) => {
+          receivedRequestContext = requestContext;
+          return dummyModel;
         },
       });
 
-      let result;
-      let toolCalls;
-
-      if (version === 'v1') {
-        result = await orchestratorAgent.generateLegacy('Use the research agent to find information about TypeScript', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCalls = result.toolResults;
-      } else {
-        result = await orchestratorAgent.generate('Use the research agent to find information about TypeScript');
-        toolCalls = result.toolResults;
-      }
-
-      // Verify that the research agent was called as a tool
-      expect(toolCalls.length).toBeGreaterThan(0);
-
-      const agentToolCall =
-        version === 'v1'
-          ? toolCalls.find((tc: any) => tc.toolName === 'agent-researchAgent')
-          : toolCalls.find((tc: any) => tc.payload?.toolName === 'agent-researchAgent');
-
-      expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
-        ...(version === 'v1' ? {} : { subAgentResourceId: expect.any(String), subAgentThreadId: expect.any(String) }),
-        text: 'Dummy response',
+      // Create an orchestrator agent with the sub-agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
       });
 
-      expect(agentToolCall).toBeDefined();
-    }, 50000);
+      // Create a requestContext with a specific value to track
+      const testRequestContext = new RequestContext();
+      testRequestContext.set('test-key', 'test-value');
+
+      // getModel is called during tool execution (not tool creation) so we
+      // need to invoke the agent tool's execute to trigger it.
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: testRequestContext,
+        methodType: 'generate',
+      });
+
+      const agentTool = tools['agent-subAgent'];
+      expect(agentTool).toBeDefined();
+
+      // Execute the tool — it will call resolvedAgent.getModel({ requestContext })
+      // during version resolution. The generate call itself will fail since the
+      // mock model isn't wired for a full conversation, but getModel is invoked first.
+      try {
+        await agentTool.execute!({ prompt: 'hello' }, { toolCallId: 'test-call', messages: [] } as any);
+      } catch {
+        // Expected — the mock model doesn't support a full generate flow
+      }
+
+      // Verify that the sub-agent's model function received the correct requestContext
+      expect(receivedRequestContext).toBeDefined();
+      expect(receivedRequestContext?.get('test-key')).toBe('test-value');
+    });
+
+    it('should create agent tools for sub-agents with defaultOptions.memory', async () => {
+      // Create a sub-agent with its own defaultOptions.memory
+      const subAgent = new Agent({
+        id: 'sub-agent-with-memory',
+        name: 'sub-agent-with-memory',
+        instructions: 'You are a sub-agent with custom memory config.',
+        model: dummyModel,
+        defaultOptions: {
+          memory: {
+            thread: 'custom-thread',
+            resource: 'custom-resource',
+          },
+        },
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created with proper configuration
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents without defaultOptions', async () => {
+      // Create a sub-agent WITHOUT defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-no-options',
+        name: 'sub-agent-no-options',
+        instructions: 'You are a sub-agent without default options.',
+        model: dummyModel,
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // This should not throw - convertTools should handle missing defaultOptions gracefully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      // Verify the agent tool was created
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents with function-based defaultOptions', async () => {
+      // Create a sub-agent with function-based defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-fn-options',
+        name: 'sub-agent-fn-options',
+        instructions: 'You are a sub-agent with function-based options.',
+        model: dummyModel,
+        defaultOptions: ({ requestContext }) => ({
+          memory: {
+            thread: `thread-${requestContext.get('userId') || 'default'}`,
+            resource: 'custom-resource',
+          },
+        }),
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created successfully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
   });
 }
 
 toolhandlingTests('v1');
 toolhandlingTests('v2');
+toolhandlingTests('v3');

@@ -1,7 +1,7 @@
 import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
-import type { Config as MastraConfig } from '@mastra/core/mastra';
 import type { IMastraLogger } from '@mastra/core/logger';
+import type { Config as MastraConfig } from '@mastra/core/mastra';
 
 export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
@@ -38,9 +38,9 @@ export function removeAllOptionsFromMastraExcept(
           mastraArgs = path.node.arguments[0];
         }
 
+        // Find the config property, skipping SpreadElement nodes
         let configProperty = mastraArgs.properties.find(
-          // @ts-ignore
-          prop => prop.key.name === option,
+          prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name === option,
         );
         let configValue: types.Expression = t.objectExpression([]);
 
@@ -83,12 +83,11 @@ export function removeAllOptionsFromMastraExcept(
 
           if (!hasExport) {
             if (logger) {
-              logger.warn(`Mastra ${option} config could not be extracted. Please make sure your entry file looks like this:
-export const mastra = new Mastra({
-  ${option}: <value>
-})
-
-`);
+              logger.warn('Mastra config could not be extracted', {
+                option,
+                details:
+                  'Please make sure your entry file looks like this:\nexport const mastra = new Mastra({\n  <option>: <value>\n})',
+              });
             }
 
             const fallbackExportDeclaration = t.exportNamedDeclaration(

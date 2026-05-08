@@ -1,9 +1,9 @@
 ---
-title: "Agent Class | v1 Migration Guide"
+title: "Agent class | v1 Migration Guide"
 description: "Learn how to migrate Agent class changes when upgrading to v1."
 ---
 
-# Agent Class
+# Agent class
 
 The Agent class has been updated with reorganized voice methods, updated property access patterns, and streamlined streaming APIs.
 
@@ -24,8 +24,8 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/mastra-plural-apis .
+```bash npm2yarn
+npx @mastra/codemod@latest v1/mastra-plural-apis .
 ```
 
 :::
@@ -53,8 +53,8 @@ To migrate, update all imports and parameter names from `RuntimeContext`/`runtim
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/runtime-context .
+```bash
+npx @mastra/codemod@latest v1/runtime-context .
 ```
 
 :::
@@ -78,8 +78,8 @@ To migrate, replace property access with the corresponding getter methods.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/agent-property-access .
+```bash
+npx @mastra/codemod@latest v1/agent-property-access .
 ```
 
 :::
@@ -103,8 +103,8 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/agent-voice .
+```bash
+npx @mastra/codemod@latest v1/agent-voice .
 ```
 
 :::
@@ -139,15 +139,38 @@ To migrate, update processor method names.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/agent-processor-methods .
+```bash
+npx @mastra/codemod@latest v1/agent-processor-methods .
 ```
 
 :::
 
+### Zod v3 and v4 structured output schemas remain supported
+
+Mastra v1 continues to accept both Zod v3 and Zod v4 schemas in public agent APIs that take structured output schemas. This includes methods such as `agent.generateLegacy()` and `agent.streamLegacy()` and the related option types.
+
+If you already pass Zod schemas to agent APIs, no migration is required for Zod version compatibility. Keep your existing schema imports:
+
+```ts
+import { z as z3 } from 'zod/v3'
+import { z as z4 } from 'zod/v4'
+
+await agent.generateLegacy({
+  prompt: 'Summarize this ticket',
+  output: z3.object({ summary: z3.string() }),
+})
+
+await agent.streamLegacy({
+  prompt: 'Extract contact info',
+  output: z4.object({ email: z4.string().email() }),
+})
+```
+
+Only update your imports if you want to standardize on one Zod version across your application.
+
 ### Default options method renames for AI SDK versions
 
-Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5+) APIs. This change helps developers understand which AI SDK version they're targeting.
 
 To migrate, update method names based on which AI SDK version you're using.
 
@@ -158,7 +181,7 @@ To migrate, update method names based on which AI SDK version you're using.
 + const options = await agent.getDefaultGenerateOptionsLegacy();
 + const streamOptions = await agent.getDefaultStreamOptionsLegacy();
 
-  // For new AI SDK v5 (default)
+  // For new AI SDK v5+ (default)
   const streamOptions = await agent.getDefaultStreamOptions();
 ```
 
@@ -181,8 +204,8 @@ To migrate, move `abortSignal` from `modelSettings` to the top level.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/agent-abort-signal .
+```bash
+npx @mastra/codemod@latest v1/agent-abort-signal .
 ```
 
 :::
@@ -213,7 +236,7 @@ To migrate, add an `id` field to all Agent configurations.
 +   id: 'my-agent',
     name: 'My Agent',
     instructions: 'You are a helpful assistant',
-    model: openai('gpt-4'),
+    model: 'openai/gpt-5.4',
   });
 ```
 
@@ -225,10 +248,10 @@ const mastra = new Mastra({
   agents: {
     myAgent: agent, // key can differ from id
   },
-});
+})
 
 // Retrieve by ID
-const agent = mastra.getAgentById('my-agent');
+const agent = mastra.getAgentById('my-agent')
 ```
 
 ### Stream API responses now redact sensitive data
@@ -236,6 +259,7 @@ const agent = mastra.getAgentById('my-agent');
 The Mastra server now automatically redacts sensitive information from agent stream responses. This prevents accidental exposure of system prompts, tool definitions, and API keys in `step-start`, `step-finish`, and `finish` stream chunks.
 
 **What's redacted:**
+
 - `request.body` containing LLM request payloads (system prompts, tool schemas)
 - `metadata.request` in step results
 - `output.steps[].request` in nested step data
@@ -246,7 +270,7 @@ This behavior is enabled by default. If you need access to the full request data
 
 ### `generateVNext` and `streamVNext` methods
 
-The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5+ compatibility but are now the standard implementation.
 
 To migrate, use the standard `generate()` and `stream()` methods.
 
@@ -261,8 +285,8 @@ To migrate, use the standard `generate()` and `stream()` methods.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/agent-generate-stream-v-next .
+```bash
+npx @mastra/codemod@latest v1/agent-generate-stream-v-next .
 ```
 
 :::
@@ -312,4 +336,105 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
 + const agent = new Agent<AgentId, Tools>({
     // ...
   });
+```
+
+### Tripwire response format changed
+
+The tripwire response format has changed from separate `tripwire` and `tripwireReason` fields to a single `tripwire` object containing all related data.
+
+To migrate, update your code to access tripwire data from the new object structure.
+
+```diff
+  const result = await agent.generate('Hello');
+
+- if (result.tripwire) {
+-   console.log(result.tripwireReason);
+- }
++ if (result.tripwire) {
++   console.log(result.tripwire.reason);
++   // New fields available:
++   // result.tripwire.retry - whether this step should be retried
++   // result.tripwire.metadata - additional metadata from the processor
++   // result.tripwire.processorId - which processor triggered the tripwire
++ }
+```
+
+For streaming responses:
+
+```diff
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tripwire') {
+-     console.log(chunk.payload.tripwireReason);
++     console.log(chunk.payload.reason);
++     // New fields available:
++     // chunk.payload.retry
++     // chunk.payload.metadata
++     // chunk.payload.processorId
+    }
+  }
+```
+
+The step results now also include tripwire information:
+
+```diff
+  const result = await agent.generate('Hello');
+
+  for (const step of result.steps) {
+-   // No tripwire info on steps
++   if (step.tripwire) {
++     console.log('Step was blocked:', step.tripwire.reason);
++   }
+  }
+```
+
+### `prepareStep` messages format
+
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5+ model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+
+If you need the old AI SDK v5+ format, use `messageList.get.all.aiV5.model()`:
+
+```diff
+  agent.generate('Hello', {
+    prepareStep: async ({ messages, messageList }) => {
+-     // messages was AI SDK v5+ ModelMessage format
+-     console.log(messages[0].content);
++     // messages is now MastraDBMessage format
++     // Use messageList to get AI SDK v5+ format if needed:
++     const aiSdkMessages = messageList.get.all.aiV5.model();
+
+      return { toolChoice: 'auto' };
+    },
+  });
+```
+
+### `threadId` and `resourceId` to `memory` option
+
+The `threadId` and `resourceId` options have been removed from `agent.stream()` and `agent.generate()`. Use the `memory` option instead, which provides a cleaner API for memory configuration.
+
+To migrate, move `threadId` and `resourceId` into the `memory` option:
+
+```diff
+  await agent.stream('Hello', {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+The `memory` option also supports passing thread metadata when creating new threads:
+
+```typescript
+await agent.stream('Hello', {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+})
 ```

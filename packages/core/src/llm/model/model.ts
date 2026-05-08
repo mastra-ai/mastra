@@ -4,9 +4,7 @@ import type {
   LanguageModelV1 as LanguageModel,
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
-  Schema,
 } from '@internal/ai-sdk-v4';
-import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -17,16 +15,19 @@ import {
   OpenAISchemaCompatLayer,
   jsonSchema,
 } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { JSONSchema7, Schema } from '@mastra/schema-compat';
+import type { z } from 'zod/v4';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
-import { SpanType } from '../../observability';
+import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
+import { toStandardSchema, standardSchemaToJSONSchema, isStandardSchemaWithJSON } from '../../schema';
+import type { ZodSchema } from '../../schema';
+import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
+import { isZodArray, getZodDef } from '../../utils/zod-utils';
 
 import type {
   GenerateObjectWithMessagesArgs,
@@ -109,8 +110,9 @@ export class MastraLLMV1 extends MastraBase {
       );
     }
 
+    // "Type instantiation is excessively deep" error from complex ZodSchema generic inference
     return applyCompatLayer({
-      schema: schema as Schema | ZodSchema,
+      schema: schema as any,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -128,12 +130,12 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug(`[LLM] - Generating text`, {
+    this.logger.debug('Generating text', {
       runId,
       messages,
       maxSteps,
@@ -145,26 +147,42 @@ export class MastraLLMV1 extends MastraBase {
     let schema: z.ZodType<inferOutput<Z>> | Schema<inferOutput<Z>> | undefined = undefined;
 
     if (experimental_output) {
-      this.logger.debug('[LLM] - Using experimental output', {
+      this.logger.debug('Using experimental output', {
         runId,
       });
 
       if (isZodType(experimental_output)) {
         schema = experimental_output as z.ZodType<inferOutput<Z>>;
-        if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<inferOutput<Z>>;
+        if (isZodArray(schema)) {
+          schema = getZodDef(schema).type as z.ZodType<inferOutput<Z>>;
         }
 
-        let jsonSchemaToUse;
-        jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7') as JSONSchema7;
+        // Convert Zod schema to JSON Schema via standard schema interface
+        const standardSchema = toStandardSchema(schema as any);
+        const jsonSchemaToUse = standardSchemaToJSONSchema(standardSchema);
 
-        schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
+        schema = jsonSchema<inferOutput<Z>>(jsonSchemaToUse);
       } else {
-        schema = jsonSchema(experimental_output as JSONSchema7) as Schema<inferOutput<Z>>;
+        schema = jsonSchema<inferOutput<Z>>(experimental_output);
       }
     }
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    // make json schema a ai sdk schema
+    if (tools && Object.keys(tools).length > 0) {
+      for (const tool of Object.values(tools)) {
+        if (tool.parameters) {
+          if ('validate' in tool.parameters) {
+            tool.parameters = tool.parameters;
+          } else if (isStandardSchemaWithJSON(tool.parameters)) {
+            tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters));
+          } else {
+            tool.parameters = jsonSchema(tool.parameters);
+          }
+        }
+      }
+    }
+
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -189,6 +207,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
@@ -227,7 +246,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Text Step Change:', {
+        this.logger.debug('Text step change', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -266,11 +285,14 @@ export class MastraLLMV1 extends MastraBase {
           reasoningText: result.reasoning,
           files: result.files,
           sources: result.sources,
+          toolCalls: result.toolCalls,
           warnings: result.warnings,
         },
         attributes: {
           finishReason: result.finishReason,
-          usage: result.usage,
+          responseId: result.response?.id,
+          responseModel: result.response?.modelId,
+          usage: convertV4Usage(result.usage),
         },
       });
 
@@ -291,6 +313,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('Generate text failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -303,14 +333,14 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug(`[LLM] - Generating a text object`, { runId });
+    this.logger.debug('Generating text object', { runId });
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -334,13 +364,19 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
       let output: 'object' | 'array' = 'object';
-      if (structuredOutput instanceof z.ZodArray) {
+      if (isZodArray(structuredOutput)) {
         output = 'array';
-        structuredOutput = structuredOutput._def.type;
+        const zodDef = getZodDef(structuredOutput);
+        if ('element' in zodDef) {
+          structuredOutput = zodDef.element;
+        } else {
+          structuredOutput = zodDef.type;
+        }
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
@@ -355,7 +391,6 @@ export class MastraLLMV1 extends MastraBase {
         ...rest,
         messages,
         model,
-        // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
       };
@@ -371,7 +406,9 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: result.finishReason,
-            usage: result.usage,
+            responseId: result.response?.id,
+            responseModel: result.response?.modelId,
+            usage: convertV4Usage(result.usage),
           },
         });
 
@@ -393,6 +430,14 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger.error('Generate object failed', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -416,6 +461,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('Generate object schema conversion failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -434,35 +487,24 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
-    this.logger.debug(`[LLM] - Streaming text`, {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      maxSteps,
-      tools: Object.keys(tools || {}),
-    });
+    const observabilityContext = resolveObservabilityContext(rest);
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
     if (experimental_output) {
-      this.logger.debug('[LLM] - Using experimental output', {
-        runId,
-      });
       if (typeof (experimental_output as any).parse === 'function') {
         schema = experimental_output as z.ZodType<Z>;
-        if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<Z>;
+        if (isZodArray(schema)) {
+          schema = getZodDef(schema).type as z.ZodType<Z>;
         }
       } else {
         schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
       }
     }
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -486,7 +528,38 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
+
+    if (llmSpan) {
+      executeWithContextSync({
+        span: llmSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            maxSteps,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
+
+    // make json schema a ai sdk schema
+    if (tools && Object.keys(tools).length > 0) {
+      for (const tool of Object.values(tools)) {
+        if (tool.parameters) {
+          if ('validate' in tool.parameters) {
+            tool.parameters = tool.parameters;
+          } else if (isStandardSchemaWithJSON(tool.parameters)) {
+            tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters));
+          } else {
+            tool.parameters = jsonSchema(tool.parameters);
+          }
+        }
+      }
+    }
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
       model,
@@ -524,7 +597,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Stream Step Change:', {
+        this.logger.debug('Stream step change', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -549,11 +622,12 @@ export class MastraLLMV1 extends MastraBase {
             reasoningText: props?.reasoning,
             files: props?.files,
             sources: props?.sources,
+            toolCalls: props?.toolCalls,
             warnings: props?.warnings,
           },
           attributes: {
             finishReason: props?.finishReason,
-            usage: props?.usage,
+            usage: convertV4Usage(props?.usage),
           },
         });
 
@@ -584,7 +658,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Stream Finished:', {
+        this.logger.debug('Stream finished', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -594,6 +668,32 @@ export class MastraLLMV1 extends MastraBase {
           threadId,
           resourceId,
         });
+      },
+      onError: ({ error }) => {
+        const mastraError = new MastraError(
+          {
+            id: 'LLM_STREAM_TEXT_AI_SDK_STREAMING_ERROR',
+            domain: ErrorDomain.LLM,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              modelId: model.modelId,
+              modelProvider: model.provider,
+              runId: runId ?? 'unknown',
+              threadId: threadId ?? 'unknown',
+              resourceId: resourceId ?? 'unknown',
+            },
+          },
+          error,
+        );
+        this.logger.error('Stream text error', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
+        llmSpan?.error({ error: mastraError });
       },
       ...rest,
       messages,
@@ -622,6 +722,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('Stream text failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -635,16 +743,17 @@ export class MastraLLMV1 extends MastraBase {
     resourceId,
     onFinish,
     structuredOutput,
-    tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
     const model = this.#model;
-    this.logger.debug(`[LLM] - Streaming structured output`, {
+    const observabilityContext = resolveObservabilityContext(rest);
+
+    this.logger.debug('Streaming structured output', {
       runId,
       messages,
     });
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -668,13 +777,14 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
       let output: 'object' | 'array' = 'object';
-      if (structuredOutput instanceof z.ZodArray) {
+      if (isZodArray(structuredOutput)) {
         output = 'array';
-        structuredOutput = structuredOutput._def.type;
+        structuredOutput = getZodDef(structuredOutput).type;
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
@@ -734,15 +844,40 @@ export class MastraLLMV1 extends MastraBase {
             throw mastraError;
           }
 
-          this.logger.debug('[LLM] - Object Stream Finished:', {
+          this.logger.debug('Object stream finished', {
             usage: props?.usage,
             runId,
             threadId,
             resourceId,
           });
         },
+        onError: ({ error }) => {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_OBJECT_AI_SDK_STREAMING_ERROR',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+              },
+            },
+            error,
+          );
+          this.logger.error('Stream object error', {
+            error: mastraError,
+            runId,
+            threadId,
+            resourceId,
+            modelId: model.modelId,
+            modelProvider: model.provider,
+          });
+          llmSpan?.error({ error: mastraError });
+        },
         messages,
-        // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<inferOutput<T>>,
       };
@@ -765,6 +900,14 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger.error('Stream object failed', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -789,6 +932,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('Stream object schema conversion failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -821,10 +972,7 @@ export class MastraLLMV1 extends MastraBase {
     Tools extends ToolSet = ToolSet,
   >(
     messages: string | string[] | CoreMessage[],
-    {
-      output,
-      ...rest
-    }: Omit<
+    args?: Omit<
       Output extends undefined
         ? GenerateTextWithMessagesArgs<Tools, StructuredOutput>
         : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'>,
@@ -832,25 +980,23 @@ export class MastraLLMV1 extends MastraBase {
     > & { output?: Output },
   ): Promise<GenerateReturn<Tools, Output, StructuredOutput>> {
     const msgs = this.convertToMessages(messages);
+    const { output, ...rest } = args ?? ({} as NonNullable<typeof args>);
 
     if (!output) {
-      const { maxSteps, onStepFinish, ...textOptions } = rest as Omit<
-        GenerateTextWithMessagesArgs<Tools, StructuredOutput>,
-        'messages'
-      >;
       return (await this.__text<Tools, StructuredOutput>({
         messages: msgs,
-        maxSteps,
-        onStepFinish,
-        ...textOptions,
-      })) as unknown as GenerateReturn<Tools, Output, StructuredOutput>;
+        ...(rest as unknown as Omit<GenerateTextWithMessagesArgs<Tools, StructuredOutput>, 'messages'>),
+      })) as GenerateReturn<Tools, Output, StructuredOutput>;
     }
 
     return (await this.__textObject({
       messages: msgs,
       structuredOutput: output as NonNullable<Output>,
-      ...rest,
-    })) as unknown as GenerateReturn<Tools, Output, StructuredOutput>;
+      ...(rest as unknown as Omit<
+        GenerateObjectWithMessagesArgs<NonNullable<Output>>,
+        'messages' | 'structuredOutput'
+      >),
+    })) as GenerateReturn<Tools, Output, StructuredOutput>;
   }
 
   stream<
@@ -859,12 +1005,7 @@ export class MastraLLMV1 extends MastraBase {
     Tools extends ToolSet = ToolSet,
   >(
     messages: string | string[] | CoreMessage[],
-    {
-      maxSteps = 5,
-      output,
-      onFinish,
-      ...rest
-    }: Omit<
+    args?: Omit<
       Output extends undefined
         ? StreamTextWithMessagesArgs<Tools, StructuredOutput>
         : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'> & { maxSteps?: never },
@@ -872,21 +1013,31 @@ export class MastraLLMV1 extends MastraBase {
     > & { output?: Output },
   ): StreamReturn<Tools, Output, StructuredOutput> {
     const msgs = this.convertToMessages(messages);
+    const { output, ...rest } = args ?? ({} as NonNullable<typeof args>);
 
     if (!output) {
+      const {
+        maxSteps = 5,
+        onFinish,
+        ...streamRest
+      } = rest as unknown as Omit<StreamTextWithMessagesArgs<Tools, StructuredOutput>, 'messages'>;
       return this.__stream({
         messages: msgs,
         maxSteps,
         onFinish: onFinish as StreamTextOnFinishCallback<Tools> | undefined,
-        ...rest,
-      }) as unknown as StreamReturn<Tools, Output, StructuredOutput>;
+        ...streamRest,
+      }) as StreamReturn<Tools, Output, StructuredOutput>;
     }
 
+    const { onFinish, ...objectRest } = rest as unknown as Omit<
+      StreamObjectWithMessagesArgs<NonNullable<Output>>,
+      'messages' | 'structuredOutput'
+    >;
     return this.__streamObject({
       messages: msgs,
       structuredOutput: output as NonNullable<Output>,
       onFinish: onFinish as StreamObjectOnFinishCallback<inferOutput<Output>> | undefined,
-      ...rest,
-    }) as unknown as StreamReturn<Tools, Output, StructuredOutput>;
+      ...objectRest,
+    }) as StreamReturn<Tools, Output, StructuredOutput>;
   }
 }

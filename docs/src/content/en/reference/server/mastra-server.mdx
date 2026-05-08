@@ -1,0 +1,357 @@
+---
+title: "Reference: MastraServer | Server"
+description: "API reference for the MastraServer abstract class used to create server adapters."
+packages:
+  - "@mastra/core"
+  - "@mastra/server"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# MastraServer
+
+The `MastraServer` abstract class is the base for all server adapters. Extend this class to create adapters for frameworks other than Hono or Express.
+
+## Import
+
+```typescript
+import { MastraServer } from '@mastra/server/server-adapter'
+```
+
+## Type parameters
+
+```typescript
+MastraServer<TApp, TRequest, TResponse>
+```
+
+| Parameter | Description |
+| - | - |
+| `TApp` | Framework app type (e.g., `Hono`, `Application`) |
+| `TRequest` | Framework request type |
+| `TResponse` | Framework response/context type |
+
+## Constructor
+
+```typescript prettier:false
+constructor(options: MastraServerOptions<TApp>)
+```
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'app',
+    type: 'TApp',
+    description: 'Framework app instance',
+    isOptional: false,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance',
+    isOptional: false,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Route path prefix (e.g., `/api/v2`)',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'openapiPath',
+    type: 'string',
+    description: 'Path to serve OpenAPI spec',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'bodyLimitOptions',
+    type: 'BodyLimitOptions',
+    description: 'Request body size limits',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: 'StreamOptions',
+    description: 'Stream redaction config',
+    isOptional: true,
+    defaultValue: '{ redact: true }',
+  },
+  {
+    name: 'customRouteAuthConfig',
+    type: 'Map<string, boolean>',
+    description: 'Per-route auth overrides',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'Record<string, Tool>',
+    description: 'Available tools for the server',
+    isOptional: true,
+  },
+  {
+    name: 'taskStore',
+    type: 'InMemoryTaskStore',
+    description: 'Task store for A2A (Agent-to-Agent) operations',
+    isOptional: true,
+  },
+  {
+    name: 'mcpOptions',
+    type: 'MCPOptions',
+    description: 'MCP transport options for serverless environments',
+    isOptional: true,
+  },
+]}
+/>
+
+## Abstract methods
+
+These methods must be implemented by adapters:
+
+### `registerContextMiddleware()`
+
+Attach Mastra context to every request.
+
+```typescript prettier:false
+abstract registerContextMiddleware(): void
+```
+
+**Context to attach:**
+
+- `mastra` - Mastra instance
+- `requestContext` - Request-scoped context
+- `tools` - Available tools
+- `abortSignal` - Request cancellation signal
+
+### `registerAuthMiddleware()`
+
+Run the adapter auth hook during initialization. Official adapters may implement this as a no-op when auth is enforced per-route.
+
+```typescript prettier:false
+abstract registerAuthMiddleware(): void
+```
+
+### `registerRoute()`
+
+Register a single route with the framework.
+
+```typescript prettier:false
+abstract registerRoute(
+  app: TApp,
+  route: ServerRoute,
+  options: { prefix?: string }
+): Promise<void>
+```
+
+### `getParams()`
+
+Extract parameters from the request.
+
+```typescript prettier:false
+abstract getParams(
+  route: ServerRoute,
+  request: TRequest
+): Promise<{
+  urlParams: Record<string, string>;
+  queryParams: Record<string, string>;
+  body: unknown;
+}>
+```
+
+### `sendResponse()`
+
+Send response based on route type.
+
+```typescript prettier:false
+abstract sendResponse(
+  route: ServerRoute,
+  response: TResponse,
+  result: unknown
+): Promise<unknown>
+```
+
+### `stream()`
+
+Handle streaming responses.
+
+```typescript prettier:false
+abstract stream(
+  route: ServerRoute,
+  response: TResponse,
+  result: unknown
+): Promise<unknown>
+```
+
+## Instance methods
+
+### `init()`
+
+Initialize the server by registering all middleware and routes.
+
+```typescript prettier:false
+async init(): Promise<void>
+```
+
+Calls in order:
+
+1. `registerContextMiddleware()`
+1. `registerAuthMiddleware()`
+1. `registerRoutes()`
+
+### `registerRoutes()`
+
+Register all Mastra routes.
+
+```typescript prettier:false
+async registerRoutes(): Promise<void>
+```
+
+### `getApp()`
+
+Get the framework app instance.
+
+```typescript prettier:false
+getApp<T = TApp>(): T
+```
+
+### `parsePathParams()`
+
+Validate path parameters with the route's Zod schema.
+
+```typescript prettier:false
+async parsePathParams(
+  route: ServerRoute,
+  params: Record<string, string>
+): Promise<Record<string, unknown>>
+```
+
+### `parseQueryParams()`
+
+Validate query parameters with the route's Zod schema.
+
+```typescript prettier:false
+async parseQueryParams(
+  route: ServerRoute,
+  params: Record<string, string>
+): Promise<Record<string, unknown>>
+```
+
+### `parseBody()`
+
+Validate request body with the route's Zod schema.
+
+```typescript prettier:false
+async parseBody(
+  route: ServerRoute,
+  body: unknown
+): Promise<unknown>
+```
+
+### `registerOpenAPIRoute()`
+
+Register an endpoint that serves the OpenAPI specification.
+
+```typescript prettier:false
+async registerOpenAPIRoute(
+  app: TApp,
+  config: OpenAPIConfig,
+  options: { prefix?: string }
+): Promise<void>
+```
+
+## Protected methods
+
+### `mergeRequestContext()`
+
+Merge request context from multiple sources (query params and body).
+
+```typescript prettier:false
+protected mergeRequestContext(options: {
+  paramsRequestContext?: Record<string, any>;
+  bodyRequestContext?: Record<string, any>;
+}): RequestContext
+```
+
+## Types
+
+### `BodyLimitOptions`
+
+```typescript
+interface BodyLimitOptions {
+  maxSize: number
+  onError: (error: unknown) => unknown
+}
+```
+
+### `StreamOptions`
+
+```typescript
+interface StreamOptions {
+  redact?: boolean
+}
+```
+
+### MCPOptions
+
+```typescript
+interface MCPOptions {
+  serverless?: boolean
+  sessionIdGenerator?: () => string
+}
+```
+
+| Property | Description |
+| - | - |
+| `serverless` | When `true`, runs MCP in stateless mode without session management. Use for serverless environments like Cloudflare Workers or Vercel Edge. |
+| `sessionIdGenerator` | Custom function to generate session IDs. |
+
+## Example
+
+```typescript
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter'
+import type { Mastra } from '@mastra/core'
+
+export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
+  registerContextMiddleware(): void {
+    this.app.use('*', (req, res, next) => {
+      res.locals.mastra = this.mastra
+      next()
+    })
+  }
+
+  registerAuthMiddleware(): void {
+    const auth = this.mastra.getServer()?.auth
+    if (!auth) return
+    // Register global auth middleware, or leave this empty and
+    // enforce auth when routes are registered.
+  }
+
+  async registerRoute(app, route, { prefix }) {
+    // Implement route registration
+  }
+
+  async getParams(route, request) {
+    return {
+      urlParams: request.params,
+      queryParams: request.query,
+      body: request.body,
+    }
+  }
+
+  async sendResponse(route, response, result) {
+    return response.json(result)
+  }
+
+  async stream(route, response, result) {
+    // Implement streaming
+  }
+}
+```
+
+## Related
+
+- [Server Adapters](/docs/server/server-adapters): Using adapters
+- [Custom Adapters](/docs/server/custom-adapters): Creating custom adapters
+- [createRoute()](/reference/server/create-route): Creating custom routes

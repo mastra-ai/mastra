@@ -60,3 +60,14 @@ If you have used `InputProcessor`, replace it with `Processor` which implements 
 - import { InputProcessor, ModerationProcessor } from '@mastra/core/agent/input-processors/processors';
 + import { Processor, ModerationProcessor } from '@mastra/core/processors';
 ```
+
+### Memory processor exports moved to core
+
+The `@mastra/memory/processors` export has been removed. All processors are now exported from `@mastra/core/processors`. This change consolidates all processor exports in a single location.
+
+To migrate, update your import paths from `@mastra/memory/processors` to `@mastra/core/processors`.
+
+```diff
+- import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
++ import { TokenLimiter, ToolCallFilter } from '@mastra/core/processors';
+```

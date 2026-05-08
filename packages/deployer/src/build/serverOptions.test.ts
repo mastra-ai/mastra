@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it, expect } from 'vitest';
 import { getServerOptionsBundler } from './serverOptions';
 
 describe('getServerOptionsConfig', () => {
@@ -11,6 +11,7 @@ describe('getServerOptionsConfig', () => {
     ['./plugins/__fixtures__/basic-with-const.js', true],
     ['./plugins/__fixtures__/basic-with-import.js', true],
     ['./plugins/__fixtures__/basic-with-function.js', true],
+    ['./plugins/__fixtures__/basic-with-spread.js', false],
     ['./plugins/__fixtures__/mastra-with-extra-code.js', true],
     ['./plugins/__fixtures__/empty-mastra.js', false],
     ['./__fixtures__/no-server.js', false],

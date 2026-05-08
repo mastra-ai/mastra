@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import { transformSync } from '@babel/core';
+import { describe, it, expect } from 'vitest';
 import { checkConfigExport } from './check-config-export';
 
 describe('checkConfigExport Babel plugin', () => {
@@ -67,6 +67,30 @@ describe('checkConfigExport Babel plugin', () => {
 
   it('works with the babel-typescript preset', () => {
     const code = 'type A = any; const foo: A = 123; export const mastra = new Mastra()';
+    expect(runPlugin(code)).toBe(true);
+  });
+
+  it('matches export const mastra = new Mastra({ ...config })', () => {
+    const code = `
+      const config = { server: { port: 3000 } };
+      export const mastra = new Mastra({ ...config });
+    `;
+    expect(runPlugin(code)).toBe(true);
+  });
+
+  it('matches export const mastra = new Mastra({ ...config, agents: {} })', () => {
+    const code = `
+      const config = { server: { port: 3000 } };
+      export const mastra = new Mastra({ ...config, agents: {} });
+    `;
+    expect(runPlugin(code)).toBe(true);
+  });
+
+  it('matches export const mastra = new Mastra({ agents: {}, ...config })', () => {
+    const code = `
+      const config = { server: { port: 3000 } };
+      export const mastra = new Mastra({ agents: {}, ...config });
+    `;
     expect(runPlugin(code)).toBe(true);
   });
 });

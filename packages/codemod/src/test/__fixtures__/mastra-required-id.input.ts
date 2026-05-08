@@ -1,5 +1,6 @@
 // @ts-nocheck
 
+import { Mastra } from "@mastra/core/mastra";
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow } from '@mastra/core/workflows';
@@ -24,7 +25,7 @@ const libsqlStorage = new LibSQLStore({
 });
 
 const libsqlVector = new LibSQLVector({
-  connectionUrl: "file:../../mastra.db",
+  url: "file:../../mastra.db",
 });
 
 const postgresStorage = new PostgresStore({
@@ -135,4 +136,61 @@ export default createTool({
   description: 'Default tool',
   inputSchema: z.object({}),
   execute: async () => ({}),
+});
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+});
+
+// Edge case: Nested createTool (CallExpression) inside MCPServer
+const mcpServerWithInlineTool = new MCPServer({
+  name: 'Inline Tool Server',
+  version: '1.0.0',
+  tools: {
+    inlineTool: createTool({
+      description: 'Inline tool without id',
+      inputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+  },
+});
+
+// Edge case: Nested primitive WITH id already present (should NOT add comment)
+export const mastraWithId = new Mastra({
+  storage: new LibSQLStore({
+    id: 'my-storage',
+    url: ":memory:",
+  }),
+});
+
+// Edge case: Multiple nested primitives in same Mastra config
+export const mastraMultiple = new Mastra({
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  vectors: {
+    default: new PgVector({
+      connectionString: process.env.DATABASE_URL!,
+    }),
+  },
+});
+
+// Edge case: Array of inline tools
+const mcpServerWithToolArray = new MCPServer({
+  name: 'Array Tool Server',
+  version: '1.0.0',
+  tools: [
+    createTool({
+      description: 'First tool',
+      inputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+    createTool({
+      description: 'Second tool',
+      inputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+  ],
 });

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.7-alpha.0",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "dev": "tsup --watch && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "eslint .",
@@ -36,9 +37,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.902.0",
-    "@aws-sdk/lib-dynamodb": "^3.902.0",
-    "electrodb": "^3.5.0"
+    "@aws-sdk/client-dynamodb": "^3.1040.0",
+    "@aws-sdk/lib-dynamodb": "^3.1040.0",
+    "electrodb": "^3.7.2"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
@@ -48,14 +49,12 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "axios": "^1.12.2",
-    "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "eslint": "^10.2.1",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

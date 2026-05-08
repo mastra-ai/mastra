@@ -27,7 +27,7 @@ export class Vector extends BaseResource {
    */
   details(indexName: string, requestContext?: RequestContext | Record<string, any>): Promise<GetVectorIndexResponse> {
     return this.request(
-      `/api/vector/${this.vectorName}/indexes/${indexName}${requestContextQueryString(requestContext)}`,
+      `/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}${requestContextQueryString(requestContext)}`,
     );
   }
 
@@ -37,7 +37,7 @@ export class Vector extends BaseResource {
    * @returns Promise indicating deletion success
    */
   delete(indexName: string): Promise<{ success: boolean }> {
-    return this.request(`/api/vector/${this.vectorName}/indexes/${indexName}`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}`, {
       method: 'DELETE',
     });
   }
@@ -47,8 +47,10 @@ export class Vector extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing array of index names
    */
-  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<{ indexes: string[] }> {
-    return this.request(`/api/vector/${this.vectorName}/indexes${requestContextQueryString(requestContext)}`);
+  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<string[]> {
+    return this.request(
+      `/vector/${encodeURIComponent(this.vectorName)}/indexes${requestContextQueryString(requestContext)}`,
+    );
   }
 
   /**
@@ -57,7 +59,7 @@ export class Vector extends BaseResource {
    * @returns Promise indicating creation success
    */
   createIndex(params: CreateIndexParams): Promise<{ success: boolean }> {
-    return this.request(`/api/vector/${this.vectorName}/create-index`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/create-index`, {
       method: 'POST',
       body: params,
     });
@@ -66,10 +68,10 @@ export class Vector extends BaseResource {
   /**
    * Upserts vectors into an index
    * @param params - Parameters containing vectors, metadata, and optional IDs
-   * @returns Promise containing array of vector IDs
+   * @returns Promise containing the inserted vector IDs
    */
-  upsert(params: UpsertVectorParams): Promise<string[]> {
-    return this.request(`/api/vector/${this.vectorName}/upsert`, {
+  upsert(params: UpsertVectorParams): Promise<{ ids: string[] }> {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/upsert`, {
       method: 'POST',
       body: params,
     });
@@ -81,7 +83,7 @@ export class Vector extends BaseResource {
    * @returns Promise containing query results
    */
   query(params: QueryVectorParams): Promise<QueryVectorResponse> {
-    return this.request(`/api/vector/${this.vectorName}/query`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/query`, {
       method: 'POST',
       body: params,
     });

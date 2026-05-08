@@ -1,0 +1,54 @@
+{
+  "name": "examples-agent",
+  "type": "module",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "version": "0.0.1",
+  "scripts": {
+    "start": "npx bun src/example.ts",
+    "processor-demo": "npx bun src/processor-demo.ts",
+    "mastra:build": "mastra build",
+    "mastra:dev": "mastra dev"
+  },
+  "dependencies": {
+    "zod": "^4.3.6",
+    "typescript": "^5.9.3",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/provider": "^3.0.0",
+    "ai": "^6.0.1",
+    "@mastra/client-js": "beta",
+    "@mastra/core": "beta",
+    "@mastra/evals": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/loggers": "beta",
+    "@mastra/mcp": "beta",
+    "@mastra/memory": "beta",
+    "@mastra/observability": "beta",
+    "@mastra/voice-openai": "beta",
+    "@mastra/ai-sdk": "beta"
+  },
+  "devDependencies": {
+    "mastra": "beta",
+    "msw": "^2.12.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/voice-openai": "link:../../voice/openai",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/mcp": "link:../../packages/mcp",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/evals": "link:../../packages/evals",
+      "@mastra/ai-sdk": "link:../../client-sdks/ai-sdk",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+}

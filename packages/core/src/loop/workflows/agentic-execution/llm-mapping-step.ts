@@ -1,17 +1,16 @@
-import type { ToolSet } from 'ai-v5';
-import z from 'zod';
-import type { MastraDBMessage } from '../../../memory';
+import type { ToolSet } from '@internal/ai-sdk-v5';
+import { z } from 'zod/v4';
+import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
+import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
-import type { OutputSchema } from '../../../stream/base/schema';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
-export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
+export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
 ) {
@@ -37,25 +36,36 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           outputProcessors: rest.outputProcessors,
           logger: rest.logger,
           agentName: 'LLMMappingStep',
+          processorStates: rest.processorStates,
         })
       : undefined;
 
-  // Get tracing context from modelSpanTracker if available
-  const tracingContext = rest.modelSpanTracker?.getTracingContext();
+  // Build observability context from modelSpanTracker if tracing context is available
+  const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
 
-  // Helper function to process a chunk through output processors and enqueue it
-  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
+  // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
+  const streamWriter = rest.outputWriter
+    ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
+    : undefined;
+
+  // Helper function to process a chunk through output processors and enqueue it.
+  // Returns the processed chunk, or null if the chunk was blocked by a processor.
+  async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT> | null> {
     if (processorRunner && rest.processorStates) {
       const {
         part: processed,
         blocked,
         reason,
+        tripwireOptions,
+        processorId,
       } = await processorRunner.processPart(
         chunk,
         rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        tracingContext,
+        observabilityContext,
         rest.requestContext,
         rest.messageList,
+        0,
+        streamWriter,
       );
 
       if (blocked) {
@@ -63,18 +73,25 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            tripwireReason: reason || 'Output processor blocked content',
+            reason: reason || 'Output processor blocked content',
+            retry: tripwireOptions?.retry,
+            metadata: tripwireOptions?.metadata,
+            processorId,
           },
         } as ChunkType<OUTPUT>);
-        return;
+        return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
+        return processed as ChunkType<OUTPUT>;
       }
+
+      return null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);
+      return chunk;
     }
   }
 
@@ -85,10 +102,39 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      if (inputData?.every(toolCall => toolCall?.result === undefined)) {
-        const errorResults = inputData.filter(toolCall => toolCall?.error);
+      /**
+       * Compute toModelOutput for a successful tool call and return providerMetadata
+       * with the result stored at mastra.modelOutput.
+       *
+       * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
+       * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
+       */
+      async function getProviderMetadataWithModelOutput(toolCall: {
+        toolName: string;
+        result?: unknown;
+        providerMetadata?: Record<string, unknown>;
+      }) {
+        const tool = ((
+          _internal?.stepTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+        )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
+          | { toModelOutput?: (output: unknown) => unknown }
+          | undefined;
+        let modelOutput: unknown;
+        if (tool?.toModelOutput && toolCall.result != null) {
+          modelOutput = await tool.toModelOutput(toolCall.result);
+        }
 
-        const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+        const existingMastra = (toolCall.providerMetadata as any)?.mastra;
+        const providerMetadata = {
+          ...toolCall.providerMetadata,
+          ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+        };
+        const hasMetadata = Object.keys(providerMetadata).length > 0;
+        return hasMetadata ? providerMetadata : undefined;
+      }
+
+      if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {
+        const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
 
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
@@ -101,44 +147,118 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
                 args: toolCall.args,
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata,
+                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               },
             };
-            await processAndEnqueueChunk(chunk);
-          }
+            const processed = await processAndEnqueueChunk(chunk);
+            if (processed) await rest.options?.onChunk?.(processed);
 
-          const msg: MastraDBMessage = {
-            id: toolResultMessageId || '',
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: errorResults.map(toolCallErrorResult => {
-                return {
+            rest.messageList.updateToolInvocation({
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: toolCall.toolCallId,
+                toolName: sanitizeToolName(toolCall.toolName),
+                args: toolCall.args,
+                result: toolCall.error?.message ?? toolCall.error,
+              },
+              ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata as ProviderMetadata } : {}),
+            });
+          }
+        }
+
+        // When tool errors occur, continue the agentic loop so the model can see the
+        // error and self-correct (e.g., retry with different args, or respond to the user).
+        // The error messages are already added to the messageList above, so the model
+        // will see them on the next turn. This handles both tool-not-found errors
+        // (hallucinated tool names) and tool execution errors (tool throws).
+        //
+        // Check for pending HITL tool calls (tools with no result and no error).
+        // In mixed turns with errors and pending HITL tools,
+        // the HITL suspension path should take priority over continuing the loop.
+        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error && !tc.providerExecuted);
+
+        if (errorResults?.length > 0 && !hasPendingHITL) {
+          // Process any successful tool results from this turn before continuing.
+          // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
+          // results need their chunks emitted and messages added to the messageList.
+          const successfulResults = inputData.filter(tc => tc.result !== undefined);
+          if (successfulResults.length) {
+            for (const toolCall of successfulResults) {
+              const chunk: ChunkType<OUTPUT> = {
+                type: 'tool-result',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result: toolCall.result,
+                  providerMetadata: toolCall.providerMetadata,
+                  providerExecuted: toolCall.providerExecuted,
+                },
+              };
+              const processed = await processAndEnqueueChunk(chunk);
+              if (processed) await rest.options?.onChunk?.(processed);
+
+              if (!toolCall.providerExecuted) {
+                // Update tool invocations from state:'call' to state:'result' for successful client tools.
+                // Provider-executed tools are handled by llm-execution-step.
+                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                rest.messageList.updateToolInvocation({
                   type: 'tool-invocation' as const,
                   toolInvocation: {
                     state: 'result' as const,
-                    toolCallId: toolCallErrorResult.toolCallId,
-                    toolName: toolCallErrorResult.toolName,
-                    args: toolCallErrorResult.args,
-                    result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: sanitizeToolName(toolCall.toolName),
+                    args: toolCall.args,
+                    result: toolCall.result,
                   },
-                  ...(toolCallErrorResult.providerMetadata
-                    ? { providerMetadata: toolCallErrorResult.providerMetadata }
-                    : {}),
-                };
-              }),
+                  ...(providerMetadata ? { providerMetadata } : {}),
+                });
+              }
+            }
+          }
+
+          // Continue the loop — the error messages are already in the messageList,
+          // so the model will see them and can retry with correct tool names
+          initialResult.stepResult.isContinued = true;
+          initialResult.stepResult.reason = 'tool-calls';
+          return {
+            ...initialResult,
+            messages: {
+              all: rest.messageList.get.all.aiV5.model(),
+              user: rest.messageList.get.input.aiV5.model(),
+              nonUser: rest.messageList.get.response.aiV5.model(),
             },
-            createdAt: new Date(),
           };
-          rest.messageList.add(msg, 'response');
         }
 
-        initialResult.stepResult.isContinued = false;
-        return bail(initialResult);
+        // Only set isContinued = false if this is NOT a retry scenario
+        // When stepResult.reason is 'retry', the llm-execution-step has already set
+        // isContinued = true and we should preserve that to allow the agentic loop to continue
+        if (initialResult.stepResult.reason !== 'retry') {
+          initialResult.stepResult.isContinued = false;
+        }
+
+        // Update messages field to include any error messages we added to messageList
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
       }
 
       if (inputData?.length) {
         for (const toolCall of inputData) {
+          // No result yet — skip emitting a chunk. For deferred provider-executed tools
+          // (e.g. Anthropic web_search), the result arrives in a later step and is handled
+          // by processOutputStream's 'tool-result' case in llm-execution-step.
+          if (toolCall.result === undefined) continue;
+
           const chunk: ChunkType<OUTPUT> = {
             type: 'tool-result',
             runId: rest.runId,
@@ -148,47 +268,39 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               result: toolCall.result,
-              providerMetadata: toolCall.providerMetadata,
+              providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               providerExecuted: toolCall.providerExecuted,
             },
           };
 
-          await processAndEnqueueChunk(chunk);
+          const processed = await processAndEnqueueChunk(chunk);
+          if (processed) await rest.options?.onChunk?.(processed);
 
-          if (initialResult?.metadata?.modelVersion === 'v2') {
-            await rest.options?.onChunk?.({
-              chunk: convertMastraChunkToAISDKv5({
-                chunk,
-              }),
-            } as any);
+          // Exclude provider-executed tools — these are handled by llm-execution-step
+          // (same-turn results are stored directly, deferred results are resolved via updateToolInvocation).
+          if (!toolCall.providerExecuted) {
+            const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+            rest.messageList.updateToolInvocation({
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: toolCall.toolCallId,
+                toolName: sanitizeToolName(toolCall.toolName),
+                args: toolCall.args,
+                result: toolCall.result,
+              },
+              ...(providerMetadata ? { providerMetadata } : {}),
+            });
           }
         }
 
-        const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-
-        const toolResultMessage: MastraDBMessage = {
-          id: toolResultMessageId || '',
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: inputData.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'result' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                  result: toolCall.result,
-                },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-              };
-            }),
-          },
-          createdAt: new Date(),
-        };
-
-        rest.messageList.add(toolResultMessage, 'response');
+        // Check if any delegation hook called ctx.bail() — signal the loop to stop.
+        // The bail flag is communicated via requestContext because Zod output validation
+        // strips unknown fields (like _bailed) from the tool result object.
+        if (rest.requestContext?.get('__mastra_delegationBailed') && _internal) {
+          _internal._delegationBailed = true;
+          rest.requestContext.set('__mastra_delegationBailed', false);
+        }
 
         return {
           ...initialResult,
@@ -199,6 +311,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           },
         };
       }
+
+      // Fallback: if inputData is empty or undefined, return initialResult as-is
+      return initialResult;
     },
   });
 }

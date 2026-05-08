@@ -20,10 +20,10 @@ Without workflows, you might write:
 ```typescript
 async function processContent(text: string) {
   // All logic in one function - hard to test and reuse
-  const validated = validateText(text);
-  const enhanced = enhanceText(validated);
-  const summarized = summarizeText(enhanced);
-  return summarized;
+  const validated = validateText(text)
+  const enhanced = enhanceText(validated)
+  const summarized = summarizeText(enhanced)
+  return summarized
 }
 ```
 

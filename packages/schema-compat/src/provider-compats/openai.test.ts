@@ -1,507 +1,159 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from '../types';
+import { isZodType } from '../utils';
+import { zodToJsonSchema } from '../zod-to-json';
 import { OpenAISchemaCompatLayer } from './openai';
+import { OpenAIReasoningSchemaCompatLayer } from './openai-reasoning';
+import { createSuite, createOpenAISuite } from './test-suite';
 
-describe('OpenAISchemaCompatLayer - Basic Transformations', () => {
+/** Check if all properties are in the required array (OpenAI strict mode requirement) */
+function allPropsRequired(jsonSchema: any): { valid: boolean; missing: string[] } {
+  if (!jsonSchema.properties) return { valid: true, missing: [] };
+  const propKeys = Object.keys(jsonSchema.properties);
+  const required = jsonSchema.required || [];
+  const missing = propKeys.filter(k => !required.includes(k));
+  return { valid: missing.length === 0, missing };
+}
+
+describe('OpenAISchemaCompatLayer', () => {
   const modelInfo: ModelInformation = {
     provider: 'openai',
     modelId: 'gpt-4o',
     supportsStructuredOutputs: false,
   };
 
-  it('should convert optional to nullable with transform', () => {
-    const schema = z.object({
-      name: z.string(),
-      age: z.number().optional(),
+  const compat = new OpenAISchemaCompatLayer(modelInfo);
+  createSuite(compat);
+  createOpenAISuite(compat);
+
+  describe('shouldApply', () => {
+    it('should apply for OpenAI models without structured outputs', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new OpenAISchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(true);
     });
 
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
+    it('should apply for OpenAI models with structured outputs', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        supportsStructuredOutputs: true,
+      };
 
-    const result = processed.parse({ name: 'John', age: null });
-    expect(result).toEqual({ name: 'John', age: undefined });
-  });
-
-  it('should keep nullable as nullable without transform', () => {
-    const schema = z.object({
-      name: z.string(),
-      deletedAt: z.date().nullable(),
+      const layer = new OpenAISchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(true);
     });
 
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
+    it('should not apply for non-OpenAI models', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        supportsStructuredOutputs: false,
+      };
 
-    const result = processed.parse({ name: 'John', deletedAt: null });
-    expect(result).toEqual({ name: 'John', deletedAt: null });
-  });
-
-  it('should handle mix of optional and nullable correctly', () => {
-    const schema = z.object({
-      name: z.string(),
-      age: z.number().optional(),
-      email: z.string().optional(),
-      deletedAt: z.date().nullable(),
-      updatedAt: z.date().nullable(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      name: 'John',
-      age: null,
-      email: null,
-      deletedAt: null,
-      updatedAt: null,
-    });
-
-    expect(result).toEqual({
-      name: 'John',
-      age: undefined,
-      email: undefined,
-      deletedAt: null,
-      updatedAt: null,
+      const layer = new OpenAISchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(false);
     });
   });
 
-  it('should preserve non-null values', () => {
-    const schema = z.object({
-      name: z.string(),
-      age: z.number().optional(),
-      deletedAt: z.date().nullable(),
+  // =============================================================================
+  // Agent network structured output flow simulation
+  //
+  // When modelId is falsy (e.g., agent networks), the compat layer must still run.
+  // execute.ts enables strictJsonSchema independently, so unprocessed schemas get rejected.
+  // =============================================================================
+
+  describe('agent network defaultCompletionSchema with falsy modelId', () => {
+    // Exact schema from packages/core/src/loop/network/validation.ts:370-377
+    const defaultCompletionSchemaNetwork = z.object({
+      isComplete: z.boolean().describe('Whether the task is complete'),
+      completionReason: z.string().describe('Explanation of why the task is or is not complete'),
+      finalResult: z
+        .string()
+        .optional()
+        .describe('The final result text to return to the user. omit if primitive result is sufficient'),
     });
 
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
+    /**
+     * Simulates the agent.ts structured output flow:
+     *   1. Check if provider/modelId includes 'openai'
+     *   2. Check isZodType(schema)
+     *   3. Construct compat layer, call processToCompatSchema()
+     *   4. Extract JSON schema from the compat schema
+     *   5. strict mode enabled if provider.startsWith('openai')
+     */
+    function simulateAgentStructuredOutputFlow(schema: any, targetProvider: string, targetModelId: string | undefined) {
+      let jsonSchema: Record<string, unknown>;
 
-    const date = new Date('2024-01-01');
-    const result = processed.parse({
-      name: 'John',
-      age: 25,
-      deletedAt: date,
+      // Optional chaining on targetModelId
+      if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+        // Compat runs even with falsy modelId (no targetModelId guard)
+        if (isZodType(schema)) {
+          const modelInfo = {
+            provider: targetProvider,
+            modelId: targetModelId ?? '',
+            supportsStructuredOutputs: false,
+          };
+          const isReasoningModel = /^o[1-5]/.test(targetModelId ?? '');
+          const compat = isReasoningModel
+            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+            : new OpenAISchemaCompatLayer(modelInfo);
+          if (compat.shouldApply()) {
+            const processed = compat.processToCompatSchema(schema);
+            jsonSchema = processed['~standard'].jsonSchema.input({ target: 'draft-07' });
+          } else {
+            jsonSchema = zodToJsonSchema(schema) as Record<string, unknown>;
+          }
+        } else {
+          jsonSchema = zodToJsonSchema(schema) as Record<string, unknown>;
+        }
+      } else {
+        jsonSchema = zodToJsonSchema(schema) as Record<string, unknown>;
+      }
+
+      // Strict mode check is independent of compat layer
+      const strictModeEnabled = targetProvider.startsWith('openai');
+
+      return { jsonSchema, strictModeEnabled };
+    }
+
+    it('happy path: valid modelId → compat layer runs → schema is strict-mode compliant', () => {
+      const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+        defaultCompletionSchemaNetwork,
+        'openai.responses',
+        'gpt-4o',
+      );
+      expect(strictModeEnabled).toBe(true);
+      expect(allPropsRequired(jsonSchema).valid).toBe(true);
     });
 
-    expect(result).toEqual({
-      name: 'John',
-      age: 25,
-      deletedAt: date,
-    });
-  });
-});
+    it('undefined modelId → compat layer still runs → schema is strict-mode compliant', () => {
+      // Agent network with OpenAI, modelId is falsy.
+      const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+        defaultCompletionSchemaNetwork,
+        'openai.responses',
+        undefined,
+      );
 
-describe('OpenAISchemaCompatLayer - Nested Objects', () => {
-  const modelInfo: ModelInformation = {
-    provider: 'openai',
-    modelId: 'gpt-4o',
-    supportsStructuredOutputs: false,
-  };
-
-  it('should handle optional fields in nested objects', () => {
-    const schema = z.object({
-      name: z.string(),
-      address: z.object({
-        street: z.string(),
-        city: z.string().optional(),
-        zip: z.string().optional(),
-      }),
+      expect(strictModeEnabled).toBe(true);
+      expect(allPropsRequired(jsonSchema).valid).toBe(true);
     });
 
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
+    it('empty string modelId → compat layer still runs → schema is strict-mode compliant', () => {
+      const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+        defaultCompletionSchemaNetwork,
+        'openai.responses',
+        '',
+      );
 
-    const result = processed.parse({
-      name: 'John',
-      address: { street: '123 Main', city: null, zip: null },
+      expect(strictModeEnabled).toBe(true);
+      expect(allPropsRequired(jsonSchema).valid).toBe(true);
     });
-
-    expect(result).toEqual({
-      name: 'John',
-      address: { street: '123 Main', city: undefined, zip: undefined },
-    });
-  });
-
-  it('should handle optional nested objects', () => {
-    const schema = z.object({
-      name: z.string(),
-      address: z
-        .object({
-          street: z.string(),
-          city: z.string().optional(),
-        })
-        .optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ name: 'John', address: null });
-    expect(result).toEqual({ name: 'John', address: undefined });
-  });
-
-  it('should handle deeply nested optional fields', () => {
-    const schema = z.object({
-      user: z.object({
-        profile: z.object({
-          bio: z.string().optional(),
-          settings: z.object({
-            theme: z.string().optional(),
-            notifications: z.boolean(),
-          }),
-        }),
-      }),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      user: {
-        profile: {
-          bio: null,
-          settings: { theme: null, notifications: true },
-        },
-      },
-    });
-
-    expect(result).toEqual({
-      user: {
-        profile: {
-          bio: undefined,
-          settings: { theme: undefined, notifications: true },
-        },
-      },
-    });
-  });
-
-  it('should handle nullable nested objects without transform', () => {
-    const schema = z.object({
-      name: z.string(),
-      metadata: z
-        .object({
-          createdBy: z.string(),
-          updatedBy: z.string().nullable(),
-        })
-        .nullable(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      name: 'John',
-      metadata: { createdBy: 'admin', updatedBy: null },
-    });
-
-    expect(result).toEqual({
-      name: 'John',
-      metadata: { createdBy: 'admin', updatedBy: null },
-    });
-  });
-});
-
-describe('OpenAISchemaCompatLayer - Arrays', () => {
-  const modelInfo: ModelInformation = {
-    provider: 'openai',
-    modelId: 'gpt-4o',
-    supportsStructuredOutputs: false,
-  };
-
-  it('should handle optional arrays', () => {
-    const schema = z.object({
-      name: z.string(),
-      tags: z.array(z.string()).optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ name: 'John', tags: null });
-    expect(result).toEqual({ name: 'John', tags: undefined });
-  });
-
-  it('should handle nullable arrays', () => {
-    const schema = z.object({
-      name: z.string(),
-      tags: z.array(z.string()).nullable(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ name: 'John', tags: null });
-    expect(result).toEqual({ name: 'John', tags: null });
-  });
-
-  it('should handle arrays with optional items', () => {
-    const schema = z.object({
-      users: z.array(
-        z.object({
-          name: z.string(),
-          email: z.string().optional(),
-        }),
-      ),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      users: [
-        { name: 'John', email: null },
-        { name: 'Jane', email: 'jane@example.com' },
-      ],
-    });
-
-    expect(result).toEqual({
-      users: [
-        { name: 'John', email: undefined },
-        { name: 'Jane', email: 'jane@example.com' },
-      ],
-    });
-  });
-});
-
-describe('OpenAISchemaCompatLayer - Complex Combinations', () => {
-  const modelInfo: ModelInformation = {
-    provider: 'openai',
-    modelId: 'gpt-4o',
-    supportsStructuredOutputs: false,
-  };
-
-  it('should handle .optional().nullable()', () => {
-    const schema = z.object({
-      name: z.string(),
-      value: z.number().optional().nullable(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ name: 'John', value: null });
-    expect(result).toEqual({ name: 'John', value: undefined });
-  });
-
-  it('should handle .nullable().optional()', () => {
-    const schema = z.object({
-      name: z.string(),
-      value: z.number().nullable().optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ name: 'John', value: null });
-    expect(result).toEqual({ name: 'John', value: undefined });
-  });
-
-  it('should handle unions with optional', () => {
-    const schema = z.object({
-      name: z.string(),
-      value: z.union([z.string(), z.number()]).optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ name: 'John', value: null });
-    expect(result).toEqual({ name: 'John', value: undefined });
-  });
-
-  it('should handle complex real-world schema', () => {
-    const schema = z.object({
-      id: z.string(),
-      email: z.string(),
-      name: z.string(),
-      avatar: z.string().optional(),
-      bio: z.string().optional(),
-      deletedAt: z.date().nullable(),
-      settings: z
-        .object({
-          theme: z.string().optional(),
-          notifications: z.boolean(),
-        })
-        .optional(),
-      tags: z.array(z.string()).optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      id: '123',
-      email: 'john@example.com',
-      name: 'John',
-      avatar: null,
-      bio: null,
-      deletedAt: null,
-      settings: { theme: null, notifications: true },
-      tags: null,
-    });
-
-    expect(result).toEqual({
-      id: '123',
-      email: 'john@example.com',
-      name: 'John',
-      avatar: undefined,
-      bio: undefined,
-      deletedAt: null,
-      settings: { theme: undefined, notifications: true },
-      tags: undefined,
-    });
-  });
-});
-
-describe('OpenAISchemaCompatLayer - Edge Cases', () => {
-  const modelInfo: ModelInformation = {
-    provider: 'openai',
-    modelId: 'gpt-4o',
-    supportsStructuredOutputs: false,
-  };
-
-  it('should handle empty objects', () => {
-    const schema = z.object({});
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({});
-    expect(result).toEqual({});
-  });
-
-  it('should handle objects with all optional fields', () => {
-    const schema = z.object({
-      field1: z.string().optional(),
-      field2: z.number().optional(),
-      field3: z.boolean().optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      field1: null,
-      field2: null,
-      field3: null,
-    });
-
-    expect(result).toEqual({
-      field1: undefined,
-      field2: undefined,
-      field3: undefined,
-    });
-  });
-
-  it('should handle 0 as a valid value', () => {
-    const schema = z.object({
-      count: z.number().optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ count: 0 });
-    expect(result).toEqual({ count: 0 });
-  });
-
-  it('should handle false as a valid value', () => {
-    const schema = z.object({
-      enabled: z.boolean().optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ enabled: false });
-    expect(result).toEqual({ enabled: false });
-  });
-
-  it('should handle empty string as a valid value', () => {
-    const schema = z.object({
-      bio: z.string().optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ bio: '' });
-    expect(result).toEqual({ bio: '' });
-  });
-
-  it('should handle empty arrays as valid values', () => {
-    const schema = z.object({
-      tags: z.array(z.string()).optional(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({ tags: [] });
-    expect(result).toEqual({ tags: [] });
-  });
-});
-
-describe('OpenAISchemaCompatLayer - JSON Serialization', () => {
-  const modelInfo: ModelInformation = {
-    provider: 'openai',
-    modelId: 'gpt-4o',
-    supportsStructuredOutputs: false,
-  };
-
-  it('should serialize correctly with JSON.stringify (undefined dropped)', () => {
-    const schema = z.object({
-      name: z.string(),
-      age: z.number().optional(),
-      email: z.string().optional(),
-      deletedAt: z.date().nullable(),
-    });
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    const processed = layer.processZodType(schema);
-
-    const result = processed.parse({
-      name: 'John',
-      age: null,
-      email: null,
-      deletedAt: null,
-    });
-
-    const json = JSON.stringify(result);
-    expect(json).toBe('{"name":"John","deletedAt":null}');
-  });
-});
-
-describe('OpenAISchemaCompatLayer - shouldApply', () => {
-  it('should apply for OpenAI models without structured outputs', () => {
-    const modelInfo: ModelInformation = {
-      provider: 'openai',
-      modelId: 'gpt-4o',
-      supportsStructuredOutputs: false,
-    };
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    expect(layer.shouldApply()).toBe(true);
-  });
-
-  it('should not apply for OpenAI models with structured outputs', () => {
-    const modelInfo: ModelInformation = {
-      provider: 'openai',
-      modelId: 'gpt-4o',
-      supportsStructuredOutputs: true,
-    };
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    expect(layer.shouldApply()).toBe(false);
-  });
-
-  it('should not apply for non-OpenAI models', () => {
-    const modelInfo: ModelInformation = {
-      provider: 'anthropic',
-      modelId: 'claude-3-5-sonnet',
-      supportsStructuredOutputs: false,
-    };
-
-    const layer = new OpenAISchemaCompatLayer(modelInfo);
-    expect(layer.shouldApply()).toBe(false);
   });
 });

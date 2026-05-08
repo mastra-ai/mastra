@@ -1,4 +1,4 @@
-import type { MastraLanguageModelV2 } from '../../llm/model/shared.types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { StreamInternal } from '../types';
 
 type State = {
@@ -9,18 +9,15 @@ type State = {
     modelVersion: string;
     modelProvider: string;
   };
-  hasToolCallStreaming: boolean;
   hasErrored: boolean;
-  reasoningDeltas: string[];
-  textDeltas: string[];
-  isReasoning: boolean;
-  isStreaming: boolean;
+  apiError: unknown | undefined;
+  deferredErrorChunk: any | undefined;
   providerOptions: Record<string, any> | undefined;
 };
 
 export class AgenticRunState {
   #state: State;
-  constructor({ _internal, model }: { _internal: StreamInternal; model: MastraLanguageModelV2 }) {
+  constructor({ _internal, model }: { _internal: StreamInternal; model: MastraLanguageModel }) {
     this.#state = {
       responseMetadata: {
         id: _internal?.generateId?.(),
@@ -35,13 +32,10 @@ export class AgenticRunState {
         modelVersion: model.specificationVersion,
         modelProvider: model.provider,
       },
-      isReasoning: false,
-      isStreaming: false,
       providerOptions: undefined,
-      hasToolCallStreaming: false,
       hasErrored: false,
-      reasoningDeltas: [],
-      textDeltas: [],
+      apiError: undefined,
+      deferredErrorChunk: undefined,
       stepResult: undefined,
     };
   }

@@ -1,0 +1,270 @@
+---
+title: "Reference: AzureBlobFilesystem | Workspace"
+description: "Documentation for the AzureBlobFilesystem provider for Azure Blob Storage."
+packages:
+  - "@mastra/azure"
+---
+
+# AzureBlobFilesystem
+
+Stores files in Azure Blob Storage containers.
+
+:::info
+
+For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/azure
+```
+
+## Usage
+
+Add an `AzureBlobFilesystem` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { AzureBlobFilesystem } from '@mastra/azure/blob'
+
+const workspace = new Workspace({
+  filesystem: new AzureBlobFilesystem({
+    container: 'my-container',
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+  }),
+})
+
+const agent = new Agent({
+  name: 'file-agent',
+  model: 'anthropic/claude-opus-4-6',
+  workspace,
+})
+```
+
+### Account key
+
+Use an account name and account key when you do not want to pass a full connection string:
+
+```typescript
+import { AzureBlobFilesystem } from '@mastra/azure/blob'
+
+const filesystem = new AzureBlobFilesystem({
+  container: 'my-container',
+  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
+  accountKey: process.env.AZURE_STORAGE_ACCOUNT_KEY,
+})
+```
+
+### Shared access signature token
+
+Use a shared access signature (SAS) token with either `accountName` or `endpoint`:
+
+```typescript
+import { AzureBlobFilesystem } from '@mastra/azure/blob'
+
+const filesystem = new AzureBlobFilesystem({
+  container: 'my-container',
+  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
+  sasToken: process.env.AZURE_STORAGE_SAS_TOKEN,
+})
+```
+
+### DefaultAzureCredential
+
+Use `DefaultAzureCredential` when your environment provides Azure identity credentials:
+
+```typescript
+import { AzureBlobFilesystem } from '@mastra/azure/blob'
+
+const filesystem = new AzureBlobFilesystem({
+  container: 'my-container',
+  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
+  useDefaultCredential: true,
+})
+```
+
+Install `@azure/identity` when you use `DefaultAzureCredential`:
+
+```bash npm2yarn
+npm install @azure/identity
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'container',
+    type: 'string',
+    description: 'Azure Blob Storage container name',
+  },
+  {
+    name: 'connectionString',
+    type: 'string',
+    description: 'Full Azure Storage connection string. Takes priority over other authentication options.',
+    isOptional: true,
+  },
+  {
+    name: 'accountName',
+    type: 'string',
+    description: 'Azure Storage account name. Required unless you use connectionString or endpoint.',
+    isOptional: true,
+  },
+  {
+    name: 'accountKey',
+    type: 'string',
+    description: 'Azure Storage account key.',
+    isOptional: true,
+  },
+  {
+    name: 'sasToken',
+    type: 'string',
+    description: 'Shared access signature token. Requires accountName or endpoint.',
+    isOptional: true,
+  },
+  {
+    name: 'useDefaultCredential',
+    type: 'boolean',
+    description: 'Use DefaultAzureCredential from @azure/identity.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Custom Blob service endpoint URL. Used for local development with Azurite.',
+    isOptional: true,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Optional prefix for all keys (acts like a subdirectory).',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'Human-friendly display name for the UI.',
+    isOptional: true,
+  },
+  {
+    name: 'icon',
+    type: 'FilesystemIcon',
+    description: 'Icon identifier for the UI.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description of this filesystem for the UI.',
+    isOptional: true,
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all write operations are blocked.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('AzureBlobFilesystem').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('azure-blob').",
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem is in read-only mode.',
+  },
+]}
+/>
+
+## Methods
+
+AzureBlobFilesystem implements the [WorkspaceFilesystem interface](/reference/workspace/filesystem), providing all standard filesystem methods:
+
+- `readFile(path, options?)` - Read file contents
+- `writeFile(path, content, options?)` - Write content to a file
+- `appendFile(path, content)` - Append content to a file
+- `deleteFile(path, options?)` - Delete a file
+- `copyFile(src, dest, options?)` - Copy a file
+- `moveFile(src, dest, options?)` - Move or rename a file
+- `mkdir(path, options?)` - Create a directory
+- `rmdir(path, options?)` - Remove a directory
+- `readdir(path, options?)` - List directory contents
+- `exists(path)` - Check if a path exists
+- `stat(path)` - Get file or directory metadata
+
+### `init()`
+
+Initialize the filesystem. Verifies container access and credentials.
+
+```typescript
+await filesystem.init()
+```
+
+### `getInfo()`
+
+Returns metadata about this filesystem instance.
+
+```typescript
+const info = filesystem.getInfo()
+// { id: '...', name: 'AzureBlobFilesystem', provider: 'azure-blob', status: 'ready' }
+```
+
+### `getContainer()`
+
+Returns the underlying Azure Blob Storage `ContainerClient`.
+
+```typescript
+const container = await filesystem.getContainer()
+```
+
+### `getMountConfig()`
+
+Returns the mount configuration for sandbox providers that support Azure Blob filesystem mounts.
+
+```typescript
+const config = filesystem.getMountConfig()
+// { type: 'azure-blob', container: 'my-container', ... }
+```
+
+:::note
+
+Azure Blob sandbox mounting depends on sandbox support for `azure-blob` mount configs. Use `filesystem` for direct workspace file operations when your sandbox provider does not support Azure Blob mounts.
+
+:::
+
+## Related
+
+- [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
+- [Workspace overview](/docs/workspace/overview)

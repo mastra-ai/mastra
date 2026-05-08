@@ -1,20 +1,29 @@
-import type { IMastraLogger } from '@mastra/core/logger';
-import * as babel from '@babel/core';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { basename, join, relative } from 'node:path';
+import * as babel from '@babel/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { basename, join, parse } from 'node:path';
+import * as stackTraceParser from 'stacktrace-parser';
+import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
+import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
-import { getBundlerOptions } from './bundlerOptions';
-import { checkConfigExport } from './babel/check-config-export';
-import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
-import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { isDependencyPartOfPackage } from './utils';
-import { GLOBAL_EXTERNALS } from './analyze/constants';
-import * as stackTraceParser from 'stacktrace-parser';
+import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
+import { checkConfigExport } from './babel/check-config-export';
+import { detectPinoTransports } from './babel/detect-pino-transports';
+import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
+import {
+  getPackageName,
+  isBareModuleSpecifier,
+  isBuiltinModule,
+  isDependencyPartOfPackage,
+  isExternalProtocolImport,
+  slash,
+} from './utils';
+import type { BundlerPlatform } from './utils';
 
 type ErrorId =
   | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
@@ -51,6 +60,12 @@ export const mastra = new Mastra({
 }
 
 function getPackageNameFromBundledModuleName(moduleName: string) {
+  // New encoding uses __ to separate path segments (e.g., @inner__inner-tools -> @inner/inner-tools)
+  if (moduleName.includes('__')) {
+    return moduleName.replaceAll('__', '/');
+  }
+
+  // Legacy fallback for old format using - as separator
   const chunks = moduleName.split('-');
 
   if (!chunks.length) {
@@ -156,11 +171,13 @@ async function validateFile(
     moduleResolveMapLocation,
     logger,
     workspaceMap,
+    stubbedExternals,
   }: {
     binaryMapData: Record<string, string[]>;
     moduleResolveMapLocation: string;
     logger: IMastraLogger;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    stubbedExternals: string[];
   },
 ) {
   try {
@@ -169,6 +186,7 @@ async function validateFile(
       await validate(join(root, file.fileName), {
         moduleResolveMapLocation,
         injectESMShim: false,
+        stubbedExternals,
       });
     }
   } catch (err) {
@@ -182,6 +200,7 @@ async function validateFile(
         await validate(join(root, file.fileName), {
           moduleResolveMapLocation,
           injectESMShim: true,
+          stubbedExternals,
         });
         errorToHandle = null;
       } catch (err) {
@@ -214,6 +233,7 @@ async function validateOutput(
     outputDir,
     projectRoot,
     workspaceMap,
+    depsVersionInfo,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -221,12 +241,13 @@ async function validateOutput(
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    depsVersionInfo: Map<string, ExternalDependencyInfo>;
   },
   logger: IMastraLogger,
 ) {
   const result = {
     dependencies: new Map<string, string>(),
-    externalDependencies: new Set<string>(),
+    externalDependencies: new Map<string, ExternalDependencyInfo>(),
     workspaceMap,
   };
 
@@ -234,7 +255,16 @@ async function validateOutput(
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
     for (const dep of Object.keys(deps)) {
-      result.externalDependencies.add(dep);
+      if (isExternalProtocolImport(dep)) {
+        continue;
+      }
+
+      const pkgName = getPackageName(dep);
+      if (pkgName) {
+        // Use version info from analysis if available
+        const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName) || {};
+        result.externalDependencies.set(pkgName, versionInfo);
+      }
     }
   }
   let binaryMapData: Record<string, string[]> = {};
@@ -249,7 +279,7 @@ async function validateOutput(
       continue;
     }
 
-    logger.debug(`Validating if ${file.fileName} is a valid module.`);
+    logger.debug('Validating module', { fileName: file.fileName });
     if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
       result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
@@ -260,6 +290,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
+      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
     });
   }
 
@@ -280,16 +311,15 @@ export async function analyzeBundle(
   {
     outputDir,
     projectRoot,
+    platform,
     isDev = false,
-    bundlerOptions: _bundlerOptions,
+    bundlerOptions,
   }: {
     outputDir: string;
     projectRoot: string;
-    platform: 'node' | 'browser';
+    platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: {
-      enableEsmShim?: boolean;
-    } | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
   },
   logger: IMastraLogger,
 ) {
@@ -305,35 +335,52 @@ export async function analyzeBundle(
   });
 
   if (!mastraConfigResult.hasValidConfig) {
-    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
-export const mastra = new Mastra({
-  // your options
-})
-  
-If you think your configuration is valid, please open an issue.`);
+    logger.warn('Invalid Mastra config', {
+      details:
+        'Please make sure that your entry file looks like this:\nexport const mastra = new Mastra({\n  // your options\n})\n\nIf you think your configuration is valid, please open an issue.',
+    });
   }
 
-  const { enableEsmShim = true } = _bundlerOptions || {};
-  const bundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
+
+  let externalsPreset = false;
+
+  const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
+  if (bundlerOptions?.externals === true) {
+    externalsPreset = true;
+  }
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
+  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
 
-  const { externals: customExternals = [] } = bundlerOptions || {};
-  const allExternals = [...GLOBAL_EXTERNALS, ...customExternals];
+  // Collect pino transports detected across all entries
+  const detectedPinoTransports = new Set<string>();
 
   logger.info('Analyzing dependencies...');
 
-  const allUsedExternals = new Set<string>();
+  // Track external dependencies with their version info
+  const allUsedExternals = new Map<string, ExternalDependencyInfo>();
+  // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
+  const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
       logger,
-      sourcemapEnabled: bundlerOptions?.sourcemap ?? false,
+      sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
       workspaceMap,
       projectRoot,
-      shouldCheckTransitiveDependencies: isDev,
+      shouldCheckTransitiveDependencies: isDev || externalsPreset,
+      analyzeCache,
+    });
+
+    // Detect pino transports in the bundled output
+    babel.transformSync(analyzeResult.output.code, {
+      filename: 'pino-detection.js',
+      plugins: [detectPinoTransports(detectedPinoTransports)],
+      configFile: false,
+      babelrc: false,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -342,8 +389,14 @@ If you think your configuration is valid, please open an issue.`);
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
       const isPartOfExternals = allExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals) {
-        allUsedExternals.add(dep);
+      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
+        // Add all packages coming from src/mastra with their version info
+        const pkgName = getPackageName(dep);
+        if (pkgName && !allUsedExternals.has(pkgName)) {
+          allUsedExternals.set(pkgName, {
+            version: metadata.version,
+          });
+        }
         continue;
       }
 
@@ -363,7 +416,7 @@ If you think your configuration is valid, please open an issue.`);
   /**
    * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
    */
-  if (isDev) {
+  if (isDev || externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
       if (!metadata.isWorkspace) {
         depsToOptimize.delete(dep);
@@ -373,19 +426,77 @@ If you think your configuration is valid, please open an issue.`);
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
-  logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
+  logger.debug('Sorted dependencies', { deps: sortedDeps });
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
       ...bundlerOptions,
-      externals: allExternals,
-      enableEsmShim,
+      externals: bundlerOptions?.externals ?? allExternals,
       isDev,
     },
     projectRoot,
     workspaceRoot,
     workspaceMap,
+    platform,
   });
+
+  // Filesystem-relative workspace paths for filtering workspace imports from rollup output.
+  // Normalize to forward slashes so the startsWith check works on Windows where
+  // path.relative() produces backslashes but rollup uses forward slashes.
+  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
+    slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
+  );
+
+  // Build a map of dependency versions from depsToOptimize for lookup
+  const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
+  for (const [dep, metadata] of depsToOptimize.entries()) {
+    const pkgName = getPackageName(dep);
+    if (pkgName && metadata.version) {
+      depsVersionInfo.set(pkgName, {
+        version: metadata.version,
+      });
+    }
+    // Also store by full import path for subpath imports
+    if (metadata.version) {
+      depsVersionInfo.set(dep, {
+        version: metadata.version,
+      });
+    }
+  }
+
+  for (const o of output) {
+    if (o.type === 'asset') {
+      continue;
+    }
+
+    for (const i of o.imports) {
+      if (isBuiltinModule(i)) {
+        continue;
+      }
+
+      // Skip relative imports - they're local chunks, not external packages
+      if (i.startsWith('.') || i.startsWith('/')) {
+        continue;
+      }
+
+      if (!isBareModuleSpecifier(i) || isExternalProtocolImport(i)) {
+        continue;
+      }
+
+      // Do not include workspace packages
+      if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
+        continue;
+      }
+
+      const pkgName = getPackageName(i);
+
+      if (pkgName && !allUsedExternals.has(pkgName)) {
+        // Try to get version info from our tracked dependencies
+        const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName) || {};
+        allUsedExternals.set(pkgName, versionInfo);
+      }
+    }
+  }
 
   const result = await validateOutput(
     {
@@ -395,12 +506,46 @@ If you think your configuration is valid, please open an issue.`);
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
+      depsVersionInfo,
     },
     logger,
   );
 
+  /**
+   * Build the final set of external dependencies from four sources:
+   * 1. result.externalDependencies - externals discovered during bundle validation
+   * 2. allUsedExternals - packages detected via static analysis that matched the externals config
+   * 3. detectedPinoTransports - pino transports detected by the plugin during bundling
+   * 4. userDynamicPackages - user-specified packages loaded dynamically at runtime
+   *
+   * Prefer entries with version info over entries without
+   */
+  const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
+  for (const [dep, info] of allUsedExternals) {
+    if (isExternalProtocolImport(dep)) {
+      continue;
+    }
+
+    const existing = mergedExternalDeps.get(dep);
+    if (!existing || (!existing.version && info.version)) {
+      mergedExternalDeps.set(dep, info);
+    }
+  }
+
+  // Add pino transports and user dynamic packages (no version info needed)
+  for (const transport of detectedPinoTransports) {
+    if (!mergedExternalDeps.has(transport)) {
+      mergedExternalDeps.set(transport, {});
+    }
+  }
+  for (const pkg of userDynamicPackages) {
+    if (!mergedExternalDeps.has(pkg)) {
+      mergedExternalDeps.set(pkg, {});
+    }
+  }
+
   return {
     ...result,
-    externalDependencies: new Set([...result.externalDependencies, ...Array.from(allUsedExternals)]),
+    externalDependencies: mergedExternalDeps,
   };
 }

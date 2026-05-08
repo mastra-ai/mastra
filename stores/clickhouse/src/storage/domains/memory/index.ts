@@ -7,19 +7,22 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { StoreOperationsClickhouse } from '../operations';
-import { transformRow, transformRows } from '../utils';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
+import { transformRow, transformRows } from '../../db/utils';
 
 /**
  * Serialize metadata object to JSON string for storage in ClickHouse.
@@ -53,11 +56,71 @@ function parseMetadata(metadata: unknown): Record<string, unknown> {
 
 export class MemoryStorageClickhouse extends MemoryStorage {
   protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+  #db: ClickhouseDB;
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new ClickhouseDB({ client, ttl });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) return;
+
+    try {
+      // Get affected thread IDs before deleting
+      const result = await this.client.query({
+        query: `SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES} WHERE id IN {messageIds:Array(String)}`,
+        query_params: { messageIds },
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ thread_id: string }>;
+      const threadIds = rows.map(r => r.thread_id);
+
+      // Delete messages
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_MESSAGES} WHERE id IN {messageIds:Array(String)}`,
+        query_params: { messageIds },
+      });
+
+      // Update thread timestamps
+      if (threadIds.length > 0) {
+        // Remove 'Z' suffix as ClickHouse DateTime64 expects format without timezone suffix
+        const now = new Date().toISOString().replace('Z', '');
+        await this.client.command({
+          query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)} WHERE id IN {threadIds:Array(String)}`,
+          query_params: { now, threadIds },
+        });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -109,7 +172,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -132,7 +195,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_PAGE',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -145,7 +208,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (threadIds.length === 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
@@ -192,7 +255,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        dataQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        dataQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         dataParams.fromDate = startDate;
       }
 
@@ -201,13 +265,32 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        dataQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        dataQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         dataParams.toDate = endDate;
       }
 
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPageForQuery === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip data and COUNT queries
+      if (perPageForQuery === 0 && include && include.length > 0) {
+        const includeResult = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeResult, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
       // Apply pagination
       if (perPageForResponse === false) {
@@ -250,7 +333,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        countQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         countParams.fromDate = startDate;
       }
 
@@ -259,7 +343,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        countQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
       }
 
@@ -289,119 +374,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
-      let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
-        // Batch lookup threadIds for includes that don't have one (avoids N+1 queries)
-        const includesNeedingThread = include.filter(inc => !inc.threadId);
-        const threadByMessageId = new Map<string, string>();
+        const includeMessages = await this._getIncludedMessages({ include });
 
-        if (includesNeedingThread.length > 0) {
-          const { messages: includeLookup } = await this.listMessagesById({
-            messageIds: includesNeedingThread.map(inc => inc.id),
-          });
-          for (const msg of includeLookup) {
-            if (msg.threadId) {
-              threadByMessageId.set(msg.id, msg.threadId);
-            }
-          }
-        }
-
-        const unionQueries: string[] = [];
-        const params: any[] = [];
-        let paramIdx = 1;
-
-        for (const inc of include) {
-          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-
-          // Get the threadId for this included message
-          // If inc.threadId is provided, use it; otherwise use the batched lookup
-          const searchThreadId = inc.threadId ?? threadByMessageId.get(id);
-
-          if (!searchThreadId) continue; // Skip if message not found
-
-          unionQueries.push(`
-            SELECT * FROM (
-              WITH numbered_messages AS (
-                SELECT
-                  id, content, role, type, "createdAt", thread_id, "resourceId",
-                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-                FROM "${TABLE_MESSAGES}"
-                WHERE thread_id = {var_thread_id_${paramIdx}:String}
-              ),
-              target_positions AS (
-                SELECT row_num as target_pos
-                FROM numbered_messages
-                WHERE id = {var_include_id_${paramIdx}:String}
-              )
-              SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id AS "threadId", m."resourceId"
-              FROM numbered_messages m
-              CROSS JOIN target_positions t
-              WHERE m.row_num BETWEEN (t.target_pos - {var_withPreviousMessages_${paramIdx}:Int64}) AND (t.target_pos + {var_withNextMessages_${paramIdx}:Int64})
-            ) AS query_${paramIdx}
-          `);
-
-          params.push(
-            { [`var_thread_id_${paramIdx}`]: searchThreadId },
-            { [`var_include_id_${paramIdx}`]: id },
-            { [`var_withPreviousMessages_${paramIdx}`]: withPreviousMessages },
-            { [`var_withNextMessages_${paramIdx}`]: withNextMessages },
-          );
-          paramIdx++;
-        }
-
-        // Only run the query if we have any valid includes
-        if (unionQueries.length > 0) {
-          const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-          const mergedParams = params.reduce((acc, paramObj) => ({ ...acc, ...paramObj }), {});
-
-          const includeResult = await this.client.query({
-            query: finalQuery,
-            query_params: mergedParams,
-            clickhouse_settings: {
-              date_time_input_format: 'best_effort',
-              date_time_output_format: 'iso',
-              use_client_time_zone: 1,
-              output_format_json_quote_64bit_integers: 0,
-            },
-          });
-
-          const includeRows = await includeResult.json();
-          includeMessages = transformRows<MastraDBMessage>(includeRows.data);
-
-          // Deduplicate: only add messages that aren't already in the paginated results
-          for (const includeMsg of includeMessages) {
-            if (!messageIds.has(includeMsg.id)) {
-              paginatedMessages.push(includeMsg);
-              messageIds.add(includeMsg.id);
-            }
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includeMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            paginatedMessages.push(includeMsg);
+            messageIds.add(includeMsg.id);
           }
         }
       }
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(paginatedMessages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -424,7 +412,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -444,6 +432,122 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore: false,
       };
     }
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
+  private async _getIncludedMessages({
+    include,
+  }: {
+    include: StorageListMessagesInput['include'];
+  }): Promise<MastraDBMessage[]> {
+    if (!include || include.length === 0) return [];
+
+    // Phase 1: Batch-fetch metadata (id, thread_id, createdAt) for all target messages.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return [];
+
+    const { messages: targetDocs } = await this.listMessagesById({ messageIds: targetIds });
+    const targetMap = new Map(
+      targetDocs.map((msg: any) => [msg.id, { threadId: msg.threadId, createdAt: msg.createdAt }]),
+    );
+
+    // Phase 2: Build cursor-based subqueries using materialized constants from Phase 1.
+    // Uses createdAt range + LIMIT instead of ROW_NUMBER() windowing to avoid full thread scans.
+    const unionQueries: string[] = [];
+    const params: Record<string, any> = {};
+    let paramIdx = 1;
+
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
+
+      // Fetch the target message itself plus previous messages.
+      const threadParam = `var_thread_${paramIdx}`;
+      const createdAtParam = `var_createdAt_${paramIdx}`;
+      const limitParam = `var_limit_${paramIdx}`;
+      unionQueries.push(`
+        SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE thread_id = {${threadParam}:String}
+          AND createdAt <= parseDateTime64BestEffort({${createdAtParam}:String}, 3)
+        ORDER BY createdAt DESC, id DESC
+        LIMIT {${limitParam}:Int64}
+      `);
+      params[threadParam] = target.threadId;
+      params[createdAtParam] = target.createdAt;
+      params[limitParam] = withPreviousMessages + 1;
+      paramIdx++;
+
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        const threadParam2 = `var_thread_${paramIdx}`;
+        const createdAtParam2 = `var_createdAt_${paramIdx}`;
+        const limitParam2 = `var_limit_${paramIdx}`;
+        unionQueries.push(`
+          SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
+          FROM "${TABLE_MESSAGES}"
+          WHERE thread_id = {${threadParam2}:String}
+            AND createdAt > parseDateTime64BestEffort({${createdAtParam2}:String}, 3)
+          ORDER BY createdAt ASC, id ASC
+          LIMIT {${limitParam2}:Int64}
+        `);
+        params[threadParam2] = target.threadId;
+        params[createdAtParam2] = target.createdAt;
+        params[limitParam2] = withNextMessages;
+        paramIdx++;
+      }
+    }
+
+    if (unionQueries.length === 0) return [];
+
+    // ClickHouse applies ORDER BY/LIMIT to individual UNION ALL members,
+    // so wrap in a subquery to sort the combined result.
+    let finalQuery: string;
+    if (unionQueries.length === 1) {
+      finalQuery = unionQueries[0]!;
+    } else {
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) ORDER BY "createdAt" ASC, id ASC`;
+    }
+
+    const includeResult = await this.client.query({
+      query: finalQuery,
+      query_params: params,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+
+    const includeRows = await includeResult.json();
+
+    // Deduplicate results (messages may appear in multiple context windows)
+    const seen = new Set<string>();
+    return transformRows<MastraDBMessage>(includeRows.data).filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -619,7 +723,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -668,7 +772,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -705,7 +809,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -768,7 +872,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id, title },
@@ -800,7 +904,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -810,33 +914,83 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
     }
 
-    // When perPage is false (get all), ignore page offset
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      // Get total count - count distinct thread IDs to handle duplicates
+      // Build WHERE clauses
+      const whereClauses: string[] = [];
+      const queryParams: Record<string, any> = {};
+
+      if (filter?.resourceId) {
+        whereClauses.push('resourceId = {resourceId:String}');
+        queryParams.resourceId = filter.resourceId;
+      }
+
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIndex}`;
+          // Use JSONExtractRaw to compare exact JSON representation
+          whereClauses.push(`JSONExtractRaw(metadata, '${key}') = {${paramName}:String}`);
+          queryParams[paramName] = JSON.stringify(value);
+          metadataIndex++;
+        }
+      }
+
+      // Get total count - count AFTER ranking to ensure we count latest versions only
       const countResult = await this.client.query({
-        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
-        query_params: { resourceId },
+        query: `
+          WITH ranked_threads AS (
+            SELECT
+              id,
+              resourceId,
+              metadata,
+              ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
+            FROM ${TABLE_THREADS}
+          )
+          SELECT count(*) as total 
+          FROM ranked_threads 
+          WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
+        `,
+        query_params: queryParams,
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
@@ -857,7 +1011,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         };
       }
 
-      // Get paginated threads - get newest version of each thread by using row number
+      // Get paginated threads - get newest version of each thread
+      // Important: Apply WHERE filters AFTER row ranking to ensure we filter on latest versions
       const dataResult = await this.client.query({
         query: `
               WITH ranked_threads AS (
@@ -870,7 +1025,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   toDateTime64(updatedAt, 3) as updatedAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
-                WHERE resourceId = {resourceId:String}
               )
               SELECT
                 id,
@@ -880,12 +1034,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 createdAt,
                 updatedAt
               FROM ranked_threads
-              WHERE row_num = 1
+              WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
-          resourceId,
+          ...queryParams,
           perPage: perPage,
           offset: offset,
         },
@@ -913,10 +1067,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page },
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+            page,
+          },
         },
         error,
       );
@@ -1276,7 +1434,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messages.map(m => m.id).join(',') },
@@ -1311,17 +1469,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           resource.workingMemory && typeof resource.workingMemory === 'object'
             ? JSON.stringify(resource.workingMemory)
             : resource.workingMemory,
-        metadata:
-          resource.metadata && typeof resource.metadata === 'string'
-            ? JSON.parse(resource.metadata)
-            : resource.metadata,
+        metadata: parseMetadata(resource.metadata),
         createdAt: new Date(resource.createdAt),
         updatedAt: new Date(resource.updatedAt),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -1340,7 +1495,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           {
             id: resource.id,
             workingMemory: resource.workingMemory,
-            metadata: JSON.stringify(resource.metadata),
+            metadata: serializeMetadata(resource.metadata),
             createdAt: resource.createdAt.toISOString(),
             updatedAt: resource.updatedAt.toISOString(),
           },
@@ -1352,11 +1507,15 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         },
       });
 
-      return resource;
+      // Return resource with normalized metadata
+      return {
+        ...resource,
+        metadata: resource.metadata || {},
+      };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -1436,7 +1595,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

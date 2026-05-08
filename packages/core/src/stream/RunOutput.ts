@@ -1,23 +1,29 @@
 import EventEmitter from 'node:events';
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import type { ReadableStreamGetReaderOptions, ReadableWritablePair, StreamPipeOptions } from 'node:stream/web';
-import type { LanguageModelUsage } from 'ai-v5';
+import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { WorkflowResult, WorkflowRunStatus } from '../workflows';
 import { DelayedPromise } from './aisdk/v5/compat';
 import type { MastraBaseStream } from './base/base';
 import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
-import type { WorkflowStreamEvent } from './types';
+import type { StepTripwireData, WorkflowStreamEvent } from './types';
 
-export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>>
-  implements MastraBaseStream<WorkflowStreamEvent>
-{
+type AggregatedLanguageModelUsage = Required<LanguageModelUsage> & {
+  cacheCreationInputTokens: number;
+};
+
+export class WorkflowRunOutput<
+  TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>,
+> implements MastraBaseStream<WorkflowStreamEvent> {
   #status: WorkflowRunStatus = 'running';
-  #usageCount: Required<LanguageModelUsage> = {
+  #tripwireData: StepTripwireData | undefined;
+  #usageCount: AggregatedLanguageModelUsage = {
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
     cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
     reasoningTokens: 0,
   };
   #consumptionStarted = false;
@@ -98,7 +104,15 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
             } else if (chunk.type === 'workflow-step-suspended') {
               self.#status = 'suspended';
             } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-              self.#status = 'failed';
+              // Check if the failure was due to a tripwire
+              if (chunk.payload.tripwire) {
+                self.#status = 'tripwire';
+                self.#tripwireData = chunk.payload.tripwire;
+              } else {
+                self.#status = 'failed';
+              }
+            } else if (chunk.type === 'workflow-paused') {
+              self.#status = 'paused';
             }
           },
           close() {
@@ -119,9 +133,10 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
                     }
                   : {},
                 output: {
-                  // @ts-ignore
                   usage: self.#usageCount,
                 },
+                // Include tripwire data when status is 'tripwire'
+                ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
             });
 
@@ -159,6 +174,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
           totalTokens?: `${number}` | number;
           reasoningTokens?: `${number}` | number;
           cachedInputTokens?: `${number}` | number;
+          cacheCreationInputTokens?: `${number}` | number;
         }
       | {
           promptTokens?: `${number}` | number;
@@ -166,6 +182,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
           totalTokens?: `${number}` | number;
           reasoningTokens?: `${number}` | number;
           cachedInputTokens?: `${number}` | number;
+          cacheCreationInputTokens?: `${number}` | number;
         },
   ) {
     let totalUsage = {
@@ -174,6 +191,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
       totalTokens: this.#usageCount.totalTokens ?? 0,
       reasoningTokens: this.#usageCount.reasoningTokens ?? 0,
       cachedInputTokens: this.#usageCount.cachedInputTokens ?? 0,
+      cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens ?? 0,
     };
     if ('inputTokens' in usage) {
       totalUsage.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
@@ -187,6 +205,7 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
 
     totalUsage.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
     totalUsage.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
+    totalUsage.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
     this.#usageCount = totalUsage;
   }
 
@@ -261,7 +280,15 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
             } else if (chunk.type === 'workflow-step-suspended') {
               self.#status = 'suspended';
             } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-              self.#status = 'failed';
+              // Check if the failure was due to a tripwire
+              if (chunk.payload.tripwire) {
+                self.#status = 'tripwire';
+                self.#tripwireData = chunk.payload.tripwire;
+              } else {
+                self.#status = 'failed';
+              }
+            } else if (chunk.type === 'workflow-paused') {
+              self.#status = 'paused';
             }
           },
           close() {
@@ -282,9 +309,10 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
                     }
                   : {},
                 output: {
-                  // @ts-ignore
                   usage: self.#usageCount,
                 },
+                // Include tripwire data when status is 'tripwire'
+                ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
               },
             });
 

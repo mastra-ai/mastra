@@ -9,14 +9,13 @@ CLAUDE.md
 **/generated/**
 **/public/**
 **/public/**/**
+**/__recordings__/**
 pnpm-lock.yaml
 pnpm-workspace.yaml
 **/packages/**/src/client/**
 .mastra/
 .changeset/
-packages/cli/src/commands/init/init.test.ts
 **/integrations/**
-packages/create-mastra/rollup.config.js
 docs/**/*.mdx
 docs/build/**
 explorations/longmemeval/data/**/*.json
@@ -24,5 +23,8 @@ explorations/longmemeval/prepared-data/**/*.json
 explorations/longmemeval/.embedding-cache/**/*.json
 explorations/longmemeval/.temp-longmemeval/**/*.json
 e2e-tests/kitchen-sink/tests/**/*.aria.yml
+packages/playground/e2e/**/*.aria.yml
+**/test-results/**
 packages/codemod/src/test/__fixtures__/**/*.ts
 packages/mcp-docs-server/.docs/**
+packages/cli/src/commands/api/route-metadata.generated.ts

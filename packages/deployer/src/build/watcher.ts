@@ -1,21 +1,30 @@
+import { dirname, posix } from 'node:path';
+import { noopLogger } from '@mastra/core/logger';
+import * as pkg from 'empathic/package';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
-import { dirname, posix } from 'node:path';
-import * as pkg from 'empathic/package';
+import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
+import { analyzeBundle } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { noopLogger } from '@mastra/core/logger';
-import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
-import { analyzeBundle } from './analyze';
+import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
+import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
-  platform: 'node' | 'browser',
+  platform: BundlerPlatform,
   env?: Record<string, string>,
-  { sourcemap = false }: { sourcemap?: boolean } = {},
+  {
+    sourcemap = false,
+    bundlerOptions = {
+      enableSourcemap: false,
+      enableEsmShim: true,
+      externals: true,
+    },
+  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -27,8 +36,9 @@ export async function getInputOptions(
     {
       outputDir: posix.join(process.cwd(), '.mastra', '.build'),
       projectRoot: workspaceRoot || process.cwd(),
-      platform: 'node',
+      platform,
       isDev: true,
+      bundlerOptions,
     },
     noopLogger,
   );
@@ -41,19 +51,16 @@ export async function getInputOptions(
     }
   }
 
-  // In `analyzeBundle` we output this file and we want to use that instead of the original entry file
-  //const analyzedEntryFile = posix.join(process.cwd(), '.mastra', '.build', 'entry-0.mjs');
-
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
       dependencies: deps,
-      externalDependencies: new Set(),
+      externalDependencies: new Map(),
       workspaceMap,
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot },
+    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

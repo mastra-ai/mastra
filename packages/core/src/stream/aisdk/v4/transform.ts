@@ -113,7 +113,10 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
       runId: ctx.runId,
       from: ChunkFrom.AGENT,
       payload: {
-        tripwireReason: value.tripwireReason,
+        reason: value.reason,
+        retry: value.retry,
+        metadata: value.metadata,
+        processorId: value.processorId,
       },
     };
   }

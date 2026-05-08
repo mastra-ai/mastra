@@ -11,7 +11,9 @@ import {
   ListVectorsCommand,
 } from '@aws-sdk/client-s3vectors';
 import type { S3VectorsClientConfig } from '@aws-sdk/client-s3vectors';
+import { v4 as uuidv4 } from '@lukeed/uuid';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -25,7 +27,6 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import { v4 as uuidv4 } from 'uuid';
 import { S3VectorsFilterTranslator } from './filter';
 import type { S3VectorsFilter } from './filter';
 
@@ -70,7 +71,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     if (!opts?.vectorBucketName) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_MISSING_BUCKET_NAME',
+          id: createVectorErrorId('S3VECTORS', 'INITIALIZATION', 'MISSING_BUCKET_NAME'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -98,7 +99,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_DISCONNECT_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'DISCONNECT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -128,7 +129,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('S3VECTORS', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, dimension, metric },
@@ -157,7 +158,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -200,7 +201,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -232,6 +233,16 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
   }: QueryVectorParams<S3VectorsFilter>): Promise<QueryResult[]> {
     indexName = normalizeIndexName(indexName);
 
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for S3 Vectors queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
       if (!Array.isArray(queryVector) || queryVector.length === 0) {
         throw new Error('queryVector must be a non-empty float32 array');
@@ -254,17 +265,17 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
 
       const vectors = (out.vectors ?? []).filter(v => !!v?.key);
 
-      // If includeVector is requested and some results lack data, fetch only the missing ones.
+      // Query results don't include vector data; fetch via GetVectors when requested.
       let dataMap: Record<string, number[] | undefined> | undefined;
       if (includeVector) {
-        const missingKeys = vectors.filter(v => !v.data?.float32 && v.key).map(v => v.key!) as string[];
+        const keys = vectors.filter(v => v.key).map(v => v.key!) as string[];
 
-        if (missingKeys.length > 0) {
+        if (keys.length > 0) {
           const got = await this.client.send(
             new GetVectorsCommand({
               ...this.bucketParams(),
               indexName,
-              keys: missingKeys,
+              keys,
               returnData: true,
               returnMetadata: false,
             }),
@@ -286,7 +297,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
         if (md !== undefined) result.metadata = md;
 
         if (includeVector) {
-          const vec = (v.data?.float32 as number[] | undefined) ?? dataMap?.[id];
+          const vec = dataMap?.[id];
           if (vec !== undefined) result.vector = vec;
         }
 
@@ -295,7 +306,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -333,7 +344,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -360,7 +371,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -383,7 +394,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -407,7 +418,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     if (!id) {
       throw new MastraError({
-        id: 'STORAGE_S3VECTORS_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('S3VECTORS', 'UPDATE_VECTOR', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'id is required for S3Vectors updateVector',
@@ -452,7 +463,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -485,7 +496,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_S3VECTORS_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('S3VECTORS', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -500,7 +511,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
     throw new MastraError({
-      id: 'STORAGE_S3VECTORS_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
       text: 'deleteVectors is not yet implemented for S3Vectors vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,

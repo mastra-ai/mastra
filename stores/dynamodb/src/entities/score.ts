@@ -221,6 +221,28 @@ export const scoreEntity = new Entity({
         return value;
       },
     },
+    metadata: {
+      type: 'string',
+      required: false,
+      set: (value?: Record<string, unknown> | string) => {
+        if (value && typeof value !== 'string') {
+          return JSON.stringify(value);
+        }
+        return value;
+      },
+      get: (value?: string) => {
+        if (value && typeof value === 'string') {
+          try {
+            if (value.startsWith('{') || value.startsWith('[')) {
+              return JSON.parse(value);
+            }
+          } catch {
+            return value;
+          }
+        }
+        return value;
+      },
+    },
     requestContext: {
       type: 'string',
       required: false,

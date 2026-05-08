@@ -1,8 +1,8 @@
 import type { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
-import type { RuntimeContext } from '../server-adapter';
+import type { ServerContext } from '../server-adapter';
 
-export function createTestRuntimeContext({ mastra }: { mastra: Mastra }): RuntimeContext {
+export function createTestServerContext({ mastra }: { mastra: Mastra }): ServerContext {
   return {
     mastra,
     requestContext: new RequestContext(),

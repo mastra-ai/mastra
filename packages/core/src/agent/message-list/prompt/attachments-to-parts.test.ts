@@ -1,5 +1,5 @@
 import type { Attachment } from '@ai-sdk/ui-utils-v5';
-import type { FilePart, ImagePart } from 'ai-v5';
+import type { FilePart, ImagePart } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import { attachmentsToParts } from './attachments-to-parts';
 
@@ -264,6 +264,83 @@ describe('attachmentsToParts', () => {
     expect(parts).toHaveLength(1);
     const imagePart = parts[0] as ImagePart;
     expect(imagePart.image).toBe('https://example.com/images/my%20image%20(1).png');
+  });
+
+  // Issue #11384: Support Google Cloud Storage gs:// URLs
+  it('should handle Google Cloud Storage gs:// URLs for images', () => {
+    const attachments: Attachment[] = [
+      {
+        url: 'gs://my-bucket/path/to/image.png',
+        contentType: 'image/png',
+        name: 'image.png',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const imagePart = parts[0] as ImagePart;
+    expect(imagePart).toMatchObject({
+      type: 'image',
+      image: 'gs://my-bucket/path/to/image.png',
+      mimeType: 'image/png',
+    });
+  });
+
+  it('should handle Google Cloud Storage gs:// URLs for non-image files', () => {
+    const attachments: Attachment[] = [
+      {
+        url: 'gs://my-bucket/path/to/document.pdf',
+        contentType: 'application/pdf',
+        name: 'document.pdf',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const filePart = parts[0] as unknown as FilePart;
+    expect(filePart).toMatchObject({
+      type: 'file',
+      data: 'gs://my-bucket/path/to/document.pdf',
+      mimeType: 'application/pdf',
+    });
+  });
+
+  it('should handle AWS S3 s3:// URLs for images', () => {
+    const attachments: Attachment[] = [
+      {
+        url: 's3://my-bucket/path/to/image.jpg',
+        contentType: 'image/jpeg',
+        name: 'image.jpg',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const imagePart = parts[0] as ImagePart;
+    expect(imagePart).toMatchObject({
+      type: 'image',
+      image: 's3://my-bucket/path/to/image.jpg',
+      mimeType: 'image/jpeg',
+    });
+  });
+
+  it('should handle AWS S3 s3:// URLs for non-image files', () => {
+    const attachments: Attachment[] = [
+      {
+        url: 's3://my-bucket/path/to/document.pdf',
+        contentType: 'application/pdf',
+        name: 'document.pdf',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const filePart = parts[0] as unknown as FilePart;
+    expect(filePart).toMatchObject({
+      type: 'file',
+      data: 's3://my-bucket/path/to/document.pdf',
+      mimeType: 'application/pdf',
+    });
   });
 
   it('should not convert URLs to data URIs', () => {

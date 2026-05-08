@@ -1,0 +1,141 @@
+---
+title: "Reference: withMastra() | AI SDK"
+description: API reference for withMastra(), a function to use Mastra functionality in AI SDK.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# withMastra()
+
+Wraps an AI SDK model with Mastra processors and/or memory.
+
+## Usage example
+
+```typescript title="src/example.ts"
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
+import { withMastra } from '@mastra/ai-sdk'
+import type { Processor } from '@mastra/core/processors'
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages')
+    return messages
+  },
+}
+
+const model = withMastra(openai('gpt-5.4'), {
+  inputProcessors: [loggingProcessor],
+})
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'LanguageModelV2 | LanguageModelV3',
+    description: "Any AI SDK v5 or v6 language model (e.g., `openai('gpt-5.4')`, `anthropic('claude-opus-4-6')`).",
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'WithMastraOptions',
+    description: 'Configuration object for processors and memory.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'WithMastraOptions',
+        parameters: [
+          {
+            name: 'inputProcessors',
+            type: 'InputProcessor[]',
+            description: 'Input processors to run before the LLM call.',
+            isOptional: true,
+          },
+          {
+            name: 'outputProcessors',
+            type: 'OutputProcessor[]',
+            description: 'Output processors to run on the LLM response.',
+            isOptional: true,
+          },
+          {
+            name: 'memory',
+            type: 'WithMastraMemoryOptions',
+            description: 'Memory configuration - enables automatic message history persistence.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'WithMastraMemoryOptions',
+                parameters: [
+                  {
+                    name: 'storage',
+                    type: 'MemoryStorage',
+                    description:
+                      "Memory storage domain for message persistence. Get it from a composite store using `await storage.getStore('memory')`.",
+                    isOptional: false,
+                  },
+                  {
+                    name: 'threadId',
+                    type: 'string',
+                    description: 'Thread ID for conversation persistence.',
+                    isOptional: false,
+                  },
+                  {
+                    name: 'resourceId',
+                    type: 'string',
+                    description: 'Resource ID (user/session identifier).',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'lastMessages',
+                    type: 'number | false',
+                    description: 'Number of recent messages to retrieve, or false to disable.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'semanticRecall',
+                    type: 'WithMastraSemanticRecallOptions',
+                    description: 'Semantic recall configuration (RAG-based memory retrieval).',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'workingMemory',
+                    type: "MemoryConfig['workingMemory']",
+                    description: 'Working memory configuration (persistent user data).',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'readOnly',
+                    type: 'boolean',
+                    description: 'Read-only mode - prevents saving new messages.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+A wrapped model compatible with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+## Streaming behavior
+
+Output processors that implement `processOutputResult` run after the stream finishes. Consume the stream to completion to persist message history and semantic recall.

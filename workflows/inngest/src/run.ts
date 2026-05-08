@@ -1,13 +1,14 @@
 import { ReadableStream } from 'node:stream/web';
-import { subscribe } from '@inngest/realtime';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { WorkflowRunOutput, ChunkFrom } from '@mastra/core/stream';
-import { createTimeTravelExecutionParams, Run } from '@mastra/core/workflows';
+import { createTimeTravelExecutionParams, Run, hydrateSerializedStepErrors } from '@mastra/core/workflows';
 import type {
   ExecutionEngine,
   ExecutionGraph,
+  OutputWriter,
   SerializedStepFlowEntry,
   Step,
   StepWithComponent,
@@ -17,16 +18,25 @@ import type {
   WorkflowResult,
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
+import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
-import type z from 'zod';
+import { subscribe } from 'inngest/realtime';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any, any, any, any, any>[] = Step<string, any, any, any, any, any, any>[],
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    string,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    TEngineType
+  >[],
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
 > extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -58,43 +68,176 @@ export class InngestRun<
     this.#mastra = params.mastra!;
   }
 
-  async getRuns(eventId: string) {
-    const response = await fetch(`${this.inngest.apiBaseUrl ?? 'https://api.inngest.com'}/v1/events/${eventId}/runs`, {
-      headers: {
-        Authorization: `Bearer ${process.env.INNGEST_SIGNING_KEY}`,
-      },
-    });
-    const json = await response.json();
-    return (json as any).data;
-  }
-
-  async getRunOutput(eventId: string) {
-    let runs = await this.getRuns(eventId);
+  /**
+   * Get run output using hybrid approach: realtime subscription + polling fallback.
+   * Resolves as soon as either method detects completion.
+   */
+  async getRunOutput(_eventId: string, maxWaitMs = 300000) {
     const storage = this.#mastra?.getStorage();
-
-    while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runs = await this.getRuns(eventId);
-
-      if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await storage?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-        return {
-          output: { result: { steps: snapshot?.context, status: 'failed', error: runs?.[0]?.output?.message } },
-        };
-      }
-
-      if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await storage?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-        return { output: { result: { steps: snapshot?.context, status: 'canceled' } } };
-      }
+    const workflowsStore = await storage?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new NonRetriableError(`Workflow storage is required to retrieve output for run ${this.runId}`);
     }
-    return runs?.[0];
+    return new Promise<any>((resolve, reject) => {
+      let resolved = false;
+      let unsubscribe: (() => void) | null = null;
+      let pollTimeoutId: NodeJS.Timeout | null = null;
+
+      const cleanup = () => {
+        if (unsubscribe) {
+          try {
+            unsubscribe();
+          } catch {
+            // Ignore unsubscribe errors
+          }
+        }
+        if (pollTimeoutId) {
+          clearTimeout(pollTimeoutId);
+        }
+      };
+
+      const handleResult = (result: any, _source: string) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(result);
+        }
+      };
+
+      const handleError = (error: any, _source: string) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          reject(error);
+        }
+      };
+
+      // Start realtime subscription for workflow-finish event
+      let realtimeStreamPromise: ReturnType<typeof subscribe> | null = null;
+
+      const startRealtimeSubscription = async () => {
+        try {
+          realtimeStreamPromise = subscribe(
+            {
+              channel: `workflow:${this.workflowId}:${this.runId}`,
+              topics: ['watch'],
+              app: this.inngest,
+            },
+            async (message: any) => {
+              if (resolved) return;
+
+              const event = message.data;
+
+              if (event?.type === 'workflow-finish') {
+                // Got the finish event - load snapshot and resolve
+                const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                  workflowName: this.workflowId,
+                  runId: this.runId,
+                });
+                if (snapshot?.context) {
+                  snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+                }
+
+                const realtimeResult: Record<string, unknown> = {
+                  steps: snapshot?.context,
+                  status: event.payload?.status ?? snapshot?.status,
+                  input: (snapshot?.context as Record<string, unknown>)?.input,
+                };
+                const resultValue = event.payload?.result ?? snapshot?.result;
+                if (resultValue !== undefined) realtimeResult.result = resultValue;
+                const rawError = event.payload?.error ?? snapshot?.error;
+                if (rawError) {
+                  realtimeResult.error = getErrorFromUnknown(rawError, { serializeStack: false });
+                }
+                if (snapshot?.value !== undefined) realtimeResult.state = snapshot.value;
+                const result = { output: { result: realtimeResult } };
+
+                handleResult(result, 'realtime');
+              }
+            },
+          );
+
+          // Set unsubscribe immediately so cleanup can cancel even before await resolves
+          unsubscribe = () => {
+            realtimeStreamPromise?.then(stream => stream.cancel().catch(() => {})).catch(() => {});
+          };
+
+          await realtimeStreamPromise;
+        } catch {
+          // Realtime subscription failed - polling will still work as fallback
+        }
+      };
+
+      // Start polling by checking our own workflow snapshot store directly.
+      // This avoids the Inngest runs API which has a 15-second response cache.
+      const startPolling = async () => {
+        const startTime = Date.now();
+
+        const poll = async () => {
+          if (resolved) {
+            return;
+          }
+          if (Date.now() - startTime >= maxWaitMs) {
+            handleError(new NonRetriableError(`Workflow did not complete within ${maxWaitMs}ms`), 'polling-timeout');
+            return;
+          }
+
+          try {
+            const snapshot = await workflowsStore.loadWorkflowSnapshot({
+              workflowName: this.workflowId,
+              runId: this.runId,
+            });
+
+            // Still running or in an intermediate state — schedule next poll
+            // 'running' = initial state, 'waiting' = sleeping/waiting, 'pending' = not yet started
+            if (
+              !snapshot ||
+              snapshot.status === 'running' ||
+              snapshot.status === 'waiting' ||
+              snapshot.status === 'pending'
+            ) {
+              pollTimeoutId = setTimeout(poll, 150 + Math.random() * 100);
+              return;
+            }
+
+            if (snapshot.context) {
+              snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+            }
+
+            const pollingResult: Record<string, unknown> = {
+              steps: snapshot.context,
+              status: snapshot.status,
+              input: (snapshot.context as Record<string, unknown>)?.input,
+            };
+            if (snapshot.result !== undefined) pollingResult.result = snapshot.result;
+            if (snapshot.error !== undefined) {
+              pollingResult.error = getErrorFromUnknown(snapshot.error, { serializeStack: false });
+            }
+            if (snapshot.value !== undefined) pollingResult.state = snapshot.value;
+
+            handleResult({ output: { result: pollingResult } }, `polling-${snapshot.status}`);
+          } catch (error) {
+            if (error instanceof NonRetriableError) {
+              handleError(error, 'polling-non-retriable');
+              return;
+            }
+            handleError(
+              new NonRetriableError(
+                `Failed to poll workflow status: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+              'polling-error',
+            );
+          }
+        };
+
+        // Start first poll
+        void poll();
+      };
+
+      // Start both in parallel
+      void startRealtimeSubscription();
+      void startPolling();
+    });
   }
 
   async cancel() {
@@ -107,12 +250,13 @@ export class InngestRun<
       },
     });
 
-    const snapshot = await storage?.loadWorkflowSnapshot({
+    const workflowsStore = await storage?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
     if (snapshot) {
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -125,17 +269,112 @@ export class InngestRun<
     }
   }
 
-  async start(params: {
-    inputData?: z.infer<TInput>;
-    requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._start(params);
+  async start(
+    args: (TInput extends unknown
+      ? {
+          inputData?: TInput;
+        }
+      : {
+          inputData: TInput;
+        }) &
+      (TState extends unknown
+        ? {
+            initialState?: TState;
+          }
+        : {
+            initialState: TState;
+          }) & {
+        requestContext?: RequestContext;
+        outputWriter?: OutputWriter;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+          includeState?: boolean;
+          includeResumeLabels?: boolean;
+        };
+        perStep?: boolean;
+      },
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    return this._start(args);
+  }
+
+  /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId after sending the event to Inngest.
+   * The workflow executes independently in Inngest.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   */
+  async startAsync(
+    args: (TInput extends unknown
+      ? {
+          inputData?: TInput;
+        }
+      : {
+          inputData: TInput;
+        }) &
+      (TState extends unknown
+        ? {
+            initialState?: TState;
+          }
+        : {
+            initialState: TState;
+          }) & {
+        requestContext?: RequestContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+          includeState?: boolean;
+          includeResumeLabels?: boolean;
+        };
+        perStep?: boolean;
+      },
+  ): Promise<{ runId: string }> {
+    // Persist initial snapshot
+    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        activePaths: [],
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
+    // Validate inputs
+    const inputDataToUse = await this._validateInput(args.inputData);
+    const initialStateToUse = await this._validateInitialState(args.initialState ?? ({} as TState));
+
+    // Send event to Inngest (fire-and-forget)
+    const eventOutput = await this.inngest.send({
+      name: `workflow.${this.workflowId}`,
+      data: {
+        inputData: inputDataToUse,
+        initialState: initialStateToUse,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        outputOptions: args.outputOptions,
+        tracingOptions: args.tracingOptions,
+        requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+        perStep: args.perStep,
+      },
+    });
+
+    const eventId = eventOutput.ids[0];
+    if (!eventId) {
+      throw new Error('Event ID is not set');
+    }
+
+    // Return immediately - NO POLLING
+    return { runId: this.runId };
   }
 
   async _start({
@@ -145,18 +384,21 @@ export class InngestRun<
     tracingOptions,
     format,
     requestContext,
+    perStep,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: TInput;
     requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
     format?: 'legacy' | 'vnext' | undefined;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    await this.#mastra.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -176,10 +418,12 @@ export class InngestRun<
     });
 
     const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
+    const eventName = `workflow.${this.workflowId}`;
 
     const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
+      name: eventName,
       data: {
         inputData: inputDataToUse,
         initialState: initialStateToUse,
@@ -189,6 +433,7 @@ export class InngestRun<
         tracingOptions,
         format,
         requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+        perStep,
       },
     });
 
@@ -196,11 +441,15 @@ export class InngestRun<
     if (!eventId) {
       throw new Error('Event ID is not set');
     }
+
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
 
-    if (result.status === 'failed') {
-      result.error = new Error(result.error);
+    this.hydrateFailedResult(result);
+
+    // Only include state when explicitly requested, matching core engine behavior
+    if (!outputOptions?.includeState) {
+      delete result.state;
     }
 
     if (result.status !== 'suspended') {
@@ -209,14 +458,16 @@ export class InngestRun<
     return result;
   }
 
-  async resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
-    step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+  async resume<TResume>(params: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, TResume, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
@@ -230,29 +481,45 @@ export class InngestRun<
     return p;
   }
 
-  async _resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
-    step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+  async _resume<TResume>(params: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, TResume, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const storage = this.#mastra?.getStorage();
 
-    let steps: string[] = [];
-    if (typeof params.step === 'string') {
-      steps = params.step.split('.');
-    } else {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-        typeof step === 'string' ? step : step?.id,
-      );
+    const workflowsStore = await storage?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new NonRetriableError(`Workflow storage is required to resume run ${this.runId}`);
     }
-    const snapshot = await storage?.loadWorkflowSnapshot({
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new NonRetriableError(`Cannot resume run ${this.runId}: snapshot not found`);
+    }
+
+    // Support label-based resume: look up step from resumeLabels
+    const snapshotResumeLabel = params.label ? snapshot.resumeLabels?.[params.label] : undefined;
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
+
+    let steps: string[] = [];
+    if (stepParam) {
+      if (typeof stepParam === 'string') {
+        steps = stepParam.split('.');
+      } else {
+        steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+          typeof step === 'string' ? step : step?.id,
+        );
+      }
+    }
 
     const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
 
@@ -263,23 +530,57 @@ export class InngestRun<
     const newRequestContext = params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {};
     const mergedRequestContext = { ...persistedRequestContext, ...newRequestContext };
 
-    const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
-      data: {
-        inputData: resumeDataToUse,
-        initialState: snapshot?.value ?? {},
-        runId: this.runId,
-        workflowId: this.workflowId,
-        stepResults: snapshot?.context as any,
-        resume: {
-          steps,
-          stepResults: snapshot?.context as any,
-          resumePayload: resumeDataToUse,
-          resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
-        },
-        requestContext: mergedRequestContext,
-      },
+    // Mark the snapshot as 'running' before sending the event so that
+    // snapshot-based polling doesn't return the stale suspended/paused result.
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
+        ...snapshot,
+        status: 'running',
+        result: undefined,
+        error: undefined,
+        timestamp: Date.now(),
+      } as any,
     });
+
+    let eventOutput;
+    try {
+      eventOutput = await this.inngest.send({
+        name: `workflow.${this.workflowId}`,
+        data: {
+          inputData: resumeDataToUse,
+          initialState: snapshot?.value ?? {},
+          runId: this.runId,
+          workflowId: this.workflowId,
+          stepResults: snapshot?.context as any,
+          resume: {
+            steps,
+            stepResults: snapshot?.context as any,
+            resumePayload: resumeDataToUse,
+            resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
+          },
+          requestContext: mergedRequestContext,
+          perStep: params.perStep,
+        },
+      });
+    } catch (err) {
+      // Rollback: restore the original snapshot so the run isn't stuck in 'running'.
+      // The rollback itself can fail (e.g. transient storage error); log it but
+      // always rethrow the original error so the underlying failure isn't masked.
+      try {
+        await workflowsStore.persistWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+          snapshot: snapshot as any,
+        });
+      } catch (rollbackErr) {
+        console.error('Failed to rollback snapshot during resume error recovery:', rollbackErr);
+      }
+      throw err;
+    }
 
     const eventId = eventOutput.ids[0];
     if (!eventId) {
@@ -287,19 +588,17 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
-    if (result.status === 'failed') {
-      result.error = new Error(result.error);
-    }
+    this.hydrateFailedResult(result);
     return result;
   }
 
-  async timeTravel<TInputSchema extends z.ZodType<any>>(params: {
-    inputData?: z.infer<TInputSchema>;
+  async timeTravel<TInput>(params: {
+    inputData?: TInput;
     resumeData?: any;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     step:
-      | Step<string, any, TInputSchema, any, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, TInputSchema, any, any>]
+      | Step<string, any, TInput, any, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, TInput, any, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -310,6 +609,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._timeTravel(params).then(result => {
       if (result.status !== 'suspended') {
@@ -323,13 +623,13 @@ export class InngestRun<
     return p;
   }
 
-  async _timeTravel<TInputSchema extends z.ZodType<any>>(params: {
-    inputData?: z.infer<TInputSchema>;
+  async _timeTravel<TInput>(params: {
+    inputData?: TInput;
     resumeData?: any;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     step:
-      | Step<string, any, TInputSchema, any, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, TInputSchema, any, any>]
+      | Step<string, any, TInput, any, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, TInput, any, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -340,7 +640,8 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    perStep?: boolean;
+  }) {
     if (!params.step || (Array.isArray(params.step) && params.step?.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
@@ -359,31 +660,38 @@ export class InngestRun<
     }
 
     const storage = this.#mastra?.getStorage();
+    const workflowsStore = await storage?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new NonRetriableError(`Workflow storage is required to time-travel run ${this.runId}`);
+    }
 
-    const snapshot = await storage?.loadWorkflowSnapshot({
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
 
+    let snapshotForRollback = snapshot;
     if (!snapshot) {
-      await storage?.persistWorkflowSnapshot({
+      const pendingSnapshot = {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'pending' as const,
+        value: {},
+        context: {} as any,
+        activePaths: [] as number[],
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      };
+      await workflowsStore.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
-        snapshot: {
-          runId: this.runId,
-          serializedStepGraph: this.serializedStepGraph,
-          status: 'pending',
-          value: {},
-          context: {} as any,
-          activePaths: [],
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          timestamp: Date.now(),
-        },
+        snapshot: pendingSnapshot,
       });
+      snapshotForRollback = pendingSnapshot;
     }
 
     if (snapshot?.status === 'running') {
@@ -405,21 +713,67 @@ export class InngestRun<
       snapshot: (snapshot ?? { context: {} }) as any,
       graph: this.executionGraph,
       initialState: params.initialState,
+      perStep: params.perStep,
     });
 
-    const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
-      data: {
-        initialState: timeTravelData.state,
+    // Save previous snapshot for rollback if send fails
+    const previousSnapshot = snapshotForRollback;
+
+    // Mark the snapshot as 'running' before sending the event so that
+    // snapshot-based polling doesn't return the stale result from a previous run.
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
         runId: this.runId,
-        workflowId: this.workflowId,
-        stepResults: timeTravelData.stepResults,
-        timeTravel: timeTravelData,
-        tracingOptions: params.tracingOptions,
-        outputOptions: params.outputOptions,
-        requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        activePaths: [],
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
       },
     });
+
+    let eventOutput;
+    try {
+      eventOutput = await this.inngest.send({
+        name: `workflow.${this.workflowId}`,
+        data: {
+          initialState: timeTravelData.state,
+          runId: this.runId,
+          workflowId: this.workflowId,
+          stepResults: timeTravelData.stepResults,
+          timeTravel: timeTravelData,
+          tracingOptions: params.tracingOptions,
+          outputOptions: params.outputOptions,
+          requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+          perStep: params.perStep,
+        },
+      });
+    } catch (err) {
+      // Rollback: restore the previous snapshot so the run isn't stuck in 'running'.
+      // The rollback itself can fail (e.g. transient storage error); log it but
+      // always rethrow the original error so the underlying failure isn't masked.
+      if (previousSnapshot) {
+        try {
+          await workflowsStore.persistWorkflowSnapshot({
+            workflowName: this.workflowId,
+            runId: this.runId,
+            resourceId: this.resourceId,
+            snapshot: previousSnapshot as any,
+          });
+        } catch (rollbackErr) {
+          console.error('Failed to rollback snapshot during time-travel error recovery:', rollbackErr);
+        }
+      }
+      throw err;
+    }
 
     const eventId = eventOutput.ids[0];
     if (!eventId) {
@@ -427,9 +781,13 @@ export class InngestRun<
     }
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
-    if (result.status === 'failed') {
-      result.error = new Error(result.error);
+    this.hydrateFailedResult(result);
+
+    // Only include state when explicitly requested, matching core engine behavior
+    if (!params.outputOptions?.includeState) {
+      delete result.state;
     }
+
     return result;
   }
 
@@ -460,7 +818,7 @@ export class InngestRun<
     };
   }
 
-  streamLegacy({ inputData, requestContext }: { inputData?: z.infer<TInput>; requestContext?: RequestContext } = {}): {
+  streamLegacy({ inputData, requestContext }: { inputData?: TInput; requestContext?: RequestContext } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -468,9 +826,8 @@ export class InngestRun<
 
     const writer = writable.getWriter();
     void writer.write({
-      // @ts-ignore
+      // @ts-expect-error - stream event type mismatch
       type: 'start',
-      // @ts-ignore
       payload: { runId: this.runId },
     });
 
@@ -493,7 +850,7 @@ export class InngestRun<
     this.closeStreamAction = async () => {
       await writer.write({
         type: 'finish',
-        // @ts-ignore
+        // @ts-expect-error - stream event type mismatch
         payload: { runId: this.runId },
       });
       unwatch();
@@ -528,18 +885,20 @@ export class InngestRun<
     closeOnSuspend = true,
     initialState,
     outputOptions,
+    perStep,
   }: {
-    inputData?: z.input<TInput>;
+    inputData?: TInput;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
-    initialState?: z.input<TState>;
+    initialState?: TState;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-  } = {}): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
+    perStep?: boolean;
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
     }
@@ -550,7 +909,6 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,
@@ -581,6 +939,7 @@ export class InngestRun<
           tracingOptions,
           outputOptions,
           format: 'vnext',
+          perStep,
         });
         let executionResults;
         try {
@@ -614,24 +973,7 @@ export class InngestRun<
     return this.streamOutput;
   }
 
-  streamVNext(
-    args: {
-      inputData?: z.input<TInput>;
-      requestContext?: RequestContext;
-      tracingContext?: TracingContext;
-      tracingOptions?: TracingOptions;
-      closeOnSuspend?: boolean;
-      initialState?: z.input<TState>;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-    } = {},
-  ): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
-    return this.stream(args);
-  }
-
-  timeTravelStream<TInputSchema extends z.ZodType<any>>({
+  timeTravelStream<TTravelInput>({
     inputData,
     resumeData,
     initialState,
@@ -639,28 +981,29 @@ export class InngestRun<
     context,
     nestedStepsContext,
     requestContext,
+    // tracingContext,
     tracingOptions,
     outputOptions,
+    perStep,
   }: {
-    inputData?: z.input<TInputSchema>;
-    initialState?: z.input<TState>;
+    inputData?: TTravelInput;
+    initialState?: TState;
     resumeData?: any;
     step:
-      | Step<string, any, TInputSchema, any, any, any, TEngineType>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, TInputSchema, any, any, any, TEngineType>,
-        ]
+      | Step<string, any, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }) {
     this.closeStreamAction = async () => {};
 
@@ -668,7 +1011,6 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,
@@ -700,6 +1042,7 @@ export class InngestRun<
           requestContext,
           tracingOptions,
           outputOptions,
+          perStep,
         });
 
         self.executionResults = executionResultsPromise;
@@ -726,5 +1069,20 @@ export class InngestRun<
     });
 
     return this.streamOutput;
+  }
+
+  /**
+   * Hydrates errors in a failed workflow result back to proper Error instances.
+   * This ensures error.cause chains and custom properties are preserved.
+   */
+  private hydrateFailedResult(result: WorkflowResult<TState, TInput, TOutput, TSteps>): void {
+    if (result.status === 'failed') {
+      // Ensure error is a proper Error instance with all properties preserved
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
+      // Re-hydrate serialized errors in step results
+      if (result.steps) {
+        hydrateSerializedStepErrors(result.steps);
+      }
+    }
   }
 }

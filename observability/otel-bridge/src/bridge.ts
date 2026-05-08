@@ -18,11 +18,12 @@ import type {
   CreateSpanOptions,
   SpanType,
   SpanIds,
+  InitExporterOptions,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import { SpanConverter, getSpanKind } from '@mastra/otel-exporter';
-import { trace as otelTrace, context as otelContext } from '@opentelemetry/api';
+import { trace as otelTrace, context as otelContext, isSpanContextValid } from '@opentelemetry/api';
 import type { Span as OtelSpan, Context as OtelContext } from '@opentelemetry/api';
 
 /**
@@ -61,7 +62,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel';
   private otelTracer = otelTrace.getTracer('@mastra/otel-bridge', '1.0.0');
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
-  private spanConverter = new SpanConverter();
+  private spanConverter?: SpanConverter;
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
@@ -79,6 +80,17 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     if (event.type === TracingEventType.SPAN_ENDED) {
       await this.handleSpanEnded(event);
     }
+  }
+
+  /**
+   * Initialize with tracing configuration
+   */
+  init(options: InitExporterOptions) {
+    this.spanConverter = new SpanConverter({
+      packageName: '@mastra/otel-bridge',
+      serviceName: options.config?.serviceName,
+      format: 'GenAI_v1_38_0',
+    });
   }
 
   /**
@@ -104,11 +116,10 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       }
 
       // Create OTEL span with SpanKind (must be set at creation, immutable)
-      const isRootSpan = !options.parent;
       const otelSpan = this.otelTracer.startSpan(
         options.name,
         {
-          kind: getSpanKind(options.type, isRootSpan),
+          kind: getSpanKind(options.type),
         },
         parentOtelContext,
       );
@@ -118,6 +129,18 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Get OTEL span identifiers
       const otelSpanContext = otelSpan.spanContext();
+
+      // If no OTEL SDK is registered, the global tracer returns a non-recording
+      // span with an invalid span context (all-zero span/trace IDs). Returning
+      // those IDs would collide across every Mastra span and break downstream
+      // exporters. Bail out so DefaultSpan falls through to its own ID generator.
+      if (!isSpanContextValid(otelSpanContext)) {
+        // End the span we just started so its lifecycle stays clean on
+        // providers that do track non-recording spans.
+        otelSpan.end();
+        return undefined;
+      }
+
       const spanId = otelSpanContext.spanId;
       const traceId = otelSpanContext.traceId;
 
@@ -126,7 +149,9 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Get parentSpanId from parent context if available
       const parentSpan = otelTrace.getSpan(parentOtelContext);
-      const parentSpanId = parentSpan?.spanContext().spanId;
+      const parentSpanContext = parentSpan?.spanContext();
+      const parentSpanId =
+        parentSpanContext && isSpanContextValid(parentSpanContext) ? parentSpanContext.spanId : undefined;
 
       this.logger.debug(
         `[OtelBridge.createSpan] Created span [spanId=${spanId}] [traceId=${traceId}] ` +
@@ -159,12 +184,16 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       // Remove from map immediately to prevent memory leak
       this.otelSpanMap.delete(mastraSpan.id);
 
+      if (!this.spanConverter) {
+        return;
+      }
+
       const { otelSpan } = entry;
 
       this.logger.debug(`[OtelBridge] Ending OTEL span [mastraId=${mastraSpan.id}] [name=${mastraSpan.name}]`);
 
       // Use SpanConverter to get consistent span formatting with otel-exporter
-      const readableSpan = this.spanConverter.convertSpan(mastraSpan);
+      const readableSpan = await this.spanConverter!.convertSpan(mastraSpan);
 
       // Update span name to match the converter's formatting
       otelSpan.updateName(readableSpan.name);
@@ -247,9 +276,35 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   }
 
   /**
+   * Force flush any buffered spans without shutting down the bridge.
+   *
+   * Attempts to flush the underlying OTEL tracer provider if it supports
+   * the forceFlush operation. This is useful in serverless environments
+   * where you need to ensure all spans are exported before the runtime
+   * instance is terminated.
+   */
+  async flush(): Promise<void> {
+    try {
+      const provider = otelTrace.getTracerProvider();
+      // Check if the provider supports forceFlush (not all implementations do)
+      if (provider && 'forceFlush' in provider && typeof provider.forceFlush === 'function') {
+        await provider.forceFlush();
+        this.logger.debug('[OtelBridge] Flushed tracer provider');
+      } else {
+        this.logger.debug('[OtelBridge] Tracer provider does not support forceFlush');
+      }
+    } catch (error) {
+      this.logger.error('[OtelBridge] Failed to flush tracer provider:', error);
+    }
+  }
+
+  /**
    * Shutdown the bridge and clean up resources
    */
   async shutdown(): Promise<void> {
+    // Flush before shutdown
+    await this.flush();
+
     // End any remaining spans
     for (const [spanId, { otelSpan }] of this.otelSpanMap.entries()) {
       this.logger.warn(`[OtelBridge] Force-ending span that was not properly closed [id=${spanId}]`);

@@ -1,8 +1,10 @@
+import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
+import { rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
@@ -11,14 +13,23 @@ import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
-import { getPackageRootPath, slash } from '../build/utils';
+import { getPackageRootPath } from '../build/package-info';
+import type { BundlerOptions } from '../build/types';
+import type { BundlerPlatform } from '../build/utils';
+import { isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
 
+export type { BundlerOptions } from '../build/types';
+export type { BundlerPlatform } from '../build/utils';
+
+export const IS_DEFAULT = Symbol('IS_DEFAULT');
+
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
+  protected platform: BundlerPlatform = 'node';
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -37,7 +48,7 @@ export abstract class Bundler extends MastraBundler {
     dependencies: Map<string, string>,
     resolutions?: Record<string, string>,
   ) {
-    this.logger.debug(`Writing project's package.json`);
+    this.logger.debug("Writing project's package.json");
 
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
@@ -85,22 +96,36 @@ export abstract class Bundler extends MastraBundler {
     return createBundlerUtil(inputOptions, outputOptions);
   }
 
-  protected async analyze(
-    entry: string | string[],
-    mastraFile: string,
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
     outputDirectory: string,
-    { enableEsmShim = true }: { enableEsmShim?: boolean } = {},
-  ) {
+  ): Promise<NonNullable<Config['bundler']>> {
+    const defaultBundlerOptions: Config['bundler'] = {
+      externals: [],
+      sourcemap: false,
+      transpilePackages: [],
+      [IS_DEFAULT]: true,
+    } as const;
+
+    try {
+      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+
+      return bundlerOptions ?? defaultBundlerOptions;
+    } catch (error) {
+      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+    }
+
+    return defaultBundlerOptions;
+  }
+
+  protected async analyze(entry: string | string[], mastraFile: string, outputDirectory: string) {
     return await analyzeBundle(
       ([] as string[]).concat(entry),
       mastraFile,
       {
         outputDir: join(outputDirectory, this.analyzeOutputDir),
         projectRoot: outputDirectory,
-        platform: 'node',
-        bundlerOptions: {
-          enableEsmShim,
-        },
+        platform: this.platform,
       },
       this.logger,
     );
@@ -111,6 +136,41 @@ export abstract class Bundler extends MastraBundler {
     deps.__setLogger(this.logger);
 
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
+  }
+
+  /**
+   * Generate a package-lock.json for the output directory so that deploy targets
+   * can use `npm ci` instead of `npm install`, skipping version resolution entirely.
+   * This is a lockfile-only operation — no packages are downloaded.
+   *
+   * Temporarily moves node_modules out of the way because pnpm's symlink-based
+   * layout confuses npm's arborist, then restores it afterwards so that
+   * `mastra start` (or wrangler) can still resolve dependencies at runtime.
+   */
+  private async generateNpmLockfile(outputDir: string): Promise<void> {
+    const nodeModules = join(outputDir, 'node_modules');
+    const nodeModulesTmp = join(outputDir, 'node_modules.__tmp');
+    let movedNodeModules = false;
+    try {
+      // Move node_modules aside — pnpm's symlink layout confuses npm's arborist
+      if (await fsExtra.pathExists(nodeModules)) {
+        await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true });
+        movedNodeModules = true;
+      }
+      execSync('npm install --package-lock-only --force', {
+        cwd: outputDir,
+        stdio: 'pipe',
+        timeout: 60_000,
+      });
+    } catch {
+      this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install');
+    } finally {
+      // Restore node_modules so runtime resolution works
+      if (movedNodeModules) {
+        await rm(nodeModules, { recursive: true, force: true });
+        await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true });
+      }
+    }
   }
 
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
@@ -148,7 +208,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap = false, enableEsmShim = true }: { enableSourcemap?: boolean; enableEsmShim?: boolean } = {},
+    { enableSourcemap, enableEsmShim, externals }: BundlerOptions,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -157,14 +217,13 @@ export abstract class Bundler extends MastraBundler {
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
       analyzedBundleInfo,
-      'node',
+      this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim },
+      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
     );
-    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
-
+    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     if (isVirtual) {
@@ -225,7 +284,7 @@ export abstract class Bundler extends MastraBundler {
 
           // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
           if (!entryFile || (await stat(entryFile)).isDirectory()) {
-            this.logger.warn(`No entry file found in ${path}, skipping...`);
+            this.logger.warn('No entry file found, skipping', { path });
             continue;
           }
 
@@ -234,7 +293,7 @@ export abstract class Bundler extends MastraBundler {
           const normalizedEntryFile = entryFile.replaceAll('\\', '/');
           inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
-          this.logger.warn(`Tool path ${path} does not exist, skipping...`);
+          this.logger.warn('Tool path does not exist, skipping', { path });
         }
       }
     }
@@ -249,19 +308,23 @@ export abstract class Bundler extends MastraBundler {
       projectRoot,
       outputDirectory,
       enableEsmShim = true,
-    }: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean },
+    }: {
+      projectRoot: string;
+      outputDirectory: string;
+      enableEsmShim?: boolean;
+    },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
-    let sourcemap = false;
 
-    try {
-      const bundlerOptions = await getBundlerOptions(mastraEntryFile, analyzeDir);
-      sourcemap = !!bundlerOptions?.sourcemap;
-    } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
-    }
+    const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    const internalBundlerOptions: BundlerOptions = {
+      enableSourcemap: !!bundlerOptions.sourcemap,
+      externals: bundlerOptions.externals ?? [],
+      enableEsmShim,
+      dynamicPackages: bundlerOptions.dynamicPackages,
+    };
 
     let analyzedBundleInfo;
     try {
@@ -272,10 +335,8 @@ export abstract class Bundler extends MastraBundler {
         {
           outputDir: analyzeDir,
           projectRoot,
-          platform: 'node',
-          bundlerOptions: {
-            enableEsmShim,
-          },
+          platform: this.platform,
+          bundlerOptions: internalBundlerOptions,
         },
         this.logger,
       );
@@ -298,18 +359,50 @@ export abstract class Bundler extends MastraBundler {
     }
 
     const dependenciesToInstall = new Map<string, string>();
-    for (const dep of analyzedBundleInfo.externalDependencies) {
+    for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
+      if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
+        continue;
+      }
+
+      let version = depInfo.version;
+      let actualPackageName: string | undefined;
+
+      // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
       try {
-        if (analyzedBundleInfo.workspaceMap.has(dep)) {
-          continue;
+        // First try to resolve from the project root (provides correct context for monorepos)
+        let rootPath = await getPackageRootPath(dep, projectRoot);
+
+        // If not found in user's project, try resolving from deployer's location
+        // This handles packages like hono that are provided by @mastra/deployer
+        if (!rootPath) {
+          rootPath = await getPackageRootPath(dep, import.meta.dirname);
         }
 
-        const rootPath = await getPackageRootPath(dep);
-        const pkg = await readJSON(`${rootPath}/package.json`);
-
-        dependenciesToInstall.set(dep, pkg.version || 'latest');
+        if (rootPath) {
+          const pkg = await readJSON(`${rootPath}/package.json`);
+          actualPackageName = pkg.name;
+          // Use pre-resolved version if available, otherwise use from package.json
+          if (!version) {
+            version = pkg.version;
+          }
+        }
       } catch {
-        dependenciesToInstall.set(dep, 'latest');
+        // Resolution failed, will use 'latest' for version
+      }
+
+      // Default to 'latest' if still no version
+      version = version || 'latest';
+
+      // Check if this is an npm alias (import name differs from actual package name)
+      // e.g., importing "ai-v5" which resolves to package "ai"
+      // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
+      // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
+      const isAlias = actualPackageName && dep !== actualPackageName;
+
+      if (isAlias) {
+        dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
+      } else {
+        dependenciesToInstall.set(dep, version);
       }
     }
 
@@ -317,12 +410,13 @@ export abstract class Bundler extends MastraBundler {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 
       this.logger.info('Bundling Mastra application');
+
       const inputOptions: InputOptions = await this.getBundlerOptions(
         serverFile,
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
-        { enableSourcemap: sourcemap, enableEsmShim },
+        internalBundlerOptions,
       );
 
       const bundler = await this.createBundler(
@@ -335,8 +429,9 @@ export abstract class Bundler extends MastraBundler {
                 return;
               }
 
-              this.logger.warn(`Circular dependency found:
-\t${warning.message.replace('Circular dependency: ', '')}`);
+              this.logger.warn('Circular dependency found', {
+                dependency: warning.message.replace('Circular dependency: ', ''),
+              });
             }
           },
         },
@@ -345,7 +440,7 @@ export abstract class Bundler extends MastraBundler {
           manualChunks: {
             mastra: ['#mastra'],
           },
-          sourcemap,
+          sourcemap: internalBundlerOptions.enableSourcemap,
         },
       );
 
@@ -379,8 +474,11 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       this.logger.info('Installing dependencies');
       await this.installDependencies(outputDirectory, projectRoot);
-
       this.logger.info('Done installing dependencies');
+
+      this.logger.info('Generating package-lock.json for deploy');
+      await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+      this.logger.info('Done generating package-lock.json');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
@@ -399,7 +497,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
-      this.logger.info(`Found ${toolsLength} ${toolsLength === 1 ? 'tool' : 'tools'}`);
+      this.logger.info('Found tools', { count: toolsLength });
     }
   }
 }

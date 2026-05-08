@@ -221,10 +221,13 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
 
   // Element Operators
-  $exists: (key: string) => {
+  $exists: (key: string, value: boolean) => {
     const jsonPath = getJsonPath(key);
     return {
-      sql: `json_extract(metadata, ${jsonPath}) IS NOT NULL`,
+      sql:
+        value === false
+          ? `json_extract(metadata, ${jsonPath}) IS NULL`
+          : `json_extract(metadata, ${jsonPath}) IS NOT NULL`,
       needsValue: false,
     };
   },

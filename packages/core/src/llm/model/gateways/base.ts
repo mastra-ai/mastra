@@ -4,6 +4,9 @@
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { StreamTransport } from '../../../stream/types';
+import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
 
 export interface ProviderConfig {
   url?: string;
@@ -13,7 +16,22 @@ export interface ProviderConfig {
   models: string[];
   docUrl?: string; // Optional documentation URL
   gateway: string;
+  npm?: string; // NPM package name from models.dev (e.g., "@ai-sdk/anthropic")
 }
+
+/**
+ * Union type for language models that can be returned by gateways.
+ * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
+ */
+export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3;
+export type GatewayStreamTransportHandle = Pick<StreamTransport, 'type' | 'close'>;
+
+/** @internal Stream transport handle attached by gateways that own custom streaming transports. */
+export const MASTRA_GATEWAY_STREAM_TRANSPORT = Symbol.for('@mastra/core.gatewayStreamTransport');
+
+export type GatewayLanguageModelWithStreamTransport = GatewayLanguageModel & {
+  [MASTRA_GATEWAY_STREAM_TRANSPORT]?: GatewayStreamTransportHandle;
+};
 
 export abstract class MastraModelGateway {
   /**
@@ -36,6 +54,14 @@ export abstract class MastraModelGateway {
   }
 
   /**
+   * Whether this gateway should be enabled for the current runtime.
+   * Disabled gateways are skipped when syncing and filtered out when reading cached registry data.
+   */
+  shouldEnable(): boolean {
+    return true;
+  }
+
+  /**
    * Fetch provider configurations from the gateway
    * Should return providers in the standard format
    */
@@ -51,10 +77,29 @@ export abstract class MastraModelGateway {
 
   abstract getApiKey(modelId: string): Promise<string>;
 
+  /**
+   * Resolve a language model from the gateway.
+   * Supports returning either LanguageModelV2 (AI SDK v5) or LanguageModelV3 (AI SDK v6).
+   */
   abstract resolveLanguageModel(args: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> | LanguageModelV2;
+    transport?: OpenAITransport;
+    responsesWebSocket?: ResponsesWebSocketOptions;
+  }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
+
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Gateways typically hold credentials (apiKey, OAuth tokens, customFetch
+   * closures that capture secrets). The base implementation exposes only
+   * the gateway identity so subclasses are safe by default.
+   *
+   * Subclasses that want to expose additional non-sensitive fields
+   * (e.g. baseUrl when it's a public URL) can override this method.
+   */
+  serializeForSpan(): { id: string; name: string } {
+    return { id: this.id, name: this.name };
+  }
 }

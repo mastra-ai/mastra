@@ -3,30 +3,88 @@
 import type { Collection, JSCodeshift } from 'jscodeshift';
 
 /**
+ * Finds all local names (including aliases) used to import a specific class from a module.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param className - Name of the class to find imports for
+ * @param moduleName - Module to search for imports from (e.g., '@mastra/memory')
+ * @returns Set of local names used for the class (includes aliases)
+ */
+export function findImportAliases(
+  j: JSCodeshift,
+  root: Collection<any>,
+  className: string,
+  moduleName: string,
+): Set<string> {
+  const aliases = new Set<string>();
+
+  root.find(j.ImportDeclaration).forEach(path => {
+    const source = path.value.source.value;
+    if (typeof source !== 'string' || source !== moduleName) return;
+
+    if (!path.value.specifiers) return;
+
+    path.value.specifiers.forEach((specifier: any) => {
+      if (
+        specifier.type === 'ImportSpecifier' &&
+        specifier.imported.type === 'Identifier' &&
+        specifier.imported.name === className
+      ) {
+        // Use the local name (which could be an alias or the original name)
+        const localName = specifier.local?.name || className;
+        aliases.add(localName);
+      }
+    });
+  });
+
+  return aliases;
+}
+
+/**
  * Efficiently tracks instances of a specific class by finding all `new ClassName()` expressions
  * and extracting the variable names they're assigned to.
  *
  * @param j - JSCodeshift API
  * @param root - Root collection
  * @param className - Name of the class to track
+ * @param moduleName - Optional module name to also track aliased imports from
  * @returns Set of variable names that are instances of the class
  */
-export function trackClassInstances(j: JSCodeshift, root: Collection<any>, className: string): Set<string> {
+export function trackClassInstances(
+  j: JSCodeshift,
+  root: Collection<any>,
+  className: string,
+  moduleName?: string,
+): Set<string> {
   const instances = new Set<string>();
 
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: className,
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        instances.add(parent.id.name);
-      }
-    });
+  // Find all names that refer to this class
+  let classNames: Set<string>;
+
+  if (moduleName) {
+    // When moduleName is specified, only track usages if the class is actually imported from that module
+    const aliases = findImportAliases(j, root, className, moduleName);
+    if (aliases.size === 0) {
+      // Class is not imported from the specified module, skip transformation
+      return instances;
+    }
+    classNames = aliases;
+  } else {
+    // When no moduleName is specified, use the className directly
+    classNames = new Set<string>([className]);
+  }
+
+  root.find(j.NewExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'Identifier') return;
+    if (!classNames.has(callee.name)) return;
+
+    const parent = path.parent.value;
+    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+      instances.add(parent.id.name);
+    }
+  });
 
   return instances;
 }
@@ -315,6 +373,48 @@ export function renameImportAndUsages(
   });
 
   return changes;
+}
+
+/**
+ * Tracks variables assigned from method calls on tracked instances.
+ * Useful for tracking objects returned from factory methods like `client.getAgent()`.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param instances - Set of instance variable names to track
+ * @param methodName - Name of the method to track (or undefined to match any method)
+ * @returns Set of variable names that are assigned from the method calls
+ */
+export function trackMethodCallResults(
+  j: JSCodeshift,
+  root: Collection<any>,
+  instances: Set<string>,
+  methodName?: string,
+): Set<string> {
+  const results = new Set<string>();
+
+  if (instances.size === 0) return results;
+
+  root.find(j.CallExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'MemberExpression') return;
+    if (callee.object.type !== 'Identifier') return;
+    if (callee.property.type !== 'Identifier') return;
+
+    // Only process if called on a tracked instance
+    if (!instances.has(callee.object.name)) return;
+
+    // Only process if it's the method we want (or any method if undefined)
+    if (methodName && callee.property.name !== methodName) return;
+
+    // Track the variable this is assigned to
+    const parent = path.parent.value;
+    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+      results.add(parent.id.name);
+    }
+  });
+
+  return results;
 }
 
 /**

@@ -43,5 +43,5 @@ export default function NetlifyLogo(props: React.SVGProps<SVGSVGElement>) {
         </clipPath>
       </defs>
     </svg>
-  );
+  )
 }

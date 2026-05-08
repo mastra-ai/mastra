@@ -1,0 +1,154 @@
+---
+title: "Deploy Mastra to Digital Ocean | Deployment"
+description: "Deploy your Mastra applications to Digital Ocean."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Deploy Mastra to Digital Ocean
+
+This guide covers Digital Ocean's App Platform and Droplets. Each of these offerings has its own set of strengths and is suited for different types of projects and developer expertise. Read [Digital Ocean's comparison](https://www.digitalocean.com/community/conceptual-articles/digitalocean-app-platform-vs-doks-vs-droplets) to understand the differences and choose the best option for your project.
+
+:::info
+This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+:::
+
+## Before you begin
+
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Digital Ocean](https://www.digitalocean.com/) account.
+
+The **App Platform** uses an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+
+## App platform
+
+After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
+
+<Steps>
+  <StepItem>
+    Follow the official [App Platform quickstart](https://docs.digitalocean.com/products/app-platform/getting-started/quickstart/#create-an-app). It'll guide you through connecting your repository, selecting the branch to deploy from, and configuring the source directory if necessary.
+  </StepItem>
+
+  <StepItem>
+    Make sure that a "Node.js" build is detected. You'll need to configure a build command. Set it based on your package manager:
+
+    ```bash npm2yarn
+    npm run build
+    ```
+  </StepItem>
+
+  <StepItem>
+    Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
+  </StepItem>
+
+  <StepItem>
+    Your app will be built and deployed automatically. Digital Ocean will provide you with a URL to access your deployed application.
+  </StepItem>
+
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
+
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
+</Steps>
+
+## Droplets
+
+### Prerequisites
+
+- A Droplet running Ubuntu 24.04 LTS or later
+- A domain name with an A record pointing to your droplet
+- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
+- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
+- Node.js 22.13.0 or later installed on your droplet
+
+### Deploy
+
+After setting up your project, push it to your remote Git provider of choice (e.g. GitHub). Connect to your Droplet and make sure `git` is installed.
+
+<Steps>
+  <StepItem>
+    Clone your repository:
+
+    <Tabs>
+      <TabItem value="public" label="Public Repository">
+        ```bash
+        git clone https://github.com/<your-username>/<your-repository>.git
+        ```
+      </TabItem>
+
+      <TabItem value="private" label="Private Repository">
+        ```bash
+        git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+        ```
+      </TabItem>
+    </Tabs>
+
+    Navigate to the repository directory:
+
+    ```bash
+    cd "<your-repository>"
+    ```
+  </StepItem>
+
+  <StepItem>
+    Install the project dependencies:
+
+    ```bash npm2yarn
+    npm install
+    ```
+  </StepItem>
+
+  <StepItem>
+    Set the required environment variables for your Mastra application. Create a `.env` file in the root of your project:
+
+    ```bash
+    touch .env
+    ```
+
+    Edit the `.env` file and add your environment variables:
+
+    ```bash title=".env"
+    OPENAI_API_KEY=your-api-key
+    ```
+  </StepItem>
+
+  <StepItem>
+    Build the project:
+
+    ```bash npm2yarn
+    npm run build
+    ```
+
+    This will create a production build of Mastra's server in the `.mastra/output` directory.
+  </StepItem>
+
+  <StepItem>
+    You can run the [Mastra Server](/docs/deployment/mastra-server) by running the `mastra start` command:
+
+    ```bash
+    mastra start
+    ```
+
+    :::info
+    Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
+    :::
+  </StepItem>
+
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
+
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
+</Steps>
+
+## Related
+
+- [Digital Ocean App Platform](https://docs.digitalocean.com/products/app-platform/)
+- [Digital Ocean Droplets](https://docs.digitalocean.com/products/droplets/)

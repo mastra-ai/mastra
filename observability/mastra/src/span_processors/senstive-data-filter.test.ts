@@ -79,7 +79,7 @@ describe('Tracing', () => {
         expect(attributes?.['sessionId']).toBe('session-789'); // sessionId should not be redacted
       });
 
-      it('should NOT redact fields like promptTokens and totalTokens', () => {
+      it('should NOT redact fields like inputTokens and outputTokens', () => {
         const processor = new SensitiveDataFilter();
 
         const mockSpan = {
@@ -91,11 +91,10 @@ describe('Tracing', () => {
           trace: { traceId: 'trace-123' } as any,
           attributes: {
             model: 'gpt-4',
-            promptTokens: 100, // Should NOT be redacted (normalizes to "prompttokens", not "token")
-            completionTokens: 50, // Should NOT be redacted (normalizes to "completiontokens")
-            totalTokens: 150, // Should NOT be redacted (normalizes to "totaltokens")
-            prompt_tokens: 100, // Should NOT be redacted (normalizes to "prompttokens")
-            total_tokens: 150, // Should NOT be redacted (normalizes to "totaltokens")
+            inputTokens: 100, // Should NOT be redacted (normalizes to "inputtokens", not "token")
+            outputTokens: 50, // Should NOT be redacted (normalizes to "outputtokens")
+            input_tokens: 100, // Should NOT be redacted (normalizes to "inputtokens")
+            output_tokens: 50, // Should NOT be redacted (normalizes to "outputtokens")
             token: 'auth-token-123', // Should be redacted (normalizes to "token")
             authToken: 'bearer-456', // Should NOT be redacted (normalizes to "authtoken", not "token")
             api_key: 'sk-123456', // Should be redacted (normalizes to "apikey")
@@ -118,11 +117,10 @@ describe('Tracing', () => {
         const attributes = filtered!.attributes;
 
         // Check that token-related metrics are NOT redacted
-        expect(attributes?.['promptTokens']).toBe(100);
-        expect(attributes?.['completionTokens']).toBe(50);
-        expect(attributes?.['totalTokens']).toBe(150);
-        expect(attributes?.['prompt_tokens']).toBe(100);
-        expect(attributes?.['total_tokens']).toBe(150);
+        expect(attributes?.['inputTokens']).toBe(100);
+        expect(attributes?.['outputTokens']).toBe(50);
+        expect(attributes?.['input_tokens']).toBe(100);
+        expect(attributes?.['output_tokens']).toBe(50);
 
         // Check that fields that don't exactly match after normalization are NOT redacted
         expect(attributes?.['authToken']).toBe('bearer-456');
@@ -234,6 +232,141 @@ describe('Tracing', () => {
         expect(attributes?.['results'][1]['value']).toBe(42);
       });
 
+      it('should redact structured data in JSON strings', () => {
+        const processor = new SensitiveDataFilter({
+          sensitiveFields: ['fullName', 'email'],
+        });
+
+        // Test case that reproduces GitHub issue #9846
+        // Where tool outputs get serialized as JSON strings in MODEL_STEP spans
+        const mockSpan = {
+          id: 'model-step-span',
+          name: 'model step',
+          type: SpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-9846',
+          trace: { traceId: 'trace-9846' } as any,
+          attributes: {},
+          input: {
+            messages: [
+              {
+                role: 'user',
+                content: 'get user info for 32ddf',
+              },
+              {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  { id: 'call1', type: 'function', function: { name: 'getUserInfo', arguments: '{"id":"32ddf"}' } },
+                ],
+              },
+              {
+                role: 'tool',
+                tool_call_id: 'call1',
+                content: JSON.stringify({
+                  fullName: 'John Doe',
+                  email: 'john@email.com',
+                  id: '32ddf',
+                }),
+              },
+            ],
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const input = filtered!.input as any;
+
+        // The tool message content should have structured data redacted
+        const toolMessage = input?.messages[2];
+        const parsedContent = JSON.parse(toolMessage.content);
+
+        // Sensitive fields should be redacted even when in JSON strings
+        expect(parsedContent.fullName).toBe('[REDACTED]');
+        expect(parsedContent.email).toBe('[REDACTED]');
+
+        // Non-sensitive fields should remain
+        expect(parsedContent.id).toBe('32ddf');
+      });
+
+      it('should handle invalid JSON strings gracefully', () => {
+        const processor = new SensitiveDataFilter({
+          sensitiveFields: ['email'],
+        });
+
+        const mockSpan = {
+          id: 'model-step-span',
+          name: 'model step',
+          type: SpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-9846',
+          trace: { traceId: 'trace-9846' } as any,
+          attributes: {},
+          input: {
+            messages: [
+              {
+                role: 'tool',
+                content: '{ email": "test@test.com" }',
+              },
+            ],
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const input = filtered!.input as any;
+
+        // Invalid JSON should pass through unchanged
+        expect(input.messages[0].content).toBe('{ email": "test@test.com" }');
+      });
+
+      it('should preserve Date objects in attributes', () => {
+        const processor = new SensitiveDataFilter();
+        const testDate = new Date('2024-01-15T10:00:00.000Z');
+
+        const mockSpan = {
+          id: 'test-span-1',
+          name: 'model-generation',
+          type: SpanType.MODEL_GENERATION,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          attributes: {
+            model: 'gpt-4',
+            completionStartTime: testDate,
+            nestedConfig: {
+              createdAt: new Date('2024-01-01'),
+              updatedAt: new Date(),
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const attributes = filtered!.attributes;
+
+        // Date objects should be preserved, not converted to {}
+        expect(attributes?.completionStartTime).toBeInstanceOf(Date);
+        expect(attributes?.completionStartTime.getTime()).toBe(testDate.getTime());
+        expect(attributes?.nestedConfig?.createdAt).toBeInstanceOf(Date);
+        expect(attributes?.nestedConfig?.updatedAt).toBeInstanceOf(Date);
+
+        // Other fields should still work
+        expect(attributes?.model).toBe('gpt-4');
+      });
+
       it('should handle circular references', () => {
         const processor = new SensitiveDataFilter();
 
@@ -262,7 +395,7 @@ describe('Tracing', () => {
         const filtered = processor.process(mockSpan);
         expect(filtered).not.toBeNull();
 
-        const attributes = filtered!.attributes;
+        const attributes = filtered!.attributes as any;
         expect(attributes?.['apiKey']).toBe('[REDACTED]');
         expect(attributes?.['self']).toBe('[Circular Reference]');
         expect(attributes?.['name']).toBe('test');
@@ -303,7 +436,7 @@ describe('Tracing', () => {
         const filtered = processor.process(mockSpan);
         expect(filtered).not.toBeNull();
 
-        const attributes = filtered!.attributes;
+        const attributes = filtered!.attributes as any;
         expect(attributes?.['error']).toStrictEqual({ processor: 'sensitive-data-filter' });
 
         // Should NOT contain the original sensitive data
@@ -342,12 +475,12 @@ describe('Tracing', () => {
 
         // Check that the exported span has filtered attributes
         const startSpan = testExporter.events[0].exportedSpan;
-        expect(startSpan.attributes?.['agentId']).toBe('agent-123');
-        expect(startSpan.attributes?.['instructions']).toBe('Test agent');
+        expect((startSpan.attributes as any)?.['agentId']).toBe('agent-123');
+        expect((startSpan.attributes as any)?.['instructions']).toBe('Test agent');
 
         // Check the updated span for the filtered field
         const updatedSpan = testExporter.events[1].exportedSpan; // span_updated event
-        expect(updatedSpan.attributes?.['apiKey']).toBe('[REDACTED]');
+        expect((updatedSpan.attributes as any)?.['apiKey']).toBe('[REDACTED]');
       });
     });
   });

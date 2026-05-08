@@ -3,6 +3,7 @@ export const RegisteredLogger = {
   AGENT: 'AGENT',
   OBSERVABILITY: 'OBSERVABILITY',
   AUTH: 'AUTH',
+  BROWSER: 'BROWSER',
   NETWORK: 'NETWORK',
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',
@@ -16,6 +17,9 @@ export const RegisteredLogger = {
   EMBEDDINGS: 'EMBEDDINGS',
   MCP_SERVER: 'MCP_SERVER',
   SERVER_CACHE: 'SERVER_CACHE',
+  SERVER: 'SERVER',
+  WORKSPACE: 'WORKSPACE',
+  CHANNEL: 'CHANNEL',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];

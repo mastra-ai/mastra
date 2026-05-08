@@ -1,16 +1,58 @@
 import fs from 'node:fs';
 import path, { normalize } from 'node:path';
-import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
+import stripJsonComments from 'strip-json-comments';
 import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
 
 const PLUGIN_NAME = 'tsconfig-paths';
+const JS_IMPORT_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 
 export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean };
 
+/**
+ * Check if a tsconfig file has path mappings configured.
+ * Exported for testing purposes.
+ *
+ * @param tsConfigPath - Path to the tsconfig.json file
+ * @returns true if the tsconfig has paths configured or extends another config, false otherwise
+ */
+export function hasPaths(tsConfigPath: string): boolean {
+  try {
+    const content = fs.readFileSync(tsConfigPath, 'utf8');
+    const config = JSON.parse(stripJsonComments(content));
+    return !!(
+      (config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0) ||
+      (typeof config.extends === 'string' && config.extends.length > 0) ||
+      (Array.isArray(config.extends) && config.extends.length > 0)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }: PluginOptions = {}): Plugin {
   const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
+
+  function resolveJsImportToSourceFile(moduleName: string): string {
+    if (fs.existsSync(moduleName)) {
+      return moduleName;
+    }
+
+    const parsed = path.parse(moduleName);
+    if (parsed.ext !== '.js') {
+      return moduleName;
+    }
+
+    for (const extension of JS_IMPORT_SOURCE_EXTENSIONS) {
+      const candidate = path.join(parsed.dir, `${parsed.name}${extension}`);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return moduleName;
+  }
 
   // Find tsconfig.json file starting from a directory and walking up
   function findTsConfigForFile(filePath: string): string | null {
@@ -39,16 +81,6 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
     }
 
     return null;
-  }
-
-  // Check if a tsconfig file has path mappings
-  function hasPaths(tsConfigPath: string): boolean {
-    try {
-      const config = JSON.parse(fs.readFileSync(tsConfigPath, 'utf8'));
-      return !!(config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0);
-    } catch {
-      return false;
-    }
   }
 
   // Get or create handler for a specific tsconfig file
@@ -105,47 +137,72 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
 
   return {
     name: PLUGIN_NAME,
-    async resolveId(request, importer, options) {
-      if (!importer || request.startsWith('\0')) {
-        return null;
-      }
-
-      const moduleName = resolveAlias(request, importer);
-      // No tsconfig alias found, so we need to resolve it normally
-      if (!moduleName) {
-        let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
-
-        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
-        if (!resolved) {
+    resolveId: {
+      order: 'pre',
+      async handler(request, importer, options) {
+        if (!importer || request.startsWith('\0') || importer.charCodeAt(0) === 0) {
           return null;
         }
 
-        // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
-        // if so, we need to resolve the request from the importer instead of the root and mark it as external
-        if (localResolve) {
-          const importerInfo = this.getModuleInfo(importer);
-          importerMeta = importerInfo?.meta || {};
-
-          if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
-            return {
-              ...resolved,
-              external: !request.startsWith('hono/') && request !== 'hono',
-            };
-          }
+        // Convert relative paths to absolute to ensure proper tsconfig path resolution
+        // This allows path aliases to work regardless of how the importer path is provided
+        if (!path.isAbsolute(importer)) {
+          importer = path.resolve(process.cwd(), importer);
         }
 
-        return {
-          ...resolved,
-          meta: {
-            ...(resolved.meta || {}),
-            ...importerMeta,
-          },
-        };
-      }
+        const moduleName = resolveAlias(request, importer);
+        // No tsconfig alias found, so we need to resolve it normally
+        if (!moduleName) {
+          const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
+          if (!resolved) {
+            return null;
+          }
 
-      // When a module does not have an extension, we need to resolve it to a file
-      if (!path.extname(moduleName)) {
-        const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
+          // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
+          // if so, we need to resolve the request from the importer instead of the root and mark it as external
+          if (localResolve) {
+            const importerInfo = this.getModuleInfo(importer);
+            const importerPluginMeta = importerInfo?.meta?.[PLUGIN_NAME];
+
+            if (!request.startsWith('./') && !request.startsWith('../') && importerPluginMeta?.resolved) {
+              return {
+                ...resolved,
+                external: !request.startsWith('hono/') && request !== 'hono',
+              };
+            }
+          }
+
+          return {
+            ...resolved,
+            meta: {
+              ...(resolved.meta || {}),
+            },
+          };
+        }
+
+        const resolvedModuleName = resolveJsImportToSourceFile(moduleName);
+
+        // When a module does not have an extension, we need to resolve it to a file
+        if (!path.extname(resolvedModuleName)) {
+          const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
+
+          if (!resolved) {
+            return null;
+          }
+
+          return {
+            ...resolved,
+            meta: {
+              ...resolved.meta,
+              [PLUGIN_NAME]: {
+                resolved: true,
+              },
+            },
+          };
+        }
+
+        // Always pass through bundler's resolution to ensure proper path normalization
+        const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
 
         if (!resolved) {
           return null;
@@ -160,24 +217,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
             },
           },
         };
-      }
-
-      // Always pass through bundler's resolution to ensure proper path normalization
-      const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
-
-      if (!resolved) {
-        return null;
-      }
-
-      return {
-        ...resolved,
-        meta: {
-          ...resolved.meta,
-          [PLUGIN_NAME]: {
-            resolved: true,
-          },
-        },
-      };
+      },
     },
   } satisfies Plugin;
 }

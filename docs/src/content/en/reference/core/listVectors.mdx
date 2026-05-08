@@ -1,6 +1,8 @@
 ---
 title: "Reference: Mastra.listVectors() | Core"
 description: "Documentation for the `Mastra.listVectors()` method in Mastra, which retrieves all configured vector stores."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listVectors()
@@ -9,28 +11,28 @@ The `.listVectors()` method is used to retrieve all vector stores that have been
 
 ## Usage example
 
-```typescript copy
-mastra.listVectors();
+```typescript
+mastra.listVectors()
 ```
 
 ## Parameters
 
-This method does not accept any parameters.
+This method doesn't accept any parameters.
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "vectors",
-      type: "TVectors",
-      description:
-        "A record of all configured vector stores, where keys are vector store names and values are vector store instances.",
-    },
-  ]}
+  {
+    name: 'vectors',
+    type: 'TVectors',
+    description:
+      'A record of all configured vector stores, where keys are vector store names and values are vector store instances.',
+  },
+]}
 />
 
 ## Related
 
-- [Vector stores overview](/docs/v1/rag/vector-databases)
-- [RAG overview](/docs/v1/rag/overview)
+- [Vector stores overview](/docs/rag/vector-databases)
+- [RAG overview](/docs/rag/overview)

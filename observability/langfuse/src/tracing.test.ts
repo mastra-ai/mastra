@@ -1,1665 +1,524 @@
-/**
- * Langfuse Exporter Tests
- *
- * These tests focus on Langfuse-specific functionality:
- * - Langfuse client interactions
- * - Mapping logic (spans -> traces/generations/spans)
- * - Type-specific metadata extraction
- * - Langfuse-specific error handling
- */
-
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  ModelGenerationAttributes,
-  ToolCallAttributes,
-} from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
-import { Langfuse } from 'langfuse';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AnyExportedSpan } from '@mastra/core/observability';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LangfuseExporter } from './tracing';
-import type { LangfuseExporterConfig } from './tracing';
 
-// Mock Langfuse constructor (must be at the top level)
-vi.mock('langfuse');
+type Mutable<T> = { -readonly [P in keyof T]: T[P] };
+
+// Track calls to LangfuseSpanProcessor
+const processedSpans: any[] = [];
+const mockForceFlush = vi.fn().mockResolvedValue(undefined);
+const mockShutdown = vi.fn().mockResolvedValue(undefined);
+const processorConstructorArgs: any[] = [];
+
+vi.mock('@langfuse/otel', () => {
+  class MockLangfuseSpanProcessor {
+    onStart = vi.fn();
+    onEnd = vi.fn().mockImplementation((span: any) => {
+      processedSpans.push(span);
+    });
+    forceFlush = mockForceFlush;
+    shutdown = mockShutdown;
+    constructor(params: any) {
+      processorConstructorArgs.push(params);
+    }
+  }
+  return { LangfuseSpanProcessor: MockLangfuseSpanProcessor };
+});
+
+// Track calls to LangfuseClient
+const mockScoreCreate = vi.fn();
+const mockClientFlush = vi.fn().mockResolvedValue(undefined);
+const mockClientShutdown = vi.fn().mockResolvedValue(undefined);
+const clientConstructorArgs: any[] = [];
+const originalLangfuseEnv = {
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  environment: process.env.LANGFUSE_TRACING_ENVIRONMENT,
+  release: process.env.LANGFUSE_RELEASE,
+};
+
+vi.mock('@langfuse/client', () => {
+  class MockLangfuseClient {
+    score = { create: mockScoreCreate };
+    prompt = {};
+    flush = mockClientFlush;
+    shutdown = mockClientShutdown;
+    constructor(params: any) {
+      clientConstructorArgs.push(params);
+    }
+  }
+  return { LangfuseClient: MockLangfuseClient };
+});
+
+vi.mock('@mastra/otel-exporter', () => {
+  class MockSpanConverter {
+    convertSpan = vi.fn().mockImplementation((span: any) => ({
+      name: span.name,
+      attributes: {
+        'gen_ai.request.model': span.attributes?.model,
+        'gen_ai.provider.name': span.attributes?.provider,
+        'gen_ai.usage.input_tokens': span.attributes?.usage?.inputTokens,
+        'gen_ai.usage.output_tokens': span.attributes?.usage?.outputTokens,
+        'mastra.span.type': span.type,
+        ...(span.metadata
+          ? Object.fromEntries(Object.entries(span.metadata).map(([k, v]) => [`mastra.metadata.${k}`, v]))
+          : {}),
+        ...(span.isRootSpan && span.tags?.length ? { 'mastra.tags': JSON.stringify(span.tags) } : {}),
+        ...(span.errorInfo ? { 'error.type': span.errorInfo.id, 'error.message': span.errorInfo.message } : {}),
+        ...(span.attributes?.completionStartTime
+          ? { 'mastra.completion_start_time': span.attributes.completionStartTime.toISOString() }
+          : {}),
+        // Pass through entityId/entityName as gen_ai.agent.* (mirrors real SpanConverter behavior)
+        ...(span.entityId ? { 'gen_ai.agent.id': span.entityId } : {}),
+        ...(span.entityName ? { 'gen_ai.agent.name': span.entityName } : {}),
+        ...(span.operationName ? { 'gen_ai.operation.name': span.operationName } : {}),
+      },
+      spanContext: () => ({ traceId: span.traceId, spanId: span.id }),
+    }));
+  }
+  return { SpanConverter: MockSpanConverter };
+});
+
+function makeSpan(overrides: Partial<Mutable<AnyExportedSpan>> = {}): AnyExportedSpan {
+  return {
+    id: 'span-1',
+    traceId: 'trace-1',
+    type: SpanType.MODEL_GENERATION,
+    name: 'Test Span',
+    startTime: new Date('2025-01-01T00:00:00Z'),
+    endTime: new Date('2025-01-01T00:00:01Z'),
+    input: { messages: [{ role: 'user', content: 'Hello' }] },
+    output: { text: 'Hi there' },
+    attributes: {
+      model: 'gpt-4o',
+      provider: 'openai',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    },
+    ...overrides,
+  } as unknown as AnyExportedSpan;
+}
+
+async function exportSpan(exporter: LangfuseExporter, span: AnyExportedSpan) {
+  await exporter.exportTracingEvent({
+    type: TracingEventType.SPAN_ENDED,
+    exportedSpan: span,
+  });
+}
 
 describe('LangfuseExporter', () => {
-  // Mock objects
-  let mockGeneration: any;
-  let mockSpan: any;
-  let mockTrace: any;
-  let mockLangfuseClient: any;
-  let LangfuseMock: any;
-
-  let exporter: LangfuseExporter;
-  let config: LangfuseExporterConfig;
+  let exporter: LangfuseExporter | undefined;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Set up mocks
-    mockGeneration = {
-      update: vi.fn(),
-      event: vi.fn(),
-    };
-
-    mockSpan = {
-      update: vi.fn(),
-      generation: vi.fn().mockReturnValue(mockGeneration),
-      span: vi.fn(),
-      event: vi.fn(),
-    };
-
-    mockTrace = {
-      generation: vi.fn().mockReturnValue(mockGeneration),
-      span: vi.fn().mockReturnValue(mockSpan),
-      update: vi.fn(),
-      event: vi.fn(),
-    };
-
-    // Set up circular reference
-    mockSpan.span.mockReturnValue(mockSpan);
-
-    mockLangfuseClient = {
-      trace: vi.fn().mockReturnValue(mockTrace),
-      shutdownAsync: vi.fn().mockResolvedValue(undefined),
-    };
-
-    // Get the mocked Langfuse constructor and configure it
-    LangfuseMock = vi.mocked(Langfuse);
-    LangfuseMock.mockImplementation(function () {
-      return mockLangfuseClient;
-    });
-
-    config = {
-      publicKey: 'test-public-key',
-      secretKey: 'test-secret-key',
-      baseUrl: 'https://test-langfuse.com',
-      options: {
-        debug: false,
-        flushAt: 1,
-        flushInterval: 1000,
-      },
-    };
-
-    exporter = new LangfuseExporter(config);
+    processedSpans.length = 0;
+    processorConstructorArgs.length = 0;
+    clientConstructorArgs.length = 0;
+    mockScoreCreate.mockClear();
+    mockForceFlush.mockClear();
+    mockShutdown.mockClear();
+    mockClientFlush.mockClear();
+    mockClientShutdown.mockClear();
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    delete process.env.LANGFUSE_RELEASE;
   });
 
-  describe('Initialization', () => {
-    it('should initialize with correct configuration', () => {
-      expect(exporter.name).toBe('langfuse');
-      // Verify Langfuse client was created with correct config
-      expect(LangfuseMock).toHaveBeenCalledWith({
-        publicKey: 'test-public-key',
-        secretKey: 'test-secret-key',
-        baseUrl: 'https://test-langfuse.com',
-        debug: false,
-        flushAt: 1,
-        flushInterval: 1000,
-      });
-    });
+  afterEach(async () => {
+    if (exporter) {
+      await exporter.shutdown();
+      exporter = undefined;
+    }
 
-    it('should initialize without baseUrl (uses Langfuse default)', () => {
-      const configWithoutBaseUrl = {
-        publicKey: 'test-public-key',
-        secretKey: 'test-secret-key',
-      };
-
-      const exporterWithoutBaseUrl = new LangfuseExporter(configWithoutBaseUrl);
-
-      expect(exporterWithoutBaseUrl.name).toBe('langfuse');
-      expect(LangfuseMock).toHaveBeenCalledWith({
-        publicKey: 'test-public-key',
-        secretKey: 'test-secret-key',
-        baseUrl: undefined,
-      });
-    });
-
-    it('should warn and disable exporter when publicKey is missing', () => {
-      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const exporterWithMissingKey = new LangfuseExporter({
-        secretKey: 'test-secret-key',
-        baseUrl: 'https://test-langfuse.com',
-      });
-
-      // Should create exporter but disable it
-      expect(exporterWithMissingKey.name).toBe('langfuse');
-      expect((exporterWithMissingKey as any).client).toBeNull();
-
-      mockConsoleWarn.mockRestore();
-    });
-
-    it('should warn and disable exporter when secretKey is missing', () => {
-      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const exporterWithMissingKey = new LangfuseExporter({
-        publicKey: 'test-public-key',
-        baseUrl: 'https://test-langfuse.com',
-      });
-
-      // Should create exporter but disable it
-      expect(exporterWithMissingKey.name).toBe('langfuse');
-      expect((exporterWithMissingKey as any).client).toBeNull();
-
-      mockConsoleWarn.mockRestore();
-    });
-
-    it('should warn and disable exporter when both keys are missing', () => {
-      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const exporterWithMissingKeys = new LangfuseExporter({
-        baseUrl: 'https://test-langfuse.com',
-      });
-
-      // Should create exporter but disable it
-      expect(exporterWithMissingKeys.name).toBe('langfuse');
-      expect((exporterWithMissingKeys as any).client).toBeNull();
-
-      mockConsoleWarn.mockRestore();
-    });
+    if (originalLangfuseEnv.publicKey === undefined) delete process.env.LANGFUSE_PUBLIC_KEY;
+    else process.env.LANGFUSE_PUBLIC_KEY = originalLangfuseEnv.publicKey;
+    if (originalLangfuseEnv.secretKey === undefined) delete process.env.LANGFUSE_SECRET_KEY;
+    else process.env.LANGFUSE_SECRET_KEY = originalLangfuseEnv.secretKey;
+    if (originalLangfuseEnv.baseUrl === undefined) delete process.env.LANGFUSE_BASE_URL;
+    else process.env.LANGFUSE_BASE_URL = originalLangfuseEnv.baseUrl;
+    if (originalLangfuseEnv.environment === undefined) delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    else process.env.LANGFUSE_TRACING_ENVIRONMENT = originalLangfuseEnv.environment;
+    if (originalLangfuseEnv.release === undefined) delete process.env.LANGFUSE_RELEASE;
+    else process.env.LANGFUSE_RELEASE = originalLangfuseEnv.release;
   });
 
-  describe('Trace Creation', () => {
-    it('should create Langfuse trace for root spans', async () => {
-      const rootSpan = createMockSpan({
-        id: 'root-span-id',
-        name: 'root-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {
-          agentId: 'agent-123',
-          instructions: 'Test agent',
-          spanType: 'agent_run',
-        },
-        metadata: { userId: 'user-456', sessionId: 'session-789' },
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should create Langfuse trace with correct parameters
-      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
-        id: 'root-span-id', // Uses span.trace.id
-        name: 'root-agent',
-        userId: 'user-456',
-        sessionId: 'session-789',
-        metadata: {
-          agentId: 'agent-123',
-          instructions: 'Test agent',
-          spanType: 'agent_run',
-        },
-      });
+  describe('configuration', () => {
+    it('disables when publicKey is missing', () => {
+      exporter = new LangfuseExporter({ secretKey: 'sk-test' });
+      expect(exporter.isDisabled).toBe(true);
     });
 
-    it('should not create trace for child spans', async () => {
-      const childSpan = createMockSpan({
-        id: 'child-span-id',
-        name: 'child-tool',
-        type: SpanType.TOOL_CALL,
-        isRoot: false,
-        attributes: { toolId: 'calculator' },
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: childSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should not create trace for child spans
-      expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('LLM Generation Mapping', () => {
-    it('should create Langfuse generation for MODEL_GENERATION spans', async () => {
-      const llmSpan = createMockSpan({
-        id: 'llm-span-id',
-        name: 'gpt-4-call',
-        type: SpanType.MODEL_GENERATION,
-        isRoot: true,
-        input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
-        attributes: {
-          model: 'gpt-4',
-          provider: 'openai',
-          usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
-          },
-          parameters: {
-            temperature: 0.7,
-            maxTokens: 100,
-            topP: 0.9,
-          },
-          streaming: false,
-          resultType: 'response_generation',
-        },
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: llmSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should create Langfuse generation with LLM-specific fields
-      // Note: usage is normalized from v4 format to unified format
-      expect(mockTrace.generation).toHaveBeenCalledWith({
-        id: 'llm-span-id',
-        name: 'gpt-4-call',
-        startTime: llmSpan.startTime,
-        model: 'gpt-4',
-        modelParameters: {
-          temperature: 0.7,
-          maxTokens: 100,
-          topP: 0.9,
-        },
-        input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
-        usage: {
-          input: 10,
-          output: 5,
-          total: 15,
-        },
-        metadata: {
-          provider: 'openai',
-          resultType: 'response_generation',
-          spanType: 'model_generation',
-          streaming: false,
-        },
-      });
+    it('disables when secretKey is missing', () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test' });
+      expect(exporter.isDisabled).toBe(true);
     });
 
-    it('should handle LLM spans without optional fields', async () => {
-      const minimalLlmSpan = createMockSpan({
-        id: 'minimal-llm',
-        name: 'simple-llm',
-        type: SpanType.MODEL_GENERATION,
-        isRoot: true,
-        attributes: {
-          model: 'gpt-3.5-turbo',
-          // No usage, parameters, input, output, etc.
-        },
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: minimalLlmSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      expect(mockTrace.generation).toHaveBeenCalledWith({
-        id: 'minimal-llm',
-        name: 'simple-llm',
-        startTime: minimalLlmSpan.startTime,
-        model: 'gpt-3.5-turbo',
-        metadata: {
-          spanType: 'model_generation',
-        },
-      });
+    it('disables when both keys are missing', () => {
+      exporter = new LangfuseExporter();
+      expect(exporter.isDisabled).toBe(true);
     });
-  });
 
-  describe('Regular Span Mapping', () => {
-    it('should create Langfuse span for non-LLM span types', async () => {
-      const toolSpan = createMockSpan({
-        id: 'tool-span-id',
-        name: 'calculator-tool',
-        type: SpanType.TOOL_CALL,
-        isRoot: true,
-        input: { operation: 'add', a: 2, b: 3 },
-        output: { result: 5 },
-        attributes: {
-          toolId: 'calculator',
-          success: true,
-        },
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: toolSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      expect(mockTrace.span).toHaveBeenCalledWith({
-        id: 'tool-span-id',
-        name: 'calculator-tool',
-        startTime: toolSpan.startTime,
-        input: { operation: 'add', a: 2, b: 3 },
-        output: { result: 5 },
-        metadata: {
-          spanType: 'tool_call',
-          toolId: 'calculator',
-          success: true,
-        },
-      });
+    it('enables when both keys are provided', () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      expect(exporter.isDisabled).toBe(false);
     });
-  });
 
-  describe('Type-Specific Metadata Extraction', () => {
-    it('should extract agent-specific metadata', async () => {
-      const agentSpan = createMockSpan({
-        id: 'agent-span',
-        name: 'customer-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {
-          agentId: 'agent-456',
-          availableTools: ['search', 'calculator'],
-          maxSteps: 10,
-          currentStep: 3,
-          instructions: 'Help customers',
-        },
+    it('reads credentials from environment variables', () => {
+      process.env.LANGFUSE_PUBLIC_KEY = 'pk-env';
+      process.env.LANGFUSE_SECRET_KEY = 'sk-env';
+      try {
+        exporter = new LangfuseExporter();
+        expect(exporter.isDisabled).toBe(false);
+      } finally {
+        delete process.env.LANGFUSE_PUBLIC_KEY;
+        delete process.env.LANGFUSE_SECRET_KEY;
+      }
+    });
+
+    it('creates LangfuseSpanProcessor with correct config', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        baseUrl: 'https://custom.langfuse.com',
+        environment: 'production',
+        release: '1.0.0',
       });
 
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: agentSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      expect(mockTrace.span).toHaveBeenCalledWith(
+      expect(processorConstructorArgs[0]).toEqual(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            spanType: 'agent_run',
-            agentId: 'agent-456',
-            availableTools: ['search', 'calculator'],
-            maxSteps: 10,
-            currentStep: 3,
-          }),
+          publicKey: 'pk-test',
+          secretKey: 'sk-test',
+          baseUrl: 'https://custom.langfuse.com',
+          environment: 'production',
+          release: '1.0.0',
+          exportMode: 'batched',
         }),
       );
     });
 
-    it('should extract MCP tool-specific metadata', async () => {
-      const mcpSpan = createMockSpan({
-        id: 'mcp-span',
-        name: 'mcp-tool-call',
-        type: SpanType.MCP_TOOL_CALL,
-        isRoot: true,
-        attributes: {
-          toolId: 'file-reader',
-          mcpServer: 'filesystem-mcp',
-          serverVersion: '1.0.0',
-          success: true,
-        },
+    it('uses immediate export mode when realtime is true', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        realtime: true,
       });
 
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: mcpSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      expect(mockTrace.span).toHaveBeenCalledWith(
+      expect(processorConstructorArgs[0]).toEqual(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            spanType: 'mcp_tool_call',
-            toolId: 'file-reader',
-            mcpServer: 'filesystem-mcp',
-            serverVersion: '1.0.0',
-            success: true,
-          }),
+          exportMode: 'immediate',
         }),
       );
     });
 
-    it('should extract workflow-specific metadata', async () => {
-      const workflowSpan = createMockSpan({
-        id: 'workflow-span',
-        name: 'data-processing-workflow',
-        type: SpanType.WORKFLOW_RUN,
-        isRoot: true,
-        attributes: {
-          workflowId: 'wf-123',
-          status: 'running',
-        },
+    it('passes batch controls to LangfuseSpanProcessor', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        flushAt: 200,
+        flushInterval: 15,
       });
 
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: workflowSpan,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      expect(mockTrace.span).toHaveBeenCalledWith(
+      expect(processorConstructorArgs[0]).toEqual(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            spanType: 'workflow_run',
-            workflowId: 'wf-123',
-            status: 'running',
-          }),
+          flushAt: 200,
+          flushInterval: 15,
+        }),
+      );
+    });
+
+    it('creates LangfuseClient with correct config', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        baseUrl: 'https://custom.langfuse.com',
+      });
+
+      expect(clientConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          publicKey: 'pk-test',
+          secretKey: 'sk-test',
+          baseUrl: 'https://custom.langfuse.com',
         }),
       );
     });
   });
 
-  describe('Span Updates', () => {
-    it('should update LLM generation with new data', async () => {
-      // First, start a span
-      const llmSpan = createMockSpan({
-        id: 'llm-span',
-        name: 'gpt-4-call',
-        type: SpanType.MODEL_GENERATION,
-        isRoot: true,
-        attributes: { model: 'gpt-4' },
-      });
+  describe('span export', () => {
+    it('converts and forwards spans to LangfuseSpanProcessor', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan());
 
+      expect(processedSpans.length).toBe(1);
+      expect(processedSpans[0].attributes['gen_ai.request.model']).toBe('gpt-4o');
+    });
+
+    it('does not export spans when disabled', async () => {
+      exporter = new LangfuseExporter();
+      await exportSpan(exporter, makeSpan());
+      expect(processedSpans.length).toBe(0);
+    });
+
+    it('only processes SPAN_ENDED events', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: llmSpan,
-      });
-
-      // Then update it
-      llmSpan.attributes = {
-        ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
-      } as ModelGenerationAttributes;
-      llmSpan.output = { content: 'Updated response' };
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: llmSpan,
-      });
-
-      expect(mockGeneration.update).toHaveBeenCalledWith({
-        metadata: expect.objectContaining({
-          spanType: 'model_generation',
-        }),
-        model: 'gpt-4',
-        output: { content: 'Updated response' },
-        usage: {
-          total: 150,
-        },
-      });
+        exportedSpan: makeSpan(),
+      } as any);
+      expect(processedSpans.length).toBe(0);
     });
 
-    it('should update regular spans', async () => {
-      const toolSpan = createMockSpan({
-        id: 'tool-span',
-        name: 'calculator',
-        type: SpanType.TOOL_CALL,
-        isRoot: true,
-        attributes: { toolId: 'calc', success: false },
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: toolSpan,
-      });
-
-      // Update with success
-      toolSpan.attributes = {
-        ...toolSpan.attributes,
-        success: true,
-      } as ToolCallAttributes;
-      toolSpan.output = { result: 42 };
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: toolSpan,
-      });
-
-      expect(mockSpan.update).toHaveBeenCalledWith({
-        metadata: expect.objectContaining({
-          spanType: 'tool_call',
-          success: true,
-        }),
-        output: { result: 42 },
-      });
-    });
-  });
-
-  describe('Span Ending', () => {
-    it('should update span with endTime on span end', async () => {
-      const exportedSpan = createMockSpan({
-        id: 'test-span',
-        name: 'test',
-        type: SpanType.GENERIC,
-        isRoot: true,
-        attributes: {},
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan,
-      });
-
-      exportedSpan.endTime = new Date();
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan,
-      });
-
-      expect(mockSpan.update).toHaveBeenCalledWith({
-        endTime: exportedSpan.endTime,
-        metadata: expect.objectContaining({
-          spanType: 'generic',
-        }),
-      });
+    it('uses serviceName from init() when available', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      exporter.init({ config: { serviceName: 'my-custom-service' } } as any);
+      await exportSpan(exporter, makeSpan());
+      expect(processedSpans.length).toBe(1);
     });
 
-    it('should update span with error information on span end', async () => {
-      const errorSpan = createMockSpan({
-        id: 'error-span',
-        name: 'failing-operation',
-        type: SpanType.TOOL_CALL,
-        isRoot: true,
-        attributes: {
-          toolId: 'failing-tool',
-        },
-        errorInfo: {
-          message: 'Tool execution failed',
-          id: 'TOOL_ERROR',
-          category: 'EXECUTION',
-        },
-      });
+    it('handles span conversion errors gracefully', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      exporter.init({ config: {} } as any);
 
-      errorSpan.endTime = new Date();
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: errorSpan,
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: errorSpan,
-      });
-
-      expect(mockSpan.update).toHaveBeenCalledWith({
-        endTime: errorSpan.endTime,
-        metadata: expect.objectContaining({
-          spanType: 'tool_call',
-          toolId: 'failing-tool',
-        }),
-        level: 'ERROR',
-        statusMessage: 'Tool execution failed',
-      });
-    });
-
-    it('should update root trace and clean up when root span ends (if no other active spans)', async () => {
-      const rootSpan = createMockSpan({
-        id: 'root-span-id',
-        name: 'root-span',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-      });
-
-      rootSpan.output = { result: 'success' };
-      rootSpan.endTime = new Date();
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      });
-
-      // Verify trace was created and span is tracked as active
-      expect((exporter as any).traceMap.has('root-span-id')).toBe(true);
-      const traceData = (exporter as any).traceMap.get('root-span-id');
-      expect(traceData.activeSpans.has('root-span-id')).toBe(true);
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: rootSpan,
-      });
-
-      // Should update trace with output
-      expect(mockTrace.update).toHaveBeenCalledWith({
-        output: { result: 'success' },
-      });
-
-      // Trace should be cleaned up since this was the only active span
-      expect((exporter as any).traceMap.has('root-span-id')).toBe(false);
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should handle missing traces gracefully', async () => {
-      const orphanSpan = createMockSpan({
-        id: 'orphan-span',
-        name: 'orphan',
-        type: SpanType.TOOL_CALL,
-        isRoot: false, // Child span without parent trace
-        attributes: { toolId: 'orphan-tool' },
-      });
-
-      // Should not throw when trying to create child span without trace
-      await expect(
-        exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: orphanSpan,
-        }),
-      ).resolves.not.toThrow();
-
-      // Should not create Langfuse span
-      expect(mockTrace.span).not.toHaveBeenCalled();
-      expect(mockTrace.generation).not.toHaveBeenCalled();
-    });
-
-    it('should handle missing Langfuse objects gracefully', async () => {
-      const exportedSpan = createMockSpan({
-        id: 'missing-span',
-        name: 'missing',
-        type: SpanType.GENERIC,
-        isRoot: true,
-        attributes: {},
-      });
-
-      // Try to update non-existent span
-      await expect(
-        exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_UPDATED,
-          exportedSpan,
-        }),
-      ).resolves.not.toThrow();
-
-      // Try to end non-existent span
-      await expect(
-        exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_ENDED,
-          exportedSpan,
-        }),
-      ).resolves.not.toThrow();
-    });
-  });
-
-  describe('Event Span Handling', () => {
-    let mockEvent: any;
-
-    beforeEach(() => {
-      mockEvent = {
-        update: vi.fn(),
-      };
-      mockTrace.event.mockReturnValue(mockEvent);
-      mockSpan.event.mockReturnValue(mockEvent);
-      mockGeneration.event.mockReturnValue(mockEvent);
-    });
-
-    it('should create Langfuse event for root event spans', async () => {
-      const eventSpan = createMockSpan({
-        id: 'event-span-id',
-        name: 'user-feedback',
-        type: SpanType.GENERIC,
-        isRoot: true,
-        attributes: {
-          eventType: 'user_feedback',
-          rating: 5,
-        },
-        input: { message: 'Great response!' },
-      });
-      eventSpan.isEvent = true;
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: eventSpan,
-      });
-
-      // Should create trace for root event span
-      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
-        id: 'event-span-id',
-        name: 'user-feedback',
-        input: { message: 'Great response!' },
-        metadata: {
-          spanType: 'generic',
-          eventType: 'user_feedback',
-          rating: 5,
-        },
-      });
-
-      // Should create Langfuse event
-      expect(mockTrace.event).toHaveBeenCalledWith({
-        id: 'event-span-id',
-        name: 'user-feedback',
-        startTime: eventSpan.startTime,
-        input: { message: 'Great response!' },
-        metadata: {
-          spanType: 'generic',
-          eventType: 'user_feedback',
-          rating: 5,
-        },
-      });
-    });
-
-    it('should create Langfuse event for child event spans', async () => {
-      // First create a root span
-      const rootSpan = createMockSpan({
-        id: 'root-span-id',
-        name: 'root-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      });
-
-      // Then create a child event span
-      const childEventSpan = createMockSpan({
-        id: 'child-event-id',
-        name: 'tool-result',
-        type: SpanType.GENERIC,
-        isRoot: false,
-        attributes: {
-          toolName: 'calculator',
-          success: true,
-        },
-        output: { result: 42 },
-      });
-      childEventSpan.isEvent = true;
-      childEventSpan.traceId = 'root-span-id';
-      childEventSpan.parentSpanId = 'root-span-id';
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: childEventSpan,
-      });
-
-      // Should create event under the parent span
-      expect(mockSpan.event).toHaveBeenCalledWith({
-        id: 'child-event-id',
-        name: 'tool-result',
-        startTime: childEventSpan.startTime,
-        output: { result: 42 },
-        metadata: {
-          spanType: 'generic',
-          toolName: 'calculator',
-          success: true,
-        },
-      });
-    });
-
-    it('should handle event spans with missing parent gracefully', async () => {
-      const orphanEventSpan = createMockSpan({
-        id: 'orphan-event-id',
-        name: 'orphan-event',
-        type: SpanType.GENERIC,
-        isRoot: false,
-        attributes: {},
-      });
-      orphanEventSpan.isEvent = true;
-      orphanEventSpan.traceId = 'missing-trace-id';
+      // Override convertSpan to throw
+      const converter = (exporter as any)['#spanConverter'] ?? {};
+      if (converter.convertSpan) {
+        converter.convertSpan.mockRejectedValueOnce(new Error('Conversion failed'));
+      }
 
       // Should not throw
-      await expect(
-        exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: orphanEventSpan,
-        }),
-      ).resolves.not.toThrow();
+      await expect(exportSpan(exporter, makeSpan())).resolves.toBeUndefined();
+    });
 
-      // Should not create any Langfuse objects
-      expect(mockTrace.event).not.toHaveBeenCalled();
-      expect(mockSpan.event).not.toHaveBeenCalled();
+    it('maps prompt metadata to langfuse.observation.prompt.* attributes', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          metadata: {
+            langfuse: { prompt: { name: 'customer-support', version: 2 } },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.prompt.name']).toBe('customer-support');
+      expect(attrs['langfuse.observation.prompt.version']).toBe(2);
+      expect(attrs['mastra.metadata.langfuse']).toBeUndefined();
+    });
+
+    it('maps completionStartTime to langfuse.observation.completion_start_time', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      const ttftTime = new Date('2025-01-01T00:00:00.500Z');
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'gpt-4o',
+            provider: 'openai',
+            completionStartTime: ttftTime,
+            usage: { inputTokens: 10, outputTokens: 5 },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.completion_start_time']).toBe(ttftTime.toISOString());
+      expect(attrs['mastra.completion_start_time']).toBeUndefined();
+    });
+
+    it('maps userId to user.id', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { userId: 'user-123' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['user.id']).toBe('user-123');
+      expect(attrs['mastra.metadata.userId']).toBeUndefined();
+    });
+
+    it('maps sessionId to session.id', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { sessionId: 'session-456' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['session.id']).toBe('session-456');
+      expect(attrs['mastra.metadata.sessionId']).toBeUndefined();
+    });
+
+    it('maps tags to langfuse.trace.tags', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ isRootSpan: true, tags: ['prod', 'v2'] } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.tags']).toBe(JSON.stringify(['prod', 'v2']));
+      expect(attrs['mastra.tags']).toBeUndefined();
+    });
+
+    it('maps traceName metadata to langfuse.trace.name', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { traceName: 'Weather Agent Run' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('Weather Agent Run');
+      expect(attrs['mastra.metadata.traceName']).toBeUndefined();
+    });
+
+    it('maps version metadata to langfuse.trace.version', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { version: '2.1.0' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['mastra.metadata.version']).toBeUndefined();
+    });
+
+    it('maps gen_ai.agent.id to langfuse.observation.metadata.agentId', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+          operationName: 'chat',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.observation.metadata.agentName']).toBe('Weather Agent');
+      expect(attrs['langfuse.observation.metadata.operationName']).toBe('chat');
+      // Original attributes should still be present (not deleted)
+      expect(attrs['gen_ai.agent.id']).toBe('weather-agent');
+    });
+
+    it('maps mastra.span.type to langfuse.observation.metadata.spanType', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ type: SpanType.MODEL_GENERATION }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.MODEL_GENERATION);
+    });
+
+    it('does not set observation metadata when source attributes are absent', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      // Create a span with no type, entityId, entityName, or operationName
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: undefined as any,
+          entityId: undefined,
+          entityName: undefined,
+          operationName: undefined,
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.agentId']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.agentName']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.spanType']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.operationName']).toBeUndefined();
+    });
+
+    it('sets langfuse.environment and langfuse.release on spans', async () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        environment: 'production',
+        release: 'v1.2.3',
+      });
+      await exportSpan(exporter, makeSpan());
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.environment']).toBe('production');
+      expect(attrs['langfuse.release']).toBe('v1.2.3');
     });
   });
 
-  describe('Out-of-order span handling with delayed ends', () => {
-    it('should handle spans that end after parent trace is removed', async () => {
-      // Create a root workflow span
-      const workflowSpan = createMockSpan({
-        id: 'workflow-1',
-        name: 'test-workflow',
-        type: SpanType.WORKFLOW_RUN,
-        isRoot: true,
-        attributes: { workflowId: 'wf-123' },
-      });
-
-      // Create a child step span
-      const step1Span = createMockSpan({
-        id: 'step-1',
-        name: 'step-one',
-        type: SpanType.WORKFLOW_STEP,
-        isRoot: false,
-        attributes: { stepId: 'step-1' },
-      });
-      step1Span.traceId = 'workflow-1';
-      step1Span.parentSpanId = 'workflow-1';
-
-      // Start workflow and step
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: workflowSpan,
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: step1Span,
-      });
-
-      // Verify trace and spans are tracked
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
-      const traceInfo = (exporter as any).traceMap.get('workflow-1');
-      expect(traceInfo.spans.has('step-1')).toBe(true);
-
-      // Clear mock calls to make assertions clearer
-      mockTrace.span.mockClear();
-      mockSpan.update.mockClear();
-      mockTrace.update.mockClear();
-
-      // Update step 1
-      step1Span.output = { result: 'step1-complete' };
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: step1Span,
-      });
-
-      expect(mockSpan.update).toHaveBeenCalledWith({
-        output: { result: 'step1-complete' },
-        metadata: expect.objectContaining({
-          spanType: 'workflow_step',
-          stepId: 'step-1',
-        }),
-      });
-
-      // End step 1
-      step1Span.endTime = new Date();
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: step1Span,
-      });
-
-      expect(mockSpan.update).toHaveBeenCalledWith({
-        endTime: step1Span.endTime,
-        output: { result: 'step1-complete' }, // Output is still included from previous update
-        metadata: expect.objectContaining({
-          spanType: 'workflow_step',
-          stepId: 'step-1',
-        }),
-      });
-
-      // Start step 2 (but don't end it yet - this is the key to testing out-of-order)
-      const step2Span = createMockSpan({
-        id: 'step-2',
-        name: 'step-two',
-        type: SpanType.WORKFLOW_STEP,
-        isRoot: false,
-        attributes: { stepId: 'step-2' },
-      });
-      step2Span.traceId = 'workflow-1';
-      step2Span.parentSpanId = 'workflow-1';
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: step2Span,
-      });
-
-      // Update workflow
-      workflowSpan.output = { status: 'completed' };
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: workflowSpan,
-      });
-
-      // End workflow (root span) BEFORE step-2 ends - this is the out-of-order scenario
-      workflowSpan.endTime = new Date();
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: workflowSpan,
-      });
-
-      // Verify trace is still in map because step-2 hasn't ended yet
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
-      const traceData = (exporter as any).traceMap.get('workflow-1');
-      // step-2 should still be in activeSpans
-      expect(traceData.activeSpans.has('step-2')).toBe(true);
-      expect(traceData.activeSpans.has('step-1')).toBe(false); // step-1 already ended
-      expect(traceData.activeSpans.has('workflow-1')).toBe(false); // workflow ended
-
-      // Now end step-2 (the last active span) AFTER the root ended
-      step2Span.endTime = new Date();
-      step2Span.output = { result: 'step2-complete' };
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: step2Span,
-      });
-
-      // NOW the trace should be cleaned up since all spans have ended
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(false);
-
-      // Clear mocks for late event testing
-      mockSpan.update.mockClear();
-      mockTrace.update.mockClear();
-
-      // Now try to send late updates/ends for already completed trace
-      const lateStep1Update = createMockSpan({
-        id: 'step-1',
-        name: 'step-one',
-        type: SpanType.WORKFLOW_STEP,
-        isRoot: false,
-        attributes: { stepId: 'step-1', lateUpdate: true },
-      });
-      lateStep1Update.traceId = 'workflow-1';
-      lateStep1Update.parentSpanId = 'workflow-1';
-      lateStep1Update.output = { result: 'late-update' };
-
-      // This should handle gracefully without errors
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: lateStep1Update,
-      });
-
-      // Should not attempt to update since trace is gone
-      expect(mockSpan.update).not.toHaveBeenCalled();
+  describe('client access', () => {
+    it('exposes LangfuseClient via client property', () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      expect(exporter.client).toBeDefined();
+      expect(exporter.client?.score).toBeDefined();
+      expect(exporter.client?.prompt).toBeDefined();
     });
 
-    it('should handle multiple rapid updates and ends in sequence', async () => {
-      // Simulate rapid-fire events that might arrive out of order
-      const rootSpan = createMockSpan({
-        id: 'root-1',
-        name: 'rapid-root',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: { agentId: 'rapid-agent' },
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
-      });
-
-      // Create multiple child spans
-      const childSpans: AnyExportedSpan[] = [];
-      for (let i = 1; i <= 5; i++) {
-        const child = createMockSpan({
-          id: `child-${i}`,
-          name: `rapid-child-${i}`,
-          type: SpanType.TOOL_CALL,
-          isRoot: false,
-          attributes: { toolId: `tool-${i}` },
-        });
-        child.traceId = 'root-1';
-        child.parentSpanId = 'root-1';
-        childSpans.push(child);
-      }
-
-      // Start all children rapidly
-      for (const child of childSpans) {
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: child,
-        });
-      }
-
-      // Update and end children in mixed order
-      // End child 3
-      childSpans[2].endTime = new Date();
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: childSpans[2],
-      });
-
-      // Update child 1
-      childSpans[0].output = { result: 'child-1-result' };
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: childSpans[0],
-      });
-
-      // End child 5
-      childSpans[4].endTime = new Date();
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: childSpans[4],
-      });
-
-      // Update child 3 (after it ended)
-      childSpans[2].output = { result: 'late-update-3' };
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_UPDATED,
-        exportedSpan: childSpans[2],
-      });
-
-      // End remaining children
-      for (const child of [childSpans[0], childSpans[1], childSpans[3]]) {
-        child.endTime = new Date();
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_ENDED,
-          exportedSpan: child,
-        });
-      }
-
-      // End root
-      rootSpan.endTime = new Date();
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: rootSpan,
-      });
-
-      // All operations should complete without errors
-      // Trace should be cleaned up since all spans have ended
-      expect((exporter as any).traceMap.has('root-1')).toBe(false);
+    it('returns undefined client when disabled', () => {
+      exporter = new LangfuseExporter();
+      expect(exporter.client).toBeUndefined();
     });
   });
 
-  describe('Score Management', () => {
-    let mockScore: any;
+  describe('addScoreToTrace', () => {
+    it('calls LangfuseClient score.create with correct payload', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
 
-    beforeEach(() => {
-      mockScore = {
-        id: 'test-score-id',
-        traceId: 'test-trace-id',
-        observationId: 'test-span-id',
-        name: 'test-scorer',
-        value: 0.85,
-        sessionId: 'test-session',
-        metadata: { reason: 'Test score' },
-        dataType: 'NUMERIC',
-      };
-      mockLangfuseClient.score = vi.fn().mockResolvedValue(mockScore);
-    });
-
-    it('should add score to trace with all parameters', async () => {
-      const scoreData = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
+      await exporter.addScoreToTrace({
+        traceId: 'trace-1',
+        spanId: 'span-1',
         score: 0.95,
-        reason: 'High quality response',
-        scorerName: 'quality-scorer',
-        metadata: {
-          sessionId: 'session-789',
-          userId: 'user-123',
-          customField: 'custom-value',
-        },
-      };
-
-      await exporter.addScoreToTrace(scoreData);
-
-      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
-        id: 'trace-123-quality-scorer',
-        traceId: 'trace-123',
-        observationId: 'span-456',
-        name: 'quality-scorer',
-        value: 0.95,
-        sessionId: 'session-789',
-        metadata: { reason: 'High quality response' },
-        dataType: 'NUMERIC',
-      });
-    });
-
-    it('should add score to trace with only required parameters', async () => {
-      const scoreData = {
-        traceId: 'trace-123',
-        score: 0.75,
-        scorerName: 'trace-scorer',
-      };
-
-      await exporter.addScoreToTrace(scoreData);
-
-      expect(mockLangfuseClient.score).toHaveBeenCalledWith({
-        id: 'trace-123-trace-scorer',
-        traceId: 'trace-123',
-        name: 'trace-scorer',
-        value: 0.75,
-        metadata: {},
-        dataType: 'NUMERIC',
-      });
-    });
-
-    it('should not call Langfuse client when client is null', async () => {
-      // Create exporter with missing keys to disable client
-      const disabledExporter = new LangfuseExporter({
-        baseUrl: 'https://test-langfuse.com',
+        reason: 'Good response',
+        scorerName: 'accuracy',
+        metadata: { sessionId: 'session-1' },
       });
 
-      const scoreData = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        score: 0.8,
-        reason: 'Test score',
-        scorerName: 'test-scorer',
-        metadata: {
-          sessionId: 'session-789',
-        },
-      };
-
-      await disabledExporter.addScoreToTrace(scoreData);
-
-      // Should not call Langfuse client
-      expect(mockLangfuseClient.score).not.toHaveBeenCalled();
-    });
-
-    it('should handle Langfuse client errors gracefully', async () => {
-      const mockError = new Error('Langfuse API error');
-      mockLangfuseClient.score.mockRejectedValue(mockError);
-
-      const mockLoggerError = vi.spyOn(exporter['logger'], 'error').mockImplementation(() => {});
-
-      const scoreData = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        score: 0.8,
-        reason: 'Test score',
-        scorerName: 'test-scorer',
-        metadata: {
-          sessionId: 'session-789',
-        },
-      };
-
-      // Should not throw
-      await expect(exporter.addScoreToTrace(scoreData)).resolves.not.toThrow();
-
-      // Should log error
-      expect(mockLoggerError).toHaveBeenCalledWith('Langfuse exporter: Error adding score to trace', {
-        error: mockError,
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        scorerName: 'test-scorer',
-      });
-
-      mockLoggerError.mockRestore();
-    });
-  });
-
-  describe('AI SDK v4 and v5 Compatibility', () => {
-    describe('Token Usage Normalization', () => {
-      it('should handle AI SDK v4 token format (promptTokens/completionTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v4-span',
-          name: 'llm-generation-v4',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              promptTokens: 100,
-              completionTokens: 50,
-              totalTokens: 150,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 100,
-              output: 50,
-              total: 150,
-            },
-          }),
-        );
-      });
-
-      it('should handle AI SDK v5 token format (inputTokens/outputTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-span',
-          name: 'llm-generation-v5',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4o',
-            provider: 'openai',
-            usage: {
-              inputTokens: 120,
-              outputTokens: 60,
-              totalTokens: 180,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4o',
-            usage: {
-              input: 120,
-              output: 60,
-              total: 180,
-            },
-          }),
-        );
-      });
-
-      it('should handle AI SDK v5 reasoning tokens', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-reasoning-span',
-          name: 'llm-generation-reasoning',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'o1-preview',
-            provider: 'openai',
-            usage: {
-              inputTokens: 100,
-              outputTokens: 50,
-              reasoningTokens: 1000,
-              totalTokens: 1150,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'o1-preview',
-            usage: {
-              input: 100,
-              output: 50,
-              reasoning: 1000,
-              total: 1150,
-            },
-          }),
-        );
-      });
-
-      it('should handle AI SDK v5 cached input tokens', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-cached-span',
-          name: 'llm-generation-cached',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'claude-3-5-sonnet',
-            provider: 'anthropic',
-            usage: {
-              inputTokens: 150,
-              outputTokens: 75,
-              cachedInputTokens: 100,
-              totalTokens: 225,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'claude-3-5-sonnet',
-            usage: {
-              input: 150,
-              output: 75,
-              cachedInput: 100,
-              total: 225,
-            },
-          }),
-        );
-      });
-
-      it('should handle legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-cache-legacy-span',
-          name: 'llm-generation-cache-legacy',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              promptTokens: 200,
-              completionTokens: 100,
-              totalTokens: 300,
-              promptCacheHitTokens: 150,
-              promptCacheMissTokens: 50,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 200,
-              output: 100,
-              total: 300,
-              promptCacheHit: 150,
-              promptCacheMiss: 50,
-            },
-          }),
-        );
-      });
-
-      it('should calculate total tokens when not provided', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-calculated-total',
-          name: 'llm-generation-calc',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              inputTokens: 80,
-              outputTokens: 40,
-              // no totalTokens provided
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 80,
-              output: 40,
-              total: 120, // calculated
-            },
-          }),
-        );
-      });
-
-      it('should handle mixed v4/v5 format gracefully (prioritizing v5)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-mixed-span',
-          name: 'llm-generation-mixed',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              // Both formats present - v5 should take precedence
-              inputTokens: 100,
-              promptTokens: 90,
-              outputTokens: 50,
-              completionTokens: 45,
-              totalTokens: 150,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 100, // v5 value, not 90
-              output: 50, // v5 value, not 45
-              total: 150,
-            },
-          }),
-        );
-      });
-    });
-  });
-
-  describe('Tags Support', () => {
-    it('should include tags in trace payload for root spans with tags', async () => {
-      const rootSpanWithTags = createMockSpan({
-        id: 'root-with-tags',
-        name: 'tagged-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: { agentId: 'agent-123' },
-        metadata: { userId: 'user-456' },
-        tags: ['production', 'experiment-v2', 'user-request'],
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpanWithTags,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should create Langfuse trace with tags
-      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
-        id: 'root-with-tags',
-        name: 'tagged-agent',
-        userId: 'user-456',
-        metadata: {
-          agentId: 'agent-123',
-          spanType: 'agent_run',
-        },
-        tags: ['production', 'experiment-v2', 'user-request'],
-      });
-    });
-
-    it('should not include tags in trace payload when tags array is empty', async () => {
-      const rootSpanEmptyTags = createMockSpan({
-        id: 'root-empty-tags',
-        name: 'agent-no-tags',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: { agentId: 'agent-123' },
-        tags: [],
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpanEmptyTags,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should create Langfuse trace without tags property
-      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
-        id: 'root-empty-tags',
-        name: 'agent-no-tags',
-        metadata: {
-          agentId: 'agent-123',
-          spanType: 'agent_run',
-        },
-      });
-      // Verify tags is not in the call
-      const traceCall = mockLangfuseClient.trace.mock.calls[0][0];
-      expect(traceCall.tags).toBeUndefined();
-    });
-
-    it('should not include tags in trace payload when tags is undefined', async () => {
-      const rootSpanNoTags = createMockSpan({
-        id: 'root-no-tags',
-        name: 'agent-undefined-tags',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: { agentId: 'agent-123' },
-      });
-      // tags is undefined by default
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpanNoTags,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should create Langfuse trace without tags property
-      const traceCall = mockLangfuseClient.trace.mock.calls[0][0];
-      expect(traceCall.tags).toBeUndefined();
-    });
-
-    it('should include tags with workflow spans', async () => {
-      const workflowSpanWithTags = createMockSpan({
-        id: 'workflow-with-tags',
-        name: 'data-processing-workflow',
-        type: SpanType.WORKFLOW_RUN,
-        isRoot: true,
-        attributes: { workflowId: 'wf-123' },
-        tags: ['batch-processing', 'priority-high'],
-      });
-
-      const event: TracingEvent = {
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: workflowSpanWithTags,
-      };
-
-      await exporter.exportTracingEvent(event);
-
-      // Should create Langfuse trace with tags
-      expect(mockLangfuseClient.trace).toHaveBeenCalledWith(
+      expect(mockScoreCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: 'workflow-with-tags',
-          name: 'data-processing-workflow',
-          tags: ['batch-processing', 'priority-high'],
+          id: 'trace-1-span-1-accuracy',
+          traceId: 'trace-1',
+          observationId: 'span-1',
+          name: 'accuracy',
+          value: 0.95,
+          comment: 'Good response',
+          metadata: { sessionId: 'session-1' },
+          dataType: 'NUMERIC',
         }),
       );
     });
 
-    it('should not include tags for child spans (only root spans get tags)', async () => {
-      // First create a root span with tags
-      const rootSpan = createMockSpan({
-        id: 'root-span-id',
-        name: 'root-agent',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-        tags: ['root-tag'],
+    it('does not call score.create when credentials are missing', async () => {
+      exporter = new LangfuseExporter();
+
+      await exporter.addScoreToTrace({
+        traceId: 'trace-1',
+        score: 0.5,
+        scorerName: 'test',
       });
 
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: rootSpan,
+      expect(mockScoreCreate).not.toHaveBeenCalled();
+    });
+
+    it('handles score.create errors gracefully', async () => {
+      mockScoreCreate.mockImplementationOnce(() => {
+        throw new Error('Score API error');
       });
 
-      // Clear mock to check child span call
-      mockLangfuseClient.trace.mockClear();
-      mockSpan.span.mockClear();
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
 
-      // Create child span (should not have tags even if we set them)
-      // Child spans should not have tags set by the system
-      // but let's verify the exporter handles it correctly even if accidentally set
-      const childSpan = createMockSpan({
-        id: 'child-span-id',
-        name: 'child-tool',
-        type: SpanType.TOOL_CALL,
-        isRoot: false,
-        attributes: { toolId: 'calculator' },
-        tags: ['should-not-appear'],
-      });
-      childSpan.traceId = 'root-span-id';
-      childSpan.parentSpanId = 'root-span-id';
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: childSpan,
-      });
-
-      // Should not create new trace for child spans
-      expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
-
-      // Span should be created on the parent span, not the trace
-      expect(mockSpan.span).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'child-span-id',
-          name: 'child-tool',
+      await expect(
+        exporter.addScoreToTrace({
+          traceId: 'trace-1',
+          score: 0.5,
+          scorerName: 'test',
         }),
-      );
-      // The span call should not include tags (tags are only in trace payload)
-      const spanCall = mockSpan.span.mock.calls[0][0];
-      expect(spanCall.tags).toBeUndefined();
+      ).resolves.toBeUndefined();
     });
   });
 
-  describe('Shutdown', () => {
-    it('should shutdown Langfuse client and clear maps', async () => {
-      // Add some data to internal maps
-      const exportedSpan = createMockSpan({
-        id: 'test-span',
-        name: 'test',
-        type: SpanType.GENERIC,
-        isRoot: true,
-        attributes: {},
-      });
+  describe('flush and shutdown', () => {
+    it('flushes both processor and client', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exporter.flush();
 
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan,
-      });
+      expect(mockForceFlush).toHaveBeenCalled();
+      expect(mockClientFlush).toHaveBeenCalled();
+    });
 
-      // Verify maps have data
-      expect((exporter as any).traceMap.size).toBeGreaterThan(0);
-      expect((exporter as any).traceMap.get('test-span').spans.size).toBeGreaterThan(0);
-
-      // Shutdown
+    it('shuts down both processor and client', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exporter.shutdown();
 
-      // Verify Langfuse client shutdown was called
-      expect(mockLangfuseClient.shutdownAsync).toHaveBeenCalled();
-
-      // Verify maps were cleared
-      expect((exporter as any).traceMap.size).toBe(0);
+      expect(mockShutdown).toHaveBeenCalled();
+      expect(mockClientShutdown).toHaveBeenCalled();
     });
   });
 });
-
-// Helper function to create mock spans
-function createMockSpan({
-  id,
-  name,
-  type,
-  isRoot,
-  attributes,
-  metadata,
-  input,
-  output,
-  errorInfo,
-  tags,
-}: {
-  id: string;
-  name: string;
-  type: SpanType;
-  isRoot: boolean;
-  attributes: any;
-  metadata?: Record<string, any>;
-  input?: any;
-  output?: any;
-  errorInfo?: any;
-  tags?: string[];
-}): AnyExportedSpan {
-  return {
-    id,
-    name,
-    type,
-    attributes,
-    metadata,
-    input,
-    output,
-    errorInfo,
-    tags,
-    startTime: new Date(),
-    endTime: undefined,
-    traceId: isRoot ? id : 'parent-trace-id',
-    isRootSpan: isRoot,
-    parentSpanId: isRoot ? undefined : 'parent-id',
-    isEvent: false,
-  };
-}

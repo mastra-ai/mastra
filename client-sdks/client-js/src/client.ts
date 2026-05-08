@@ -1,28 +1,111 @@
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  TraceRecord,
+  GetTraceLightResponse,
+  GetSpanResponse,
+  ListTracesArgs,
+  ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
+  // Logs
+  ListLogsArgs,
+  ListLogsResponse,
+  // Scores (observability)
+  ListScoresArgs,
+  ListScoresResponse as ListScoresResponseNew,
+  CreateScoreBody,
+  CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+  // Feedback
+  ListFeedbackArgs,
+  ListFeedbackResponse,
+  CreateFeedbackBody,
+  CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
+  // Metrics OLAP
+  GetMetricAggregateArgs,
+  GetMetricAggregateResponse,
+  GetMetricBreakdownArgs,
+  GetMetricBreakdownResponse,
+  GetMetricTimeSeriesArgs,
+  GetMetricTimeSeriesResponse,
+  GetMetricPercentilesArgs,
+  GetMetricPercentilesResponse,
+  // Discovery
+  GetMetricNamesArgs,
+  GetMetricNamesResponse,
+  GetMetricLabelKeysArgs,
+  GetMetricLabelKeysResponse,
+  GetMetricLabelValuesArgs,
+  GetMetricLabelValuesResponse,
+  GetEntityTypesResponse,
+  GetEntityNamesArgs,
+  GetEntityNamesResponse,
+  GetServiceNamesResponse,
+  GetEnvironmentsResponse,
+  GetTagsArgs,
+  GetTagsResponse,
+} from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
   MemoryThread,
   Tool,
+  Processor,
   Workflow,
   Vector,
   BaseResource,
   A2A,
   MCPTool,
   AgentBuilder,
+  Conversations,
   Observability,
+  StoredAgent,
+  StoredPromptBlock,
+  StoredMCPClient,
+  StoredScorer,
+  StoredSkill,
+  ToolProvider,
+  ProcessorProvider,
+  Workspace,
+  Responses,
+  Channels,
 } from './resources';
+import type {
+  ListScoresBySpanParams,
+  LegacyTracesPaginatedArg,
+  LegacyGetTracesResponse,
+} from './resources/observability';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
+  AgentVersionIdentifier,
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
   GetToolResponse,
+  GetProcessorResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
@@ -30,13 +113,10 @@ import type {
   McpServerToolListResponse,
   GetScorerResponse,
   ListScoresByScorerIdParams,
-  ListScoresResponse,
   ListScoresByRunIdParams,
   ListScoresByEntityIdParams,
-  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
-  GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   ListMemoryThreadMessagesResponse,
@@ -44,14 +124,80 @@ import type {
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
   ListMemoryThreadsResponse,
+  ListStoredAgentsParams,
+  ListStoredAgentsResponse,
+  CreateStoredAgentParams,
+  StoredAgentResponse,
+  ListStoredPromptBlocksParams,
+  ListStoredPromptBlocksResponse,
+  CreateStoredPromptBlockParams,
+  StoredPromptBlockResponse,
+  ListStoredScorersParams,
+  ListStoredScorersResponse,
+  CreateStoredScorerParams,
+  StoredScorerResponse,
+  ListStoredMCPClientsParams,
+  ListStoredMCPClientsResponse,
+  CreateStoredMCPClientParams,
+  StoredMCPClientResponse,
+  ListStoredSkillsParams,
+  ListStoredSkillsResponse,
+  CreateStoredSkillParams,
+  StoredSkillResponse,
+  GetSystemPackagesResponse,
+  ListScoresResponse as ListScoresResponseOld,
+  GetObservationalMemoryParams,
+  GetObservationalMemoryResponse,
+  AwaitBufferStatusParams,
+  AwaitBufferStatusResponse,
+  GetMemoryStatusResponse,
+  ListWorkspacesResponse,
+  ListVectorsResponse,
+  ListEmbeddersResponse,
+  DatasetRecord,
+  DatasetItem,
+  DatasetExperiment,
+  DatasetExperimentResult,
+  ExperimentReviewCounts,
+  CreateDatasetParams,
+  UpdateDatasetParams,
+  AddDatasetItemParams,
+  UpdateDatasetItemParams,
+  BatchInsertDatasetItemsParams,
+  BatchDeleteDatasetItemsParams,
+  GenerateDatasetItemsParams,
+  GeneratedItem,
+  TriggerDatasetExperimentParams,
+  UpdateExperimentResultParams,
+  CompareExperimentsParams,
+  CompareExperimentsResponse,
+  DatasetItemVersionResponse,
+  DatasetVersionResponse,
+  ListToolProvidersResponse,
+  GetProcessorProvidersResponse,
+  ListBackgroundTasksParams,
+  ListBackgroundTasksResponse,
+  BackgroundTaskResponse,
+  StreamBackgroundTasksParams,
+  ListSchedulesParams,
+  ListSchedulesResponse,
+  ScheduleResponse,
+  ListScheduleTriggersParams,
+  ListScheduleTriggersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly conversations: Conversations;
+  public readonly responses: Responses;
+  public readonly channels: Channels;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.conversations = new Conversations(options);
+    this.responses = new Responses(options);
+    this.channels = new Channels(options);
   }
 
   /**
@@ -59,7 +205,10 @@ export class MastraClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public listAgents(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+  public listAgents(
+    requestContext?: RequestContext | Record<string, any>,
+    partial?: boolean,
+  ): Promise<Record<string, GetAgentResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
@@ -68,41 +217,61 @@ export class MastraClient extends BaseResource {
       searchParams.set('requestContext', requestContextParam);
     }
 
+    if (partial) {
+      searchParams.set('partial', 'true');
+    }
+
     const queryString = searchParams.toString();
-    return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/agents${queryString ? `?${queryString}` : ''}`);
   }
 
   public listAgentsModelProviders(): Promise<ListAgentsModelProvidersResponse> {
-    return this.request(`/api/agents/providers`);
+    return this.request(`/agents/providers`);
   }
 
   /**
    * Gets an agent instance by ID
    * @param agentId - ID of the agent to retrieve
+   * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string) {
-    return new Agent(this.options, agentId);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
+    return new Agent(this.options, agentId, version);
   }
 
   /**
-   * Lists memory threads for a resource with pagination support
-   * @param params - Parameters containing resource ID, pagination options, and optional request context
+   * Lists memory threads with optional filtering by resourceId and/or metadata
+   * @param params - Parameters containing optional filters, pagination options, and request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
-  public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
-    const queryParams = new URLSearchParams({
-      resourceId: params.resourceId,
-      resourceid: params.resourceId,
-      agentId: params.agentId,
-      ...(params.page !== undefined && { page: params.page.toString() }),
-      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
-      ...(params.orderBy && { orderBy: params.orderBy }),
-      ...(params.sortDirection && { sortDirection: params.sortDirection }),
-    });
+  public async listMemoryThreads(params: ListMemoryThreadsParams = {}): Promise<ListMemoryThreadsResponse> {
+    const queryParams = new URLSearchParams();
 
+    // Add resourceId if provided (backwards compatible - also add lowercase version)
+    if (params.resourceId) {
+      queryParams.set('resourceId', params.resourceId);
+    }
+
+    // Add metadata filter as JSON string if provided
+    if (params.metadata) {
+      queryParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    if (params.agentId) queryParams.set('agentId', params.agentId);
+    if (params.page !== undefined) queryParams.set('page', params.page.toString());
+    if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());
+    if (params.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+
+    const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
-      `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/threads${queryString ? `?${queryString}` : ''}${requestContextQueryString(params.requestContext, queryString ? '&' : '?')}`,
     );
 
     const actualResponse: ListMemoryThreadsResponse =
@@ -126,7 +295,7 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
     return this.request(
-      `/api/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
     );
   }
 
@@ -137,7 +306,7 @@ export class MastraClient extends BaseResource {
    */
   public createMemoryThread(params: CreateMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
     return this.request(
-      `/api/memory/threads?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/threads?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       { method: 'POST', body: params },
     );
   }
@@ -145,24 +314,41 @@ export class MastraClient extends BaseResource {
   /**
    * Gets a memory thread instance by ID
    * @param threadId - ID of the memory thread to retrieve
+   * @param agentId - Optional agent ID. When not provided, uses storage directly
    * @returns MemoryThread instance
    */
-  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
+  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId?: string }) {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
+  /**
+   * Lists messages for a thread.
+   * @param threadId - ID of the thread
+   * @param opts - Optional parameters including agentId, networkId, and requestContext
+   *   - When agentId is provided, uses the agent's memory
+   *   - When networkId is provided, uses the network endpoint
+   *   - When neither is provided, uses storage directly
+   * @returns Promise containing the thread messages
+   */
   public listThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: {
+      agentId?: string;
+      networkId?: string;
+      requestContext?: RequestContext | Record<string, any>;
+      includeSystemReminders?: boolean;
+    } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    if (!opts.agentId && !opts.networkId) {
-      throw new Error('Either agentId or networkId must be provided');
-    }
     let url = '';
-    if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+    const includeSystemRemindersQuery =
+      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
+
+    if (opts.networkId) {
+      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
+    } else if (opts.agentId) {
+      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
+    } else {
+      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
     }
     return this.request(url);
   }
@@ -174,9 +360,9 @@ export class MastraClient extends BaseResource {
     let url = '';
 
     if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
     } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
     }
     return this.request(url, { method: 'DELETE' });
   }
@@ -188,7 +374,7 @@ export class MastraClient extends BaseResource {
    */
   public saveMessageToMemory(params: SaveMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
     return this.request(
-      `/api/memory/save-messages?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/save-messages?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       {
         method: 'POST',
         body: params,
@@ -199,14 +385,64 @@ export class MastraClient extends BaseResource {
   /**
    * Gets the status of the memory system
    * @param agentId - The agent ID
-   * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing memory system status
+   * @param opts - Optional parameters including resourceId, threadId, and requestContext
+   * @returns Promise containing memory system status including observational memory info
    */
   public getMemoryStatus(
     agentId: string,
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<{ result: boolean }> {
-    return this.request(`/api/memory/status?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`);
+    opts?: {
+      resourceId?: string;
+      threadId?: string;
+    },
+  ): Promise<GetMemoryStatusResponse> {
+    const queryParams = new URLSearchParams({ agentId });
+    if (opts?.resourceId) queryParams.set('resourceId', opts.resourceId);
+    if (opts?.threadId) queryParams.set('threadId', opts.threadId);
+    const queryString = queryParams.toString();
+    return this.request(`/memory/status?${queryString}${requestContextQueryString(requestContext, '&')}`);
+  }
+
+  /**
+   * Gets observational memory data for a resource or thread
+   * @param params - Parameters containing agentId, resourceId, threadId, and optional request context
+   * @returns Promise containing the current OM record and history
+   */
+  public getObservationalMemory(params: GetObservationalMemoryParams): Promise<GetObservationalMemoryResponse> {
+    const queryParams = new URLSearchParams({ agentId: params.agentId });
+    if (params.resourceId) queryParams.set('resourceId', params.resourceId);
+    if (params.threadId) queryParams.set('threadId', params.threadId);
+    if (params.from) {
+      queryParams.set('from', params.from instanceof Date ? params.from.toISOString() : params.from);
+    }
+    if (params.to) {
+      queryParams.set('to', params.to instanceof Date ? params.to.toISOString() : params.to);
+    }
+    if (params.offset != null) queryParams.set('offset', String(params.offset));
+    if (params.limit != null) queryParams.set('limit', String(params.limit));
+    const queryString = queryParams.toString();
+    return this.request(
+      `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
+    );
+  }
+
+  /**
+   * Blocks until any in-flight observational memory buffering completes, then returns the updated record
+   * @param params - Parameters containing agentId, resourceId, threadId
+   * @returns Promise containing the updated OM record after buffering completes
+   */
+  public awaitBufferStatus(params: AwaitBufferStatusParams): Promise<AwaitBufferStatusResponse> {
+    return this.request(
+      `/memory/observational-memory/buffer-status${requestContextQueryString(params.requestContext)}`,
+      {
+        method: 'POST',
+        body: {
+          agentId: params.agentId,
+          resourceId: params.resourceId,
+          threadId: params.threadId,
+        },
+      },
+    );
   }
 
   /**
@@ -224,7 +460,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/tools${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/tools${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -237,13 +473,13 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves all available workflows
+   * Retrieves all available processors
    * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing map of workflow IDs to workflow details
+   * @returns Promise containing map of processor IDs to processor details
    */
-  public listWorkflows(
+  public listProcessors(
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<Record<string, GetWorkflowResponse>> {
+  ): Promise<Record<string, GetProcessorResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
@@ -253,7 +489,41 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/workflows${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/processors${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a processor instance by ID
+   * @param processorId - ID of the processor to retrieve
+   * @returns Processor instance
+   */
+  public getProcessor(processorId: string) {
+    return new Processor(this.options, processorId);
+  }
+
+  /**
+   * Retrieves all available workflows
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of workflow IDs to workflow details
+   */
+  public listWorkflows(
+    requestContext?: RequestContext | Record<string, any>,
+    partial?: boolean,
+  ): Promise<Record<string, GetWorkflowResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/workflows${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -270,7 +540,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of action IDs to action details
    */
   public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
-    return this.request('/api/agent-builder/');
+    return this.request('/agent-builder/');
   }
 
   /**
@@ -329,9 +599,9 @@ export class MastraClient extends BaseResource {
     }
 
     if (searchParams.size) {
-      return this.request(`/api/logs?${searchParams}`);
+      return this.request(`/logs?${searchParams}`);
     } else {
-      return this.request(`/api/logs`);
+      return this.request(`/logs`);
     }
   }
 
@@ -378,9 +648,9 @@ export class MastraClient extends BaseResource {
     }
 
     if (searchParams.size) {
-      return this.request(`/api/logs/${runId}?${searchParams}`);
+      return this.request(`/logs/${runId}?${searchParams}`);
     } else {
-      return this.request(`/api/logs/${runId}`);
+      return this.request(`/logs/${runId}`);
     }
   }
 
@@ -389,24 +659,38 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing list of log transports
    */
   public listLogTransports(): Promise<{ transports: string[] }> {
-    return this.request('/api/logs/transports');
+    return this.request('/logs/transports');
   }
 
   /**
    * Retrieves a list of available MCP servers.
-   * @param params - Optional parameters for pagination (perPage, page).
+   * @param params - Optional parameters for pagination (page, perPage, or deprecated offset, limit).
    * @returns Promise containing the list of MCP servers and pagination info.
    */
-  public getMcpServers(params?: { perPage?: number; page?: number }): Promise<McpServerListResponse> {
+  public getMcpServers(params?: {
+    page?: number;
+    perPage?: number;
+    /** @deprecated Use page instead */
+    offset?: number;
+    /** @deprecated Use perPage instead */
+    limit?: number;
+  }): Promise<McpServerListResponse> {
     const searchParams = new URLSearchParams();
-    if (params?.perPage !== undefined) {
-      searchParams.set('perPage', String(params.perPage));
-    }
     if (params?.page !== undefined) {
       searchParams.set('page', String(params.page));
     }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    // Legacy support: also send limit/offset if provided (for older servers)
+    if (params?.limit !== undefined) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.offset !== undefined) {
+      searchParams.set('offset', String(params.offset));
+    }
     const queryString = searchParams.toString();
-    return this.request(`/api/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -421,7 +705,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('version', params.version);
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/mcp/v0/servers/${serverId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/mcp/v0/servers/${serverId}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -430,7 +714,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the list of tools.
    */
   public getMcpServerTools(serverId: string): Promise<McpServerToolListResponse> {
-    return this.request(`/api/mcp/${serverId}/tools`);
+    return this.request(`/mcp/${serverId}/tools`);
   }
 
   /**
@@ -442,6 +726,40 @@ export class MastraClient extends BaseResource {
    */
   public getMcpServerTool(serverId: string, toolId: string): MCPTool {
     return new MCPTool(this.options, serverId, toolId);
+  }
+
+  /**
+   * Lists resources available on an MCP server.
+   * @param serverId - The ID of the MCP server.
+   * @returns Promise containing the list of resources.
+   */
+  public getMcpServerResources(serverId: string): Promise<{
+    resources: Array<{
+      uri: string;
+      name: string;
+      description?: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+    }>;
+  }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources`);
+  }
+
+  /**
+   * Reads the content of a resource from an MCP server.
+   * Used for fetching ui:// MCP App HTML content.
+   * @param serverId - The ID of the MCP server.
+   * @param uri - The resource URI to read.
+   * @returns Promise containing the resource content.
+   */
+  public readMcpServerResource(
+    serverId: string,
+    uri: string,
+  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
+      method: 'POST',
+      body: { uri },
+    });
   }
 
   /**
@@ -472,7 +790,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
+      `/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
     );
   }
 
@@ -505,7 +823,7 @@ export class MastraClient extends BaseResource {
       params.append('memoryConfig', JSON.stringify(memoryConfig));
     }
 
-    return this.request(`/api/memory/search?${params}${requestContextQueryString(requestContext, '&')}`);
+    return this.request(`/memory/search?${params}${requestContextQueryString(requestContext, '&')}`);
   }
 
   /**
@@ -529,7 +847,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
+      `/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
       {
         method: 'POST',
         body: {
@@ -542,10 +860,13 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available scorers
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing list of available scorers
    */
-  public listScorers(): Promise<Record<string, GetScorerResponse>> {
-    return this.request('/api/scores/scorers');
+  public listScorers(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<Record<string, GetScorerResponse>> {
+    return this.request(`/scores/scorers${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -554,10 +875,10 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the scorer
    */
   public getScorer(scorerId: string): Promise<GetScorerResponse> {
-    return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
+    return this.request(`/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponseOld> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -575,7 +896,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('perPage', String(perPage));
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -583,7 +904,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponseOld> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -595,7 +916,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -603,7 +924,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponseOld> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -616,7 +937,7 @@ export class MastraClient extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(
-      `/api/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
+      `/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
     );
   }
 
@@ -626,28 +947,1112 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the saved score
    */
   public saveScore(params: SaveScoreParams): Promise<SaveScoreResponse> {
-    return this.request('/api/scores', {
+    return this.request('/scores', {
       method: 'POST',
       body: params,
     });
   }
 
+  /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
   }
 
-  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
+  /** Retrieves a lightweight trace by ID (timeline fields only, excludes heavy fields). */
+  getTraceLight(traceId: string): Promise<GetTraceLightResponse> {
+    return this.observability.getTraceLight(traceId);
+  }
+
+  /** Retrieves a single span with full details by trace ID and span ID. */
+  getSpan(traceId: string, spanId: string): Promise<GetSpanResponse> {
+    return this.observability.getSpan(traceId, spanId);
+  }
+
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
+  }
+
+  /**
+   * Retrieves paginated list of traces with optional filtering.
+   * This is the legacy API preserved for backward compatibility.
+   *
+   * @param params - Parameters for pagination and filtering (legacy format)
+   * @returns Promise containing paginated traces and pagination info
+   * @deprecated Use {@link listTraces} instead for new features like ordering and more filters.
+   */
+  getTraces(params: LegacyTracesPaginatedArg): Promise<LegacyGetTracesResponse> {
     return this.observability.getTraces(params);
+  }
+
+  /**
+   * Retrieves paginated list of traces with optional filtering and sorting.
+   * This is the new API with improved filtering options.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated traces and pagination info
+   */
+  listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
+    return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
+   * ones nested under a different root entity. Pairs with {@link getBranch} to expand
+   * a single branch into its subtree.
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    return this.observability.listBranches(params);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span. The optional `depth` field
+   * bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    return this.observability.getBranch(params);
   }
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
     return this.observability.listScoresBySpan(params);
   }
 
+  /** Scores one or more traces using a specified scorer (fire-and-forget). */
   score(params: {
     scorerName: string;
     targets: Array<{ traceId: string; spanId?: string }>;
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Logs
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of observability logs. */
+  listLogsVNext(params: ListLogsArgs = {}): Promise<ListLogsResponse> {
+    return this.observability.listLogs(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Scores
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of observability scores. */
+  listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
+    return this.observability.listScores(params);
+  }
+
+  /** Creates a single score record in the observability store. */
+  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params);
+  }
+
+  /** Returns an aggregated score value with optional period-over-period comparison. */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.observability.getScoreAggregate(params);
+  }
+
+  /** Returns score values grouped by specified dimensions. */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.observability.getScoreBreakdown(params);
+  }
+
+  /** Returns score values bucketed by time interval with optional grouping. */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.observability.getScoreTimeSeries(params);
+  }
+
+  /** Returns percentile values for scores bucketed by time interval. */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.observability.getScorePercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Feedback
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of feedback records. */
+  listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
+    return this.observability.listFeedback(params);
+  }
+
+  /** Creates a single feedback record in the observability store. */
+  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params);
+  }
+
+  /** Returns an aggregated feedback value with optional period-over-period comparison. */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.observability.getFeedbackAggregate(params);
+  }
+
+  /** Returns feedback values grouped by specified dimensions. */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.observability.getFeedbackBreakdown(params);
+  }
+
+  /** Returns feedback values bucketed by time interval with optional grouping. */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.observability.getFeedbackTimeSeries(params);
+  }
+
+  /** Returns percentile values for feedback bucketed by time interval. */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.observability.getFeedbackPercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Metrics
+  // --------------------------------------------------------------------------
+
+  /** Returns an aggregated metric value with optional period-over-period comparison. */
+  getMetricAggregate(params: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
+    return this.observability.getMetricAggregate(params);
+  }
+
+  /** Returns metric values grouped by specified dimensions. */
+  getMetricBreakdown(params: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
+    return this.observability.getMetricBreakdown(params);
+  }
+
+  /** Returns metric values bucketed by time interval with optional grouping. */
+  getMetricTimeSeries(params: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
+    return this.observability.getMetricTimeSeries(params);
+  }
+
+  /** Returns percentile values for a metric bucketed by time interval. */
+  getMetricPercentiles(params: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
+    return this.observability.getMetricPercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Discovery
+  // --------------------------------------------------------------------------
+
+  /** Returns distinct metric names with optional prefix filtering. */
+  getMetricNames(params: GetMetricNamesArgs = {}): Promise<GetMetricNamesResponse> {
+    return this.observability.getMetricNames(params);
+  }
+
+  /** Returns distinct label keys for a given metric. */
+  getMetricLabelKeys(params: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
+    return this.observability.getMetricLabelKeys(params);
+  }
+
+  /** Returns distinct values for a given metric label key. */
+  getMetricLabelValues(params: GetMetricLabelValuesArgs): Promise<GetMetricLabelValuesResponse> {
+    return this.observability.getMetricLabelValues(params);
+  }
+
+  /** Returns distinct entity types from observability data. */
+  getEntityTypes(): Promise<GetEntityTypesResponse> {
+    return this.observability.getEntityTypes();
+  }
+
+  /** Returns distinct entity names with optional type filtering. */
+  getEntityNames(params: GetEntityNamesArgs = {}): Promise<GetEntityNamesResponse> {
+    return this.observability.getEntityNames(params);
+  }
+
+  /** Returns distinct service names from observability data. */
+  getServiceNames(): Promise<GetServiceNamesResponse> {
+    return this.observability.getServiceNames();
+  }
+
+  /** Returns distinct environments from observability data. */
+  getEnvironments(): Promise<GetEnvironmentsResponse> {
+    return this.observability.getEnvironments();
+  }
+
+  /** Returns distinct tags with optional entity type filtering. */
+  getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
+    return this.observability.getTags(params);
+  }
+
+  // ============================================================================
+  // Stored Agents
+  // ============================================================================
+
+  /**
+   * Lists all stored agents with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored agents
+   */
+  public listStoredAgents(params?: ListStoredAgentsParams): Promise<ListStoredAgentsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/agents${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored agent
+   * @param params - Agent configuration including id, name, instructions, model, etc.
+   * @returns Promise containing the created stored agent
+   */
+  public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
+    return this.request('/stored/agents', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored agent instance by ID for further operations (details, update, delete)
+   * @param storedAgentId - ID of the stored agent to retrieve
+   * @returns StoredAgent instance
+   */
+  public getStoredAgent(storedAgentId: string): StoredAgent {
+    return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Prompt Blocks
+  // ============================================================================
+
+  /**
+   * Lists all stored prompt blocks with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored prompt blocks
+   */
+  public listStoredPromptBlocks(params?: ListStoredPromptBlocksParams): Promise<ListStoredPromptBlocksResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/prompt-blocks${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored prompt block
+   * @param params - Prompt block configuration including name, content, rules, etc.
+   * @returns Promise containing the created stored prompt block
+   */
+  public createStoredPromptBlock(params: CreateStoredPromptBlockParams): Promise<StoredPromptBlockResponse> {
+    return this.request('/stored/prompt-blocks', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored prompt block instance by ID for further operations (details, update, delete)
+   * @param storedPromptBlockId - ID of the stored prompt block to retrieve
+   * @returns StoredPromptBlock instance
+   */
+  public getStoredPromptBlock(storedPromptBlockId: string): StoredPromptBlock {
+    return new StoredPromptBlock(this.options, storedPromptBlockId);
+  }
+
+  // ============================================================================
+  // Stored Scorer Definitions
+  // ============================================================================
+
+  /**
+   * Lists all stored scorer definitions with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored scorer definitions
+   */
+  public listStoredScorers(params?: ListStoredScorersParams): Promise<ListStoredScorersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/scorers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored scorer definition
+   * @param params - Scorer definition configuration
+   * @returns Promise containing the created stored scorer definition
+   */
+  public createStoredScorer(params: CreateStoredScorerParams): Promise<StoredScorerResponse> {
+    return this.request('/stored/scorers', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored scorer definition instance by ID for further operations (details, update, delete)
+   * @param storedScorerId - ID of the stored scorer definition
+   * @returns StoredScorer instance
+   */
+  public getStoredScorer(storedScorerId: string): StoredScorer {
+    return new StoredScorer(this.options, storedScorerId);
+  }
+
+  // ============================================================================
+  // Stored MCP Clients
+  // ============================================================================
+
+  /**
+   * Lists all stored MCP clients with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored MCP clients
+   */
+  public listStoredMCPClients(params?: ListStoredMCPClientsParams): Promise<ListStoredMCPClientsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/mcp-clients${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored MCP client
+   * @param params - MCP client configuration
+   * @returns Promise containing the created stored MCP client
+   */
+  public createStoredMCPClient(params: CreateStoredMCPClientParams): Promise<StoredMCPClientResponse> {
+    return this.request('/stored/mcp-clients', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored MCP client instance by ID for further operations (details, update, delete)
+   * @param storedMCPClientId - ID of the stored MCP client
+   * @returns StoredMCPClient instance
+   */
+  public getStoredMCPClient(storedMCPClientId: string): StoredMCPClient {
+    return new StoredMCPClient(this.options, storedMCPClientId);
+  }
+
+  // ============================================================================
+  // Stored Skills
+  // ============================================================================
+
+  /**
+   * Lists all stored skills with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored skills
+   */
+  public listStoredSkills(params?: ListStoredSkillsParams): Promise<ListStoredSkillsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/skills${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored skill
+   * @param params - Skill configuration
+   * @returns Promise containing the created stored skill
+   */
+  public createStoredSkill(params: CreateStoredSkillParams): Promise<StoredSkillResponse> {
+    return this.request('/stored/skills', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored skill instance by ID for further operations (details, update, delete)
+   * @param storedSkillId - ID of the stored skill
+   * @returns StoredSkill instance
+   */
+  public getStoredSkill(storedSkillId: string): StoredSkill {
+    return new StoredSkill(this.options, storedSkillId);
+  }
+
+  // ============================================================================
+  // Tool Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered tool providers
+   * @returns Promise containing list of tool provider info
+   */
+  public listToolProviders(): Promise<ListToolProvidersResponse> {
+    return this.request('/tool-providers');
+  }
+
+  /**
+   * Gets a tool provider instance by ID for further operations (listToolkits, listTools, getToolSchema)
+   * @param providerId - ID of the tool provider
+   * @returns ToolProvider instance
+   */
+  public getToolProvider(providerId: string): ToolProvider {
+    return new ToolProvider(this.options, providerId);
+  }
+
+  // ============================================================================
+  // Processor Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered processor providers
+   * @returns Promise containing list of processor provider info
+   */
+  public getProcessorProviders(): Promise<GetProcessorProvidersResponse> {
+    return this.request('/processor-providers');
+  }
+
+  /**
+   * Gets a processor provider instance by ID for further operations
+   * @param providerId - ID of the processor provider
+   * @returns ProcessorProvider instance
+   */
+  public getProcessorProvider(providerId: string): ProcessorProvider {
+    return new ProcessorProvider(this.options, providerId);
+  }
+
+  // ============================================================================
+  // System
+  // ============================================================================
+
+  /**
+   * Retrieves installed Mastra packages and their versions
+   * @returns Promise containing the list of installed Mastra packages
+   */
+  public getSystemPackages(): Promise<GetSystemPackagesResponse> {
+    return this.request('/system/packages');
+  }
+
+  // ============================================================================
+  // Workspace
+  // ============================================================================
+
+  /**
+   * Lists all workspaces from both Mastra instance and agents
+   * @returns Promise containing array of workspace items
+   */
+  public listWorkspaces(): Promise<ListWorkspacesResponse> {
+    return this.request('/workspaces');
+  }
+
+  /**
+   * Gets the workspace resource for filesystem, search, and skills operations
+   * @param workspaceId - Workspace ID to target
+   * @returns Workspace instance
+   */
+  public getWorkspace(workspaceId: string): Workspace {
+    return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Vectors & Embedders
+  // ============================================================================
+
+  /**
+   * Lists all available vector stores
+   * @returns Promise containing list of available vector stores
+   */
+  public listVectors(): Promise<ListVectorsResponse> {
+    return this.request('/vectors');
+  }
+
+  /**
+   * Lists all available embedding models
+   * @returns Promise containing list of available embedders
+   */
+  public listEmbedders(): Promise<ListEmbeddersResponse> {
+    return this.request('/embedders');
+  }
+
+  // ============================================================================
+  // Datasets
+  // ============================================================================
+
+  /**
+   * Lists all datasets with optional pagination
+   */
+  public listDatasets(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset by ID
+   */
+  public getDataset(datasetId: string): Promise<DatasetRecord> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  }
+
+  /**
+   * Creates a new dataset
+   */
+  public createDataset(params: CreateDatasetParams): Promise<DatasetRecord> {
+    return this.request('/datasets', { method: 'POST', body: params });
+  }
+
+  /**
+   * Updates a dataset
+   */
+  public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Deletes a dataset
+   */
+  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
+  // Dataset Items
+  // ============================================================================
+
+  /**
+   * Lists items in a dataset with optional pagination, search, and version filter
+   */
+  public listDatasetItems(
+    datasetId: string,
+    params?: { page?: number; perPage?: number; search?: string; version?: number | null },
+  ): Promise<{ items: DatasetItem[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.version != null) {
+      searchParams.set('version', String(params.version));
+    }
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset item by ID
+   */
+  public getDatasetItem(datasetId: string, itemId: string): Promise<DatasetItem> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`);
+  }
+
+  /**
+   * Adds an item to a dataset
+   */
+  public addDatasetItem(params: AddDatasetItemParams): Promise<DatasetItem> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Updates a dataset item
+   */
+  public updateDatasetItem(params: UpdateDatasetItemParams): Promise<DatasetItem> {
+    const { datasetId, itemId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Deletes a dataset item
+   */
+  public deleteDatasetItem(datasetId: string, itemId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Batch inserts items to a dataset
+   */
+  public batchInsertDatasetItems(
+    params: BatchInsertDatasetItemsParams,
+  ): Promise<{ items: DatasetItem[]; count: number }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/batch`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Batch deletes items from a dataset
+   */
+  public batchDeleteDatasetItems(
+    params: BatchDeleteDatasetItemsParams,
+  ): Promise<{ success: boolean; deletedCount: number }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/batch`, {
+      method: 'DELETE',
+      body,
+    });
+  }
+
+  /**
+   * Generates synthetic dataset items using AI. Items are returned for review, not auto-saved.
+   */
+  public generateDatasetItems(params: GenerateDatasetItemsParams): Promise<{ items: GeneratedItem[] }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/generate-items`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Cluster experiment failures using AI to identify common failure patterns.
+   */
+  public clusterFailures(params: {
+    modelId: string;
+    items: Array<{
+      id: string;
+      input: unknown;
+      output?: unknown;
+      error?: string;
+      scores?: Record<string, number>;
+      existingTags?: string[];
+    }>;
+    availableTags?: string[];
+    prompt?: string;
+  }): Promise<{
+    clusters: Array<{ id: string; label: string; description: string; itemIds: string[] }>;
+    proposedTags?: Array<{ itemId: string; tags: string[]; reason: string }>;
+  }> {
+    return this.request(`/datasets/cluster-failures`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  // ============================================================================
+  // Dataset Item Versions
+  // ============================================================================
+
+  /**
+   * Lists versions for a dataset item
+   */
+  public getItemHistory(datasetId: string, itemId: string): Promise<{ history: DatasetItemVersionResponse[] }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/history`);
+  }
+
+  /**
+   * Gets a specific version of a dataset item
+   */
+  public getDatasetItemVersion(
+    datasetId: string,
+    itemId: string,
+    datasetVersion: number,
+  ): Promise<DatasetItemVersionResponse> {
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions/${datasetVersion}`,
+    );
+  }
+
+  // ============================================================================
+  // Dataset Versions
+  // ============================================================================
+
+  /**
+   * Lists versions for a dataset
+   */
+  public listDatasetVersions(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ versions: DatasetVersionResponse[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/versions${qs ? `?${qs}` : ''}`);
+  }
+
+  // ============================================================================
+  // Dataset Experiments
+  // ============================================================================
+
+  /**
+   * Lists all experiments across all datasets
+   */
+  public listExperiments(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets review status counts aggregated per experiment
+   */
+  public getExperimentReviewSummary(): Promise<{ counts: ExperimentReviewCounts[] }> {
+    return this.request(`/experiments/review-summary`);
+  }
+
+  /**
+   * Lists experiments for a dataset
+   */
+  public listDatasetExperiments(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset experiment by ID
+   */
+  public getDatasetExperiment(datasetId: string, experimentId: string): Promise<DatasetExperiment> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`);
+  }
+
+  /**
+   * Lists results for a dataset experiment
+   */
+  public listDatasetExperimentResults(
+    datasetId: string,
+    experimentId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  /**
+   * Updates an experiment result's status and/or tags
+   */
+  public updateDatasetExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, resultId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results/${encodeURIComponent(resultId)}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Triggers a new dataset experiment
+   */
+  public triggerDatasetExperiment(params: TriggerDatasetExperimentParams): Promise<{
+    experimentId: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    totalItems: number;
+    succeededCount: number;
+    failedCount: number;
+    startedAt: string | Date;
+    completedAt: string | Date | null;
+    results: Array<{
+      itemId: string;
+      itemDatasetVersion: number | null;
+      input: unknown;
+      output: unknown | null;
+      groundTruth: unknown | null;
+      error: string | null;
+      startedAt: string | Date;
+      completedAt: string | Date;
+      retryCount: number;
+      scores: Array<{
+        scorerId: string;
+        scorerName: string;
+        score: number | null;
+        reason: string | null;
+        error: string | null;
+      }>;
+    }>;
+  }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Updates the status and/or tags on an experiment result
+   */
+  public updateExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
+    const { datasetId, experimentId, resultId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results/${encodeURIComponent(resultId)}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Compares two dataset experiments for regression detection
+   */
+  public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/compare`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  // ============================================================================
+  // Background Tasks
+  // ============================================================================
+
+  /**
+   * Lists background tasks with optional filtering and pagination.
+   */
+  public listBackgroundTasks(params: ListBackgroundTasksParams = {}): Promise<ListBackgroundTasksResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.toolName) searchParams.set('toolName', params.toolName);
+    if (params.toolCallId) searchParams.set('toolCallId', params.toolCallId);
+    if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);
+    if (params.orderBy) searchParams.set('orderBy', params.orderBy);
+    if (params.orderDirection) searchParams.set('orderDirection', params.orderDirection);
+    if (params.page !== undefined) searchParams.set('page', String(params.page));
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/background-tasks${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single background task by ID.
+   */
+  public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Opens an SSE stream of background task events (completed/failed).
+   * Returns a Response that can be consumed as a ReadableStream.
+   */
+  public async streamBackgroundTasks(params: StreamBackgroundTasksParams = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.taskId) searchParams.set('taskId', params.taskId);
+    const qs = searchParams.toString();
+    const response: Response = await this.request(`/background-tasks/stream${qs ? `?${qs}` : ''}`, { stream: true });
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream background tasks: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    return response.body.pipeThrough(
+      new TransformStream({
+        async transform(chunk, controller) {
+          try {
+            // Decode binary data to text
+            const decoded = new TextDecoder().decode(chunk);
+
+            // Split by record separator
+            const chunks = decoded.split('\n\n');
+
+            // Process each chunk
+            for (const chunk of chunks) {
+              if (chunk) {
+                const cleanChunk = chunk.substring('data: '.length);
+                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
+                try {
+                  const parsedChunk = JSON.parse(newChunk);
+                  controller.enqueue(parsedChunk);
+                  failedChunk = undefined;
+                } catch {
+                  failedChunk = newChunk;
+                }
+              }
+            }
+          } catch {
+            // Silently ignore processing errors
+          }
+        },
+      }),
+    );
+  }
+
+  /**
+   * Lists workflow schedules with optional filtering by workflowId or status.
+   */
+  public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.workflowId) searchParams.set('workflowId', params.workflowId);
+    if (params.status) searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    return this.request(`/schedules${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single schedule by ID.
+   */
+  public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Lists trigger history for a schedule, ordered by actualFireAt descending.
+   */
+  public listScheduleTriggers(
+    scheduleId: string,
+    params: ListScheduleTriggersParams = {},
+  ): Promise<ListScheduleTriggersResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.fromActualFireAt !== undefined) searchParams.set('fromActualFireAt', String(params.fromActualFireAt));
+    if (params.toActualFireAt !== undefined) searchParams.set('toActualFireAt', String(params.toActualFireAt));
+    const qs = searchParams.toString();
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/triggers${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Pauses a schedule. The scheduler tick loop will skip paused schedules.
+   * Idempotent — pausing an already-paused schedule returns the current state unchanged.
+   * Pause status survives redeploys.
+   */
+  public pauseSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/pause`, { method: 'POST' });
+  }
+
+  /**
+   * Resumes a paused schedule. Recomputes nextFireAt from "now" so a long-paused schedule
+   * does not fire a backlog. Idempotent — resuming an already-active schedule returns
+   * the current state unchanged.
+   */
+  public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
   }
 }

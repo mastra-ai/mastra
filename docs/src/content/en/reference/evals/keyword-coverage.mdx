@@ -1,51 +1,51 @@
 ---
-title: "Reference: Keyword Coverage Scorer | Evals"
+title: "Reference: Keyword coverage scorer | Evals"
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
-# Keyword Coverage Scorer
+# Keyword coverage scorer
 
 The `createKeywordCoverageScorer()` function evaluates how well an LLM's output covers the important keywords from the input. It analyzes keyword presence and matches while ignoring common words and stop words.
 
 ## Parameters
 
-The `createKeywordCoverageScorer()` function does not take any options.
+The `createKeywordCoverageScorer()` function doesn't take any options.
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description:
-        "Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Coverage score (0-1) representing the proportion of matched keywords.",
-    },
-  ]}
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Coverage score (0-1) representing the proportion of matched keywords.',
+  },
+]}
 />
 
 `.run()` returns a result in the following shape:
 
-```typescript
+```typescript prettier:false
 {
   runId: string,
   extractStepResult: {
@@ -60,7 +60,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 }
 ```
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates keyword coverage by matching keywords with the following features:
 
@@ -75,7 +75,7 @@ The scorer evaluates keyword coverage by matching keywords with the following fe
    - Filters out common words and stop words
    - Normalizes case and word forms
    - Handles special terms and compounds
-2. Calculates keyword coverage:
+1. Calculates keyword coverage:
    - Matches keywords between texts
    - Counts successful matches
    - Computes coverage ratio
@@ -106,24 +106,24 @@ The scorer handles several special cases:
 
 Evaluate keyword coverage between input queries and agent responses:
 
-```typescript title="src/example-keyword-coverage.ts" showLineNumbers copy
-import { runEvals } from "@mastra/core/evals";
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+```typescript title="src/example-keyword-coverage.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createKeywordCoverageScorer();
+const scorer = createKeywordCoverageScorer()
 
 const result = await runEvals({
   data: [
     {
-      input: "JavaScript frameworks like React and Vue",
+      input: 'JavaScript frameworks like React and Vue',
     },
     {
-      input: "TypeScript offers interfaces, generics, and type inference",
+      input: 'TypeScript offers interfaces, generics, and type inference',
     },
     {
       input:
-        "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning",
+        'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning',
     },
   ],
   scorers: [scorer],
@@ -131,16 +131,16 @@ const result = await runEvals({
   onItemComplete: ({ scorerResults }) => {
     console.log({
       score: scorerResults[scorer.id].score,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#adding-scorers-to-agents) guide.
 
 ## Related
 

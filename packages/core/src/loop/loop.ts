@@ -1,14 +1,14 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
+import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
-import type { OutputSchema } from '../stream/base/schema';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   models,
   logger,
@@ -23,6 +23,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   returnScorerData,
   requireToolApproval,
   agentId,
+  toolCallConcurrency,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -38,7 +39,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       category: ErrorCategory.USER,
     });
     loggerToUse.trackException(mastraError);
-    loggerToUse.error(mastraError.toString());
     throw mastraError;
   }
 
@@ -47,7 +47,14 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   let runIdToUse = runId;
 
   if (!runIdToUse) {
-    runIdToUse = idGenerator?.() || crypto.randomUUID();
+    runIdToUse =
+      idGenerator?.({
+        idType: 'run',
+        source: 'agent',
+        entityId: agentId,
+        threadId: _internal?.threadId,
+        resourceId: _internal?.resourceId,
+      }) || crypto.randomUUID();
   }
 
   const internalToUse: StreamInternal = {
@@ -60,6 +67,11 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
     threadExists: _internal?.threadExists,
+    transportRef: _internal?.transportRef ?? {},
+    backgroundTaskManager: _internal?.backgroundTaskManager,
+    agentBackgroundConfig: _internal?.agentBackgroundConfig,
+    backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
+    skipBgTaskWait: _internal?.skipBgTaskWait,
   };
 
   let startTimestamp = internalToUse.now?.();
@@ -74,9 +86,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     modelOutput?.deserializeState(state);
   };
 
-  // Create processor states map that will be shared across all LLM execution steps
-  const processorStates =
-    outputProcessors && outputProcessors.length > 0 ? new Map<string, ProcessorState<OUTPUT>>() : undefined;
+  // Use the passed-in processorStates map if available, otherwise create a new one.
+  // This map persists across loop iterations and is shared by all processor methods.
+  const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
@@ -93,6 +105,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     messageId: messageId!,
     agentId,
     requireToolApproval,
+    toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,
@@ -118,6 +131,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
+  // Build observability context from modelSpanTracker if tracing context is available
+  const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
+
   modelOutput = new MastraModelOutput({
     model: {
       modelId: firstModel.model.modelId,
@@ -136,8 +152,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
-      tracingContext: rest.modelSpanTracker?.getTracingContext(),
+      ...observabilityContext,
       requestContext: rest.requestContext,
+      processorStates,
+      transportRef: internalToUse.transportRef,
     },
     initialState: initialStreamState,
   });

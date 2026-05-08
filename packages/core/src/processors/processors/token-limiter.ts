@@ -1,11 +1,9 @@
-import { Tiktoken } from 'js-tiktoken/lite';
-import type { TiktokenBPE } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
+import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
-import type { TracingContext } from '../../observability';
-import type { RequestContext } from '../../request-context';
+import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
-import type { Processor } from '../index';
+import type { ProcessInputStepArgs, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -13,8 +11,11 @@ import type { Processor } from '../index';
 export interface TokenLimiterOptions {
   /** Maximum number of tokens to allow */
   limit: number;
-  /** Optional encoding to use (defaults to o200k_base which is used by gpt-4o) */
-  encoding?: TiktokenBPE;
+  /**
+   * @deprecated Token counts are now estimated using `tokenx` (no BPE encoder required).
+   * This option is accepted for backwards compatibility but is ignored.
+   */
+  encoding?: unknown;
   /**
    * Strategy when token limit is reached:
    * - 'truncate': Stop emitting chunks (default)
@@ -27,19 +28,30 @@ export interface TokenLimiterOptions {
    * - 'part': Only count tokens in the current part
    */
   countMode?: 'cumulative' | 'part';
+  trimMode?: 'best-fit' | 'contiguous';
 }
 
 /**
- * Output processor that limits the number of tokens in generated responses.
- * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
+ * Processor that limits the number of tokens in messages.
+ *
+ * Can be used as:
+ * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
+ * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
-export class TokenLimiterProcessor implements Processor<'token-limiter'> {
+type TokenLimiterTripWireMetadata = {
+  systemTokens: number;
+  limit: number;
+  remainingBudget?: number;
+  messageCount?: number;
+};
+
+export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
-  private encoder: Tiktoken;
   private maxTokens: number;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
+  private trimMode: 'best-fit' | 'contiguous';
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -49,81 +61,130 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     if (typeof options === 'number') {
       // Simple number format - just the token limit with default settings
       this.maxTokens = options;
-      this.encoder = new Tiktoken(o200k_base);
       this.strategy = 'truncate';
       this.countMode = 'cumulative';
+      this.trimMode = 'best-fit';
     } else {
       // Object format with all options
       this.maxTokens = options.limit;
-      this.encoder = new Tiktoken(options.encoding || o200k_base);
       this.strategy = options.strategy || 'truncate';
       this.countMode = options.countMode || 'cumulative';
+      this.trimMode = options.trimMode || 'best-fit';
     }
   }
 
+  private countTokens(text: string): number {
+    return estimateTokenCount(text);
+  }
+
   /**
-   * Process input messages to limit them to the configured token limit.
-   * This filters historical messages to fit within the token budget,
-   * prioritizing the most recent messages.
+   * Process input messages at each step of the agentic loop, before they are sent to the LLM.
+   * Runs at every step (including tool call continuations), preventing the conversation history
+   * from growing unboundedly during multi-step agent workflows.
+   *
+   * System messages are always preserved, and the most recent non-system messages are kept
+   * within the token budget.
    */
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+  async processInputStep(args: ProcessInputStepArgs): Promise<void> {
+    const { messageList, systemMessages: coreSystemMessages } = args;
+
+    if (!messageList) return;
+
+    const messages = messageList.get.all.db();
+
+    // If no messages or empty array, throw TripWire - can't send LLM a request with no messages
+    if (!messages || messages.length === 0) {
+      throw new TripWire('TokenLimiterProcessor: No messages to process. Cannot send LLM a request with no messages.', {
+        retry: false,
+      });
+    }
+
+    // Calculate token count for system messages (always included, never filtered)
+    let systemTokens = 0;
+    if (coreSystemMessages && coreSystemMessages.length > 0) {
+      for (const msg of coreSystemMessages) {
+        systemTokens += await this.countCoreSystemMessageTokens(msg);
+      }
+    }
+
     const limit = this.maxTokens;
 
-    // If no messages or empty array, return as-is
-    if (!messages || messages.length === 0) {
-      return messages;
-    }
-
-    // Separate system messages from other messages
-    const systemMessages = messages.filter(msg => msg.role === 'system');
-    const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
-
-    // Calculate token count for system messages (always included)
-    let systemTokens = 0;
-    for (const msg of systemMessages) {
-      systemTokens += this.countInputMessageTokens(msg);
-    }
-
-    // If system messages alone exceed the limit (accounting for conversation overhead), return only system messages
+    // If system messages alone exceed the token limit (accounting for conversation overhead),
+    // throw TripWire - can't send LLM a request with only system messages
     if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
-      return systemMessages;
+      throw new TripWire(
+        'TokenLimiterProcessor: System messages alone exceed token limit. Requests cannot be completed by removing system messages.',
+        { retry: false, metadata: { systemTokens, limit } },
+      );
     }
 
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
     // Process non-system messages in reverse order (newest first)
-    const result: MastraDBMessage[] = [];
+    const messagesToKeep: MastraDBMessage[] = [];
     let currentTokens = 0;
 
     // Iterate through messages in reverse to prioritize recent messages
-    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
-      const message = nonSystemMessages[i];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
       if (!message) continue;
 
-      const messageTokens = this.countInputMessageTokens(message);
+      const messageTokens = await this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        result.unshift(message); // Add to beginning to maintain order
+        messagesToKeep.unshift(message);
         currentTokens += messageTokens;
+      } else {
+        if (this.trimMode === 'contiguous') {
+          break;
+        }
+        // best-fit → continue (existing behavior)
       }
-      // Continue checking all messages, don't break early
     }
 
-    // Return system messages followed by the filtered non-system messages
-    return [...systemMessages, ...result];
+    if (messagesToKeep.length === 0) {
+      throw new TripWire(
+        'TokenLimiterProcessor: No messages fit within the remaining token budget. Cannot send LLM a request with no messages.',
+        {
+          retry: false,
+          metadata: { systemTokens, limit, remainingBudget, messageCount: messages.length },
+        },
+      );
+    }
+
+    // Remove messages that don't fit within the token budget
+    const keepIds = new Set(messagesToKeep.map(m => m.id));
+    const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
+    if (idsToRemove.length > 0) {
+      messageList.removeByIds(idsToRemove);
+    }
+  }
+
+  /**
+   * Count tokens for a system message (CoreMessageV4 from args.systemMessages).
+   * This method only accepts system messages with string content and will throw otherwise.
+   */
+  private async countCoreSystemMessageTokens(message: CoreMessageV4): Promise<number> {
+    if (message.role !== 'system') {
+      throw new Error(
+        `countCoreSystemMessageTokens can only be used with system messages, received role: ${message.role}`,
+      );
+    }
+
+    if (typeof message.content !== 'string') {
+      throw new Error('countCoreSystemMessageTokens: System message content must be a string');
+    }
+
+    const tokenString = message.role + message.content;
+
+    return this.countTokens(tokenString) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
 
   /**
    * Count tokens for an input message, including overhead for message structure
    */
-  private countInputMessageTokens(message: MastraDBMessage): number {
+  private async countInputMessageTokens(message: MastraDBMessage): Promise<number> {
     let tokenString = message.role;
     let overhead = 0;
 
@@ -187,7 +248,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
       overhead += toolResultCount * TokenLimiterProcessor.TOKENS_PER_MESSAGE;
     }
 
-    const tokenCount = this.encoder.encode(tokenString).length;
+    const tokenCount = this.countTokens(tokenString);
     const total = tokenCount + overhead;
     return total;
   }
@@ -208,7 +269,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     }
 
     // Count tokens in the current part
-    const chunkTokens = this.countTokensInChunk(part);
+    const chunkTokens = await this.countTokensInChunk(part);
 
     if (this.countMode === 'cumulative') {
       // Add to cumulative count
@@ -243,15 +304,15 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
     return result;
   }
 
-  private countTokensInChunk(part: ChunkType): number {
+  private async countTokensInChunk(part: ChunkType): Promise<number> {
     if (part.type === 'text-delta') {
       // For text chunks, count the text content directly
-      return this.encoder.encode(part.payload.text).length;
+      return this.countTokens(part.payload.text);
     } else if (part.type === 'object') {
       // For object chunks, count the JSON representation
       // This is similar to how the memory processor handles object content
       const objectString = JSON.stringify(part.object);
-      return this.encoder.encode(objectString).length;
+      return this.countTokens(objectString);
     } else if (part.type === 'tool-call') {
       // For tool-call chunks, count tool name and args
       let tokenString = part.payload.toolName;
@@ -262,7 +323,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
           tokenString += JSON.stringify(part.payload.args);
         }
       }
-      return this.encoder.encode(tokenString).length;
+      return this.countTokens(tokenString);
     } else if (part.type === 'tool-result') {
       // For tool-result chunks, count the result
       let tokenString = '';
@@ -273,10 +334,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
           tokenString += JSON.stringify(part.payload.result);
         }
       }
-      return this.encoder.encode(tokenString).length;
+      return this.countTokens(tokenString);
     } else {
       // For other part types, count the JSON representation
-      return this.encoder.encode(JSON.stringify(part)).length;
+      return this.countTokens(JSON.stringify(part));
     }
   }
 
@@ -303,7 +364,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
       const processedParts = message.content.parts.map(part => {
         if (part.type === 'text') {
           const textContent = part.text;
-          const tokens = this.encoder.encode(textContent).length;
+          const tokens = this.countTokens(textContent);
 
           // Check if adding this part's tokens would exceed the cumulative limit
           if (cumulativeTokens + tokens <= limit) {
@@ -314,36 +375,9 @@ export class TokenLimiterProcessor implements Processor<'token-limiter'> {
               abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
             } else {
               // Truncate the text to fit within the remaining token limit
-              let truncatedText = '';
-              let currentTokens = 0;
-              const remainingTokens = limit - cumulativeTokens;
-
-              // Find the cutoff point that fits within the remaining limit using binary search
-              let left = 0;
-              let right = textContent.length;
-              let bestLength = 0;
-              let bestTokens = 0;
-
-              while (left <= right) {
-                const mid = Math.floor((left + right) / 2);
-                const testText = textContent.slice(0, mid);
-                const testTokens = this.encoder.encode(testText).length;
-
-                if (testTokens <= remainingTokens) {
-                  // This length fits, try to find a longer one
-                  bestLength = mid;
-                  bestTokens = testTokens;
-                  left = mid + 1;
-                } else {
-                  // This length is too long, try a shorter one
-                  right = mid - 1;
-                }
-              }
-
-              truncatedText = textContent.slice(0, bestLength);
-              currentTokens = bestTokens;
-
-              cumulativeTokens += currentTokens;
+              const remainingTokens = Math.max(0, limit - cumulativeTokens);
+              const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
+              cumulativeTokens += this.countTokens(truncatedText);
 
               return {
                 ...part,

@@ -10,15 +10,15 @@ Add this step to your workflow file:
 
 ```typescript
 const aiAnalysisStep = createStep({
-  id: "ai-analysis",
-  description: "AI-powered content analysis",
+  id: 'ai-analysis',
+  description: 'AI-powered content analysis',
   inputSchema: z.object({
     content: z.string(),
     type: z.string(),
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(["easy", "medium", "hard"]),
+      difficulty: z.enum(['easy', 'medium', 'hard']),
       processedAt: z.string(),
     }),
     summary: z.string(),
@@ -29,7 +29,7 @@ const aiAnalysisStep = createStep({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(["easy", "medium", "hard"]),
+      difficulty: z.enum(['easy', 'medium', 'hard']),
       processedAt: z.string(),
     }),
     summary: z.string(),
@@ -39,7 +39,7 @@ const aiAnalysisStep = createStep({
     }),
   }),
   execute: async ({ inputData, mastra }) => {
-    const { content, type, wordCount, metadata, summary } = inputData;
+    const { content, type, wordCount, metadata, summary } = inputData
 
     // Create prompt for the AI agent
     const prompt = `
@@ -55,26 +55,24 @@ Please provide:
 2. Brief feedback on strengths and areas for improvement
 
 Format as JSON: {"score": number, "feedback": "your feedback here"}
-    `;
+    `
 
     // Get the contentAgent from the mastra instance.
-    const contentAgent = mastra.getAgent("contentAgent");
-    const { text } = await contentAgent.generate([
-      { role: "user", content: prompt },
-    ]);
+    const contentAgent = mastra.getAgent('contentAgent')
+    const { text } = await contentAgent.generate([{ role: 'user', content: prompt }])
 
     // Parse AI response (with fallback)
-    let aiAnalysis;
+    let aiAnalysis
     try {
-      aiAnalysis = JSON.parse(text);
+      aiAnalysis = JSON.parse(text)
     } catch {
       aiAnalysis = {
         score: 7,
-        feedback: "AI analysis completed. " + text,
-      };
+        feedback: 'AI analysis completed. ' + text,
+      }
     }
 
-    console.log(`🤖 AI Score: ${aiAnalysis.score}/10`);
+    console.log(`🤖 AI Score: ${aiAnalysis.score}/10`)
 
     return {
       content,
@@ -83,9 +81,9 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
       metadata,
       summary,
       aiAnalysis,
-    };
+    }
   },
-});
+})
 ```
 
 Your agent-powered step is ready! Next, you'll add it to your workflow for complete AI-enhanced content processing.

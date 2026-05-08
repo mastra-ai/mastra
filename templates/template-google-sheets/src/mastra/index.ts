@@ -1,4 +1,4 @@
-import { Observability } from '@mastra/observability';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { financialModelingAgent } from './agents/financial-modeling-agent';
@@ -12,17 +12,17 @@ export const mastra = new Mastra({
   agents: { financialModelingAgent },
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    url: 'file:../../mastra.db',
+    url: 'file:./mastra.db',
   }),
   vectors: {
     default: new LibSQLVector({
       id: 'mastra-vector',
-      connectionUrl: 'file:../../mastra.db',
+      url: 'file:./mastra.db',
     }),
   },
   logger: new PinoLogger({
     name: 'Mastra',
-    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+    level: 'info',
   }),
   server: {
     build: {
@@ -46,7 +46,7 @@ export const mastra = new Mastra({
         // TODO: Retrieve unique user id and set it on the request context
         // Consider using Authentication headers for user identification
         // e.g const bearerToken = c.get('Authorization')
-        // https://mastra.ai/en/docs/server-db/middleware#common-examples
+        // https://mastra.ai/docs/server/middleware#common-examples
         const userId = 'unique-user-id';
         requestContext.set('userId', userId);
 
@@ -87,8 +87,17 @@ export const mastra = new Mastra({
     ],
   },
   observability: new Observability({
-    default: {
-      enabled: true,
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
     },
   }),
 });

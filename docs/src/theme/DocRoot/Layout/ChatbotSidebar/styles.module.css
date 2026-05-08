@@ -7,7 +7,7 @@
   display: none;
 }
 
-@media (min-width: 997px) {
+@media (min-width: 62.25rem) {
   .chatbotSidebarContainer {
     display: flex;
     flex-direction: column;

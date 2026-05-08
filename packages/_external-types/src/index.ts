@@ -25,18 +25,18 @@ export type ProviderDefinedTool =
       type?: string;
       id?: string;
       args?: Record<string, unknown>;
-      execute?: (...args: any[]) => any;
+      execute?: ((...args: any[]) => any) | undefined;
       [key: string]: any; // Allows experimental_* and other future properties
     }
   | {
       // ToolV5 structure
-      inputSchema: unknown;
+      inputSchema?: unknown;
       description?: string;
       type?: string;
       id?: string;
       name?: string;
       providerOptions?: any;
-      execute?: (...args: any[]) => any;
+      execute?: ((...args: any[]) => any) | undefined;
       outputSchema?: any;
       [key: string]: any; // Allows onInput* callbacks and other future properties
     };

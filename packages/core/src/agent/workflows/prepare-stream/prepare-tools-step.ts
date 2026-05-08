@@ -1,34 +1,29 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
-interface PrepareToolsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareToolsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
+  backgroundTaskEnabled?: boolean;
 }
 
-export function createPrepareToolsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareToolsStep<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -37,30 +32,14 @@ export function createPrepareToolsStep<
   requestContext,
   agentSpan,
   methodType,
-  memory,
-}: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
+  memory: _memory,
+  backgroundTaskEnabled,
+}: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: z.object({}),
     outputSchema: prepareToolsStepOutputSchema,
     execute: async () => {
-      const toolEnhancements = [
-        options?.toolsets && Object.keys(options?.toolsets || {}).length > 0
-          ? `toolsets present (${Object.keys(options?.toolsets || {}).length} tools)`
-          : undefined,
-        memory && resourceId ? 'memory and resourceId available' : undefined,
-      ]
-        .filter(Boolean)
-        .join(', ');
-
-      capabilities.logger.debug(`[Agent:${capabilities.agentName}] - Enhancing tools: ${toolEnhancements}`, {
-        runId,
-        toolsets: options?.toolsets ? Object.keys(options?.toolsets) : undefined,
-        clientTools: options?.clientTools ? Object.keys(options?.clientTools) : undefined,
-        hasMemory: !!memory,
-        hasResourceId: !!resourceId,
-      });
-
       const threadId = threadFromArgs?.id;
 
       const convertedTools = await capabilities.convertTools({
@@ -70,11 +49,25 @@ export function createPrepareToolsStep<
         resourceId,
         runId,
         requestContext,
-        tracingContext: { currentSpan: agentSpan },
-        writableStream: options.writableStream,
+        ...createObservabilityContext({ currentSpan: agentSpan }),
+        outputWriter: options.outputWriter,
         methodType,
         memoryConfig: options.memory?.options,
+        autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+        delegation: options.delegation,
+        backgroundTaskEnabled,
+        inputProcessors: options.inputProcessors,
       });
+
+      // Update the agent span with available tool names for observability
+      const toolNames = Object.keys(convertedTools);
+      if (toolNames.length > 0) {
+        agentSpan?.update({
+          attributes: {
+            availableTools: toolNames,
+          },
+        });
+      }
 
       return {
         convertedTools,

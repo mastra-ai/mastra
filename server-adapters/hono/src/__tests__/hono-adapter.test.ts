@@ -1,13 +1,23 @@
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type { Server } from 'node:http';
+import { serve } from '@hono/node-server';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
   consumeSSEStream,
+  createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
@@ -15,7 +25,7 @@ describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
 
-    setupAdapter: async (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       const app = new Hono();
 
       // Create Hono adapter
@@ -25,8 +35,7 @@ describe('Hono Server Adapter', () => {
         tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
+        prefix: options?.prefix,
       });
 
       await adapter.init();
@@ -78,7 +87,10 @@ describe('Hono Server Adapter', () => {
 
       // Parse response
       const contentType = response.headers?.get('content-type') || '';
-      const isStream = contentType.includes('text/plain') || response.headers?.get('transfer-encoding') === 'chunked';
+      const isStream =
+        contentType.includes('text/plain') ||
+        contentType.includes('text/event-stream') ||
+        response.headers?.get('transfer-encoding') === 'chunked';
 
       // Extract headers
       const headers: Record<string, string> = {};
@@ -305,6 +317,615 @@ describe('Hono Server Adapter', () => {
       const textDelta = chunks.find(c => c.type === 'text-delta');
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
+    });
+  });
+
+  describe('Abort Signal', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('should not have aborted signal when route handler executes', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Track the abort signal state when the handler executes
+      let abortSignalAborted: boolean | undefined;
+
+      // Create a test route that checks the abort signal state
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/abort-signal',
+        responseType: 'json',
+        handler: async (params: any) => {
+          // Capture the abort signal state when handler runs
+          abortSignalAborted = params.abortSignal?.aborted;
+          return { signalAborted: abortSignalAborted };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Make a POST request with a JSON body (this triggers body parsing which can cause the issue)
+      const response = await app.request(
+        new Request('http://localhost/test/abort-signal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ test: 'data' }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // The abort signal should NOT be aborted during normal request handling
+      expect(result.signalAborted).toBe(false);
+      expect(abortSignalAborted).toBe(false);
+    });
+
+    it('should provide abort signal to route handlers', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/abort-signal-exists',
+        responseType: 'json',
+        handler: async (params: any) => {
+          receivedAbortSignal = params.abortSignal;
+          return { hasSignal: !!params.abortSignal };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/abort-signal-exists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // Route handler should receive an abort signal
+      expect(result.hasSignal).toBe(true);
+      expect(receivedAbortSignal).toBeDefined();
+      expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  // Multipart FormData tests
+  createMultipartTestSuite({
+    suiteName: 'Hono Multipart FormData',
+
+    setupAdapter: async (context, options) => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        taskStore: context.taskStore,
+        bodyLimitOptions: options?.bodyLimitOptions,
+      });
+
+      await adapter.init();
+
+      return { app, adapter };
+    },
+
+    startServer: async (app: Hono) => {
+      const server = serve({
+        fetch: app.fetch,
+        port: 0, // Random available port
+      }) as Server;
+
+      // Wait for server to be listening
+      await new Promise<void>(resolve => {
+        server.once('listening', () => resolve());
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+
+      return {
+        baseUrl: `http://localhost:${address.port}`,
+        cleanup: async () => {
+          await new Promise<void>(resolve => {
+            server.close(() => resolve());
+          });
+        },
+      };
+    },
+
+    registerRoute: async (adapter, app, route, options) => {
+      await adapter.registerRoute(app, route, options || { prefix: '' });
+    },
+
+    getContextMiddleware: adapter => adapter.createContextMiddleware(),
+
+    applyMiddleware: (app, middleware) => {
+      app.use('*', middleware);
+    },
+  });
+
+  describe('OpenAPI Spec', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should serve the OpenAPI spec at /api/openapi.json', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const prefixedResponse = await fetch(`http://localhost:${port}/api/openapi.json`);
+      expect(prefixedResponse.status).toBe(200);
+      const prefixedSpec = await prefixedResponse.json();
+      expect(prefixedSpec.openapi).toBe('3.1.0');
+      expect(prefixedSpec.servers).toEqual([{ url: '/api' }]);
+    });
+
+    it('should set per-path servers override on custom routes in the spec', async () => {
+      const customRoutes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          openapi: {
+            summary: 'Health check',
+            description: 'Returns health status',
+            tags: ['Health'],
+            responses: {
+              200: { description: 'OK' },
+            },
+          },
+          handler: async c => {
+            return c.json({ status: 'ok' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
+      const spec = await response.json();
+
+      // Built-in routes should NOT have per-path servers (they use top-level servers)
+      const builtinPaths = Object.keys(spec.paths).filter(p => p !== '/health');
+      for (const p of builtinPaths) {
+        expect(spec.paths[p].servers).toBeUndefined();
+      }
+
+      expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toEqual([{ url: '/' }]);
+    });
+
+    it('should not add servers override to custom routes when no prefix is used', async () => {
+      const customRoutes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          openapi: {
+            summary: 'Health check',
+            description: 'Returns health status',
+            responses: { 200: { description: 'OK' } },
+          },
+          handler: async c => {
+            return c.json({ status: 'ok' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '',
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/openapi.json`);
+      const spec = await response.json();
+
+      expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toBeUndefined();
+      expect(spec.servers).toBeUndefined();
+    });
+
+    it('should enforce root-level servers override on custom routes', async () => {
+      const customRoutes = [
+        registerApiRoute('/external', {
+          method: 'GET',
+          openapi: {
+            summary: 'External endpoint',
+            description: 'Route with custom servers',
+            servers: [{ url: 'https://external.example.com' }],
+            responses: { 200: { description: 'OK' } },
+          },
+          handler: async c => {
+            return c.json({ ok: true });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
+      const spec = await response.json();
+
+      expect(spec.paths['/external']).toBeDefined();
+      expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
+    });
+  });
+
+  describe('Custom API Routes (registerApiRoute)', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should register and respond to custom API routes added via registerApiRoute', async () => {
+      const customRoutes = [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Hello from custom route!' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('should register custom API routes with POST method', async () => {
+      const customRoutes = [
+        registerApiRoute('/echo', {
+          method: 'POST',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ echo: body });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/echo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ echo: { test: 'data' } });
+    });
+
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+    });
+
+    it('should allow framework-internal routes under the server prefix', async () => {
+      const customRoutes = [
+        {
+          path: '/mastra/agents/bot/channels/slack/webhook',
+          method: 'POST' as const,
+          requiresAuth: false,
+          _mastraInternal: true,
+          handler: async (c: any) => c.json({ ok: true }),
+        },
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).resolves.not.toThrow();
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+  });
+
+  describe('Reserved context key injection prevention', () => {
+    it('should strip mastra__resourceId from client-provided requestContext in body', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should strip mastra__threadId from client-provided requestContext in body', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              mastra__threadId: 'injected-thread-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should strip reserved keys from client-provided requestContext in GET query params', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const queryContext = JSON.stringify({
+        mastra__resourceId: 'injected-victim-id',
+        mastra__threadId: 'injected-thread-id',
+        myKey: 'safe-value',
+      });
+
+      const response = await app.request(
+        new Request(`http://localhost/test/context?requestContext=${encodeURIComponent(queryContext)}`, {
+          method: 'GET',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
     });
   });
 });

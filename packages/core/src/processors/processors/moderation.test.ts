@@ -1,7 +1,8 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { ModerationResult } from './moderation';
@@ -138,6 +139,24 @@ describe('ModerationProcessor', () => {
 
       expect(result).toEqual(messages);
       expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should only moderate the last message when lastMessageOnly is enabled', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(true, ['violence']) });
+      const moderator = new ModerationProcessor({
+        model,
+        strategy: 'filter',
+        lastMessageOnly: true,
+      });
+
+      const messages = [
+        createTestMessage('This earlier message would have been checked before', 'user', 'msg1'),
+        createTestMessage('Flag this violent content', 'user', 'msg2'),
+      ];
+
+      const result = await moderator.processInput({ messages, abort: vi.fn() as any });
+
+      expect(result).toEqual([messages[0]]);
     });
 
     it('should abort when content is flagged with block strategy', async () => {
@@ -562,7 +581,7 @@ describe('ModerationProcessor', () => {
 
       const part: ChunkType = {
         type: 'text-delta' as const,
-        payload: { text: 'Flagged content', id: '1' },
+        payload: { text: 'Flagged content', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -594,15 +613,20 @@ describe('ModerationProcessor', () => {
       const previousChunks: ChunkType[] = [
         {
           type: 'text-delta' as const,
-          payload: { text: 'Previous content ', id: '1' },
+          payload: { text: 'Previous content ', id: 'text-1' },
           runId: '1',
           from: ChunkFrom.AGENT,
         },
-        { type: 'text-delta' as const, payload: { text: 'more context ', id: '1' }, runId: '1', from: ChunkFrom.AGENT },
+        {
+          type: 'text-delta' as const,
+          payload: { text: 'more context ', id: 'text-1' },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        },
       ];
       const currentChunk: ChunkType = {
         type: 'text-delta' as const,
-        payload: { text: 'current part', id: '1' },
+        payload: { text: 'current part', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -659,7 +683,7 @@ describe('ModerationProcessor', () => {
 
       const currentChunk: ChunkType = {
         type: 'text-delta' as const,
-        payload: { text: 'Safe content', id: '1' },
+        payload: { text: 'Safe content', id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };
@@ -675,6 +699,55 @@ describe('ModerationProcessor', () => {
       // Should moderate the current part and return it if safe
       expect(result).toEqual(currentChunk);
       expect(mockAbort).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('structured output schema compatibility', () => {
+    it('should not send number bounds to Anthropic in score schemas', async () => {
+      const mockResult = createMockModerationResult(false);
+      const mockModel = new MastraLanguageModelV2Mock({
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify(mockResult) }],
+          warnings: [],
+        }),
+      });
+
+      const moderator = new ModerationProcessor({ model: mockModel });
+
+      await moderator.processInput({ messages: [createTestMessage('Safe content')], abort: vi.fn() as any });
+
+      const responseFormat = mockModel.doGenerateCalls[0].responseFormat;
+      expect(responseFormat?.type).toBe('json');
+      const schema = responseFormat?.type === 'json' ? responseFormat.schema : undefined;
+      const schemaJson = JSON.stringify(schema);
+      expect(schemaJson).toContain('score');
+      expect(schemaJson).not.toContain('minimum');
+      expect(schemaJson).not.toContain('maximum');
+    });
+
+    it('should reject scores outside the 0-1 range at runtime', async () => {
+      const model = setupMockModel({
+        object: {
+          category_scores: [{ category: 'hate', score: 1.2 }],
+          reason: 'Flagged content',
+        },
+      });
+      const moderator = new ModerationProcessor({ model, strategy: 'warn', includeScores: true });
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await moderator.processInput({ messages: [createTestMessage('Flagged content')], abort: vi.fn() as any });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[ModerationProcessor] Agent moderation failed, allowing content:',
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });

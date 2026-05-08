@@ -1,42 +1,67 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { OutputProcessor } from '../../../processors';
-import type { DynamicArgument } from '../../../types';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorState,
+} from '../../../processors';
+import type { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
+  agent: Agent<any, any, any, any>;
   agentName: string;
   logger: MastraBase['logger'];
   getMemory: Agent['getMemory'];
   getModel: Agent['getModel'];
   generateMessageId: Mastra['generateId'];
+  mastra?: Mastra;
   _agentNetworkAppend?: boolean;
-  saveStepMessages: Agent['saveStepMessages'];
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
-  outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  outputProcessors?:
+    | OutputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: OutputProcessorOrWorkflow[];
+      }) => Promise<OutputProcessorOrWorkflow[]> | OutputProcessorOrWorkflow[]);
+  inputProcessors?:
+    | InputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
+  llmRequestInputProcessors?:
+    | InputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
+  errorProcessors?:
+    | ErrorProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: ErrorProcessorOrWorkflow[];
+      }) => Promise<ErrorProcessorOrWorkflow[]> | ErrorProcessorOrWorkflow[]);
   llm: MastraLLMVNext;
 };
 
-const coreToolSchema = z.object({
-  id: z.string().optional(),
-  description: z.string().optional(),
-  parameters: z.union([
-    z.record(z.string(), z.any()), // JSON Schema as object
-    z.any(), // Zod schema or other schema types - validated at tool execution
-  ]),
-  outputSchema: z.union([z.record(z.string(), z.any()), z.any()]).optional(),
-  execute: z.function(z.tuple([z.any(), z.any()]), z.promise(z.any())).optional(),
-  type: z.union([z.literal('function'), z.literal('provider-defined'), z.undefined()]).optional(),
-  args: z.record(z.string(), z.any()).optional(),
-});
-
-export type CoreTool = z.infer<typeof coreToolSchema>;
+export type CoreTool = {
+  parameters: any;
+  id?: string | undefined;
+  description?: string | undefined;
+  outputSchema?: any;
+  execute?: (inputData: any, context: any) => any;
+  toModelOutput?: (output: any) => any;
+  type?: 'function' | 'provider-defined' | undefined;
+  args?: Record<string, any> | undefined;
+};
 
 export const storageThreadSchema = z.object({
   id: z.string(),
@@ -48,15 +73,24 @@ export const storageThreadSchema = z.object({
 });
 
 export const prepareToolsStepOutputSchema = z.object({
-  convertedTools: z.record(z.string(), coreToolSchema),
+  convertedTools: z.record(z.string(), z.any()),
 });
 
 export const prepareMemoryStepOutputSchema = z.object({
   threadExists: z.boolean(),
   thread: storageThreadSchema.optional(),
   messageList: z.instanceof(MessageList),
-  tripwire: z.boolean().optional(),
-  tripwireReason: z.string().optional(),
+  /** Shared processor states map that persists across loop iterations for both input and output processors */
+  processorStates: z.instanceof(Map<string, ProcessorState>),
+  /** Tripwire data when input processor triggered abort */
+  tripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      metadata: z.unknown().optional(),
+      processorId: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type PrepareMemoryStepOutput = z.infer<typeof prepareMemoryStepOutputSchema>;

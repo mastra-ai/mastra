@@ -1,32 +1,19 @@
-import { ReadableStream, WritableStream } from 'node:stream/web';
-import type { ToolSet } from 'ai-v5';
+import { ReadableStream } from 'node:stream/web';
+import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { MastraDBMessage } from '../../agent/message-list';
+import { getErrorFromUnknown } from '../../error';
+import { ConsoleLogger } from '../../logger';
+import { createObservabilityContext } from '../../observability';
+import { ProcessorRunner } from '../../processors/runner';
+import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
-import type { OutputSchema } from '../../stream/base/schema';
+import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-/**
- * Check if a ReadableStreamDefaultController is open and can accept data.
- *
- * Note: While the ReadableStream spec indicates desiredSize can be:
- * - positive (ready), 0 (full but open), or null (closed/errored),
- * our empirical testing shows that after controller.close(), desiredSize becomes 0.
- * Therefore, we treat both 0 and null as closed states to prevent
- * "Invalid state: Controller is already closed" errors.
- *
- * @param controller - The ReadableStreamDefaultController to check
- * @returns true if the controller is open and can accept data
- */
-export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
-  return controller.desiredSize !== 0 && controller.desiredSize !== null;
-}
-
-export function workflowLoopStream<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   requireToolApproval,
   models,
@@ -40,15 +27,152 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
+  toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
-      const writer = new WritableStream<ChunkType<OUTPUT>>({
-        write: chunk => {
-          controller.enqueue(chunk);
+      // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
+      const requestContext = rest.requestContext ?? new RequestContext();
+
+      // Create a ProcessorRunner for data-* chunks so they go through output processors
+      const hasOutputProcessors = rest.outputProcessors && rest.outputProcessors.length > 0;
+      const dataChunkProcessorRunner = hasOutputProcessors
+        ? new ProcessorRunner({
+            outputProcessors: rest.outputProcessors,
+            logger: rest.logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+          })
+        : undefined;
+      const dataChunkProcessorStates = hasOutputProcessors ? new Map<string, ProcessorState>() : undefined;
+
+      // Create a ProcessorStreamWriter so output processors can emit custom chunks back to the stream
+      const dataChunkStreamWriter = {
+        custom: async (data: { type: string }) => {
+          safeEnqueue(controller, data as ChunkType<OUTPUT>);
         },
-      });
+      };
+
+      const outputWriter = async (chunk: ChunkType<OUTPUT>, options?: { messageId?: string }) => {
+        // Handle data-* chunks (custom data chunks from writer.custom())
+        // These need to be persisted to storage, not just streamed
+        // Transient chunks are streamed to the client but not saved to the DB
+        if (chunk.type.startsWith('data-')) {
+          // Run data-* chunks through output processors before persisting
+          let processedChunk = chunk;
+          if (dataChunkProcessorRunner) {
+            const {
+              part: processed,
+              blocked,
+              reason,
+              tripwireOptions,
+              processorId,
+            } = await dataChunkProcessorRunner.processPart(
+              chunk,
+              (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
+              undefined, // observabilityContext
+              requestContext,
+              messageList,
+              0,
+              dataChunkStreamWriter,
+            );
+
+            if (blocked) {
+              safeEnqueue(controller, {
+                type: 'tripwire',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  reason: reason || 'Output processor blocked content',
+                  retry: tripwireOptions?.retry,
+                  metadata: tripwireOptions?.metadata,
+                  processorId,
+                },
+              } as ChunkType<OUTPUT>);
+              return;
+            }
+
+            if (processed) {
+              processedChunk = processed as ChunkType<OUTPUT>;
+            } else {
+              return;
+            }
+          }
+
+          // If a processor rewrote the chunk to a non-data type, skip persistence
+          const responseMessageId = options?.messageId ?? messageId;
+          if (
+            typeof processedChunk.type === 'string' &&
+            processedChunk.type.startsWith('data-') &&
+            responseMessageId &&
+            !('transient' in processedChunk && processedChunk.transient)
+          ) {
+            const dataPart = {
+              type: processedChunk.type as `data-${string}`,
+              data: 'data' in processedChunk ? processedChunk.data : undefined,
+            };
+            const message: MastraDBMessage = {
+              id: responseMessageId,
+              role: 'assistant',
+              content: {
+                format: 2,
+                parts: [dataPart],
+              },
+              createdAt: new Date(),
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+            };
+            messageList.add(message, 'response');
+          }
+
+          safeEnqueue(controller, processedChunk);
+          return;
+        }
+
+        // Non data-* chunks injected via this writer (e.g. `tool-output` from
+        // sub-agents delegated through the `agents:` option, or
+        // `workflow-step-output` from workflow tools) bypass the LLM's own
+        // processor pipeline. Route them through configured output processors
+        // here so users can filter/redact nested chunks via processOutputStream.
+        if (dataChunkProcessorRunner) {
+          const {
+            part: processed,
+            blocked,
+            reason,
+            tripwireOptions,
+            processorId,
+          } = await dataChunkProcessorRunner.processPart(
+            chunk,
+            (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
+            undefined,
+            requestContext,
+            messageList,
+            0,
+            dataChunkStreamWriter,
+          );
+
+          if (blocked) {
+            safeEnqueue(controller, {
+              type: 'tripwire',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                reason: reason || 'Output processor blocked content',
+                retry: tripwireOptions?.retry,
+                metadata: tripwireOptions?.metadata,
+                processorId,
+              },
+            } as ChunkType<OUTPUT>);
+            return;
+          }
+
+          if (!processed) return;
+          safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          return;
+        }
+
+        safeEnqueue(controller, chunk);
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -58,12 +182,14 @@ export function workflowLoopStream<
         modelSettings,
         toolChoice,
         controller,
-        writer,
+        outputWriter,
         runId,
         messageList,
         startTimestamp,
         streamState,
         agentId,
+        requireToolApproval,
+        toolCallConcurrency,
         ...rest,
       });
 
@@ -92,21 +218,21 @@ export function workflowLoopStream<
       };
 
       if (!resumeContext) {
-        controller.enqueue({
+        safeEnqueue(controller, {
           type: 'start',
           runId,
           from: ChunkFrom.AGENT,
           payload: {
             id: agentId,
+            messageId,
           },
         });
       }
 
       const run = await agenticLoopWorkflow.createRun({
         runId,
+        resourceId: _internal?.resourceId,
       });
-
-      const requestContext = new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);
@@ -115,26 +241,48 @@ export function workflowLoopStream<
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+            requestContext,
             label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
             requestContext,
           });
 
       if (executionResult.status !== 'success') {
-        controller.close();
+        if (executionResult.status === 'failed') {
+          const error = getErrorFromUnknown(executionResult.error, {
+            fallbackMessage: 'Unknown error in agent workflow stream',
+          });
+
+          safeEnqueue(controller, {
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { error },
+          });
+
+          if (rest.options?.onError) {
+            await rest.options?.onError?.({ error });
+          }
+        }
+
+        if (executionResult.status !== 'suspended') {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        }
+
+        safeClose(controller);
         return;
       }
 
-      if (executionResult.result.stepResult?.reason === 'abort') {
-        controller.close();
-        return;
-      }
+      await agenticLoopWorkflow.deleteWorkflowRunById(runId);
 
-      controller.enqueue({
+      // Always emit finish chunk, even for abort (tripwire) cases
+      // This ensures the stream properly completes and all promises are resolved
+      // The tripwire/abort status is communicated through the stepResult.reason
+      safeEnqueue(controller, {
         type: 'finish',
         runId,
         from: ChunkFrom.AGENT,
@@ -142,13 +290,13 @@ export function workflowLoopStream<
           ...executionResult.result,
           stepResult: {
             ...executionResult.result.stepResult,
-            // @ts-ignore we add 'abort' for tripwires so the type is not compatible
+            // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
             reason: executionResult.result.stepResult.reason,
           },
         },
       });
 
-      controller.close();
+      safeClose(controller);
     },
   });
 }

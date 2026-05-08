@@ -1,6 +1,17 @@
 import { posix } from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule } from './utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  getPackageName,
+  hasImportProtocol,
+  isExternalProtocolImport,
+  isBareModuleSpecifier,
+  getCompiledDepCachePath,
+  slash,
+  findNativePackageModule,
+  normalizeStudioBase,
+  detectRuntime,
+  injectStudioHtmlConfig,
+} from './utils';
 
 describe('getPackageName', () => {
   it('should return the full scoped package name for scoped packages', () => {
@@ -24,6 +35,53 @@ describe('getPackageName', () => {
   it('should handle multiple slashes', () => {
     expect(getPackageName('foo/bar/baz')).toBe('foo');
     expect(getPackageName('@scope/foo/bar/baz')).toBe('@scope/foo');
+  });
+});
+
+describe('hasImportProtocol', () => {
+  it('should detect protocol-style import specifiers', () => {
+    expect(hasImportProtocol('cloudflare:workers')).toBe(true);
+    expect(hasImportProtocol('node:fs')).toBe(true);
+    expect(hasImportProtocol('data:text/javascript,export default 1')).toBe(true);
+  });
+
+  it('should not treat package names or paths as protocol imports', () => {
+    expect(hasImportProtocol('@mastra/core')).toBe(false);
+    expect(hasImportProtocol('lodash')).toBe(false);
+    expect(hasImportProtocol('./relative/file.ts')).toBe(false);
+    expect(hasImportProtocol('/absolute/file.ts')).toBe(false);
+    expect(hasImportProtocol('C:\\Users\\demo\\file.ts')).toBe(false);
+  });
+});
+
+describe('isExternalProtocolImport', () => {
+  it('should treat non-node protocol imports as runtime externals', () => {
+    expect(isExternalProtocolImport('cloudflare:workers')).toBe(true);
+    expect(isExternalProtocolImport('data:text/javascript,export default 1')).toBe(true);
+  });
+
+  it('should exclude node: imports from protocol external handling', () => {
+    expect(isExternalProtocolImport('node:fs')).toBe(false);
+  });
+});
+
+describe('isBareModuleSpecifier', () => {
+  it('should accept package imports and package subpaths', () => {
+    expect(isBareModuleSpecifier('@mastra/core')).toBe(true);
+    expect(isBareModuleSpecifier('@mastra/core/agent')).toBe(true);
+    expect(isBareModuleSpecifier('lodash')).toBe(true);
+    expect(isBareModuleSpecifier('lodash/fp/get')).toBe(true);
+  });
+
+  it('should reject virtual, path, builtin, and runtime protocol specifiers', () => {
+    expect(isBareModuleSpecifier('node:fs')).toBe(false);
+    expect(isBareModuleSpecifier('cloudflare:workers')).toBe(false);
+    expect(isBareModuleSpecifier('#server')).toBe(false);
+    expect(isBareModuleSpecifier('./relative/file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('../relative/file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('/absolute/file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('C:\\Users\\demo\\file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('fs')).toBe(false);
   });
 });
 
@@ -323,5 +381,223 @@ describe('findNativePackageModule', () => {
         '/Users/user/project/node_modules/bcrypt/bcrypt.js?commonjs-module',
       );
     });
+  });
+});
+
+describe('normalizeStudioBase', () => {
+  describe('special cases', () => {
+    it('should return empty string for root path', () => {
+      expect(normalizeStudioBase('/')).toBe('');
+    });
+
+    it('should return empty string for empty string', () => {
+      expect(normalizeStudioBase('')).toBe('');
+    });
+  });
+
+  describe('basic normalization', () => {
+    it('should add leading slash when missing', () => {
+      expect(normalizeStudioBase('admin')).toBe('/admin');
+    });
+
+    it('should preserve leading slash', () => {
+      expect(normalizeStudioBase('/admin')).toBe('/admin');
+    });
+
+    it('should remove trailing slash', () => {
+      expect(normalizeStudioBase('/admin/')).toBe('/admin');
+    });
+
+    it('should add leading slash and remove trailing slash', () => {
+      expect(normalizeStudioBase('admin/')).toBe('/admin');
+    });
+
+    it('should handle nested paths', () => {
+      expect(normalizeStudioBase('/admin/panel')).toBe('/admin/panel');
+      expect(normalizeStudioBase('admin/panel')).toBe('/admin/panel');
+      expect(normalizeStudioBase('/admin/panel/')).toBe('/admin/panel');
+    });
+  });
+
+  describe('multiple slashes normalization', () => {
+    it('should normalize double slashes to single slash', () => {
+      expect(normalizeStudioBase('//admin')).toBe('/admin');
+    });
+
+    it('should normalize multiple consecutive slashes', () => {
+      expect(normalizeStudioBase('///admin')).toBe('/admin');
+      expect(normalizeStudioBase('////admin')).toBe('/admin');
+    });
+
+    it('should normalize slashes in the middle of path', () => {
+      expect(normalizeStudioBase('/admin//test')).toBe('/admin/test');
+      expect(normalizeStudioBase('/admin///test')).toBe('/admin/test');
+    });
+
+    it('should normalize multiple slash groups', () => {
+      expect(normalizeStudioBase('//admin//test//panel')).toBe('/admin/test/panel');
+    });
+
+    it('should handle trailing multiple slashes', () => {
+      expect(normalizeStudioBase('/admin//')).toBe('/admin');
+      expect(normalizeStudioBase('/admin///')).toBe('/admin');
+    });
+  });
+
+  describe('validation - path traversal', () => {
+    it('should throw error for path with parent directory traversal', () => {
+      expect(() => normalizeStudioBase('../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+
+    it('should throw error for path with traversal in middle', () => {
+      expect(() => normalizeStudioBase('/admin/../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+
+    it('should throw error for path with multiple traversals', () => {
+      expect(() => normalizeStudioBase('../../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+  });
+
+  describe('validation - query parameters', () => {
+    it('should throw error for path with query string', () => {
+      expect(() => normalizeStudioBase('/admin?query=1')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+
+    it('should throw error for path with multiple query parameters', () => {
+      expect(() => normalizeStudioBase('/admin?a=1&b=2')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+  });
+
+  describe('validation - hash fragments', () => {
+    it('should throw error for path with hash', () => {
+      expect(() => normalizeStudioBase('/admin#section')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+
+    it('should throw error for path with just hash', () => {
+      expect(() => normalizeStudioBase('#anchor')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+  });
+
+  describe('validation - combined invalid characters', () => {
+    it('should throw error for path with query and hash', () => {
+      expect(() => normalizeStudioBase('/admin?query=1#section')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+
+    it('should throw error for path with traversal and query', () => {
+      expect(() => normalizeStudioBase('../admin?query=1')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
+    });
+  });
+
+  describe('real-world examples', () => {
+    it('should handle common base path patterns', () => {
+      expect(normalizeStudioBase('api')).toBe('/api');
+      expect(normalizeStudioBase('admin')).toBe('/admin');
+      expect(normalizeStudioBase('studio')).toBe('/studio');
+      expect(normalizeStudioBase('v1')).toBe('/v1');
+    });
+
+    it('should handle versioned API paths', () => {
+      expect(normalizeStudioBase('/api/v1')).toBe('/api/v1');
+      expect(normalizeStudioBase('api/v2/')).toBe('/api/v2');
+    });
+
+    it('should handle dashboard/admin paths', () => {
+      expect(normalizeStudioBase('/admin/dashboard')).toBe('/admin/dashboard');
+      expect(normalizeStudioBase('admin/panel/')).toBe('/admin/panel');
+    });
+
+    it('should handle hyphenated paths', () => {
+      expect(normalizeStudioBase('/my-app')).toBe('/my-app');
+      expect(normalizeStudioBase('my-admin-panel')).toBe('/my-admin-panel');
+    });
+
+    it('should handle underscored paths', () => {
+      expect(normalizeStudioBase('/my_app')).toBe('/my_app');
+      expect(normalizeStudioBase('admin_panel')).toBe('/admin_panel');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle single character paths', () => {
+      expect(normalizeStudioBase('a')).toBe('/a');
+      expect(normalizeStudioBase('/a')).toBe('/a');
+    });
+
+    it('should normalize multiple slashes to empty string', () => {
+      // Multiple slashes normalize to '/' during normalization step
+      // Then caught by the post-normalization check that returns ''
+      expect(normalizeStudioBase('///')).toBe('');
+      expect(normalizeStudioBase('//')).toBe('');
+    });
+
+    it('should handle deep nested paths', () => {
+      expect(normalizeStudioBase('/a/b/c/d/e/f')).toBe('/a/b/c/d/e/f');
+      expect(normalizeStudioBase('a/b/c/d/e/f/')).toBe('/a/b/c/d/e/f');
+    });
+
+    it('should handle paths with numbers', () => {
+      expect(normalizeStudioBase('/app123')).toBe('/app123');
+      expect(normalizeStudioBase('v2024')).toBe('/v2024');
+    });
+
+    it('should handle mixed case paths', () => {
+      expect(normalizeStudioBase('/Admin')).toBe('/Admin');
+      expect(normalizeStudioBase('MyApp')).toBe('/MyApp');
+    });
+  });
+});
+
+/**
+ * Tests for runtime detection utilities
+ * @see GitHub Issue #11253: Bun S3 API's not working inside Mastra Workflows
+ */
+describe('detectRuntime', () => {
+  const originalBunVersion = process.versions.bun;
+
+  beforeEach(() => {
+    // Clean up bun version before each test
+    delete (process.versions as Record<string, string | undefined>).bun;
+  });
+
+  afterEach(() => {
+    // Restore original bun version
+    if (originalBunVersion) {
+      (process.versions as Record<string, string | undefined>).bun = originalBunVersion;
+    } else {
+      delete (process.versions as Record<string, string | undefined>).bun;
+    }
+  });
+
+  it('should return "node" when process.versions.bun is not present', () => {
+    expect(detectRuntime()).toBe('node');
+  });
+
+  it('should return "bun" when process.versions.bun is present', () => {
+    (process.versions as Record<string, string | undefined>).bun = '1.0.0';
+    expect(detectRuntime()).toBe('bun');
+  });
+});
+
+describe('injectStudioHtmlConfig', () => {
+  it('should inject MASTRA_EXPERIMENTAL_UI placeholder', () => {
+    const html = "window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'true'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
   });
 });

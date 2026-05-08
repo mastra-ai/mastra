@@ -5,8 +5,6 @@ A Cloudflare Workers deployer for Mastra applications.
 ## Features
 
 - Deploy Mastra applications to Cloudflare Workers
-- Configure custom domains and routes
-- Support for worker namespaces
 - Automatic environment variable configuration
 
 ## Installation
@@ -24,8 +22,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 
 const deployer = new CloudflareDeployer({
-  scope: 'your-account-id',
-  projectName: 'your-project-name',
+  name: 'your-project-name',
   routes: [
     {
       pattern: 'example.com/*',
@@ -33,10 +30,8 @@ const deployer = new CloudflareDeployer({
       custom_domain: true,
     },
   ],
-  workerNamespace: 'your-namespace',
-  auth: {
-    apiToken: 'your-api-token',
-    apiEmail: 'your-email',
+  assets: {
+    directory: './assets/',
   },
 });
 
@@ -48,18 +43,9 @@ const mastra = new Mastra({
 
 ## Configuration
 
-### Constructor Options
+The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
 
-- `scope` (required): Your Cloudflare account ID
-- `projectName`: Name of your worker project
-- `routes`: Array of route configurations for your worker
-  - `pattern`: URL pattern to match
-  - `zone_name`: Domain zone name
-  - `custom_domain`: Whether to use a custom domain
-- `workerNamespace`: Namespace for your worker
-- `auth`: Cloudflare authentication details
-  - `apiToken`: Your Cloudflare API token
-  - `apiEmail`: Your Cloudflare account email
+**Deprecated fields:** If migrating from an earlier version, note that `projectName`, `d1Databases`, `kvNamespaces`, and `workerNamespace` are deprecated. Use the standard `wrangler.json` property names instead (`name`, `d1_databases`, `kv_namespaces`).
 
 ## Environment Variables
 
@@ -67,30 +53,6 @@ The deployer will automatically load environment variables from:
 
 - `.env` files in your project
 - Environment variables passed through the Mastra configuration
-
-## Routes
-
-Routes can be configured to direct traffic to your worker based on URL patterns and domains:
-
-```typescript
-const routes = [
-  {
-    pattern: 'api.example.com/*',
-    zone_name: 'example.com',
-    custom_domain: true,
-  },
-  {
-    pattern: 'example.com/api/*',
-    zone_name: 'example.com',
-  },
-];
-```
-
-Each route requires:
-
-- `pattern`: URL pattern to match
-- `zone_name`: Domain zone name
-- `custom_domain`: (optional) Set to true to use a custom domain
 
 ## Requirements
 

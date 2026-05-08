@@ -18,7 +18,7 @@ export class Tool extends BaseResource {
    * @returns Promise containing tool details including description and schemas
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
-    return this.request(`/api/tools/${this.toolId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/tools/${this.toolId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -38,7 +38,7 @@ export class Tool extends BaseResource {
       requestContext: parseClientRequestContext(params.requestContext),
     };
 
-    return this.request(`/api/tools/${this.toolId}/execute?${url.toString()}`, {
+    return this.request(`/tools/${this.toolId}/execute?${url.toString()}`, {
       method: 'POST',
       body,
     });

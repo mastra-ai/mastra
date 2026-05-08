@@ -1,16 +1,19 @@
 ---
-title: "Braintrust Exporter | Tracing | Observability"
+title: "Braintrust exporter | Tracing | Observability"
 description: "Send traces to Braintrust for evaluation and monitoring"
+packages:
+  - "@mastra/braintrust"
+  - "@mastra/observability"
 ---
 
-# Braintrust Exporter
+# Braintrust exporter
 
 [Braintrust](https://www.braintrust.dev/) is an evaluation and monitoring platform that helps you measure and improve LLM application quality. The Braintrust exporter sends your traces to Braintrust, enabling systematic evaluation, scoring, and experimentation.
 
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/braintrust@beta
+npm install @mastra/braintrust@latest
 ```
 
 ## Configuration
@@ -18,37 +21,62 @@ npm install @mastra/braintrust@beta
 ### Prerequisites
 
 1. **Braintrust Account**: Sign up at [braintrust.dev](https://www.braintrust.dev/)
-2. **Project**: Create or select a project for your traces
-3. **API Key**: Generate in Braintrust Settings → API Keys
-4. **Environment Variables**: Set your credentials:
+1. **Project**: Create or select a project for your traces
+1. **API Key**: Generate in Braintrust Settings → API Keys
+1. **Environment Variables**: Set your credentials:
 
 ```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
-BRAINTRUST_PROJECT_NAME=my-project  # Optional, defaults to 'mastra-tracing'
+
+# Optional
+BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # Custom endpoint if needed
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { BraintrustExporter } from "@mastra/braintrust";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       braintrust: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
+        exporters: [new BraintrustExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: 'my-service',
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
-            projectName: process.env.BRAINTRUST_PROJECT_NAME,
+            projectName: 'my-project',
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 ### Complete Configuration
@@ -59,32 +87,28 @@ new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY!,
 
   // Optional settings
-  projectName: "my-project", // Default: 'mastra-tracing'
-  endpoint: "https://api.braintrust.dev", // Custom endpoint if needed
-  logLevel: "info", // Diagnostic logging: debug | info | warn | error
-});
+  projectName: 'my-project', // Default: 'mastra-tracing'
+  endpoint: 'https://api.braintrust.dev', // Custom endpoint if needed
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+})
 ```
 
-## Using Tags
+## Querying Braintrust with returned `spanId`
 
-Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
+For Braintrust, use `spanId` as the root span identifier when searching for traces because Braintrust root-span queries are typically faster than trace-id queries.
 
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
+```typescript title="src/mastra/usage.ts"
+const result = await agent.stream('Summarize this ticket')
+
+console.log('Mastra trace ID:', result.traceId)
+console.log('Braintrust root span ID:', result.spanId)
+
+// Use result.spanId in your Braintrust lookup/query path
 ```
 
-Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
+The same applies to `agent.generate()` and workflow run results (`run.start()`, `run.stream()` final state, `run.resume()`).
 
 ## Related
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Tracing Overview](/docs/observability/tracing/overview)
 - [Braintrust Documentation](https://www.braintrust.dev/docs)

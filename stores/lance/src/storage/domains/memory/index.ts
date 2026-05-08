@@ -4,30 +4,107 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsLance } from '../operations';
-import { getTableSchema, processResultWithTypeConversion } from '../utils';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
+import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreMemoryLance extends MemoryStorage {
   private client: Connection;
-  private operations: StoreOperationsLance;
-  constructor({ client, operations }: { client: Connection; operations: StoreOperationsLance }) {
+  #db: LanceDB;
+
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new LanceDB({ client });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Get messages to find their threadIds before deleting
+      for (const messageId of messageIds) {
+        const message = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id: messageId } });
+        if (message?.thread_id) {
+          threadIds.add(message.thread_id);
+        }
+      }
+
+      // Delete messages
+      const messagesTable = await this.client.openTable(TABLE_MESSAGES);
+      const idConditions = messageIds.map(id => `id = '${this.escapeSql(id)}'`).join(' OR ');
+      await messagesTable.delete(idConditions);
+
+      // Update thread timestamps using mergeInsert
+      const now = new Date().getTime();
+      const threadsTable = await this.client.openTable(TABLE_THREADS);
+      for (const threadId of threadIds) {
+        const thread = await this.getThreadById({ threadId });
+        if (thread) {
+          const record = {
+            id: threadId,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: JSON.stringify(thread.metadata),
+            createdAt: new Date(thread.createdAt).getTime(),
+            updatedAt: now,
+          };
+          await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Utility to escape single quotes in SQL strings
@@ -37,7 +114,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
+      const thread = await this.#db.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
 
       if (!thread) {
         return null;
@@ -51,7 +128,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -75,7 +152,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -133,7 +210,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // If it's not a commit conflict or we've exhausted retries, throw the error
         throw new MastraError(
           {
-            id: 'LANCE_STORE_UPDATE_THREAD_FAILED',
+            id: createStorageErrorId('LANCE', 'UPDATE_THREAD', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
           },
@@ -145,7 +222,7 @@ export class StoreMemoryLance extends MemoryStorage {
     // This should never be reached, but just in case
     throw new MastraError(
       {
-        id: 'LANCE_STORE_UPDATE_THREAD_FAILED',
+        id: createStorageErrorId('LANCE', 'UPDATE_THREAD', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
       },
@@ -165,7 +242,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('LANCE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -213,7 +290,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -234,7 +311,7 @@ export class StoreMemoryLance extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -251,7 +328,7 @@ export class StoreMemoryLance extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -281,7 +358,8 @@ export class StoreMemoryLance extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.getTime()
             : new Date(filter.dateRange.start).getTime();
-        conditions.push(`\`createdAt\` >= ${startTime}`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`\`createdAt\` ${startOp} ${startTime}`);
       }
 
       if (filter?.dateRange?.end) {
@@ -289,10 +367,29 @@ export class StoreMemoryLance extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.getTime()
             : new Date(filter.dateRange.end).getTime();
-        conditions.push(`\`createdAt\` <= ${endTime}`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`\`createdAt\` ${endOp} ${endTime}`);
       }
 
       const whereClause = conditions.join(' AND ');
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includedMessages = await this._getIncludedMessages(table, include);
+        const list = new MessageList().add(includedMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
       // Get total count
       const total = await table.countRows(whereClause);
@@ -335,25 +432,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        // Get all unique thread IDs from include items
-        const threadIds = [...new Set(include.map(item => item.threadId || threadId))];
-
-        // Fetch all messages from all relevant threads
-        const allThreadMessages: any[] = [];
-        for (const tid of threadIds) {
-          const threadQuery = table.query().where(`thread_id = '${tid}'`);
-          let threadRecords = await threadQuery.toArray();
-          allThreadMessages.push(...threadRecords);
-        }
-
-        // Sort all messages by createdAt
-        allThreadMessages.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Apply processMessagesWithContext to get included messages with context
-        const contextMessages = this.processMessagesWithContext(allThreadMessages, include);
-        const includedMessages = contextMessages.map((row: any) => this.normalizeMessage(row));
-
-        // Deduplicate: only add messages that aren't already in the paginated results
+        const includedMessages = await this._getIncludedMessages(table, include);
         for (const includeMsg of includedMessages) {
           if (!messageIds.has(includeMsg.id)) {
             messages.push(includeMsg);
@@ -367,20 +446,7 @@ export class StoreMemoryLance extends MemoryStorage {
       let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        // Handle null/undefined - treat as "smallest" values
-        if (aValue == null && bValue == null) return 0;
-        if (aValue == null) return direction === 'ASC' ? -1 : 1;
-        if (bValue == null) return direction === 'ASC' ? 1 : -1;
-
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-        }
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      finalMessages = this._sortMessages(finalMessages, field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -400,7 +466,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'LANCE_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -475,7 +541,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -484,36 +550,85 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = normalizePerPage(perPageInput, 100);
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
 
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: 'STORAGE_LANCE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
+    const perPage = normalizePerPage(perPageInput, 100);
 
-      // When perPage is false (get all), ignore page offset
+    // Validate metadata keys to prevent prototype pollution and ensure safe key patterns
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    try {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
-      // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
+      // Build WHERE clause
+      const whereClauses: string[] = [];
 
-      // Get ALL matching records (no limit/offset yet - need to sort first)
-      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
-      const records = await query.toArray();
+      if (filter?.resourceId) {
+        whereClauses.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
+      }
+
+      const whereClause = whereClauses.length > 0 ? whereClauses.join(' AND ') : '';
+
+      // Get ALL matching records (no limit/offset yet - need to filter metadata + sort)
+      // Lance doesn't support nested JSON path queries in SQL WHERE clause
+      const query = whereClause ? table.query().where(whereClause) : table.query();
+      let records = await query.toArray();
+
+      // Apply metadata filters in-memory (AND logic)
+      // Lance stores metadata as a JSON column, not flattened fields
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        records = records.filter((record: any) => {
+          if (!record.metadata) return false;
+
+          // Handle both object and stringified JSON metadata
+          let recordMeta: Record<string, unknown>;
+          if (typeof record.metadata === 'string') {
+            try {
+              recordMeta = JSON.parse(record.metadata);
+            } catch {
+              return false;
+            }
+          } else {
+            recordMeta = record.metadata;
+          }
+
+          // Check all metadata filters match (AND logic)
+          return Object.entries(filter.metadata!).every(([key, value]) => recordMeta[key] === value);
+        });
+      }
+
+      const total = records.length;
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
@@ -549,13 +664,96 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
     }
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return direction === 'ASC' ? -1 : 1;
+      if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      }
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
+  }
+
+  private async _getIncludedMessages(
+    table: any,
+    include: NonNullable<StorageListMessagesInput['include']>,
+  ): Promise<(MastraMessageV1 | MastraDBMessage)[]> {
+    if (include.length === 0) return [];
+
+    // Phase 1: Fetch target messages by ID to discover their thread_ids
+    const targetIds = include.map(item => item.id);
+    const idCondition =
+      targetIds.length === 1
+        ? `id = '${this.escapeSql(targetIds[0]!)}'`
+        : `id IN (${targetIds.map(id => `'${this.escapeSql(id)}'`).join(', ')})`;
+    const targetRecords = await table.query().where(idCondition).toArray();
+
+    const needsContext = include.some(item => item.withPreviousMessages || item.withNextMessages);
+
+    if (!needsContext) {
+      // No context needed — return only the target messages themselves
+      return targetRecords.map((row: any) => this.normalizeMessage(row));
+    }
+
+    // Phase 2: Fetch full threads for context windows (each unique thread loaded once)
+    const threadIdsToFetch = [...new Set<string>(targetRecords.map((r: any) => r.thread_id as string))];
+    const threadCache = new Map<string, any[]>();
+    for (const tid of threadIdsToFetch) {
+      const threadRecords = await table
+        .query()
+        .where(`thread_id = '${this.escapeSql(tid)}'`)
+        .toArray();
+      threadRecords.sort((a: any, b: any) => a.createdAt - b.createdAt);
+      threadCache.set(tid, threadRecords);
+    }
+
+    // Process context windows per-thread to avoid cross-thread contamination
+    const targetThreadMap = new Map<string, any>();
+    for (const r of targetRecords) {
+      targetThreadMap.set(r.id, r.thread_id);
+    }
+
+    // Group include items by thread
+    const includeByThread = new Map<string, typeof include>();
+    for (const item of include) {
+      const tid = targetThreadMap.get(item.id);
+      if (!tid) continue;
+      const items = includeByThread.get(tid) ?? [];
+      items.push(item);
+      includeByThread.set(tid, items);
+    }
+
+    // Process each thread separately, then combine
+    const seen = new Set<string>();
+    const allContextMessages: any[] = [];
+    for (const [tid, threadInclude] of includeByThread) {
+      const threadMessages = threadCache.get(tid) ?? [];
+      const contextMessages = this.processMessagesWithContext(threadMessages, threadInclude);
+      for (const msg of contextMessages) {
+        if (!seen.has(msg.id)) {
+          seen.add(msg.id);
+          allContextMessages.push(msg);
+        }
+      }
+    }
+
+    allContextMessages.sort((a, b) => a.createdAt - b.createdAt);
+    return allContextMessages.map((row: any) => this.normalizeMessage(row));
   }
 
   /**
@@ -571,7 +769,9 @@ export class StoreMemoryLance extends MemoryStorage {
     const messagesWithContext = include.filter(item => item.withPreviousMessages || item.withNextMessages);
 
     if (messagesWithContext.length === 0) {
-      return records;
+      // No context requested — return only the target messages themselves
+      const targetIds = new Set(include.map(item => item.id));
+      return records.filter(record => targetIds.has(record.id));
     }
 
     // Create a map of message id to index in the sorted array for quick lookup
@@ -605,9 +805,10 @@ export class StoreMemoryLance extends MemoryStorage {
       }
     }
 
-    // If we need to include additional messages, create a new set of records
+    // If no additional context messages needed, return only the target messages
     if (additionalIndices.size === 0) {
-      return records;
+      const targetIds = new Set(include.map(item => item.id));
+      return records.filter(record => targetIds.has(record.id));
     }
 
     // Get IDs of the records that matched the original query
@@ -680,7 +881,7 @@ export class StoreMemoryLance extends MemoryStorage {
         const { id, ...updates } = updateData;
 
         // Get the existing message
-        const existingMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const existingMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (!existingMessage) {
           this.logger.warn('Message not found for update', { id });
           continue;
@@ -729,10 +930,10 @@ export class StoreMemoryLance extends MemoryStorage {
         }
 
         // Update the message using merge insert
-        await this.operations.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
+        await this.#db.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
 
         // Get the updated message
-        const updatedMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const updatedMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (updatedMessage) {
           updatedMessages.push(this.parseMessageData(updatedMessage));
         }
@@ -740,7 +941,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.operations.insert({
+        await this.#db.insert({
           tableName: TABLE_THREADS,
           record: { id: threadId, updatedAt: Date.now() },
         });
@@ -750,7 +951,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('LANCE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -762,7 +963,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const resource = await this.operations.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
+      const resource = await this.#db.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
 
       if (!resource) {
         return null;
@@ -848,7 +1049,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -873,7 +1074,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -941,7 +1142,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // If it's not a commit conflict or we've exhausted retries, throw the error
         throw new MastraError(
           {
-            id: 'LANCE_STORE_UPDATE_RESOURCE_FAILED',
+            id: createStorageErrorId('LANCE', 'UPDATE_RESOURCE', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
           },

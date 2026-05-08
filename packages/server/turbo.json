@@ -2,8 +2,44 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    "generate:api-cli-route-metadata": {
+      "cache": false,
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "scripts/generate-api-cli-route-metadata.ts", "package.json"],
+      "outputs": ["../cli/src/commands/api/route-metadata.generated.ts"]
+    },
+    "generate:route-types": {
+      "cache": false,
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "scripts/generate-route-types.ts", "package.json"],
+      "outputs": ["../../client-sdks/client-js/src/route-types.generated.ts"]
+    },
+    "build:lib": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
+      "outputs": ["dist/**", "!dist/docs/**"]
+    },
+    "build:patch-commonjs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["./**/*.d.ts"]
+    },
+    "build": {
+      "dependsOn": ["build:patch-commonjs", "build:lib"],
+      "inputs": ["package.json"]
+    },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"],
+      "outputs": []
     }
   }
 }

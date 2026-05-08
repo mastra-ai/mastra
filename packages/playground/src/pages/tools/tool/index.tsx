@@ -1,18 +1,7 @@
+import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, ToolsIcon } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
-
-import {
-  Header,
-  Breadcrumb,
-  Crumb,
-  Icon,
-  ToolsIcon,
-  HeaderAction,
-  Button,
-  DocsIcon,
-  ToolPanel,
-  HeaderGroup,
-  ToolCombobox,
-} from '@mastra/playground-ui';
+import { ToolCombobox } from '@/domains/tools/components/tool-combobox';
+import { ToolPanel } from '@/domains/tools/components/ToolPanel';
 
 const Tool = () => {
   const { toolId } = useParams();
@@ -21,25 +10,26 @@ const Tool = () => {
     <div className="h-full w-full overflow-y-hidden">
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to={`/tools`} isCurrent>
+          <Crumb as={Link} to={`/tools`}>
             <Icon>
               <ToolsIcon />
             </Icon>
             Tools
           </Crumb>
+          <Crumb as="span" to="" isCurrent>
+            <ToolCombobox value={toolId} variant="ghost" />
+          </Crumb>
         </Breadcrumb>
 
-        <HeaderGroup>
-          <div className="w-[240px]">
-            <ToolCombobox value={toolId} />
-          </div>
-        </HeaderGroup>
-
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+            target="_blank"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Tools documentation
           </Button>
         </HeaderAction>

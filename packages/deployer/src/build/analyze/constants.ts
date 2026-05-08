@@ -1,4 +1,4 @@
-export const DEPS_TO_IGNORE = ['#tools'];
+export const DEPS_TO_IGNORE = ['#tools', 'execa'];
 
 export const GLOBAL_EXTERNALS = [
   'pino',
@@ -10,5 +10,8 @@ export const GLOBAL_EXTERNALS = [
   'typescript',
   'undici',
   'readable-stream',
+  'bufferutil',
+  'utf-8-validate',
+  'execa',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];

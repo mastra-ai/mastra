@@ -1,27 +1,29 @@
 ---
 title: "Reference: Run.observeStream() | Streaming"
 description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.observeStream()
 
-The `.observeStream()` method opens a new `ReadableStream` to a workflow run that is currently running, allowing you to observe the stream of events if the original stream is no longer available.
+The `.observeStream()` method opens a new `ReadableStream` to a workflow run that's currently running, allowing you to observe the stream of events if the original stream is no longer available.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const run = await workflow.createRun();
+```typescript
+const run = await workflow.createRun()
 
 run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
-const stream = await run.observeStream();
+const stream = await run.observeStream()
 
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -29,7 +31,7 @@ for await (const chunk of stream) {
 
 `ReadableStream<ChunkType>`
 
-## Stream Events
+## Stream events
 
 The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
@@ -41,7 +43,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
-- [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.stream()](./stream)
 - [Run.resumeStream()](./resumeStream)

@@ -114,8 +114,10 @@ class TransformerTestBuilder {
       startedAt: config.startedAt || '2025-01-01T00:02:00Z',
       input: config.input || { query: 'test' },
       output: config.output || { result: 'success' },
+      // Use entityName and entityId to match the actual span record schema
+      entityName: config.toolId || 'test-tool',
+      entityId: config.toolId,
       attributes: {
-        toolId: config.toolId || 'test-tool',
         toolDescription: 'Test tool description',
         toolType: 'function',
       },
@@ -386,7 +388,7 @@ describe('Transformer Functions', () => {
       expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
       expect(result.output[0]?.content.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
 
-      // @ts-ignore
+      // @ts-expect-error - result property exists when state is 'result'
       expect(result.output[0]?.content.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
     });
 

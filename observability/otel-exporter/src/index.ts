@@ -1,6 +1,6 @@
 export { OtelExporter } from './tracing.js';
 export { SpanConverter, getSpanKind } from './span-converter.js';
-export { MastraReadableSpan } from './mastra-span.js';
+export { getAttributes, getSpanName } from './gen-ai-semantics.js';
 export type {
   OtelExporterConfig,
   ProviderConfig,

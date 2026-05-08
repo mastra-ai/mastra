@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
   QueryResult,
@@ -22,10 +23,19 @@ import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
-import type { IndexConfig, IndexType } from './types';
+import type { IndexConfig, IndexType, PgMetric, VectorOps, VectorType } from './types';
+export type { PgMetric, VectorOps, VectorType, IndexConfig, IndexType } from './types';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
+  /**
+   * The pgvector storage type used for this index.
+   * - 'vector': Full precision (4 bytes per dimension)
+   * - 'halfvec': Half precision (2 bytes per dimension)
+   * - 'bit': Binary vectors (1 bit per dimension)
+   * - 'sparsevec': Sparse vectors (only non-zero elements stored)
+   */
+  vectorType: VectorType;
   config: {
     m?: number;
     efConstruction?: number;
@@ -48,27 +58,61 @@ interface PgQueryVectorParams extends QueryVectorParams<PGVectorFilter> {
   probes?: number;
 }
 
-interface PgCreateIndexParams extends CreateIndexParams {
+interface PgCreateIndexParams extends Omit<CreateIndexParams, 'metric'> {
+  /**
+   * Distance metric for the index.
+   * Standard: 'cosine', 'euclidean', 'dotproduct' (work with all vector types)
+   * Bit-specific: 'hamming' (count differing bits), 'jaccard' (1 - intersection/union)
+   *
+   * For 'bit' vectorType, defaults to 'hamming' if not specified.
+   * 'jaccard' requires HNSW index (IVFFlat does not support Jaccard distance).
+   */
+  metric?: PgMetric;
   indexConfig?: IndexConfig;
   buildIndex?: boolean;
+  /**
+   * The pgvector storage type for embeddings.
+   * - 'vector': Full precision (4 bytes per dimension), max 2000 dimensions for indexes (default)
+   * - 'halfvec': Half precision (2 bytes per dimension), max 4000 dimensions for indexes
+   * - 'bit': Binary vectors (1 bit per dimension), up to 64,000 dimensions for indexes
+   * - 'sparsevec': Sparse vectors (only non-zero elements), up to 1,000 non-zero elements for indexes
+   *
+   * Use 'halfvec' for large dimension models like text-embedding-3-large (3072 dimensions)
+   * Use 'bit' for binary quantization (reduced storage, faster search)
+   * Use 'sparsevec' for BM25/TF-IDF and other sparse embeddings
+   */
+  vectorType?: VectorType;
+  /**
+   * Metadata fields to create btree indexes for.
+   * This improves query performance when filtering vectors by these metadata fields.
+   *
+   * Each entry creates a btree index on `metadata->>'field_name'`.
+   *
+   * Example: `['thread_id', 'resource_id']` creates indexes that speed up
+   * queries filtering by `thread_id` or `resource_id` in the metadata JSONB column.
+   */
+  metadataIndexes?: string[];
 }
 
 interface PgDefineIndexParams {
   indexName: string;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: PgMetric;
   indexConfig: IndexConfig;
+  vectorType?: VectorType;
 }
 
 export class PgVector extends MastraVector<PGVectorFilter> {
   public pool: pg.Pool;
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
+  private indexVectorTypes = new Map<string, VectorType>();
   private mutexesByName = new Map<string, Mutex>();
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private installVectorExtensionPromise: Promise<void> | null = null;
   private vectorExtensionInstalled: boolean | undefined = undefined;
   private vectorExtensionSchema: string | null = null;
+  private vectorExtensionVersion: string | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
@@ -93,8 +137,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       } else if (isCloudSqlConfig(config)) {
         poolConfig = {
           ...config,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          max: config.pgPoolOptions?.max ?? 20,
+          idleTimeoutMillis: config.pgPoolOptions?.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         } as pg.PoolConfig;
@@ -130,8 +174,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 metric: info.metric,
                 dimension: info.dimension,
                 type: info.type,
+                vectorType: info.vectorType,
               });
               this.createdIndexes.set(indexName, key);
+              this.indexVectorTypes.set(indexName, info.vectorType);
             }),
           );
         } catch (error) {
@@ -143,7 +189,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_INITIALIZATION_FAILED',
+          id: createVectorErrorId('PG', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -161,12 +207,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
-   * Detects which schema contains the vector extension
+   * Detects which schema contains the vector extension and its version
    */
   private async detectVectorExtensionSchema(client: pg.PoolClient): Promise<string | null> {
     try {
       const result = await client.query(`
-        SELECT n.nspname as schema_name
+        SELECT n.nspname as schema_name, e.extversion as version
         FROM pg_extension e
         JOIN pg_namespace n ON e.extnamespace = n.oid
         WHERE e.extname = 'vector'
@@ -175,7 +221,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (result.rows.length > 0) {
         this.vectorExtensionSchema = result.rows[0].schema_name;
-        this.logger.debug('Vector extension found in schema', { schema: this.vectorExtensionSchema });
+        this.vectorExtensionVersion = result.rows[0].version;
+        this.logger.debug('Vector extension found', {
+          schema: this.vectorExtensionSchema,
+          version: this.vectorExtensionVersion,
+        });
         return this.vectorExtensionSchema;
       }
 
@@ -187,26 +237,170 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
-   * Gets the properly qualified vector type name
+   * Sets search_path on the client connection so that vector operators (e.g. <=>, vector_cosine_ops)
+   * are resolvable when the pgvector extension is installed in a non-default schema.
+   *
+   * PostgreSQL's default search_path is ("$user", public). If the extension lives in a custom schema
+   * (e.g. "myapp"), operator classes and distance operators won't resolve without this.
    */
-  private getVectorTypeName(): string {
+  private async ensureSearchPath(client: pg.PoolClient) {
+    // Lazily detect extension schema if not yet known
+    if (!this.vectorExtensionSchema) {
+      await this.detectVectorExtensionSchema(client);
+    }
+
+    if (
+      this.vectorExtensionSchema &&
+      this.vectorExtensionSchema !== 'public' &&
+      this.vectorExtensionSchema !== 'pg_catalog'
+    ) {
+      const schemas = new Set<string>();
+      schemas.add(this.vectorExtensionSchema);
+      if (this.schema) schemas.add(this.schema);
+      schemas.add('public');
+      await client.query(`SET search_path TO ${[...schemas].map(s => `"${s}"`).join(', ')}`);
+    }
+  }
+
+  /**
+   * Checks if the installed pgvector version supports halfvec type.
+   * halfvec was introduced in pgvector 0.7.0.
+   */
+  private supportsHalfvec(): boolean {
+    if (!this.vectorExtensionVersion) {
+      return false;
+    }
+    // Parse version string, handling non-numeric suffixes (e.g., "0.7.0-beta", "0.8.0+build")
+    const parts = this.vectorExtensionVersion.split('.');
+    const major = parseInt(parts[0] ?? '', 10);
+    const minor = parseInt(parts[1] ?? '', 10);
+    // If parsing failed (NaN), assume version doesn't support halfvec
+    if (isNaN(major) || isNaN(minor)) {
+      return false;
+    }
+    // halfvec was introduced in pgvector 0.7.0
+    return major > 0 || (major === 0 && minor >= 7);
+  }
+
+  /** Checks if pgvector >= 0.7.0 (required for bit type). */
+  private supportsBit(): boolean {
+    return this.supportsHalfvec();
+  }
+
+  /** Checks if pgvector >= 0.7.0 (required for sparsevec type). */
+  private supportsSparsevec(): boolean {
+    return this.supportsHalfvec();
+  }
+
+  /**
+   * Gets the properly qualified vector type name
+   * @param vectorType - The type of vector storage
+   */
+  private getVectorTypeName(vectorType: VectorType = 'vector', dimension?: number): string {
+    // 'bit' is a native PostgreSQL type (in pg_catalog), not a pgvector extension type.
+    // It must never be schema-qualified with the extension schema.
+    // When dimension is provided, return 'bit(N)' for proper casting (PostgreSQL treats bare 'bit' as 'bit(1)').
+    if (vectorType === 'bit') {
+      return dimension ? `bit(${dimension})` : 'bit';
+    }
+
     // If we know where the extension is, use that
     if (this.vectorExtensionSchema) {
-      // If it's in pg_catalog, return vector
+      // If it's in pg_catalog, return the type directly
       if (this.vectorExtensionSchema === 'pg_catalog') {
-        return 'vector';
+        return vectorType;
       }
-      // If it's in the current schema, return vector
-      if (this.vectorExtensionSchema === (this.schema || 'public')) {
-        return 'vector';
-      }
-      // Otherwise, qualify it with the schema where vector extension is installed
+      // Issue #10061: Always qualify with schema where vector extension is installed
+      // This ensures the type is found regardless of the session's search_path
       const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
-      return `${validatedSchema}.vector`;
+      return `${validatedSchema}.${vectorType}`;
     }
 
     // Fallback to unqualified (will use search_path)
-    return 'vector';
+    return vectorType;
+  }
+
+  /**
+   * Returns the operator class, distance operator, and score expression for a
+   * standard (non-bit) vector type prefix and metric.
+   */
+  private getMetricOps(
+    prefix: string,
+    metric: PgMetric,
+  ): Pick<VectorOps, 'operatorClass' | 'distanceOperator' | 'scoreExpr'> {
+    switch (metric) {
+      case 'euclidean':
+        return {
+          operatorClass: `${prefix}_l2_ops`,
+          distanceOperator: '<->',
+          scoreExpr: d => `1.0 / (1.0 + (${d}))`,
+        };
+      case 'dotproduct':
+        return {
+          operatorClass: `${prefix}_ip_ops`,
+          distanceOperator: '<#>',
+          scoreExpr: d => `(${d}) * -1`,
+        };
+      default:
+        return {
+          operatorClass: `${prefix}_cosine_ops`,
+          distanceOperator: '<=>',
+          scoreExpr: d => `1 - (${d})`,
+        };
+    }
+  }
+
+  /**
+   * Returns all vector-type-specific operations for the given vectorType and metric.
+   */
+  private getVectorOps(vectorType: VectorType, metric: PgMetric): VectorOps {
+    switch (vectorType) {
+      case 'bit':
+        return {
+          operatorClass: metric === 'jaccard' ? 'bit_jaccard_ops' : 'bit_hamming_ops',
+          distanceOperator: metric === 'jaccard' ? '<%>' : '<~>',
+          scoreExpr: d => (metric === 'jaccard' ? `1 - (${d})` : `1 - ((${d})::float / bit_length(embedding))`),
+          formatVector: v => v.map(x => (x ? '1' : '0')).join(''),
+          parseEmbedding: e => e.split('').map(c => (c === '1' ? 1 : 0)),
+        };
+
+      case 'sparsevec':
+        return {
+          ...this.getMetricOps('sparsevec', metric),
+          formatVector: (v, dimension) => {
+            const dim = dimension ?? v.length;
+            const nonZero = v
+              .map((val, i) => (val !== 0 ? `${i + 1}:${val}` : null))
+              .filter(Boolean)
+              .join(',');
+            return `{${nonZero}}/${dim}`;
+          },
+          parseEmbedding: e => {
+            const match = e.match(/^\{([^}]*)\}\/(\d+)$/);
+            if (!match) return [];
+            const dim = parseInt(match[2]!, 10);
+            const result = new Array(dim).fill(0) as number[];
+            const entries = match[1]!;
+            if (entries.trim()) {
+              for (const entry of entries.split(',')) {
+                const [idxStr, valStr] = entry.split(':');
+                const idx = parseInt(idxStr!.trim(), 10) - 1;
+                result[idx] = parseFloat(valStr!.trim());
+              }
+            }
+            return result;
+          },
+        };
+
+      case 'halfvec':
+      case 'vector':
+      default:
+        return {
+          ...this.getMetricOps(vectorType === 'halfvec' ? 'halfvec' : 'vector', metric),
+          formatVector: v => `[${v.join(',')}]`,
+          parseEmbedding: e => JSON.parse(e),
+        };
+    }
   }
 
   private getTableName(indexName: string) {
@@ -247,16 +441,19 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     probes,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
     try {
-      if (!Number.isInteger(topK) || topK <= 0) {
-        throw new Error('topK must be a positive integer');
-      }
-      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-        throw new Error('queryVector must be an array of finite numbers');
+      // Validate topK parameter
+      validateTopK('PG', topK);
+      if (queryVector !== undefined) {
+        if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+          throw new Error('queryVector must be an array of finite numbers');
+        }
+      } else if (!filter || Object.keys(filter).length === 0) {
+        throw new Error('Either queryVector or filter must be provided');
       }
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_INVALID_INPUT',
+          id: createVectorErrorId('PG', 'QUERY', 'INVALID_INPUT'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
           details: {
@@ -269,15 +466,67 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     }
 
+    // Metadata-only query: filter without vector similarity
+    if (queryVector === undefined) {
+      const client = await this.pool.connect();
+      try {
+        const translatedFilter = this.transformFilter(filter);
+        const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+        const { tableName } = this.getTableName(indexName);
+
+        const query = `
+          SELECT
+            vector_id as id,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ${filterQuery}
+          ORDER BY vector_id
+          LIMIT $${filterValues.length + 1}`;
+        const result = await client.query(query, [...filterValues, topK]);
+
+        return result.rows.map(({ id, metadata, embedding }: { id: string; metadata: any; embedding?: string }) => ({
+          id,
+          score: 0,
+          metadata,
+          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+        }));
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: createVectorErrorId('PG', 'QUERY', 'FAILED'),
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+            },
+          },
+          error,
+        );
+        this.logger?.trackException(mastraError);
+        throw mastraError;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Vector similarity query
     const client = await this.pool.connect();
     try {
+      // Set search path so vector operators (e.g. <=>) resolve correctly
+      await this.ensureSearchPath(client);
       await client.query('BEGIN');
-      const vectorStr = `[${queryVector.join(',')}]`;
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
 
       // Get index type and configuration
       const indexInfo = await this.getIndexInfo({ indexName });
+
+      const metric = indexInfo.metric ?? 'cosine';
+      const ops = this.getVectorOps(indexInfo.vectorType, metric);
+
+      // Format vector string based on vector type
+      const vectorStr = ops.formatVector(queryVector, indexInfo.dimension);
 
       // Set HNSW search parameter if applicable
       if (indexInfo.type === 'hnsw') {
@@ -293,14 +542,42 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const { tableName } = this.getTableName(indexName);
 
-      // Get the properly qualified vector type
-      const vectorType = this.getVectorTypeName();
+      // Get the properly qualified vector type based on the index's vector type
+      const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
 
-      const query = `
+      // Build distance expression and score based on metric and vector type
+      const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
+      const scoreExpr = ops.scoreExpr(distanceExpr);
+
+      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
+      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
+      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
+      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
+      // vectors in other clusters, returning fewer results than expected.
+      const hasFilter = filterQuery.trim().length > 0;
+      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
+
+      const query = useIndexedOrder
+        ? `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
-            1 - (embedding <=> '${vectorStr}'::${vectorType}) as score,
+            ${scoreExpr} as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ORDER BY ${distanceExpr}
+          LIMIT $2
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC`
+        : `
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            ${scoreExpr} as score,
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
@@ -318,13 +595,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         id,
         score,
         metadata,
-        ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+        ...(includeVector && embedding && { vector: ops.parseEmbedding(embedding) }),
       }));
     } catch (error) {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('PG', 'QUERY', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -347,11 +624,17 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     ids,
     deleteFilter,
   }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('PG', vectors, metadata, ids);
+
     const { tableName } = this.getTableName(indexName);
 
     // Start a transaction
     const client = await this.pool.connect();
     try {
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       await client.query('BEGIN');
 
       // Step 1: If deleteFilter is provided, delete matching vectors first
@@ -376,21 +659,24 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Step 2: Insert/update new vectors
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
-      // Get the properly qualified vector type
-      const vectorType = this.getVectorTypeName();
+      // Get the properly qualified vector type for this index
+      const indexInfo = await this.getIndexInfo({ indexName });
+      const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
+      const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
       for (let i = 0; i < vectors.length; i++) {
+        const vectorStr = ops.formatVector(vectors[i]!, indexInfo.dimension);
         const query = `
           INSERT INTO ${tableName} (vector_id, embedding, metadata)
-          VALUES ($1, $2::${vectorType}, $3::jsonb)
+          VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
           ON CONFLICT (vector_id)
           DO UPDATE SET
-            embedding = $2::${vectorType},
+            embedding = $2::${qualifiedVectorType},
             metadata = $3::jsonb
           RETURNING embedding::text
         `;
 
-        await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
+        await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {})]);
       }
 
       await client.query('COMMIT');
@@ -410,7 +696,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const [, expected, actual] = match;
           const mastraError = new MastraError(
             {
-              id: 'MASTRA_STORAGE_PG_VECTOR_UPSERT_INVALID_INPUT',
+              id: createVectorErrorId('PG', 'UPSERT', 'INVALID_INPUT'),
               domain: ErrorDomain.MASTRA_VECTOR,
               category: ErrorCategory.USER,
               text:
@@ -431,7 +717,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('PG', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -453,8 +739,22 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     dimension,
     metric,
     type,
-  }: CreateIndexParams & { type: IndexType | undefined }) {
-    const input = indexName + dimension + metric + (type || 'ivfflat'); // ivfflat is default
+    vectorType = 'vector',
+    metadataIndexes,
+  }: Omit<CreateIndexParams, 'metric'> & {
+    metric?: PgMetric;
+    type: IndexType | undefined;
+    vectorType?: VectorType;
+    metadataIndexes?: string[];
+  }) {
+    const input = JSON.stringify([
+      indexName,
+      dimension,
+      metric,
+      type || 'ivfflat',
+      vectorType,
+      metadataIndexes?.toSorted() ?? [],
+    ]);
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
@@ -515,10 +815,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   async createIndex({
     indexName,
     dimension,
-    metric = 'cosine',
+    metric: rawMetric = 'cosine',
     indexConfig = {},
     buildIndex = true,
+    vectorType = 'vector',
+    metadataIndexes,
   }: PgCreateIndexParams): Promise<void> {
+    // Normalize metric for bit vectors: default to 'hamming' unless explicitly 'hamming' or 'jaccard'
+    const metric: PgMetric =
+      vectorType === 'bit' && rawMetric !== 'hamming' && rawMetric !== 'jaccard' ? 'hamming' : rawMetric;
+
     const { tableName } = this.getTableName(indexName);
 
     // Validate inputs
@@ -529,10 +835,26 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
+      if (vectorType !== 'vector' && vectorType !== 'halfvec' && vectorType !== 'bit' && vectorType !== 'sparsevec') {
+        throw new Error('vectorType must be "vector", "halfvec", "bit", or "sparsevec"');
+      }
+      // Dimension limits for indexed vectors (pgvector restrictions)
+      if (vectorType === 'bit' && dimension > 64000) {
+        throw new Error('bit vectors support up to 64,000 dimensions for indexes');
+      }
+
+      // hamming and jaccard metrics are only valid with bit vectors
+      if ((metric === 'hamming' || metric === 'jaccard') && vectorType !== 'bit') {
+        throw new Error(`${metric} metric is only valid with vectorType 'bit'`);
+      }
+      // IVFFlat does not support Jaccard distance for bit vectors
+      if (indexConfig?.type === 'ivfflat' && vectorType === 'bit' && metric === 'jaccard') {
+        throw new Error('IVFFlat indexes do not support Jaccard distance for bit vectors. Use HNSW instead.');
+      }
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_CREATE_INDEX_INVALID_INPUT',
+          id: createVectorErrorId('PG', 'CREATE_INDEX', 'INVALID_INPUT'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
           details: {
@@ -545,7 +867,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     }
 
-    const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
+    const indexCacheKey = await this.getIndexCacheKey({
+      indexName,
+      dimension,
+      type: indexConfig.type,
+      metric,
+      vectorType,
+      metadataIndexes,
+    });
     if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
       return;
@@ -569,34 +898,82 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           // Install vector extension and detect where it is
           await this.installVectorExtension(client);
 
-          // Set search path to include both schemas if needed
-          if (
-            this.schema &&
-            this.vectorExtensionSchema &&
-            this.schema !== this.vectorExtensionSchema &&
-            this.vectorExtensionSchema !== 'pg_catalog'
-          ) {
-            await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
+          // Check if halfvec is supported when requested
+          if (vectorType === 'halfvec' && !this.supportsHalfvec()) {
+            throw new MastraError({
+              id: createVectorErrorId('PG', 'CREATE_INDEX', 'HALFVEC_NOT_SUPPORTED'),
+              text:
+                `halfvec type requires pgvector >= 0.7.0, but version ${this.vectorExtensionVersion || 'unknown'} is installed. ` +
+                `Either upgrade pgvector or use vectorType: 'vector' (which supports up to 2000 dimensions for indexes).`,
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: ErrorCategory.USER,
+              details: {
+                indexName,
+                requestedVectorType: vectorType,
+                pgvectorVersion: this.vectorExtensionVersion || 'unknown',
+                requiredVersion: '0.7.0',
+              },
+            });
           }
 
-          // Use the properly qualified vector type
-          const vectorType = this.getVectorTypeName();
+          // Check if bit/sparsevec is supported when requested
+          if (vectorType === 'bit' && !this.supportsBit()) {
+            throw new MastraError({
+              id: createVectorErrorId('PG', 'CREATE_INDEX', 'VECTOR_TYPE_NOT_SUPPORTED'),
+              text:
+                `${vectorType} type requires pgvector >= 0.7.0, but version ${this.vectorExtensionVersion || 'unknown'} is installed. ` +
+                `Either upgrade pgvector or use vectorType: 'vector'.`,
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: ErrorCategory.USER,
+              details: {
+                indexName,
+                vectorType,
+                installedVersion: this.vectorExtensionVersion,
+              },
+            });
+          }
+
+          if (vectorType === 'sparsevec' && !this.supportsSparsevec()) {
+            throw new MastraError({
+              id: createVectorErrorId('PG', 'CREATE_INDEX', 'VECTOR_TYPE_NOT_SUPPORTED'),
+              text:
+                `${vectorType} type requires pgvector >= 0.7.0, but version ${this.vectorExtensionVersion || 'unknown'} is installed. ` +
+                `Either upgrade pgvector or use vectorType: 'vector'.`,
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: ErrorCategory.USER,
+              details: {
+                indexName,
+                requestedVectorType: vectorType,
+                pgvectorVersion: this.vectorExtensionVersion || 'unknown',
+                requiredVersion: '0.7.0',
+              },
+            });
+          }
+
+          // Use the properly qualified vector type (vector or halfvec)
+          const qualifiedVectorType = this.getVectorTypeName(vectorType);
 
           await client.query(`
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id SERIAL PRIMARY KEY,
             vector_id TEXT UNIQUE NOT NULL,
-            embedding ${vectorType}(${dimension}),
+            embedding ${qualifiedVectorType}(${dimension}),
             metadata JSONB DEFAULT '{}'::jsonb
           );
         `);
           this.createdIndexes.set(indexName, indexCacheKey);
+          this.indexVectorTypes.set(indexName, vectorType);
 
           if (buildIndex) {
-            await this.setupIndex({ indexName, metric, indexConfig }, client);
+            await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
+          }
+
+          if (metadataIndexes?.length) {
+            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
+          this.indexVectorTypes.delete(indexName);
           throw error;
         } finally {
           client.release();
@@ -605,7 +982,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       .catch(error => {
         const mastraError = new MastraError(
           {
-            id: 'MASTRA_STORAGE_PG_VECTOR_CREATE_INDEX_FAILED',
+            id: createVectorErrorId('PG', 'CREATE_INDEX', 'FAILED'),
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.THIRD_PARTY,
             details: {
@@ -619,14 +996,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       });
   }
 
-  async buildIndex({ indexName, metric = 'cosine', indexConfig }: PgDefineIndexParams): Promise<void> {
+  async buildIndex({ indexName, metric = 'cosine', indexConfig, vectorType }: PgDefineIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
-      await this.setupIndex({ indexName, metric, indexConfig }, client);
+      await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_BUILD_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'BUILD_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -642,7 +1019,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  private async setupIndex({ indexName, metric, indexConfig }: PgDefineIndexParams, client: pg.PoolClient) {
+  private async setupIndex(
+    { indexName, metric, indexConfig, vectorType = 'vector' }: PgDefineIndexParams,
+    client: pg.PoolClient,
+  ) {
     const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
@@ -652,7 +1032,32 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         Object.keys(indexConfig).length === 0 ||
         (!indexConfig.type && !indexConfig.ivf && !indexConfig.hnsw);
       // Determine index type - use defaults if no config provided
-      const indexType = isConfigEmpty ? 'ivfflat' : indexConfig.type || 'ivfflat';
+      // sparsevec does not support IVFFlat, so default to HNSW for it
+      const defaultIndexType = vectorType === 'sparsevec' ? 'hnsw' : 'ivfflat';
+      const indexType = isConfigEmpty ? defaultIndexType : indexConfig.type || defaultIndexType;
+
+      // Validate index type restrictions for sparsevec
+      if (indexType === 'ivfflat' && vectorType === 'sparsevec') {
+        throw new MastraError({
+          id: createVectorErrorId('PG', 'BUILD_INDEX', 'UNSUPPORTED_INDEX_TYPE'),
+          text: `IVFFlat indexes do not support sparsevec type. Use HNSW instead.`,
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName, vectorType, indexType },
+        });
+      }
+
+      // Validate index type restrictions for bit + jaccard
+      // IVFFlat supports bit vectors with Hamming distance only, not Jaccard
+      if (indexType === 'ivfflat' && vectorType === 'bit' && metric === 'jaccard') {
+        throw new MastraError({
+          id: createVectorErrorId('PG', 'BUILD_INDEX', 'UNSUPPORTED_INDEX_TYPE'),
+          text: `IVFFlat indexes do not support Jaccard distance for bit vectors. Use HNSW instead.`,
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName, vectorType, indexType, metric },
+        });
+      }
 
       const { tableName, vectorIndexName } = this.getTableName(indexName);
 
@@ -677,8 +1082,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
               dimension,
               type: existingIndexInfo.type,
               metric: existingIndexInfo.metric,
+              vectorType: existingIndexInfo.vectorType,
             });
             this.createdIndexes.set(indexName, cacheKey);
+            this.indexVectorTypes.set(indexName, existingIndexInfo.vectorType);
             return;
           }
         }
@@ -704,8 +1111,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             dimension,
             type: existingIndexInfo.type,
             metric: existingIndexInfo.metric,
+            vectorType: existingIndexInfo.vectorType,
           });
           this.createdIndexes.set(indexName, cacheKey);
+          this.indexVectorTypes.set(indexName, existingIndexInfo.vectorType);
           return;
         }
 
@@ -722,8 +1131,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         return;
       }
 
-      const metricOp =
-        metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
+      // Set search path so vector operator classes (e.g. vector_cosine_ops) resolve correctly
+      await this.ensureSearchPath(client);
+
+      // Get the operator class based on vector type and metric
+      // pgvector uses different operator classes for vector vs halfvec
+      // Use the detected vectorType from existing table if available, otherwise use the parameter
+      const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
+      const metricOp = this.getVectorOps(effectiveVectorType, metric).operatorClass;
 
       let indexSQL: string;
       if (indexType === 'hnsw') {
@@ -759,6 +1174,29 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     });
   }
 
+  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+    const hasher = await this.hasher;
+    for (const field of metadataFields) {
+      // Hash the field to produce a safe, fixed-length suffix for the index name.
+      // This avoids issues with fields containing characters invalid in SQL identifiers
+      // (e.g. "user-id") and keeps the total index name under PostgreSQL's 63-char limit.
+      const fieldHash = hasher.h32(field).toString(16);
+      const prefix = indexName.slice(0, 63 - '_md__idx'.length - fieldHash.length);
+      const metadataIdxName = `"${prefix}_md_${fieldHash}_idx"`;
+      // DDL statements don't support bind parameters, so we must interpolate
+      // the field name as a literal. Escape single quotes to prevent SQL injection.
+      const escapedField = field.replace(/'/g, "''");
+      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
+      // This must run outside a transaction, so we use pool.query() directly.
+      await this.pool.query(
+        `
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
+        ON ${tableName} ((metadata->>'${escapedField}'))
+      `,
+      );
+    }
+  }
+
   private async installVectorExtension(client: pg.PoolClient) {
     // If we've already successfully installed, no need to do anything
     if (this.vectorExtensionInstalled) {
@@ -785,6 +1223,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             if (this.schema && this.schema !== 'public') {
               try {
                 await client.query(`CREATE EXTENSION IF NOT EXISTS vector SCHEMA ${this.getSchemaName()}`);
+                // Re-detect to get the version info (needed for halfvec support check)
+                const installedSchema = await this.detectVectorExtensionSchema(client);
+                if (installedSchema) {
+                  this.vectorExtensionInstalled = true;
+                  this.logger.info(`Vector extension installed in schema: ${installedSchema}`);
+                  return;
+                }
+                // Fallback if detection failed but install succeeded
                 this.vectorExtensionInstalled = true;
                 this.vectorExtensionSchema = this.schema;
                 this.logger.info(`Vector extension installed in schema: ${this.schema}`);
@@ -839,7 +1285,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const client = await this.pool.connect();
     try {
       // Query for tables that match the exact Mastra PgVector table structure:
-      // Must have: vector_id (TEXT), embedding (vector), metadata (JSONB)
+      // Must have: vector_id (TEXT), embedding (vector or halfvec), metadata (JSONB)
       const mastraTablesQuery = `
         SELECT DISTINCT t.table_name
         FROM information_schema.tables t
@@ -858,7 +1304,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           WHERE c.table_schema = t.table_schema
           AND c.table_name = t.table_name
           AND c.column_name = 'embedding'
-          AND c.udt_name = 'vector'
+          AND c.udt_name IN ('vector', 'halfvec', 'bit', 'sparsevec')
         )
         AND EXISTS (
           SELECT 1
@@ -874,7 +1320,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (e) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('PG', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -898,13 +1344,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     try {
       const { tableName } = this.getTableName(indexName);
 
-      // Check if table exists with a vector column
+      // Check if table exists with a vector-type column
       const tableExistsQuery = `
-        SELECT 1
+        SELECT udt_name
         FROM information_schema.columns
         WHERE table_schema = $1
           AND table_name = $2
-          AND udt_name = 'vector'
+          AND udt_name IN ('vector', 'halfvec', 'bit', 'sparsevec')
         LIMIT 1;
       `;
       const tableExists = await client.query(tableExistsQuery, [this.schema || 'public', indexName]);
@@ -912,6 +1358,17 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       if (tableExists.rows.length === 0) {
         throw new Error(`Vector table ${tableName} does not exist`);
       }
+
+      // Determine the vector type from the column
+      const udtName = tableExists.rows[0].udt_name;
+      const vectorType: VectorType =
+        udtName === 'halfvec'
+          ? 'halfvec'
+          : udtName === 'bit'
+            ? 'bit'
+            : udtName === 'sparsevec'
+              ? 'sparsevec'
+              : 'vector';
 
       // Get vector dimension
       const dimensionQuery = `
@@ -942,11 +1399,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             AND n.nspname = $2;
             `;
 
-      const [dimResult, countResult, indexResult] = await Promise.all([
-        client.query(dimensionQuery, [tableName]),
-        client.query(countQuery),
-        client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
-      ]);
+      const dimResult = await client.query(dimensionQuery, [tableName]);
+      const countResult = await client.query(countQuery);
+      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
         index_method: 'flat',
@@ -954,12 +1409,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         operator_class: 'cosine',
       };
 
-      // Convert pg_vector index method to our metric type
-      const metric = operator_class.includes('l2')
-        ? 'euclidean'
-        : operator_class.includes('ip')
-          ? 'dotproduct'
-          : 'cosine';
+      // Convert pg_vector operator class to our metric type
+      const metric: PgMetric = operator_class.includes('hamming')
+        ? 'hamming'
+        : operator_class.includes('jaccard')
+          ? 'jaccard'
+          : operator_class.includes('l2')
+            ? 'euclidean'
+            : operator_class.includes('ip')
+              ? 'dotproduct'
+              : 'cosine';
 
       // Parse index configuration
       const config: { m?: number; efConstruction?: number; lists?: number } = {};
@@ -977,15 +1436,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       return {
         dimension: dimResult.rows[0].dimension,
         count: parseInt(countResult.rows[0].count),
-        metric,
+        metric: metric as PGIndexStats['metric'],
         type: index_method as 'flat' | 'hnsw' | 'ivfflat',
+        vectorType,
         config,
       };
     } catch (e: any) {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1008,11 +1468,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Drop the table
       await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
       this.createdIndexes.delete(indexName);
+      this.indexVectorTypes.delete(indexName);
+      this.describeIndexCache.delete(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1037,7 +1499,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_TRUNCATE_INDEX_FAILED',
+          id: createVectorErrorId('PG', 'TRUNCATE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1087,7 +1549,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of id or filter is provided
       if (!id && !filter) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_MISSING_PARAMS',
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'NO_TARGET'),
           text: 'Either id or filter must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1097,7 +1559,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (id && filter) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_CONFLICTING_PARAMS',
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
           text: 'Cannot provide both id and filter - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1106,8 +1568,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       client = await this.pool.connect();
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       const { tableName } = this.getTableName(indexName);
-      const vectorType = this.getVectorTypeName();
+
+      // Get the properly qualified vector type for this index
+      const indexInfo = await this.getIndexInfo({ indexName });
+      const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
+      const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
       let updateParts = [];
       let values: any[] = [];
@@ -1115,8 +1584,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       // Build SET clause
       if (update.vector) {
-        updateParts.push(`embedding = $${valueIndex}::${vectorType}`);
-        values.push(`[${update.vector.join(',')}]`);
+        updateParts.push(`embedding = $${valueIndex}::${qualifiedVectorType}`);
+        values.push(ops.formatVector(update.vector, indexInfo.dimension));
         valueIndex++;
       }
 
@@ -1141,7 +1610,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Update by filter
         if (!filter || Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_EMPTY_FILTER',
+            id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
             text: 'Cannot update with empty filter',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1157,7 +1626,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         if (!whereClause) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_INVALID_FILTER',
+            id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'INVALID_FILTER'),
             text: 'Filter produced empty WHERE clause',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1194,7 +1663,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('PG', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1232,7 +1701,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('PG', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1265,7 +1734,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Validate that exactly one of filter or ids is provided
       if (!filter && !ids) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_MISSING_PARAMS',
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'NO_TARGET'),
           text: 'Either filter or ids must be provided',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1275,7 +1744,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       if (filter && ids) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_CONFLICTING_PARAMS',
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
           text: 'Cannot provide both filter and ids - they are mutually exclusive',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
@@ -1290,7 +1759,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Delete by IDs
         if (ids.length === 0) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_IDS',
+            id: createVectorErrorId('PG', 'DELETE_VECTORS', 'EMPTY_IDS'),
             text: 'Cannot delete with empty ids array',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1306,7 +1775,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
         if (!filter || Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_EMPTY_FILTER',
+            id: createVectorErrorId('PG', 'DELETE_VECTORS', 'EMPTY_FILTER'),
             text: 'Cannot delete with empty filter. Use deleteIndex to delete all vectors.',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1323,7 +1792,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         if (!whereClause) {
           throw new MastraError({
-            id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INVALID_FILTER',
+            id: createVectorErrorId('PG', 'DELETE_VECTORS', 'INVALID_FILTER'),
             text: 'Filter produced empty WHERE clause',
             domain: ErrorDomain.MASTRA_VECTOR,
             category: ErrorCategory.USER,
@@ -1353,7 +1822,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Wrap other errors
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('PG', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {

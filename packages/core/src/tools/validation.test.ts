@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createTool } from './tool';
+import { validateToolInput } from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -21,9 +22,13 @@ describe('Tool Input Validation Integration Tests', () => {
       // Test missing required fields - pass raw data as first arg
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('- name: Required');
-      expect(result.message).toContain('- age: Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for test-tool. Please fix the following errors and try again:
+        - name: Invalid input: expected string, received undefined
+        - age: Invalid input: expected number, received undefined
+
+        Provided arguments: {}"
+      `);
     });
 
     it('should validate field types', async () => {
@@ -45,7 +50,16 @@ describe('Tool Input Validation Integration Tests', () => {
       } as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for type-test. Please fix the following errors and try again:
+        - count: Invalid input: expected number, received string
+        - active: Invalid input: expected boolean, received string
+
+        Provided arguments: {
+          "count": "not a number",
+          "active": "not a boolean"
+        }"
+      `);
       expect(result.validationErrors).toBeDefined();
     });
 
@@ -75,9 +89,18 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Invalid email format');
-      expect(result.message).toContain('String must contain at least 3 character(s)');
-      expect(result.message).toContain('Password must be at least 8 characters');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for string-test. Please fix the following errors and try again:
+        - email: Invalid email format
+        - username: Too small: expected string to have >=3 characters
+        - password: Password must be at least 8 characters with letters and numbers
+
+        Provided arguments: {
+          "email": "not-an-email",
+          "username": "ab",
+          "password": "weak"
+        }"
+      `);
     });
 
     it('should validate arrays and objects', async () => {
@@ -104,8 +127,18 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('At least one tag required');
-      expect(result.message).toContain("Invalid enum value. Expected 'low' | 'medium' | 'high'");
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for complex-test. Please fix the following errors and try again:
+        - tags: At least one tag required
+        - metadata.priority: Invalid option: expected one of "low"|"medium"|"high"
+
+        Provided arguments: {
+          "tags": [],
+          "metadata": {
+            "priority": "urgent"
+          }
+        }"
+      `);
     });
 
     it('should pass validation with valid data', async () => {
@@ -183,8 +216,16 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Invalid email');
-      expect(result.message).toContain('Must be 18 or older');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for validate-user. Please fix the following errors and try again:
+        - email: Invalid email address
+        - age: Must be 18 or older
+
+        Provided arguments: {
+          "email": "invalid-email",
+          "age": 16
+        }"
+      `);
     });
 
     it('should include tool ID in validation error messages', async () => {
@@ -202,7 +243,14 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute({ username: 'ab' });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed for user-registration');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for user-registration. Please fix the following errors and try again:
+        - username: Too small: expected string to have >=3 characters
+
+        Provided arguments: {
+          "username": "ab"
+        }"
+      `);
     });
   });
 
@@ -376,8 +424,15 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Expected string, received number');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for context-validation-fail. Please fix the following errors and try again:
+        - context: Invalid input: expected string, received number
+
+        Provided arguments: {
+          "context": 123,
+          "other": 456
+        }"
+      `);
     });
 
     it('should fail validation when schema expects inputData but input has wrong structure', async () => {
@@ -401,8 +456,15 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Expected object, received string');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for inputdata-validation-fail. Please fix the following errors and try again:
+        - inputData: Invalid input: expected object, received string
+
+        Provided arguments: {
+          "inputData": "should-be-object",
+          "metadata": "valid-string"
+        }"
+      `);
     });
   });
 
@@ -507,7 +569,14 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!({ limit: 'not-a-number' } as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for optional-type-check. Please fix the following errors and try again:
+        - limit: Invalid input: expected number, received string
+
+        Provided arguments: {
+          "limit": "not-a-number"
+        }"
+      `);
     });
 
     it('should reject array input when object schema is expected', async () => {
@@ -526,7 +595,15 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!(['item1', 'item2'] as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for object-not-array. Please fix the following errors and try again:
+        - root: Invalid input: expected object, received array
+
+        Provided arguments: [
+          "item1",
+          "item2"
+        ]"
+      `);
     });
 
     it('should reject string input when object schema is expected', async () => {
@@ -545,7 +622,12 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!('some string' as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for object-not-string. Please fix the following errors and try again:
+        - root: Invalid input: expected object, received string
+
+        Provided arguments: "some string""
+      `);
     });
 
     it('should reject number input when object schema is expected', async () => {
@@ -564,7 +646,12 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!(42 as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for object-not-number. Please fix the following errors and try again:
+        - root: Invalid input: expected object, received number
+
+        Provided arguments: 42"
+      `);
     });
 
     it('should accept undefined input when schema is an array', async () => {
@@ -638,8 +725,12 @@ describe('Tool Input Validation Integration Tests', () => {
 
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for empty-context. Please fix the following errors and try again:
+        - required: Invalid input: expected string, received undefined
+
+        Provided arguments: {}"
+      `);
     });
 
     it('should preserve additional properties when using passthrough', async () => {
@@ -758,9 +849,15 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- name: Required');
-      expect(result.message).toContain('- email: Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for invalid-output. The tool returned invalid output:
+        - name: Invalid input: expected string, received undefined
+        - email: Invalid input: expected string, received undefined
+
+        Returned output: {
+          "id": "123"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -784,9 +881,16 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- count: Expected number, received string');
-      expect(result.message).toContain('- active: Expected boolean, received string');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for type-mismatch. The tool returned invalid output:
+        - count: Invalid input: expected number, received string
+        - active: Invalid input: expected boolean, received string
+
+        Returned output: {
+          "count": "not-a-number",
+          "active": "not-a-boolean"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -819,10 +923,24 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- user.age');
-      expect(result.message).toContain('- metadata.createdAt');
-      expect(result.message).toContain('- metadata.tags');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for nested-output. The tool returned invalid output:
+        - user.age: Too small: expected number to be >=0
+        - metadata.createdAt: Invalid ISO datetime
+        - metadata.tags: Too small: expected array to have >=1 items
+
+        Returned output: {
+          "user": {
+            "id": "123",
+            "name": "John",
+            "age": -5
+          },
+          "metadata": {
+            "createdAt": "invalid-date",
+            "tags": []
+          }
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -886,8 +1004,14 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed for user-service');
-      expect(result.message).toContain('Invalid uuid');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for user-service. The tool returned invalid output:
+        - userId: Invalid UUID
+
+        Returned output: {
+          "userId": "not-a-uuid"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -918,7 +1042,14 @@ describe('Tool Output Validation Tests', () => {
     const invalidInputResult = await tool.execute({ email: 'not-an-email' });
     if ('error' in invalidInputResult) {
       expect(invalidInputResult.error).toBe(true);
-      expect(invalidInputResult.message).toContain('Tool input validation failed');
+      expect(invalidInputResult.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for full-validation. Please fix the following errors and try again:
+        - email: Invalid email address
+
+        Provided arguments: {
+          "email": "not-an-email"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -946,8 +1077,14 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- count: Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for input-pass-output-fail. The tool returned invalid output:
+        - count: Invalid input: expected number, received undefined
+
+        Returned output: {
+          "result": "success"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -990,8 +1127,14 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain("Invalid enum value. Expected 'pending' | 'approved' | 'rejected'");
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for enum-output. The tool returned invalid output:
+        - status: Invalid option: expected one of "pending"|"approved"|"rejected"
+
+        Returned output: {
+          "status": "unknown"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -1024,8 +1167,23 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('... (truncated)');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for large-output. The tool returned invalid output:
+        - status: Invalid input: expected "success"
+
+        Returned output: {
+          "users": [
+            {
+              "id": 0,
+              "name": "User 0",
+              "email": "user0@example.com",
+              "sensitiveData": "This could contain PII"
+            },
+            {
+              "id": 1,
+              "name": "User 1",
+            ... (truncated)"
+      `);
       // Ensure the full large data is NOT in the error message
       expect(result.message.length).toBeLessThan(500); // Should be much smaller than full output
       // Ensure sensitive data is not exposed
@@ -1055,10 +1213,1073 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for non-serializable. The tool returned invalid output:
+        - value: Invalid input: expected string, received undefined
+
+        Returned output: [Unable to serialize data]"
+      `);
       expect(result.message).toContain('[Unable to serialize data]');
     } else {
       throw new Error('Result is not a validation error');
     }
+  });
+});
+
+describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/12362
+  // LLMs like Gemini send null for optional fields, but Zod's .optional() only accepts
+  // undefined, not null. The validateToolInput function retries with null values stripped
+  // when initial validation fails.
+
+  it('should accept null for optional fields (the original bug scenario)', () => {
+    const schema = z.object({
+      category: z.string(),
+      minPrice: z.number().optional(),
+      maxPrice: z.number().optional(),
+    });
+
+    // LLM sends null for optional fields
+    const input = { category: 'electronics', minPrice: null, maxPrice: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ category: 'electronics' });
+  });
+
+  it('should handle nested objects with null values in optional fields', () => {
+    const schema = z.object({
+      query: z.string(),
+      filters: z.object({
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        limit: z.number().optional(),
+      }),
+    });
+
+    const input = {
+      query: 'search term',
+      filters: {
+        startDate: null,
+        endDate: null,
+        limit: 10,
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      query: 'search term',
+      filters: { limit: 10 },
+    });
+  });
+
+  it('should preserve null for .nullable() fields (null is a valid value)', () => {
+    const schema = z.object({
+      name: z.string(),
+      status: z.string().nullable(),
+    });
+
+    // null is valid for .nullable() fields
+    const input = { name: 'test', status: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', status: null });
+  });
+
+  it('should preserve null for required .nullable() fields without .optional()', () => {
+    const schema = z.object({
+      id: z.string(),
+      deletedAt: z.string().nullable(), // Required field that accepts null
+    });
+
+    // null is valid - the field is required but nullable
+    const input = { id: '123', deletedAt: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ id: '123', deletedAt: null });
+  });
+
+  it('should handle mix of .optional() and .nullable() fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      bio: z.string().optional(), // null should be stripped
+      status: z.string().nullable(), // null should be preserved
+    });
+
+    const input = { name: 'test', bio: null, status: null };
+
+    const result = validateToolInput(schema, input);
+
+    // First try: { name: 'test', bio: null, status: null }
+    //   bio fails (.optional() doesn't accept null), status passes (.nullable() accepts null)
+    // Retry with targeted stripping: { name: 'test', status: null }
+    //   bio passes (absent = undefined for .optional()), status passes (.nullable() accepts null)
+    // Targeted null stripping only removes nulls for fields that caused validation errors,
+    // preserving null for .nullable() fields that are valid.
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', status: null });
+  });
+
+  it('should handle .nullable().optional() fields receiving null', () => {
+    const schema = z.object({
+      name: z.string(),
+      nickname: z.string().nullable().optional(), // Accepts: string | null | undefined
+    });
+
+    // null is valid for .nullable().optional()
+    const input = { name: 'test', nickname: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', nickname: null });
+  });
+
+  it('should still reject invalid types after null stripping', () => {
+    const schema = z.object({
+      name: z.string(),
+      count: z.number().optional(),
+    });
+
+    // Invalid type should still fail even after null stripping
+    const input = { name: 123, count: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('Invalid input: expected string, received number');
+  });
+
+  it('should handle deeply nested null values', () => {
+    const schema = z.object({
+      level1: z.object({
+        level2: z.object({
+          value: z.string().optional(),
+          required: z.string(),
+        }),
+      }),
+    });
+
+    const input = {
+      level1: {
+        level2: {
+          value: null,
+          required: 'present',
+        },
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      level1: { level2: { required: 'present' } },
+    });
+  });
+});
+
+describe('validateToolInput - Absent Optional Fields in Nested Objects (GitHub #13518)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/13518
+  // When an LLM sends an empty nested object (e.g., { story: {} }) for a schema with
+  // optional string fields inside, the absent fields (undefined) should be accepted by
+  // the original Zod schema's .optional() wrapper. This was previously broken when
+  // processZodType converted .optional() to .nullable() without preserving .optional(),
+  // causing validateToolInput to reject absent fields.
+
+  it('should accept empty nested objects when inner fields are optional (the original #13518 scenario)', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends { name: "Rafael", story: {} } — inner fields are absent
+    const input = { name: 'Rafael', story: {} };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: {} });
+  });
+
+  it('should accept null for optional nested object fields', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends null for the optional nested object
+    const input = { name: 'Rafael', story: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    // null is stripped and becomes undefined for .optional() field
+    expect(result.data).toEqual({ name: 'Rafael' });
+  });
+
+  it('should accept nested objects with null inner fields when outer fields are optional', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends null for inner optional fields
+    const input = { name: 'Rafael', story: { whyTheyCreate: null, howLong: null } };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: {} });
+  });
+
+  it('should accept partially filled nested objects', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends one field but omits the other
+    const input = { name: 'Rafael', story: { whyTheyCreate: 'creativity' } };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: { whyTheyCreate: 'creativity' } });
+  });
+
+  it('should accept completely absent optional nested object', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM omits the optional nested object entirely
+    const input = { name: 'Rafael' };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael' });
+  });
+});
+
+describe('validateToolInput - Value-Based Null Detection (GitHub #14476)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/14476
+  // The null detection in Step 5 should check the actual value at the failing path
+  // rather than relying on error message string matching (e.g., checking for 'null'
+  // in the message). This ensures null values are detected even when validators
+  // return messages like "must be string" or "must be object".
+
+  it('should detect null values even when error message does not contain "null"', () => {
+    // Use a custom refinement whose error message deliberately avoids "null".
+    // This simulates non-Zod Standard Schema validators (e.g. JSON Schema)
+    // that report errors like "must be string" instead of "received null".
+    const schema = z.object({
+      name: z.string(),
+      description: z
+        .string()
+        .optional()
+        .superRefine((val, ctx) => {
+          if (typeof val !== 'string' && val !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a valid string value' });
+          }
+        }),
+      tags: z
+        .array(z.string())
+        .optional()
+        .superRefine((val, ctx) => {
+          if (!Array.isArray(val) && val !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'expected an array of strings' });
+          }
+        }),
+    });
+
+    // LLM sends null for optional fields — error messages won't contain "null"
+    const input = { name: 'test', description: null, tags: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test' });
+  });
+
+  it('should handle null in nested optional fields with non-null error messages', () => {
+    // Custom refinements that produce errors without "null" in the message
+    const schema = z.object({
+      config: z.object({
+        timeout: z
+          .number()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'number' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a numeric value' });
+            }
+          }),
+        retries: z
+          .number()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'number' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a numeric value' });
+            }
+          }),
+        label: z
+          .string()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'string' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a valid string value' });
+            }
+          }),
+      }),
+    });
+
+    const input = {
+      config: {
+        timeout: null,
+        retries: null,
+        label: null,
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ config: {} });
+  });
+
+  it('should still preserve null for .nullable() fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      deletedAt: z.string().nullable(),
+      note: z.string().optional(),
+    });
+
+    const input = { name: 'test', deletedAt: null, note: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', deletedAt: null });
+  });
+
+  it('should not misidentify non-null values at failing paths as null-related', () => {
+    const schema = z.object({
+      count: z.number(),
+      name: z.string(),
+    });
+
+    // Invalid types but not null - these should NOT be treated as null-related
+    const input = { count: 'not-a-number', name: 123 };
+
+    const result = validateToolInput(schema, input);
+
+    // Should still fail validation (can't fix by stripping)
+    expect(result.error).toBeDefined();
+  });
+});
+
+describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11457
+  // When schemas are processed through OpenAI compat layers, .optional() is converted
+  // to .nullable() for strict mode compliance. This means the schema expects null,
+  // not undefined. The validateToolInput function now converts undefined → null
+  // before validation so that omitted fields work correctly.
+
+  it('should convert undefined to null in nested objects', () => {
+    // Create a schema that expects nullable fields (like after OpenAI compat processing)
+    const schema = z.object({
+      name: z.string(),
+      age: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+      nested: z.object({
+        city: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+        country: z.string(),
+      }),
+    });
+
+    // Input with undefined values (as if fields were omitted)
+    const input = {
+      name: 'John',
+      age: undefined,
+      nested: {
+        city: undefined,
+        country: 'USA',
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'John',
+      age: undefined, // null was transformed to undefined
+      nested: {
+        city: undefined, // null was transformed to undefined
+        country: 'USA',
+      },
+    });
+  });
+
+  it('should handle partial nested objects with undefined fields', () => {
+    // This mimics the exact schema from GitHub issue #11457
+    // After OpenAI compat processing, .partial() fields become nullable
+    const schema = z.object({
+      eventId: z.string(),
+      request: z.object({
+        City: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+        Name: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+        Slug: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+      }),
+      eventImageFile: z
+        .any()
+        .nullable()
+        .transform((val: any) => (val === null ? undefined : val)),
+    });
+
+    // Input with some fields omitted (undefined)
+    const input = {
+      eventId: '123',
+      request: {
+        Name: 'Test',
+        City: undefined,
+        Slug: undefined,
+      },
+      eventImageFile: undefined,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      eventId: '123',
+      request: {
+        Name: 'Test',
+        City: undefined,
+        Slug: undefined,
+      },
+      eventImageFile: undefined,
+    });
+  });
+
+  it('should convert undefined to null in arrays', () => {
+    const schema = z.object({
+      items: z.array(
+        z.object({
+          id: z.string(),
+          value: z
+            .string()
+            .nullable()
+            .transform((val: string | null) => (val === null ? undefined : val)),
+        }),
+      ),
+    });
+
+    const input = {
+      items: [
+        { id: '1', value: 'test' },
+        { id: '2', value: undefined },
+      ],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: [
+        { id: '1', value: 'test' },
+        { id: '2', value: undefined },
+      ],
+    });
+  });
+});
+
+describe('validateToolInput - Built-in Object Preservation (GitHub #11502)', () => {
+  it('should preserve Date objects when validating z.coerce.date() schemas', () => {
+    const schema = z.object({
+      startDate: z.coerce.date(),
+    });
+
+    const input = {
+      startDate: new Date('2024-01-01T00:00:00Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).startDate).toBeInstanceOf(Date);
+    expect((result.data as any).startDate.toISOString()).toBe('2024-01-01T00:00:00.000Z');
+  });
+
+  it('should handle ISO string dates with z.coerce.date()', () => {
+    const schema = z.object({
+      startDate: z.coerce.date(),
+    });
+
+    const input = {
+      startDate: '2024-01-01T00:00:00Z',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).startDate).toBeInstanceOf(Date);
+    expect((result.data as any).startDate.toISOString()).toBe('2024-01-01T00:00:00.000Z');
+  });
+
+  it('should preserve Date objects in nested structures', () => {
+    const schema = z.object({
+      params: z.object({
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+      }),
+    });
+
+    const input = {
+      params: {
+        startDate: new Date('2024-01-01T00:00:00Z'),
+        endDate: new Date('2024-12-31T23:59:59Z'),
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).params.startDate).toBeInstanceOf(Date);
+    expect((result.data as any).params.endDate).toBeInstanceOf(Date);
+  });
+
+  it('should preserve Date objects with nullable optional fields', () => {
+    // This test verifies that Date objects are preserved even in schemas with
+    // optional/nullable fields. The undefined-to-null conversion (GitHub #11457)
+    // happens before validation, so we use nullable() with a transform.
+    const schema = z.object({
+      startDate: z.coerce.date(),
+      endDate: z.coerce
+        .date()
+        .nullable()
+        .transform((val: Date | null) => val ?? undefined),
+    });
+
+    const input = {
+      startDate: new Date('2024-01-01T00:00:00Z'),
+      endDate: new Date('2024-12-31T23:59:59Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).startDate).toBeInstanceOf(Date);
+    expect((result.data as any).endDate).toBeInstanceOf(Date);
+  });
+
+  it('should preserve RegExp objects', () => {
+    const schema = z.object({
+      pattern: z.any(),
+    });
+
+    const input = { pattern: /abc/i };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).pattern).toBeInstanceOf(RegExp);
+    expect((result.data as any).pattern).toEqual(/abc/i);
+  });
+
+  it('should preserve Error objects', () => {
+    const schema = z.object({
+      error: z.any(),
+    });
+
+    const input = { error: new Error('Test error') };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).error).toBeInstanceOf(Error);
+    expect((result.data as any).error.message).toBe('Test error');
+  });
+
+  it('should handle Date objects in arrays', () => {
+    const schema = z.object({
+      dates: z.array(z.coerce.date()),
+    });
+
+    const input = {
+      dates: [new Date('2024-01-01T00:00:00Z'), new Date('2024-12-31T23:59:59Z')],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).dates).toHaveLength(2);
+    expect((result.data as any).dates[0]).toBeInstanceOf(Date);
+    expect((result.data as any).dates[1]).toBeInstanceOf(Date);
+  });
+
+  it('should handle mixed Date objects and ISO strings', () => {
+    const schema = z.object({
+      date1: z.coerce.date(),
+      date2: z.coerce.date(),
+      date3: z.coerce.date(),
+    });
+
+    const input = {
+      date1: new Date('2024-01-01T00:00:00Z'),
+      date2: '2024-06-15T12:00:00.000Z',
+      date3: new Date('2024-12-31T23:59:59Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).date1).toBeInstanceOf(Date);
+    expect((result.data as any).date2).toBeInstanceOf(Date);
+    expect((result.data as any).date3).toBeInstanceOf(Date);
+  });
+
+  it('should preserve Map objects', () => {
+    const schema = z.object({
+      data: z.any(),
+    });
+
+    const map = new Map([
+      ['key1', 'value1'],
+      ['key2', 'value2'],
+    ]);
+    const input = { data: map };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).data).toBeInstanceOf(Map);
+    expect((result.data as any).data.get('key1')).toBe('value1');
+  });
+
+  it('should preserve Set objects', () => {
+    const schema = z.object({
+      data: z.any(),
+    });
+
+    const set = new Set([1, 2, 3]);
+    const input = { data: set };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).data).toBeInstanceOf(Set);
+    expect((result.data as any).data.has(2)).toBe(true);
+  });
+
+  it('should preserve URL objects', () => {
+    const schema = z.object({
+      url: z.any(),
+    });
+
+    const url = new URL('https://example.com/path?query=value');
+    const input = { url };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).url).toBeInstanceOf(URL);
+    expect((result.data as any).url.hostname).toBe('example.com');
+  });
+
+  it('should preserve custom class instances', () => {
+    class CustomClass {
+      constructor(public value: string) {}
+      getValue() {
+        return this.value;
+      }
+    }
+
+    const schema = z.object({
+      instance: z.any(),
+    });
+
+    const instance = new CustomClass('test');
+    const input = { instance };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).instance).toBeInstanceOf(CustomClass);
+    expect((result.data as any).instance.getValue()).toBe('test');
+  });
+
+  it('should handle nested plain objects with non-plain objects inside', () => {
+    const schema = z.object({
+      nested: z.object({
+        date: z.coerce.date(),
+        map: z.any(),
+        name: z.string(),
+      }),
+    });
+
+    const input = {
+      nested: {
+        date: new Date('2024-01-01T00:00:00Z'),
+        map: new Map([['key', 'value']]),
+        name: 'test',
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).nested.date).toBeInstanceOf(Date);
+    expect((result.data as any).nested.map).toBeInstanceOf(Map);
+    expect((result.data as any).nested.map.get('key')).toBe('value');
+  });
+});
+
+describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/12757
+  // Some LLMs (e.g., GLM4.7) generate tool arguments where array or object
+  // parameters are returned as stringified JSON strings instead of actual
+  // arrays/objects, causing Zod validation to fail.
+
+  it('should coerce a stringified JSON array to an actual array', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+      timeout: z.number().nullish().default(30000),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should coerce a stringified JSON array with multiple items', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '["item1", "item2", "item3"]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: ['item1', 'item2', 'item3'],
+    });
+  });
+
+  it('should coerce a stringified numeric array', () => {
+    const schema = z.object({
+      values: z.array(z.number()),
+    });
+
+    const input = {
+      values: '[1, 2, 3]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      values: [1, 2, 3],
+    });
+  });
+
+  it('should coerce a stringified empty array', () => {
+    const schema = z.object({
+      tags: z.array(z.string()).default([]),
+    });
+
+    const input = {
+      tags: '[]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      tags: [],
+    });
+  });
+
+  it('should coerce a stringified JSON object to an actual object', () => {
+    const schema = z.object({
+      name: z.string(),
+      metadata: z.object({
+        key: z.string(),
+        value: z.string(),
+      }),
+    });
+
+    const input = {
+      name: 'test',
+      metadata: '{"key": "color", "value": "blue"}',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      metadata: { key: 'color', value: 'blue' },
+    });
+  });
+
+  it('should handle the exact GLM4.7 output for mastra_workspace_execute_command', () => {
+    const schema = z.object({
+      command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
+      args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
+      timeout: z.number().nullish().default(30000).describe('Maximum execution time in milliseconds.'),
+      cwd: z.string().nullish().describe('Working directory for the command'),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should work end-to-end with createTool when LLM sends stringified array', async () => {
+    const tool = createTool({
+      id: 'mastra_workspace_execute_command',
+      description: 'Execute a command',
+      inputSchema: z.object({
+        command: z.string(),
+        args: z.array(z.string()).nullish().default([]),
+        timeout: z.number().nullish().default(30000),
+      }),
+      execute: async ({ command, args, timeout }) => {
+        return { command, args: args ?? [], timeout: timeout ?? 30000 };
+      },
+    });
+
+    const result = await tool.execute({
+      command: 'python3',
+      args: '["parse_excel.py"]' as any,
+      timeout: 60000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should NOT coerce regular strings that are not valid JSON', () => {
+    const schema = z.object({
+      name: z.string(),
+      tags: z.array(z.string()),
+    });
+
+    const input = {
+      name: 'test',
+      tags: 'not-json-at-all',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should NOT coerce a string that parses to wrong type', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '42',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should still accept actual arrays (no regression)', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+    });
+
+    const input = {
+      command: 'python3',
+      args: ['parse_excel.py'],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+    });
+  });
+
+  it('should still accept actual objects (no regression)', () => {
+    const schema = z.object({
+      name: z.string(),
+      config: z.object({ key: z.string() }),
+    });
+
+    const input = {
+      name: 'test',
+      config: { key: 'value' },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      config: { key: 'value' },
+    });
+  });
+});
+
+describe('prompt alias normalization (GitHub #14154)', () => {
+  const promptSchema = z.object({
+    prompt: z.string(),
+    threadId: z.string().optional(),
+  });
+
+  it('should normalize "query" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { query: 'give me insights into target USA' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'give me insights into target USA' });
+  });
+
+  it('should normalize "message" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { message: 'hello sub-agent' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hello sub-agent' });
+  });
+
+  it('should normalize "input" to "prompt" when prompt is missing', () => {
+    const result = validateToolInput(promptSchema, { input: 'process this' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'process this' });
+  });
+
+  it('should prefer "prompt" over alias fields when both are present', () => {
+    const result = validateToolInput(promptSchema, { prompt: 'correct prompt', query: 'should be ignored' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'correct prompt' });
+  });
+
+  it('should still reject input with no prompt or alias fields', () => {
+    const result = validateToolInput(promptSchema, { threadId: 'some-thread' });
+    expect(result.error).toBeDefined();
+  });
+
+  it('should preserve other fields when normalizing alias to prompt', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 'give me insights',
+      threadId: 'thread-123',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      prompt: 'give me insights',
+      threadId: 'thread-123',
+    });
+  });
+
+  it('should prefer "query" over "message" and "input" as alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 'from query',
+      message: 'from message',
+      input: 'from input',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from query' });
+  });
+
+  it('should not normalize aliases for schemas without a "prompt" field', () => {
+    const otherSchema = z
+      .object({
+        name: z.string(),
+      })
+      .strict();
+    const result = validateToolInput(otherSchema, { name: 'ok', query: 'give me insights' });
+    expect(result.error).toBeDefined();
+  });
+
+  it('should skip non-string aliases and fall back to the next string alias', () => {
+    const result = validateToolInput(promptSchema, {
+      query: 123,
+      message: 'from message',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'from message' });
   });
 });

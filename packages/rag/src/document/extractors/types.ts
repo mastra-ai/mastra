@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import type { z } from 'zod';
 import type {
   KeywordExtractPrompt,
   QuestionExtractPrompt,
@@ -9,32 +10,39 @@ import type {
 } from '../prompts';
 
 export type KeywordExtractArgs = {
-  llm?: MastraLanguageModel;
+  llm?: MastraLegacyLanguageModel | MastraLanguageModel;
   keywords?: number;
   promptTemplate?: KeywordExtractPrompt['template'];
 };
 
 export type QuestionAnswerExtractArgs = {
-  llm?: MastraLanguageModel;
+  llm?: MastraLegacyLanguageModel | MastraLanguageModel;
   questions?: number;
   promptTemplate?: QuestionExtractPrompt['template'];
   embeddingOnly?: boolean;
 };
 
 export type SummaryExtractArgs = {
-  llm?: MastraLanguageModel;
+  llm?: MastraLegacyLanguageModel | MastraLanguageModel;
   summaries?: string[];
   promptTemplate?: SummaryPrompt['template'];
 };
 
 export type TitleExtractorsArgs = {
-  llm?: MastraLanguageModel;
+  llm?: MastraLegacyLanguageModel | MastraLanguageModel;
   nodes?: number;
   nodeTemplate?: TitleExtractorPrompt['template'];
   combineTemplate?: TitleCombinePrompt['template'];
 };
 
+export type SchemaExtractArgs<T extends z.ZodType = z.ZodType> = {
+  schema: T;
+  llm?: MastraLegacyLanguageModel | MastraLanguageModel;
+  instructions?: string;
+  metadataKey?: string;
+};
+
 export const STRIP_REGEX = /(\r\n|\n|\r)/gm;
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-export const baseLLM: MastraLanguageModel = openai('gpt-4o');
+export const baseLLM: MastraLegacyLanguageModel | MastraLanguageModel = openai('gpt-4o');

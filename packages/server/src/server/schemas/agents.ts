@@ -1,9 +1,31 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
+});
+
+/**
+ * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
+ * Use either `status` or `versionId`, not both.
+ * - `status` — 'draft' (latest version, default) or 'published' (active published version).
+ * - `versionId` — Resolve with a specific version ID.
+ */
+export const agentVersionQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published'])
+    .optional()
+    .describe(
+      'Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId.',
+    ),
+  versionId: z
+    .string()
+    .optional()
+    .describe(
+      'Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence.',
+    ),
 });
 
 export const toolIdPathParams = z.object({
@@ -12,6 +34,10 @@ export const toolIdPathParams = z.object({
 
 export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
+});
+
+export const agentSkillPathParams = agentIdPathParams.extend({
+  skillName: z.string().describe('Name of the skill'),
 });
 
 export const modelConfigIdPathParams = agentIdPathParams.extend({
@@ -101,9 +127,12 @@ export const serializedAgentSchema = z.object({
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.string(), z.any()).optional(),
+  defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  activeVersionId: z.string().optional(),
+  hasDraft: z.boolean().optional(),
 });
 
 /**
@@ -188,14 +217,23 @@ export const agentExecutionBodySchema = z
 
     // Memory & Persistence
     memory: agentMemoryOptionSchema.optional(),
-    resourceId: z.string().optional(), // @deprecated
-    resourceid: z.string().optional(),
-    threadId: z.string().optional(), // @deprecated
     runId: z.string().optional(),
     savePerStep: z.boolean().optional(),
 
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.any()).optional(),
+
+    // Version overrides for sub-agents (and future primitives)
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+      })
+      .optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),
@@ -253,13 +291,33 @@ export const agentExecutionBodySchema = z
   .passthrough(); // Allow additional fields for forward compatibility
 
 /**
+ * Legacy body schema for deprecated endpoints that still use threadId/resourceId
+ * Used by /agents/:agentId/generate-legacy and /agents/:agentId/stream-legacy
+ */
+export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
+  resourceId: z.string().optional(),
+  resourceid: z.string().optional(), // lowercase variant
+  threadId: z.string().optional(),
+});
+
+export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
+  maxIdleMs: z.number().int().positive().optional(),
+});
+
+export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
+  maxIdleMs: z.number().int().positive().optional(),
+});
+/**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
- * Note: Using z.custom() instead of z.any()/z.any() because those are treated as optional by Zod
+ * Note: Using z.unknown().refine() instead of z.any() to ensure data is required
+ * (z.any() is treated as optional by Zod)
  */
-
 const executeToolDataBodySchema = z.object({
-  data: z.custom<unknown>(x => x !== undefined, { message: 'data is required' }),
+  data: z.unknown().refine(x => x !== undefined, { message: 'data is required' }),
 });
 
 export const executeToolBodySchema = executeToolDataBodySchema.extend({
@@ -296,6 +354,11 @@ const toolCallActionBodySchema = z.object({
   toolCallId: z.string(),
   format: z.string().optional(),
 });
+const networkToolCallActionBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  format: z.string().optional(),
+});
 
 /**
  * Body schema for approving tool call
@@ -308,10 +371,35 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
 export const declineToolCallBodySchema = toolCallActionBodySchema;
 
 /**
+ * Body schema for approving network tool call
+ */
+export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+
+/**
+ * Body schema for declining network tool call
+ */
+export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+
+/**
  * Response schema for tool approval/decline
  */
 export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
+});
+
+// ============================================================================
+// Resume Stream Schema
+// ============================================================================
+
+/**
+ * Body schema for resuming a suspended agent stream with custom data.
+ * Extends the agent execution body without messages, since resume
+ * continues from a prior suspension point rather than starting fresh.
+ */
+export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
 });
 
 // ============================================================================
@@ -368,7 +456,7 @@ export const generateSpeechBodySchema = z.object({
  * Body schema for transcribing speech
  */
 export const transcribeSpeechBodySchema = z.object({
-  audioData: z.any(), // Buffer
+  audio: z.any(), // Buffer
   options: z.record(z.string(), z.any()).optional(),
 });
 
@@ -392,3 +480,41 @@ export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
 export const streamResponseSchema = z.any(); // AI SDK StreamResult type
 export const speakResponseSchema = z.any(); // Voice synthesis result
 export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool
+
+// ============================================================================
+// Instruction Enhancement Schemas
+// ============================================================================
+
+/**
+ * Body schema for enhancing agent instructions
+ */
+export const enhanceInstructionsBodySchema = z.object({
+  instructions: z.string().describe('The current agent instructions to enhance'),
+  comment: z.string().describe('User comment describing how to enhance the instructions'),
+});
+
+/**
+ * Response schema for enhanced instructions
+ */
+export const enhanceInstructionsResponseSchema = z.object({
+  explanation: z.string().describe('Explanation of the changes made'),
+  new_prompt: z.string().describe('The enhanced instructions'),
+});
+
+// ============================================================================
+// Observe (Resumable Streams) Schemas
+// ============================================================================
+
+/**
+ * Body schema for observing an agent stream
+ * Used to reconnect to an existing stream and receive missed events
+ */
+export const observeAgentBodySchema = z.object({
+  runId: z.string().describe('The run ID to observe/reconnect to'),
+  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+});
+
+/**
+ * Response schema for observe endpoint (streaming response)
+ */
+export const observeAgentResponseSchema = z.any(); // Streaming response

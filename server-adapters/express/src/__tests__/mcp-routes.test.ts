@@ -24,8 +24,6 @@ describe('Express MCP Registry Routes Integration', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
       });
 
       // Register context middleware
@@ -74,8 +72,8 @@ describe('Express MCP Registry Routes Integration', () => {
           },
         };
 
-        // Add body for POST/PUT/PATCH
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+        // Add body for POST/PUT/PATCH/DELETE
+        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

@@ -11,16 +11,9 @@ import type {
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
-import { resourceFromAttributes } from '@opentelemetry/resources';
+
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-  ATTR_TELEMETRY_SDK_LANGUAGE,
-  ATTR_TELEMETRY_SDK_NAME,
-  ATTR_TELEMETRY_SDK_VERSION,
-} from '@opentelemetry/semantic-conventions';
 
 import { loadExporter } from './loadExporter.js';
 import { resolveProviderConfig } from './provider-configs.js';
@@ -29,8 +22,8 @@ import type { OtelExporterConfig } from './types.js';
 
 export class OtelExporter extends BaseExporter {
   private config: OtelExporterConfig;
-  private tracingConfig?: ObservabilityInstanceConfig;
-  private spanConverter: SpanConverter;
+  private observabilityConfig?: ObservabilityInstanceConfig;
+  private spanConverter?: SpanConverter;
   private processor?: BatchSpanProcessor;
   private exporter?: SpanExporter;
   private isSetup: boolean = false;
@@ -41,7 +34,6 @@ export class OtelExporter extends BaseExporter {
     super(config);
 
     this.config = config;
-    this.spanConverter = new SpanConverter();
 
     // Set up OpenTelemetry diagnostics if debug mode
     if (config.logLevel === 'debug') {
@@ -53,7 +45,7 @@ export class OtelExporter extends BaseExporter {
    * Initialize with tracing configuration
    */
   init(options: InitExporterOptions) {
-    this.tracingConfig = options.config;
+    this.observabilityConfig = options.config;
   }
 
   private async setupExporter() {
@@ -62,10 +54,9 @@ export class OtelExporter extends BaseExporter {
 
     // Provider configuration is required
     if (!this.config.provider) {
-      this.logger.error(
+      this.setDisabled(
         '[OtelExporter] Provider configuration is required. Use the "custom" provider for generic endpoints.',
       );
-      this.isDisabled = true;
       this.isSetup = true;
       return;
     }
@@ -74,7 +65,7 @@ export class OtelExporter extends BaseExporter {
     const resolved = resolveProviderConfig(this.config.provider);
     if (!resolved) {
       // Configuration validation failed, disable tracing
-      this.isDisabled = true;
+      this.setDisabled('[OtelExporter] Provider configuration validation failed.');
       this.isSetup = true;
       return;
     }
@@ -95,7 +86,7 @@ export class OtelExporter extends BaseExporter {
 
     if (!ExporterClass) {
       // Exporter not available, disable tracing
-      this.isDisabled = true;
+      this.setDisabled(`[OtelExporter] Exporter not available for protocol: ${protocol}`);
       this.isSetup = true;
       return;
     }
@@ -111,19 +102,17 @@ export class OtelExporter extends BaseExporter {
         // Dynamically import @grpc/grpc-js to create metadata
         let metadata: any;
         try {
-          // @ts-ignore - Dynamic import for optional dependency
           const grpcModule = await import('@grpc/grpc-js');
           metadata = new grpcModule.Metadata();
           Object.entries(headers).forEach(([key, value]) => {
             metadata.set(key, value);
           });
         } catch (grpcError) {
-          this.logger.error(
+          this.setDisabled(
             `[OtelExporter] Failed to load gRPC metadata. Install required packages:\n` +
-              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
-            grpcError,
+              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js`,
           );
-          this.isDisabled = true;
+          this.logger.error('[OtelExporter] gRPC error details:', grpcError);
           this.isSetup = true;
           return;
         }
@@ -142,8 +131,8 @@ export class OtelExporter extends BaseExporter {
         });
       }
     } catch (error) {
-      this.logger.error(`[OtelExporter] Failed to create exporter:`, error);
-      this.isDisabled = true;
+      this.setDisabled('[OtelExporter] Failed to create exporter.');
+      this.logger.error('[OtelExporter] Exporter creation error details:', error);
       this.isSetup = true;
       return;
     }
@@ -152,25 +141,12 @@ export class OtelExporter extends BaseExporter {
   private async setupProcessor() {
     if (this.processor || this.isSetup) return;
 
-    // Create resource with service name from ObservabilityInstanceConfig
-    let resource = resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: this.tracingConfig?.serviceName || 'mastra-service',
-      [ATTR_SERVICE_VERSION]: '1.0.0',
-      // Add telemetry SDK information
-      [ATTR_TELEMETRY_SDK_NAME]: '@mastra/otel-exporter',
-      [ATTR_TELEMETRY_SDK_VERSION]: '1.0.0',
-      [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
+    this.spanConverter = new SpanConverter({
+      packageName: '@mastra/otel-exporter',
+      serviceName: this.observabilityConfig?.serviceName,
+      config: this.config,
+      format: 'GenAI_v1_38_0',
     });
-
-    if (this.config.resourceAttributes) {
-      resource = resource.merge(
-        // Duplicate attributes from config will override defaults above
-        resourceFromAttributes(this.config.resourceAttributes),
-      );
-    }
-
-    // Store the resource in the span converter
-    this.spanConverter = new SpanConverter(resource);
 
     // Always use BatchSpanProcessor for production
     // It queues spans and exports them in batches for better performance
@@ -217,12 +193,12 @@ export class OtelExporter extends BaseExporter {
 
     try {
       // Convert the span to OTEL format
-      const readableSpan = this.spanConverter.convertSpan(span);
+      const otelSpan = await this.spanConverter!.convertSpan(span);
 
       // Export the span immediately through the processor
       // The processor will handle batching if configured
       await new Promise<void>(resolve => {
-        this.processor!.onEnd(readableSpan);
+        this.processor!.onEnd(otelSpan);
         resolve();
       });
 
@@ -231,6 +207,17 @@ export class OtelExporter extends BaseExporter {
       );
     } catch (error) {
       this.logger.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
+    }
+  }
+
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * Delegates to the BatchSpanProcessor's forceFlush() method.
+   */
+  async flush(): Promise<void> {
+    if (this.processor) {
+      await this.processor.forceFlush();
+      this.logger.debug('[OtelExporter] Flushed pending spans');
     }
   }
 

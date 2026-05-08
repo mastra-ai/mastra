@@ -1,66 +1,145 @@
-import type { z } from 'zod';
 import type { MastraScorers } from '../evals';
+import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType } from '../stream/types';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
-import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { Emitter, StepResult } from './types';
+import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import type { OutputWriter, StepResult, StepMetadata } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
-};
+} & Record<string, any>;
 
-export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
+// Create a unique symbol that only exists at the type level
+declare const SuspendBrand: unique symbol;
+
+// Create a branded type that can ONLY be produced by suspend()
+export type InnerOutput = void & { readonly [SuspendBrand]: never };
+
+export type ExecuteFunctionParams<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResume,
+  TSuspend,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = Partial<ObservabilityContext> & {
   runId: string;
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
-  requestContext: RequestContext;
+  requestContext: RequestContext<TRequestContext>;
   inputData: TStepInput;
   state: TState;
-  setState(state: TState): void;
-  resumeData?: TResumeSchema;
-  suspendData?: TSuspendSchema;
+  setState(state: TState): Promise<void>;
+  resumeData?: TResume;
+  suspendData?: TSuspend;
   retryCount: number;
-  tracingContext: TracingContext;
-  getInitData<T extends z.ZodType<any>>(): z.infer<T>;
-  getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
-    ? unknown
-    : z.infer<NonNullable<T['inputSchema']>>;
-  getStepResult<T extends Step<any, any, any, any, any, any>>(
-    stepId: T,
-  ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-  getStepResult(stepId: string): any;
-  suspend(suspendPayload?: TSuspendSchema, suspendOptions?: SuspendOptions): Promise<any>;
-  bail(result: any): any;
-  abort(): any;
+  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any, any>
+    ? InferStandardSchemaOutput<T['inputSchema']>
+    : T;
+  getStepResult<TOutput>(step: string): TOutput;
+  getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
+    step: TStep,
+  ): InferStandardSchemaOutput<TStep['outputSchema']>;
+  suspend: unknown extends TSuspend
+    ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
+    : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
+  bail(result: TStepOutput): InnerOutput;
+  bail<T>(
+    result: T extends Workflow<any, any, any, any, any, infer TWorkflowOutput, any, any> ? TWorkflowOutput : T,
+  ): InnerOutput;
+  abort(): void;
   resume?: {
     steps: string[];
-    resumePayload: any;
+    resumePayload: TResume;
   };
   restart?: boolean;
-  [EMITTER_SYMBOL]: Emitter;
+  [PUBSUB_SYMBOL]: PubSub;
   [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
-  writer: ToolStream<ChunkType>;
+  writer: ToolStream;
+  outputWriter?: OutputWriter;
   validateSchemas?: boolean;
 };
 
-export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
-) => Promise<TStepOutput>;
+export type ConditionFunctionParams<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = Omit<
+  ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
+  'setState' | 'suspend'
+>;
 
-export type ConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ExecuteFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ExecuteFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  >,
+) => Promise<TStepOutput | InnerOutput>;
+
+export type ConditionFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  >,
 ) => Promise<boolean>;
 
-export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+export type LoopConditionFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  > & {
     iterationCount: number;
   },
 ) => Promise<boolean>;
@@ -68,35 +147,36 @@ export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSch
 // Define a Step interface
 export interface Step<
   TStepId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TSchemaIn extends z.ZodType<any> = z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any> = z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any> = z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any> = z.ZodType<any>,
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
+  TResume = unknown,
+  TSuspend = unknown,
   TEngineType = any,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TStepId;
   description?: string;
-  inputSchema: TSchemaIn;
-  outputSchema: TSchemaOut;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  stateSchema?: TState;
-  execute: ExecuteFunction<
-    z.infer<TState>,
-    z.infer<TSchemaIn>,
-    z.infer<TSchemaOut>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    TEngineType
-  >;
+  inputSchema: StandardSchemaWithJSON<TInput>;
+  outputSchema: StandardSchemaWithJSON<TOutput>;
+  resumeSchema?: StandardSchemaWithJSON<TResume>;
+  suspendSchema?: StandardSchemaWithJSON<TSuspend>;
+  stateSchema?: StandardSchemaWithJSON<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
+  execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType, TRequestContext>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
   component?: string;
+  metadata?: StepMetadata;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
   let result;
+
   if (typeof step === 'string') {
     result = stepResults[step];
   } else {

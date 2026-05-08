@@ -32,7 +32,7 @@ const downloadAndSummarizeCSVStep = createStep({
     console.log('Executing Step: download-and-summarize-csv');
     const { csvUrl } = inputData;
 
-    const result = await csvFetcherTool.execute(
+    const result = await csvFetcherTool.execute!(
       { csvUrl },
       {
         mastra,
@@ -69,7 +69,7 @@ const generateQuestionsFromSummaryStep = createStep({
     }
 
     try {
-      const result = await generateQuestionsFromTextTool.execute(
+      const result = await generateQuestionsFromTextTool.execute!(
         { extractedText: summary }, // Use summary as the text input
         {
           mastra,

@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -15,17 +16,25 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
 export class MemoryMSSQL extends MemoryStorage {
   private pool: sql.ConnectionPool;
-  private schema: string;
-  private operations: StoreOperationsMSSQL;
+  private schema?: string;
+  private db: MssqlDB;
+  private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
+  private indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
 
   private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
     // Parse content back to objects if they were stringified during storage
@@ -49,19 +58,90 @@ export class MemoryMSSQL extends MemoryStorage {
     return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
-  constructor({
-    pool,
-    schema,
-    operations,
-  }: {
-    pool: sql.ConnectionPool;
-    schema: string;
-    operations: StoreOperationsMSSQL;
-  }) {
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.schema = schema;
-    this.operations = operations;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
+    this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (MemoryMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the memory domain tables.
+   * IMPORTANT: Uses seq_id DESC instead of createdAt DESC for MSSQL due to millisecond accuracy limitations
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.schema ? `${this.schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_threads_resourceid_seqid_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'seq_id DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_thread_id_seqid_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'seq_id DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.db.clearTable({ tableName: TABLE_THREADS });
+    await this.db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -91,7 +171,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -103,33 +183,97 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_MSSQL_STORE_INVALID_PAGE',
+        id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
+        text: error instanceof Error ? error.message : 'Invalid pagination parameters',
+        details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
       });
     }
 
     const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: error instanceof Error ? error.message : 'Invalid metadata key',
+        details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+      });
+    }
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
+
     try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
+      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const whereClauses: string[] = [];
+      const params: Record<string, any> = {};
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        whereClauses.push('[resourceId] = @resourceId');
+        params.resourceId = filter.resourceId;
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          // Validate filter value type - only allow scalar types
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError({
+              id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+              details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+            });
+          }
+
+          // Handle null values specially: JSON_VALUE returns NULL for null values,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            whereClauses.push(`JSON_VALUE(metadata, '$.${key}') IS NULL`);
+          } else {
+            const paramName = `metadata${metadataIndex}`;
+            whereClauses.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
+            // JSON_VALUE returns strings directly, numbers as strings, booleans as 'true'/'false'
+            // Don't use JSON.stringify as it escapes quotes/backslashes which JSON_VALUE doesn't
+            if (typeof value === 'string') {
+              params[paramName] = value;
+            } else if (typeof value === 'boolean') {
+              params[paramName] = value ? 'true' : 'false';
+            } else {
+              params[paramName] = String(value);
+            }
+          }
+          metadataIndex++;
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${tableName} ${whereClause}`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
       const countRequest = this.pool.request();
-      countRequest.input('resourceId', resourceId);
+      for (const [key, value] of Object.entries(params)) {
+        countRequest.input(key, value);
+      }
       const countResult = await countRequest.query(countQuery);
       const total = parseInt(countResult.recordset[0]?.count ?? '0', 10);
 
@@ -148,7 +292,10 @@ export class MemoryMSSQL extends MemoryStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
-      dataRequest.input('resourceId', resourceId);
+
+      for (const [key, value] of Object.entries(params)) {
+        dataRequest.input(key, value);
+      }
       dataRequest.input('offset', offset);
 
       if (limitValue > 2147483647) {
@@ -156,6 +303,7 @@ export class MemoryMSSQL extends MemoryStorage {
       } else {
         dataRequest.input('perPage', limitValue);
       }
+
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const threads = rows.map(thread => ({
@@ -173,13 +321,18 @@ export class MemoryMSSQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            resourceId,
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
             page,
           },
         },
@@ -230,7 +383,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('MSSQL', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -257,7 +410,7 @@ export class MemoryMSSQL extends MemoryStorage {
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_THREAD_FAILED',
+        id: createStorageErrorId('MSSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -294,7 +447,7 @@ export class MemoryMSSQL extends MemoryStorage {
       }
       if (!thread) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: `Thread ${id} not found after update`,
@@ -313,7 +466,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -343,7 +496,7 @@ export class MemoryMSSQL extends MemoryStorage {
       await tx.rollback().catch(() => {});
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('MSSQL', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -353,6 +506,25 @@ export class MemoryMSSQL extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    const mult = direction === 'ASC' ? 1 : -1;
+    return messages.sort((a, b) => {
+      const aVal = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bVal = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aVal == null || bVal == null) {
+        return aVal == null && bVal == null ? a.id.localeCompare(b.id) : aVal == null ? 1 : -1;
+      }
+
+      const diff =
+        (typeof aVal === 'number' && typeof bVal === 'number'
+          ? aVal - bVal
+          : String(aVal).localeCompare(String(bVal))) * mult;
+
+      return diff !== 0 ? diff : a.id.localeCompare(b.id);
+    });
   }
 
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
@@ -473,7 +645,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -497,7 +669,7 @@ export class MemoryMSSQL extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_MSSQL_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -508,7 +680,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
     if (page < 0) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_MSSQL_STORE_INVALID_PAGE',
+        id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
@@ -543,6 +715,24 @@ export class MemoryMSSQL extends MemoryStorage {
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
       };
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        const messages = this._parseAndFormatMessages(includeMessages ?? [], 'v2') as MastraDBMessage[];
+        return {
+          messages: this._sortMessages(messages, field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
       // Get total count
       const countRequest = this.pool.request();
@@ -639,7 +829,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -666,7 +856,7 @@ export class MemoryMSSQL extends MemoryStorage {
     const threadId = messages[0]?.threadId;
     if (!threadId) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_MESSAGES_FAILED',
+        id: createStorageErrorId('MSSQL', 'SAVE_MESSAGES', 'INVALID_THREAD_ID'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         text: `Thread ID is required`,
@@ -675,7 +865,7 @@ export class MemoryMSSQL extends MemoryStorage {
     const thread = await this.getThreadById({ threadId });
     if (!thread) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_MESSAGES_FAILED',
+        id: createStorageErrorId('MSSQL', 'SAVE_MESSAGES', 'THREAD_NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         text: `Thread ${threadId} not found`,
@@ -748,7 +938,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('MSSQL', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -855,7 +1045,7 @@ export class MemoryMSSQL extends MemoryStorage {
       await transaction.rollback();
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -936,7 +1126,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_DELETE_MESSAGES_FAILED',
+          id: createStorageErrorId('MSSQL', 'DELETE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messageIds.join(', ') },
@@ -967,7 +1157,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -981,7 +1171,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    await this.operations.insert({
+    await this.db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
@@ -1050,7 +1240,7 @@ export class MemoryMSSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

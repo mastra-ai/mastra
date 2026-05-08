@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import {
   streamWorkflowBodySchema,
   resumeBodySchema,
@@ -49,8 +49,9 @@ export {
   sendWorkflowRunEventBodySchema,
   workflowExecutionResultSchema,
   workflowControlResponseSchema,
-  workflowRunResponseSchema,
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
+  workflowRunResultSchema,
+  workflowRunResultQuerySchema,
 } from './workflows';

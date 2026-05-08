@@ -1,54 +1,25 @@
+import { Header, Breadcrumb, Crumb, Button, HeaderAction, Icon, DocsIcon, AgentIcon } from '@mastra/playground-ui';
 import { Link } from 'react-router';
+import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 
-import {
-  Header,
-  Breadcrumb,
-  Crumb,
-  HeaderGroup,
-  Button,
-  DividerIcon,
-  HeaderAction,
-  Icon,
-  DocsIcon,
-  AgentIcon,
-  AgentCombobox,
-} from '@mastra/playground-ui';
-
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+export function AgentHeader({ agentId }: { agentId: string }) {
   return (
-    <Header>
+    <Header border={false}>
       <Breadcrumb>
-        <Crumb as={Link} to={`/agents`} isCurrent>
+        <Crumb as={Link} to={`/agents`}>
           <Icon>
             <AgentIcon />
           </Icon>
           Agents
         </Crumb>
+        <Crumb as="span" to="" isCurrent>
+          <AgentCombobox value={agentId} variant="ghost" />
+        </Crumb>
       </Breadcrumb>
 
-      <HeaderGroup>
-        <div className="w-[240px]">
-          <AgentCombobox value={agentId} />
-        </div>
-
-        <DividerIcon />
-
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
-        </Button>
-
-        <DividerIcon />
-
-        <Button as={Link} to={`/observability?entity=${agentId}`}>
-          Traces
-        </Button>
-      </HeaderGroup>
-
       <HeaderAction>
-        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-          <Icon>
-            <DocsIcon />
-          </Icon>
+        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank" variant="ghost" size="md">
+          <DocsIcon />
           Agents documentation
         </Button>
       </HeaderAction>

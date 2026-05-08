@@ -6,9 +6,3 @@
 .docItemCol {
   max-width: 100% !important;
 }
-
-/* @media (min-width: 997px) {
-  .docItemCol {
-    max-width: 75% !important;
-  }
-} */

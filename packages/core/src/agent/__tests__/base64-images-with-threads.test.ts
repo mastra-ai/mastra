@@ -1,5 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
@@ -120,8 +120,8 @@ describe('Base64 Images with Threads - Issue #10480', () => {
     const streamModel = new MockLanguageModelV2({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
-          { type: 'text-delta', id: '1', delta: 'I see ' },
-          { type: 'text-delta', id: '2', delta: 'the image' },
+          { type: 'text-delta', id: 'text-1', delta: 'I see ' },
+          { type: 'text-delta', id: 'text-2', delta: 'the image' },
           {
             type: 'finish',
             id: '3',

@@ -17,6 +17,7 @@ import {
 } from '../schemas/scores';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 
 async function listScorersFromSystem({
@@ -30,10 +31,21 @@ async function listScorersFromSystem({
 
   const scorersMap = new Map<
     string,
-    MastraScorerEntry & { agentIds: string[]; agentNames: string[]; workflowIds: string[]; isRegistered: boolean }
+    MastraScorerEntry & {
+      agentIds: string[];
+      agentNames: string[];
+      workflowIds: string[];
+      isRegistered: boolean;
+      source: 'code' | 'stored';
+    }
   >();
 
-  for (const [_, agent] of Object.entries(agents)) {
+  // Helper function to process an agent's scorers
+  const processAgentScorers = async (agent: {
+    id: string;
+    name: string;
+    listScorers: (typeof agents)[string]['listScorers'];
+  }) => {
     const scorers =
       (await agent.listScorers({
         requestContext,
@@ -52,10 +64,53 @@ async function listScorersFromSystem({
             agentNames: [agent.name],
             agentIds: [agent.id],
             isRegistered: false,
+            source: scorer.scorer.source ?? 'code',
           });
         }
       }
     }
+  };
+
+  // Process code-defined agents
+  for (const [_, agent] of Object.entries(agents)) {
+    await processAgentScorers(agent);
+  }
+
+  // Process stored agents (database-backed agents)
+  try {
+    const editor = mastra.getEditor();
+    const storedAgentsResult = await editor?.agent.list();
+    if (storedAgentsResult?.agents) {
+      for (const storedAgentConfig of storedAgentsResult.agents) {
+        try {
+          const agent = await editor?.agent.getById(storedAgentConfig.id);
+          if (agent) {
+            await processAgentScorers(agent);
+          }
+        } catch {
+          // Skip individual agents that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured - not all setups have storage
+  }
+
+  // Process stored scorers (standalone CMS-created scorers)
+  try {
+    const editor = mastra.getEditor();
+    const storedScorersResult = await editor?.scorer.list();
+    if (storedScorersResult?.scorerDefinitions) {
+      for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
+        try {
+          await editor?.scorer.getById(storedScorerConfig.id);
+        } catch {
+          // Skip individual scorers that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
@@ -76,6 +131,7 @@ async function listScorersFromSystem({
             ...scorer,
             workflowIds: [workflowId],
             isRegistered: false,
+            source: scorer.scorer.source ?? 'code',
           });
         }
       }
@@ -94,6 +150,7 @@ async function listScorersFromSystem({
         agentNames: [],
         workflowIds: [],
         isRegistered: true,
+        source: scorer.source ?? 'code',
       });
     }
   }
@@ -121,31 +178,33 @@ function getTraceDetails(traceIdWithSpanId?: string) {
 
 export const LIST_SCORERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorers',
+  path: '/scores/scorers',
   responseType: 'json',
   responseSchema: listScorersResponseSchema,
   summary: 'List all scorers',
   description: 'Returns a list of all registered scorers with their configuration and associated agents and workflows',
   tags: ['Scoring'],
-  handler: async ({ mastra, requestContext }) => {
+  requiresAuth: true,
+  handler: (async ({ mastra, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
     });
     return scorers;
-  },
+  }) as any,
 });
 
 export const GET_SCORER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorers/:scorerId',
+  path: '/scores/scorers/:scorerId',
   responseType: 'json',
   pathParamSchema: scorerIdPathParams,
   responseSchema: scorerEntrySchema.nullable(),
   summary: 'Get scorer by ID',
   description: 'Returns details for a specific scorer including its configuration and associations',
   tags: ['Scoring'],
-  handler: async ({ mastra, scorerId, requestContext }) => {
+  requiresAuth: true,
+  handler: (async ({ mastra, scorerId, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
@@ -158,12 +217,12 @@ export const GET_SCORER_ROUTE = createRoute({
     }
 
     return scorer;
-  },
+  }) as any,
 });
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/run/:runId',
+  path: '/scores/run/:runId',
   responseType: 'json',
   pathParamSchema: runIdSchema,
   queryParamSchema: listScoresByRunIdQuerySchema,
@@ -171,6 +230,7 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
   summary: 'List scores by run ID',
   description: 'Returns all scores for a specific execution run',
   tags: ['Scoring'],
+  requiresAuth: true,
   handler: async ({ mastra, runId, ...params }) => {
     try {
       const { page, perPage } = params;
@@ -178,13 +238,14 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
         page: page ?? 0,
         perPage: perPage ?? 10,
       };
-      const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
+      const scores = await mastra.getStorage()?.getStore('scores');
+      const scoreResults = (await scores?.listScoresByRunId?.({
         runId,
         pagination,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
       return {
         pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
       return handleError(error, 'Error getting scores by run id');
@@ -194,7 +255,7 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/scorer/:scorerId',
+  path: '/scores/scorer/:scorerId',
   responseType: 'json',
   pathParamSchema: scorerIdPathParams,
   queryParamSchema: listScoresByScorerIdQuerySchema,
@@ -202,18 +263,20 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
   summary: 'List scores by scorer ID',
   description: 'Returns all scores generated by a specific scorer',
   tags: ['Scoring'],
+  requiresAuth: true,
   handler: async ({ mastra, scorerId, ...params }) => {
     try {
       const { page, perPage, entityId, entityType } = params;
       const filters = Object.fromEntries(Object.entries({ entityId, entityType }).filter(([_, v]) => v !== undefined));
-      const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
+      const scores = await mastra.getStorage()?.getStore('scores');
+      const scoreResults = (await scores?.listScoresByScorerId?.({
         scorerId,
         pagination: { page: page ?? 0, perPage: perPage ?? 10 },
         ...filters,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
       return {
         pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
       return handleError(error, 'Error getting scores by scorer id');
@@ -223,7 +286,7 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
 
 export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/scores/entity/:entityType/:entityId',
+  path: '/scores/entity/:entityType/:entityId',
   responseType: 'json',
   pathParamSchema: entityPathParams,
   queryParamSchema: listScoresByEntityIdQuerySchema,
@@ -231,13 +294,14 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   summary: 'List scores by entity ID',
   description: 'Returns all scores for a specific entity (agent or workflow)',
   tags: ['Scoring'],
+  requiresAuth: true,
   handler: async ({ mastra, entityId, entityType, ...params }) => {
     try {
       const { page, perPage } = params;
       let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        const agent = mastra.getAgentById(entityId);
+        const agent = await getAgentFromSystem({ mastra, agentId: entityId });
         entityIdToUse = agent.id;
       } else if (entityType === 'WORKFLOW') {
         const workflow = mastra.getWorkflowById(entityId);
@@ -249,7 +313,8 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
         perPage: perPage ?? 10,
       };
 
-      const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
+      const scoresStore = await mastra.getStorage()?.getStore('scores');
+      const scoreResults = (await scoresStore?.listScoresByEntityId?.({
         entityId: entityIdToUse,
         entityType,
         pagination,
@@ -257,7 +322,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
 
       return {
         pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
       return handleError(error, 'Error getting scores by entity id');
@@ -267,17 +332,19 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
 
 export const SAVE_SCORE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/scores',
+  path: '/scores',
   responseType: 'json',
   bodySchema: saveScoreBodySchema,
   responseSchema: saveScoreResponseSchema,
   summary: 'Save score',
   description: 'Saves a new score record to storage',
   tags: ['Scoring'],
+  requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
       const { score } = params as { score: ScoreRowData };
-      const result = await mastra.getStorage()?.saveScore?.(score);
+      const scoresStore = await mastra.getStorage()?.getStore('scores');
+      const result = await scoresStore?.saveScore?.(score);
       if (!result) {
         throw new HTTPException(500, { message: 'Storage not configured' });
       }

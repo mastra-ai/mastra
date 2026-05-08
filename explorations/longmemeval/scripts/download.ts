@@ -10,11 +10,22 @@ import { pipeline } from 'stream/promises';
 const REPO_ID = 'xiaowu0162/longmemeval';
 const DATA_DIR = join(process.cwd(), 'data');
 
-const FILES = [
+const ALL_FILES = [
   { filename: 'longmemeval_oracle.json', repoPath: 'longmemeval_oracle' },
   { filename: 'longmemeval_s.json', repoPath: 'longmemeval_s' },
   { filename: 'longmemeval_m.json', repoPath: 'longmemeval_m' },
 ];
+
+// Parse command line arguments to get specific dataset
+const args = process.argv.slice(2);
+const datasetArg = args.find(arg => arg.startsWith('--dataset=') || arg.startsWith('-d='));
+const datasetIndex = args.findIndex(arg => arg === '--dataset' || arg === '-d');
+const specificDataset = datasetArg ? datasetArg.split('=')[1] : datasetIndex !== -1 ? args[datasetIndex + 1] : null;
+
+// Filter to specific dataset if provided
+const FILES = specificDataset
+  ? ALL_FILES.filter(f => f.filename === `${specificDataset}.json` || f.filename === specificDataset)
+  : ALL_FILES;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -54,6 +65,16 @@ async function downloadWithFetch(url: string, outputPath: string, token: string)
 
 async function main() {
   console.log(chalk.blue('\n📥 LongMemEval Dataset Downloader\n'));
+
+  if (specificDataset) {
+    console.log(chalk.gray(`Downloading specific dataset: ${specificDataset}\n`));
+  }
+
+  if (FILES.length === 0) {
+    console.log(chalk.red(`Dataset not found: ${specificDataset}`));
+    console.log(chalk.gray('Available datasets: longmemeval_oracle, longmemeval_s, longmemeval_m'));
+    process.exit(1);
+  }
 
   // Create data directory if it doesn't exist
   if (!existsSync(DATA_DIR)) {

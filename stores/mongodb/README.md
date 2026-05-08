@@ -21,6 +21,7 @@ npm install @mastra/mongodb
 import { MongoDBVector } from '@mastra/mongodb';
 
 const vectorDB = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'vector_db',
 });
@@ -49,7 +50,6 @@ const results = await vectorDB.query({
   topK: 10,
   filter: { text: 'doc1' },
   includeVector: false,
-  minScore: 0.5,
 });
 
 // Clean up
@@ -62,6 +62,7 @@ await vectorDB.disconnect();
 import { MongoDBStore } from '@mastra/mongodb';
 
 const store = new MongoDBStore({
+  id: 'mongodb-store',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'mastra',
 });
@@ -100,15 +101,31 @@ const { messages } = await store.listMessages({ threadId: 'thread-123' });
 
 The MongoDB vector store is initialized with:
 
+- `id`: Unique identifier for this store instance
 - `uri`: MongoDB connection string (with credentials and options)
 - `dbName`: Name of the database to use
+- `embeddingFieldPath` (optional): Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., `'text.contentEmbedding'`). Defaults to `'embedding'`.
 
 Example:
 
 ```typescript
 const vectorDB = new MongoDBVector({
+  id: 'mongodb-vector',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'vector_db',
+});
+```
+
+### Custom Embedding Field Path
+
+If you need to store embeddings in a nested field structure, use the `embeddingFieldPath` option:
+
+```typescript
+const vectorDB = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
+  dbName: 'vector_db',
+  embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
 });
 ```
 
@@ -118,7 +135,6 @@ const vectorDB = new MongoDBVector({
 
 - Vector similarity search with cosine, euclidean, and dotproduct metrics (Atlas Search)
 - Metadata filtering with MongoDB-style query syntax
-- Minimum score threshold for queries
 - Automatic UUID generation for vectors
 - Collection (index) management: create, list, describe, delete
 - Atlas Search readiness checks for reliable testing
@@ -157,7 +173,7 @@ The following distance metrics are supported:
 
 - `createIndex({indexName, dimension, metric})`: Create a new collection with vector search support
 - `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
-- `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?, documentFilter?})`: Search for similar vectors (optionally filter by document content)
+- `query({indexName, queryVector, topK?, filter?, includeVector?, documentFilter?})`: Search for similar vectors (optionally filter by document content)
 
 > **Note:** `documentFilter` allows filtering results based on the content of the `document` field. Example: `{ $contains: 'specific text' }` will return only vectors whose associated document contains the specified text.
 

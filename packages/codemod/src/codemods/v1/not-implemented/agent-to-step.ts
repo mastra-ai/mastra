@@ -10,14 +10,14 @@ import { createTransformer } from '../../lib/create-transformer';
  * const step = agent.toStep();
  *
  * After:
- * /* FIXME(mastra): The toStep() method has been removed. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/agent#agenttostep-method *\/
+ * /* FIXME(mastra): The toStep() method has been removed. See: https://mastra.ai/guides/migrations/upgrade-to-v1/agent#agenttostep-method *\/
  * const step = agent.toStep();
  */
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
   const COMMENT_MESSAGE =
-    'FIXME(mastra): The toStep() method has been removed. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/agent#agenttostep-method';
+    'FIXME(mastra): The toStep() method has been removed. See: https://mastra.ai/guides/migrations/upgrade-to-v1/agent#agenttostep-method';
 
   // Track Agent instances
   const agentInstances = new Set<string>();

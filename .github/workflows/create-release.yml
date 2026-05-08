@@ -123,6 +123,8 @@ jobs:
     needs: release
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.release.outputs.exited_prerelease == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Initial checkout
         uses: actions/checkout@v5

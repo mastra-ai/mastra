@@ -3,7 +3,7 @@ import { SERVER_ROUTES } from '../server-adapter/routes';
 
 /**
  * Extract path parameters from a path pattern
- * e.g., '/api/agents/:agentId/tools/:toolId' -> ['agentId', 'toolId']
+ * e.g., '/agents/:agentId/tools/:toolId' -> ['agentId', 'toolId']
  */
 export function extractPathParams(path: string): string[] {
   const matches = path.match(/:(\w+)/g);
@@ -64,10 +64,17 @@ describe('Schema Consistency Across All Routes', () => {
           const pathParams = extractPathParams(route.path);
           const testData: Record<string, string> = {};
           pathParams.forEach(param => {
-            testData[param] = `test-${param}`;
+            if (param === 'datasetVersion') {
+              testData[param] = '1';
+            } else {
+              testData[param] = `test-${param}`;
+            }
           });
 
           const result = route.pathParamSchema.safeParse(testData);
+          if (!result.success) {
+            console.error(`Path param schema validation failed for route ${route.path}:`, result.error);
+          }
           expect(result.success).toBe(true);
         }
       });

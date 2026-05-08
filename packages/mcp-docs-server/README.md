@@ -1,146 +1,75 @@
 # @mastra/mcp-docs-server
 
-A Model Context Protocol (MCP) server that provides AI assistants with direct access to Mastra.ai's complete knowledge base. This includes comprehensive documentation with MDX support, a collection of production-ready code examples, technical blog posts, and detailed package changelogs. The server integrates with popular AI development environments like Cursor and Windsurf, as well as Mastra agents, making it easy to build documentation-aware AI assistants that can provide accurate, up-to-date information about Mastra.ai's ecosystem.
+Access Mastra's documentation via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex, or any MCP-compatible tool.
 
-## Installation
+## Usage
 
-### In Cursor
-
-Create or update `.cursor/mcp.json` in your project root:
-
-MacOS/Linux
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-Windows
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-This will make all Mastra documentation tools available in your Cursor workspace.
-Note that the MCP server wont be enabled by default. You'll need to go to Cursor settings -> MCP settings and click "enable" on the Mastra MCP server.
-
-### In Windsurf
-
-Create or update `~/.codeium/windsurf/mcp_config.json`:
-
-MacOS/Linux
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-Windows
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-This will make all Mastra documentation tools available in your Windsurf workspace.
-Note that Windsurf MCP tool calling doesn't work very well. You will need to fully quit and re-open Windsurf after adding this.
-If a tool call fails you will need to go into Windsurf MCP settings and re-start the MCP server.
-
-### In Claude Code
-
-After installing Claude Code run:
-
-```sh
-claude mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
-```
-
-### In a Mastra Agent
-
-```typescript
-import { MCPClient } from '@mastra/mcp';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-
-// Configure MCP with the docs server
-const mcp = new MCPClient({
-  servers: {
-    mastra: {
-      command: 'npx',
-      args: ['-y', '@mastra/mcp-docs-server'],
-    },
-  },
-});
-
-// Create an agent with access to all documentation tools
-const agent = new Agent({
-  id: 'doc-assistant',
-  name: 'Documentation Assistant',
-  instructions: 'You help users find and understand Mastra.ai documentation.',
-  model: openai('gpt-4'),
-  tools: await mcp.listTools(),
-});
-
-// Or use toolsets dynamically in generate/stream
-const response = await agent.stream('Show me the quick start example', {
-  toolsets: await mcp.listToolsets(),
-});
-```
+Follow the [official installation](https://mastra.ai/docs/getting-started/mcp-docs-server) instructions.
 
 ## Tools
 
-### Documentation Tool (`mastraDocs`)
+### `mastraDocs`
 
-- Get Mastra.ai documentation by requesting specific paths
-- Explore both general guides and API reference documentation
-- Automatically lists available paths when a requested path isn't found
+Fetch documentation from mastra.ai by path. Supports guides and API references.
 
-### Examples Tool (`mastraExamples`)
+### `mastraMigration`
 
-- Access code examples showing Mastra.ai implementation patterns
-- List all available examples
-- Get detailed source code for specific examples
+Navigate migration guides for version upgrades. Supports directory browsing, section listing, and keyword search.
 
-### Blog Tool (`mastraBlog`)
+Read docs from installed `@mastra/*` packages in `node_modules`. All tools require `projectPath` parameter.
 
-- Access technical blog posts and articles
-- Posts are properly formatted with code block handling
-- Supports various date formats in blog metadata
+### `getMastraHelp`
 
-### Changes Tool (`mastraChanges`)
+Entry point showing all available documentation tools and recommended workflows.
 
-- Access package changelogs
-- List all available package changelogs
-- Get detailed changelog content for specific packages
+### `listMastraPackages`
 
-### Migration Tool (`mastraMigration`)
+List installed `@mastra/*` packages with embedded documentation.
 
-- Get migration guidance for Mastra version upgrades and breaking changes
-- Explore all available migration guides (e.g., upgrade-to-v1/, agentnetwork)
-- List section headers to see what breaking changes are covered
-- Fetch specific sections or entire migration guides
-- Search across all migration guides by keywords
+### `getMastraExports`
+
+Explore package API surface - all classes, functions, types, and constants.
+
+### `getMastraExportDetails`
+
+Get TypeScript type definitions and optionally implementation source code for a specific export.
+
+### `readMastraDocs`
+
+Read topic-based guides and examples (agents, tools, workflows, memory, etc.).
+
+### `searchMastraDocs`
+
+Full-text search across all embedded documentation.
+
+## Interactive Course
+
+### `startMastraCourse`
+
+Start or resume the interactive Mastra course. Requires email registration.
+
+### `getMastraCourseStatus`
+
+View course progress including completed lessons and steps.
+
+### `startMastraCourseLesson`
+
+Jump to a specific lesson by name.
+
+### `nextMastraCourseStep`
+
+Advance to the next step in the current lesson.
+
+### `clearMastraCourseHistory`
+
+Reset all course progress.
+
+## Prompts
+
+### `upgrade-to-v1`
+
+Guided migration workflow from Mastra v0.x to v1.0. Optionally focus on a specific area (agent, tools, workflows, etc.).
+
+### `migration-checklist`
+
+Comprehensive checklist of all breaking changes for v1.0 migration.

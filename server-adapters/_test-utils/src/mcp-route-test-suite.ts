@@ -55,7 +55,7 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
       const mastra = setup.adapter.mastra;
       mcpServer1 = mastra.getMCPServerById('test-server-1');
       mcpServer2 = mastra.getMCPServerById('test-server-2');
-    });
+    }, 30000);
 
     describe('GET /api/mcp/v0/servers', () => {
       it('should list MCP servers', async () => {
@@ -84,7 +84,26 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
         });
       });
 
-      it('should handle pagination', async () => {
+      it('should handle pagination with page/perPage', async () => {
+        const res = await executeHttpRequest(app, {
+          method: 'GET',
+          path: '/api/mcp/v0/servers',
+          query: { perPage: '1', page: '0' },
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.data).toMatchObject({
+          servers: expect.any(Array),
+          total_count: 2,
+        });
+        expect((res.data as any).servers).toHaveLength(1);
+        expect((res.data as any).next).toContain('perPage=1');
+        expect((res.data as any).next).toContain('page=1');
+        // Verify the returned server is one of the expected ones
+        expect(['Test Server 1', 'Test Server 2']).toContain((res.data as any).servers[0].name);
+      });
+
+      it('should handle pagination with legacy limit/offset', async () => {
         const res = await executeHttpRequest(app, {
           method: 'GET',
           path: '/api/mcp/v0/servers',
@@ -97,6 +116,7 @@ export function createMCPRouteTestSuite(config: AdapterTestSuiteConfig) {
           total_count: 2,
         });
         expect((res.data as any).servers).toHaveLength(1);
+        // Response mirrors request format (legacy limit/offset)
         expect((res.data as any).next).toContain('limit=1');
         expect((res.data as any).next).toContain('offset=1');
         // Verify the returned server is one of the expected ones

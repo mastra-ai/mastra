@@ -3,13 +3,14 @@
   "extends": ["//"],
   "tasks": {
     "build:lib": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "dependsOn": ["^build", "@mastra/server#generate:api-cli-route-metadata"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
     },
     "build": {
       "dependsOn": ["^build", "build:lib", "@internal/playground#build"],
-      "outputs": ["dist/**"]
+      "inputs": ["package.json"],
+      "outputs": ["dist/**", "!dist/docs/**"]
     }
   }
 }

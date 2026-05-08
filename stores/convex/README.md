@@ -29,7 +29,7 @@ import {
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
-} from '@mastra/convex/server';
+} from '@mastra/convex/schema';
 
 export default defineSchema({
   mastra_threads: mastraThreadsTable,

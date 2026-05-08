@@ -1,33 +1,81 @@
-import type { ToolSet } from 'ai-v5';
+import { randomUUID } from 'node:crypto';
+import type { ToolSet } from '@internal/ai-sdk-v5';
+import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
+import { createBackgroundTask } from '../../../background-tasks/create';
+import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
+import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
-import type { OutputSchema } from '../../../stream/base/schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
+import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
+import type { ProviderMetadata } from '../../../stream/types';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { ensureSerializable } from '../../../utils';
+import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
+import { ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
-export function createToolCallStep<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+type AddToolMetadataOptions = {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  resumeSchema: string;
+  suspendedToolRunId?: string;
+} & (
+  | {
+      type: 'approval';
+      suspendPayload?: never;
+    }
+  | {
+      type: 'suspension';
+      suspendPayload: unknown;
+    }
+);
+
+export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
   messageList,
   options,
-  writer,
+  outputWriter,
   controller,
   runId,
   streamState,
   modelSpanTracker,
   _internal,
+  logger,
+  agentId,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData, requestContext }) => {
-      // Helper function to add tool approval metadata to the assistant message
-      const addToolApprovalMetadata = (toolCallId: string, toolName: string, args: unknown) => {
+    execute: async ({ inputData, suspend, resumeData: workflowResumeData, requestContext }) => {
+      // Use tools from _internal.stepTools if available (set by llmExecutionStep via prepareStep/processInputStep)
+      // This avoids serialization issues - _internal is a mutable object that preserves execute functions
+      // Fall back to the original tools from the closure if not set
+      const stepTools = (_internal?.stepTools as Tools) || tools;
+      const stepActiveTools = _internal?.stepActiveTools;
+
+      const tool =
+        stepTools?.[inputData.toolName] ||
+        findProviderToolByName(stepTools, inputData.toolName) ||
+        Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
+
+      const addToolMetadata = ({
+        toolCallId,
+        toolName,
+        args,
+        suspendPayload,
+        resumeSchema,
+        type,
+        suspendedToolRunId,
+      }: AddToolMetadataOptions) => {
+        const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
         const responseMessages = messageList.get.response.db();
         const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
@@ -40,19 +88,22 @@ export function createToolCallStep<
             typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
-          metadata.pendingToolApprovals = metadata.pendingToolApprovals || {};
-          metadata.pendingToolApprovals[toolCallId] = {
+          metadata[metadataKey] = metadata[metadataKey] || {};
+          // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
+          metadata[metadataKey][toolName] = {
+            toolCallId,
             toolName,
             args,
-            type: 'approval',
-            runId, // Store the runId so we can resume after page refresh
+            type,
+            runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
+            ...(type === 'suspension' ? { suspendPayload } : {}),
+            resumeSchema,
           };
           lastAssistantMessage.content.metadata = metadata;
         }
       };
 
-      // Helper function to remove tool approval metadata after approval/decline
-      const removeToolApprovalMetadata = async (toolCallId: string) => {
+      const removeToolMetadata = async (toolName: string, type: 'suspension' | 'approval') => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
@@ -69,32 +120,77 @@ export function createToolCallStep<
           return metadata;
         };
 
+        const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
+
         // Find and update the assistant message to remove approval metadata
         // At this point, messages have been persisted, so we look in all messages
         const allMessages = messageList.get.all.db();
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
-          const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
-          return !!pendingToolApprovals?.[toolCallId];
+          const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
+          const foundTool = !!suspendedTools?.[toolName];
+          if (foundTool) {
+            return true;
+          }
+          const dataToolSuspendedParts = msg.content.parts?.filter(
+            part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
+          );
+          if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+            const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === toolName);
+            if (foundTool) {
+              return true;
+            }
+          }
+          return false;
         });
 
         if (lastAssistantMessage) {
           const metadata = getMetadata(lastAssistantMessage);
-          const pendingToolApprovals = metadata?.pendingToolApprovals as Record<string, any> | undefined;
+          let suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
+          if (!suspendedTools) {
+            suspendedTools = lastAssistantMessage.content.parts
+              ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
+              ?.reduce(
+                (acc, part) => {
+                  if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                    acc[(part.data as any).toolName] = part.data;
+                  }
+                  return acc;
+                },
+                {} as Record<string, any>,
+              );
+          }
 
-          if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-            delete pendingToolApprovals[toolCallId];
+          if (suspendedTools && typeof suspendedTools === 'object') {
+            if (metadata) {
+              delete suspendedTools[toolName];
+            } else {
+              lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
+                if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                  if ((part.data as any).toolName === toolName) {
+                    return {
+                      ...part,
+                      data: {
+                        ...(part.data as any),
+                        resumed: true,
+                      },
+                    };
+                  }
+                }
+                return part;
+              });
+            }
 
             // If no more pending suspensions, remove the whole object
-            if (metadata && Object.keys(pendingToolApprovals).length === 0) {
-              delete metadata.pendingToolApprovals;
+            if (metadata && Object.keys(suspendedTools).length === 0) {
+              delete metadata[metadataKey];
             }
 
             // Flush to persist the metadata removal
             try {
               await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             } catch (error) {
-              console.error('Error removing tool approval metadata:', error);
+              logger?.error('Error removing tool suspension metadata:', error);
             }
           }
         }
@@ -126,24 +222,33 @@ export function createToolCallStep<
           // Flush all pending messages immediately
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
-          console.error('Error flushing messages before suspension:', error);
+          logger?.error('Error flushing messages before suspension:', error);
         }
       };
 
-      // If the tool was already executed by the provider, skip execution
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
-        return {
-          ...inputData,
-          result: inputData.output,
-        };
+        return inputData;
       }
 
-      const tool =
-        tools?.[inputData.toolName] ||
-        Object.values(tools || {})?.find(tool => `id` in tool && tool.id === inputData.toolName);
+      // Resolve the tool key for activeTools enforcement (may differ from toolName when matched by id)
+      const toolKey = stepTools?.[inputData.toolName]
+        ? inputData.toolName
+        : Object.entries(stepTools || {}).find(([_, t]: [string, any]) => t === tool)?.[0];
 
-      if (!tool) {
-        throw new Error(`Tool ${inputData.toolName} not found`);
+      // Reject if tool doesn't exist or isn't in the active set for this step
+      const isHiddenByActiveTools = stepActiveTools && toolKey && !stepActiveTools.includes(toolKey);
+      if (!tool || isHiddenByActiveTools) {
+        const availableToolNames = stepActiveTools ?? Object.keys(stepTools || {});
+        const availableToolsStr =
+          availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
+        return {
+          error: new ToolNotFoundError(
+            `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+          ),
+          ...inputData,
+        };
       }
 
       if (tool && 'onInputAvailable' in tool) {
@@ -155,7 +260,7 @@ export function createToolCallStep<
             abortSignal: options?.abortSignal,
           });
         } catch (error) {
-          console.error('Error calling onInputAvailable', error);
+          logger?.error('Error calling onInputAvailable', error);
         }
       }
 
@@ -165,9 +270,56 @@ export function createToolCallStep<
 
       try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
-        if (requireToolApproval || (tool as any).requireApproval) {
+
+        let resumeDataFromArgs: any = undefined;
+        let args: any = inputData.args;
+
+        if (typeof inputData.args === 'object' && inputData.args !== null) {
+          const { resumeData: resumeDataFromInput, ...argsFromInput } = inputData.args;
+          args = argsFromInput;
+          resumeDataFromArgs = resumeDataFromInput;
+        }
+
+        const resumeData = resumeDataFromArgs ?? workflowResumeData;
+
+        const isResumeToolCall = !!resumeDataFromArgs;
+
+        // Check if approval is required
+        // requireApproval can be:
+        // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
+        // - undefined (no approval needed)
+        // If needsApprovalFn exists, evaluate it with the tool args and context
+        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
+        if ((tool as any).needsApprovalFn) {
+          // Evaluate the function with parsed args and available context
+          try {
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
+              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+              workspace: _internal?.stepWorkspace,
+            });
+            toolRequiresApproval = needsApprovalResult;
+          } catch (error) {
+            // Log error to help developers debug faulty needsApprovalFn implementations
+            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
+            // On error, default to requiring approval to be safe
+            toolRequiresApproval = true;
+          }
+        }
+
+        // Schema for tool call approval - used for both streaming and metadata
+        const approvalSchema = toStandardSchema(
+          z.object({
+            approved: z
+              .boolean()
+              .describe(
+                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+              ),
+          }),
+        );
+
+        if (toolRequiresApproval) {
           if (!resumeData) {
-            controller.enqueue({
+            safeEnqueue(controller, {
               type: 'tool-call-approval',
               runId,
               from: ChunkFrom.AGENT,
@@ -175,11 +327,18 @@ export function createToolCallStep<
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
               },
             });
 
             // Add approval metadata to message before persisting
-            addToolApprovalMetadata(inputData.toolCallId, inputData.toolName, inputData.args);
+            addToolMetadata({
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              args: inputData.args,
+              type: 'approval',
+              resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+            });
 
             // Flush messages before suspension to ensure they are persisted
             await flushMessagesBeforeSuspension();
@@ -199,7 +358,7 @@ export function createToolCallStep<
             );
           } else {
             // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolApprovalMetadata(inputData.toolCallId);
+            await removeToolMetadata(inputData.toolName, 'approval');
 
             if (!resumeData.approved) {
               return {
@@ -210,38 +369,537 @@ export function createToolCallStep<
           }
         }
 
+        //this is to avoid passing resume data to the tool if it's not needed
+        // For agent tools, always pass resume data so the agent tool wrapper knows to call
+        // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
+        const isAgentTool = inputData.toolName?.startsWith('agent-');
+        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
+        const resumeDataToPassToToolOptions =
+          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+            ? undefined
+            : resumeData;
+
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          messages: messageList.get.input.aiV5.model(),
-          writableStream: writer,
+          // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
+          // the full conversation context and can make better decisions. Each sub-agent invocation
+          // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
+          messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
+          outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
-          suspend: async (suspendPayload: any) => {
-            controller.enqueue({
-              type: 'tool-call-suspended',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
-            });
+          // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
+          workspace: _internal?.stepWorkspace,
+          // Forward requestContext so tools receive values set by the workflow step
+          requestContext,
+          // Let tools that read thread history mid-stream (e.g. forked subagents
+          // cloning the parent thread) drain the save queue so the store reflects
+          // the latest user/assistant messages before they read.
+          flushMessages:
+            _internal?.saveQueueManager && _internal?.threadId
+              ? () => _internal.saveQueueManager!.flushMessages(messageList, _internal.threadId, _internal.memoryConfig)
+              : undefined,
+          suspend: async (suspendPayload: any, options?: SuspendOptions) => {
+            if (options?.requireToolApproval) {
+              safeEnqueue(controller, {
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  args: inputData.args,
+                  resumeSchema: JSON.stringify(
+                    standardSchemaToJSONSchema(
+                      toStandardSchema(
+                        z.object({
+                          approved: z
+                            .boolean()
+                            .describe(
+                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                            ),
+                        }),
+                      ),
+                    ),
+                  ),
+                },
+              });
 
-            // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
+              // Add approval metadata to message before persisting
+              addToolMetadata({
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+                type: 'approval',
+                suspendedToolRunId: options.runId,
+                resumeSchema: JSON.stringify(
+                  standardSchemaToJSONSchema(
+                    toStandardSchema(
+                      z.object({
+                        approved: z
+                          .boolean()
+                          .describe(
+                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                          ),
+                      }),
+                    ),
+                  ),
+                ),
+              });
 
-            return await suspend(
-              {
-                toolCallSuspended: suspendPayload,
-                __streamState: streamState.serialize(),
-              },
-              {
-                resumeLabel: inputData.toolCallId,
-              },
-            );
+              // Flush messages before suspension to ensure they are persisted
+              await flushMessagesBeforeSuspension();
+
+              return suspend(
+                {
+                  requireToolApproval: {
+                    toolCallId: inputData.toolCallId,
+                    toolName: inputData.toolName,
+                    args: inputData.args,
+                  },
+                  __streamState: streamState.serialize(),
+                },
+                {
+                  resumeLabel: inputData.toolCallId,
+                },
+              );
+            } else {
+              safeEnqueue(controller, {
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: options?.resumeSchema,
+                },
+              });
+
+              // Add suspension metadata to message before persisting
+              addToolMetadata({
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args,
+                suspendPayload,
+                suspendedToolRunId: options?.runId,
+                type: 'suspension',
+                resumeSchema: options?.resumeSchema,
+              });
+
+              // Flush messages before suspension to ensure they are persisted
+              await flushMessagesBeforeSuspension();
+
+              return await suspend(
+                {
+                  toolCallSuspended: suspendPayload,
+                  __streamState: streamState.serialize(),
+                  toolName: inputData.toolName,
+                  resumeLabel: options?.resumeLabel,
+                },
+                {
+                  resumeLabel: inputData.toolCallId,
+                },
+              );
+            }
           },
-          resumeData,
+          resumeData: resumeDataToPassToToolOptions,
         };
 
-        const result = await tool.execute(inputData.args, toolOptions);
+        //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
+        // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
+        // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
+        const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
+        if (needsRunIdLookup) {
+          let suspendedToolRunId = '';
+          const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
+          const messages = messageList.get.all.db();
+          const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
+
+          for (const message of assistantMessages) {
+            const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
+              message.content.metadata?.pendingToolApprovals) as Record<string, any>;
+            if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
+              suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
+              break;
+            }
+
+            if (shouldUsePartsFallback) {
+              const dataToolSuspendedParts = message.content.parts?.filter(
+                part =>
+                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                  !(part.data as any).resumed,
+              );
+              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+                const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
+                if (foundTool) {
+                  suspendedToolRunId = (foundTool as any).data.runId;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (suspendedToolRunId) {
+            args.suspendedToolRunId = suspendedToolRunId;
+          }
+        }
+
+        if (!toolRequiresApproval && isResumeToolCall) {
+          await removeToolMetadata(inputData.toolName, 'suspension');
+        }
+
+        if (args === null || args === undefined) {
+          return {
+            error: new Error(
+              `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+            ),
+            ...inputData,
+          };
+        }
+
+        if (isAgentTool) {
+          if (typeof args === 'object' && args !== null && 'prompt' in args) {
+            args.threadId = _internal?.threadId;
+            args.resourceId = _internal?.resourceId;
+          }
+        }
+
+        // FGA authorization check before tool execution
+        const toolFgaProvider = mastra?.getServer?.()?.fga;
+        if (toolFgaProvider) {
+          const fgaUser = requestContext?.get('user');
+          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
+          if (!fgaUser) {
+            throw new FGADeniedError(
+              { id: 'unknown' },
+              { type: 'tool', id: inputData.toolName },
+              MastraFGAPermissions.TOOLS_EXECUTE,
+            );
+          }
+          await checkFGA({
+            fgaProvider: toolFgaProvider,
+            user: fgaUser,
+            resource: { type: 'tool', id: inputData.toolName },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          });
+        }
+
+        const llmBgOverrides =
+          typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
+
+        if (llmBgOverrides) {
+          delete args._background;
+        }
+
+        // --- Background task dispatch ---
+        const backgroundTaskManager = _internal?.backgroundTaskManager;
+        const agentBgConfigCheck = _internal?.agentBackgroundConfig;
+        // Skip background dispatch entirely when disabled (e.g., for sub-agents whose
+        // entire invocation is itself dispatched as a background task by the parent)
+        if (backgroundTaskManager && !agentBgConfigCheck?.disabled && typeof args === 'object' && args !== null) {
+          const toolBgConfig = (tool as any).backgroundConfig as ToolBackgroundConfig | undefined;
+          const agentBgConfig = agentBgConfigCheck;
+          const managerConfig = _internal?.backgroundTaskManagerConfig;
+
+          const bgResolved = resolveBackgroundConfig({
+            llmBgOverrides,
+            toolName: inputData.toolName,
+            toolConfig: toolBgConfig,
+            agentConfig: agentBgConfig,
+            managerConfig,
+          });
+
+          if (bgResolved.runInBackground) {
+            // Resolve the tool executor from the current closure
+            const stepTools = (_internal?.stepTools as Tools) || tools;
+            const resolvedTool =
+              stepTools?.[inputData.toolName] ||
+              Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === inputData.toolName);
+            if (!resolvedTool?.execute) {
+              throw new ToolNotFoundError(inputData.toolName);
+            }
+
+            // Create a self-contained background task with per-stream hooks
+            const bgTask = createBackgroundTask(backgroundTaskManager, {
+              toolName: inputData.toolName,
+              toolCallId: inputData.toolCallId,
+              args: args as Record<string, unknown>,
+              agentId,
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+              timeoutMs: bgResolved.timeoutMs,
+              maxRetries: bgResolved.maxRetries,
+              runId,
+              context: {
+                // Executor — uses the tool from the current closure
+                executor: {
+                  execute: (
+                    bgArgs: Record<string, unknown>,
+                    opts?: {
+                      abortSignal?: AbortSignal;
+                      onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
+                      suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
+                      resumeData?: unknown;
+                    },
+                  ) => {
+                    // Override the agent loop's `suspend`/`resumeData` (which
+                    // would suspend the AGENT run via tool-call-approval) with
+                    // the bg-task workflow's, so calling `suspend()` from the
+                    // tool pauses the bg-task run instead.
+                    return resolvedTool.execute!(bgArgs, {
+                      ...toolOptions,
+                      ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                      suspend: async (data?: unknown, options?: SuspendOptions) => {
+                        await toolOptions.suspend?.(data, options);
+                        return opts?.suspend?.(data, options);
+                      },
+                      outputWriter: async (chunk: any) => {
+                        await opts?.onProgress?.(chunk);
+                        return toolOptions.outputWriter?.(chunk);
+                      },
+                      abortSignal: opts?.abortSignal,
+                    } as any);
+                  },
+                },
+
+                // Synthetic tool-call/tool-result emitter. Bg-task lifecycle
+                // chunks (running/output/completed/failed/cancelled) are NOT
+                // re-emitted here — `bgManager.stream(...)` is the single
+                // source of truth for those. We only emit the synthetic
+                // tool-call (at dispatch time) and tool-result / tool-error
+                // chunks so UIs rendering this stream can show the tool's
+                // outcome inline with the conversation.
+                onChunk: chunk => {
+                  try {
+                    const bgRunId = chunk.payload.runId;
+                    if (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) {
+                      controller.enqueue({
+                        type: 'tool-call',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          args: inputData.args,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    }
+
+                    if (chunk.type === 'background-task-completed') {
+                      controller.enqueue({
+                        type: 'tool-result',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          args: inputData.args,
+                          result: chunk.payload.result,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    } else {
+                      controller.enqueue({
+                        type: 'tool-error',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          error: chunk.payload.error,
+                          args: inputData.args,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    }
+                  } catch {
+                    // Controller may be closed if stream ended — ignore
+                  }
+                },
+
+                // Result injector — updates the existing tool-invocation in the
+                // message list (keyed by toolCallId) with the real result, then
+                // flushes to memory. This matters because the initial turn
+                // persisted a placeholder ("Background task started...") as the
+                // tool-result for the same toolCallId; appending a second
+                // tool-result would leave two conflicting entries in memory and
+                // the LLM on the next turn would re-dispatch the tool thinking
+                // the research was still running.
+                onResult: async params => {
+                  const result =
+                    params.status === 'failed'
+                      ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                      : params.result;
+
+                  const updated = messageList.updateToolInvocation(
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'result',
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        args,
+                        result,
+                      },
+                    },
+                    {
+                      mode: 'stream',
+                      backgroundTasks: {
+                        [params.toolCallId]: {
+                          startedAt: params.startedAt,
+                          completedAt: params.completedAt,
+                          taskId: params.taskId,
+                        },
+                      },
+                    },
+                  );
+
+                  // Fallback: no matching tool-invocation was found in the
+                  // current message list (can happen if the initial run's
+                  // message list was cleared, e.g. because the task completed
+                  // after the process restarted and hooks were reattached
+                  // without the original call). Append a standalone tool
+                  // message so memory still records the result, even if it
+                  // means a duplicate entry for that toolCallId.
+                  if (!updated) {
+                    if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                      messageList.add(
+                        [
+                          {
+                            role: 'tool' as const,
+                            type: 'tool-call',
+                            id: _internal?.generateId?.() ?? randomUUID(),
+                            createdAt: new Date(),
+                            content: [
+                              {
+                                type: 'tool-call' as const,
+                                toolCallId: params.toolCallId,
+                                toolName: params.toolName,
+                                args,
+                              },
+                            ],
+                          },
+                        ],
+                        'response',
+                      );
+                    }
+                    messageList.add(
+                      [
+                        {
+                          role: 'tool' as const,
+                          content: [
+                            {
+                              type: 'tool-result' as const,
+                              toolCallId: params.toolCallId,
+                              toolName: params.toolName,
+                              result,
+                              isError: params.status === 'failed',
+                            },
+                          ],
+                        },
+                      ],
+                      'response',
+                    );
+                  }
+
+                  // Flush to memory if available
+                  if (_internal?.saveQueueManager && _internal?.threadId) {
+                    await _internal.saveQueueManager.flushMessages(
+                      messageList,
+                      _internal.threadId,
+                      _internal.memoryConfig,
+                    );
+                  }
+                },
+                // Execution injector — updates the existing tool-invocation in the
+                // message list (keyed by toolCallId) background task startedAt.
+                onExecution: async params => {
+                  messageList.updateToolInvocation(
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'call',
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        args,
+                      },
+                    },
+                    {
+                      mode: 'stream',
+                      backgroundTasks: {
+                        [params.toolCallId]: {
+                          startedAt: params.startedAt,
+                          suspendedAt: params.suspendedAt,
+                          taskId: params.taskId,
+                        },
+                      },
+                    },
+                  );
+                },
+
+                // Per-task callbacks
+                onComplete: toolBgConfig?.onComplete ?? agentBgConfig?.onTaskComplete,
+                onFailed: toolBgConfig?.onFailed ?? agentBgConfig?.onTaskFailed,
+              },
+            });
+
+            const isSuspended = await bgTask.checkIfSuspended({
+              toolCallId: inputData.toolCallId,
+              runId,
+              agentId,
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+              toolName: inputData.toolName,
+            });
+            if (isSuspended && resumeDataToPassToToolOptions) {
+              const task = await bgTask.resume(resumeDataToPassToToolOptions);
+
+              return {
+                result: `Background task resumed. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
+                ...inputData,
+              };
+            }
+
+            const { task, fallbackToSync } = await bgTask.dispatch();
+
+            if (!fallbackToSync) {
+              // Emit background-task-started chunk. Use safeEnqueue: the
+              // agent stream may have closed by the time this fires (e.g.
+              // when the controller closes mid-dispatch in a long-lived
+              // streamUntilIdle wrapper) — without the guard, the throw
+              // bubbles up through the AI-SDK-v5 tool builder and gets
+              // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
+              // Controller is already closed`.
+              safeEnqueue(controller, {
+                type: 'background-task-started' as any,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  taskId: task.id,
+                  toolName: inputData.toolName,
+                  toolCallId: inputData.toolCallId,
+                },
+              });
+
+              // Return placeholder result so the LLM can continue
+              return {
+                result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
+                ...inputData,
+              };
+            }
+            // fallbackToSync: concurrency limit hit, fall through to synchronous execution
+          }
+        }
+
+        const rawResult = await tool.execute(args, toolOptions);
+        const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
@@ -253,12 +911,16 @@ export function createToolCallStep<
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onOutput', error);
+            logger?.error('Error calling onOutput', error);
           }
         }
 
         return { result, ...inputData };
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         return {
           error: error as Error,
           ...inputData,

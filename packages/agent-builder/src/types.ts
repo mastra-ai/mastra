@@ -1,4 +1,5 @@
-import type { MastraLanguageModel, ToolsInput } from '@mastra/core/agent';
+import type { ToolsInput } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { MastraStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { z } from 'zod';
@@ -8,7 +9,7 @@ import { z } from 'zod';
  */
 export interface AgentBuilderConfig {
   /** The language model to use for agent generation */
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   /** Storage provider for memory (optional) */
   storage?: MastraStorage;
   /** Vector provider for memory (optional) */
@@ -25,7 +26,7 @@ export interface AgentBuilderConfig {
   /** Project path */
   projectPath: string;
   /** Summary model */
-  summaryModel?: MastraLanguageModel;
+  summaryModel?: MastraModelConfig;
   /** Mode */
   mode?: 'template' | 'code-editor';
 }
@@ -105,7 +106,7 @@ export const AgentBuilderInputSchema = z.object({
   ref: z.string().optional().describe('Tag/branch/commit to checkout (defaults to main/master)'),
   slug: z.string().optional().describe('Slug for branch/scripts; defaults to inferred from repo'),
   targetPath: z.string().optional().describe('Project path to merge into; defaults to current directory'),
-  variables: z.record(z.string()).optional().describe('Environment variables to set in .env file'),
+  variables: z.record(z.string(), z.string()).optional().describe('Environment variables to set in .env file'),
 });
 
 export const MergePlanSchema = z.object({
@@ -141,7 +142,7 @@ export const FileCopyInputSchema = z.object({
   commitSha: z.string(),
   slug: z.string(),
   targetPath: z.string().optional(),
-  variables: z.record(z.string()).optional(),
+  variables: z.record(z.string(), z.string()).optional(),
 });
 
 export const FileCopyResultSchema = z.object({
@@ -249,10 +250,10 @@ export const PackageAnalysisSchema = z.object({
   name: z.string().optional(),
   version: z.string().optional(),
   description: z.string().optional(),
-  dependencies: z.record(z.string()).optional(),
-  devDependencies: z.record(z.string()).optional(),
-  peerDependencies: z.record(z.string()).optional(),
-  scripts: z.record(z.string()).optional(),
+  dependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
+  peerDependencies: z.record(z.string(), z.string()).optional(),
+  scripts: z.record(z.string(), z.string()).optional(),
   success: z.boolean().optional(),
   error: z.string().optional(),
 });
@@ -288,7 +289,7 @@ export const PackageMergeResultSchema = z.object({
 
 // Install schemas and types
 export const InstallInputSchema = z.object({
-  targetPath: z.string().describe('Path to the project to install packages in'),
+  targetPath: z.string().optional().describe('Path to the project to install packages in'),
 });
 
 export const InstallResultSchema = z.object({

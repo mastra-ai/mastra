@@ -44,10 +44,10 @@ vi.mock('@opentelemetry/resources', () => ({
 
 vi.mock('./loadExporter', () => ({
   loadExporter: vi.fn().mockResolvedValue(
-    vi.fn().mockImplementation(() => ({
-      export: vi.fn().mockResolvedValue(undefined),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    })),
+    class MockExporter {
+      export = vi.fn().mockResolvedValue(undefined);
+      shutdown = vi.fn().mockResolvedValue(undefined);
+    },
   ),
 }));
 
@@ -281,9 +281,8 @@ describe('OtelExporter', () => {
         model: 'gpt-4',
         provider: 'openai',
         usage: {
-          promptTokens: 10,
-          completionTokens: 5,
-          totalTokens: 15,
+          inputTokens: 10,
+          outputTokens: 5,
         },
       } as unknown as AnyExportedSpan;
 
@@ -392,6 +391,140 @@ describe('OtelExporter', () => {
       await exporter.shutdown();
 
       expect(exporter).toBeDefined();
+    });
+  });
+
+  describe('Tags Support', () => {
+    it('should include tags as mastra.tags attribute for root spans with tags', async () => {
+      // This test captures the expected behavior: tags should be included as span attributes
+      const { SpanConverter } = await import('./span-converter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const rootSpanWithTags = {
+        id: 'root-with-tags',
+        traceId: 'trace-with-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'tagged-agent',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        attributes: { agentId: 'agent-123' },
+        tags: ['production', 'experiment-v2', 'user-request'],
+      } as unknown as AnyExportedSpan;
+
+      const readableSpan = await converter.convertSpan(rootSpanWithTags);
+
+      // Tags should be present as mastra.tags attribute (JSON-stringified for backend compatibility)
+      expect(readableSpan.attributes['mastra.tags']).toBeDefined();
+      expect(readableSpan.attributes['mastra.tags']).toBe(
+        JSON.stringify(['production', 'experiment-v2', 'user-request']),
+      );
+    });
+
+    it('should not include mastra.tags attribute when tags array is empty', async () => {
+      const { SpanConverter } = await import('./span-converter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const rootSpanEmptyTags = {
+        id: 'root-empty-tags',
+        traceId: 'trace-empty-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'agent-no-tags',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        attributes: { agentId: 'agent-123' },
+        tags: [],
+      } as unknown as AnyExportedSpan;
+
+      const readableSpan = await converter.convertSpan(rootSpanEmptyTags);
+
+      // Tags should NOT be present when array is empty
+      expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
+    });
+
+    it('should not include mastra.tags attribute when tags is undefined', async () => {
+      const { SpanConverter } = await import('./span-converter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const rootSpanNoTags = {
+        id: 'root-no-tags',
+        traceId: 'trace-no-tags',
+        type: SpanType.AGENT_RUN,
+        name: 'agent-undefined-tags',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        attributes: { agentId: 'agent-123' },
+        // tags is undefined by default
+      } as unknown as AnyExportedSpan;
+
+      const readableSpan = await converter.convertSpan(rootSpanNoTags);
+
+      // Tags should NOT be present when undefined
+      expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
+    });
+
+    it('should not include mastra.tags attribute for child spans (tags only on root spans)', async () => {
+      const { SpanConverter } = await import('./span-converter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      // Child spans should not have tags even if accidentally set
+      const childSpanWithTags = {
+        id: 'child-with-tags',
+        traceId: 'trace-parent',
+        parentSpanId: 'root-span-id',
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        attributes: { toolId: 'calculator' },
+        tags: ['should-not-appear'],
+      } as unknown as AnyExportedSpan;
+
+      const readableSpan = await converter.convertSpan(childSpanWithTags);
+
+      // Tags should NOT be present on child spans
+      expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
+    });
+
+    it('should include tags with workflow spans', async () => {
+      const { SpanConverter } = await import('./span-converter');
+      const converter = new SpanConverter({
+        format: 'GenAI_v1_38_0',
+        packageName: 'test',
+      });
+
+      const workflowSpanWithTags = {
+        id: 'workflow-with-tags',
+        traceId: 'trace-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        name: 'data-processing-workflow',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        attributes: { workflowId: 'wf-123' },
+        tags: ['batch-processing', 'priority-high'],
+      } as unknown as AnyExportedSpan;
+
+      const readableSpan = await converter.convertSpan(workflowSpanWithTags);
+
+      // Tags should be present as mastra.tags attribute (JSON-stringified for backend compatibility)
+      expect(readableSpan.attributes['mastra.tags']).toBeDefined();
+      expect(readableSpan.attributes['mastra.tags']).toBe(JSON.stringify(['batch-processing', 'priority-high']));
     });
   });
 });

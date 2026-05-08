@@ -3,10 +3,66 @@ import type {
   LanguageModelV2StreamPart,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import { convertArrayToReadableStream, mockId } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
+import { expect } from 'vitest';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { MessageList } from '../../agent/message-list';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+
+export function stripMastraCreatedAt<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => stripMastraCreatedAt(item)) as T;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    const normalizedEntries = Object.entries(value).map(([key, nestedValue]) => {
+      if (key === 'createdAt') {
+        return null;
+      }
+
+      const normalizedValue = stripMastraCreatedAt(nestedValue);
+
+      if (key === 'providerOptions' && normalizedValue && typeof normalizedValue === 'object') {
+        const providerOptions = normalizedValue as Record<string, unknown>;
+
+        if (providerOptions.mastra && typeof providerOptions.mastra === 'object') {
+          const normalizedMastra = Object.fromEntries(
+            Object.entries(providerOptions.mastra as Record<string, unknown>).filter(
+              ([nestedKey]) => nestedKey !== 'createdAt',
+            ),
+          );
+
+          const providerOptionsWithoutMastra = Object.fromEntries(
+            Object.entries(providerOptions).filter(([nestedKey]) => nestedKey !== 'mastra'),
+          );
+
+          return [
+            key,
+            Object.keys(normalizedMastra).length > 0
+              ? { ...providerOptions, mastra: normalizedMastra }
+              : Object.keys(providerOptionsWithoutMastra).length > 0
+                ? providerOptionsWithoutMastra
+                : undefined,
+          ];
+        }
+      }
+
+      return [key, normalizedValue];
+    });
+
+    return Object.fromEntries(normalizedEntries.filter(entry => entry !== null)) as T;
+  }
+
+  return value;
+}
+
+export function expectPromptWithoutMastraCreatedAt(actual: unknown, expected: unknown) {
+  expect(stripMastraCreatedAt(actual)).toStrictEqual(expected);
+}
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 
@@ -51,11 +107,11 @@ export function createTestModels({
       modelId: 'mock-model-id',
       timestamp: new Date(0),
     },
-    { type: 'text-start', id: '1' },
-    { type: 'text-delta', id: '1', delta: 'Hello' },
-    { type: 'text-delta', id: '1', delta: ', ' },
-    { type: 'text-delta', id: '1', delta: `world!` },
-    { type: 'text-end', id: '1' },
+    { type: 'text-start', id: 'text-1' },
+    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+    { type: 'text-delta', id: 'text-1', delta: ', ' },
+    { type: 'text-delta', id: 'text-1', delta: `world!` },
+    { type: 'text-end', id: 'text-1' },
     {
       type: 'finish',
       finishReason: 'stop',
@@ -109,9 +165,9 @@ export const modelWithSources = new MockLanguageModelV2({
         title: 'Example',
         providerMetadata: { provider: { custom: 'value' } },
       },
-      { type: 'text-start', id: '1' },
-      { type: 'text-delta', id: '1', delta: 'Hello!' },
-      { type: 'text-end', id: '1' },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+      { type: 'text-end', id: 'text-1' },
       {
         type: 'source',
         sourceType: 'url',
@@ -165,9 +221,9 @@ export const modelWithDocumentSources = new MockLanguageModelV2({
         filename: 'example.pdf',
         providerMetadata: { provider: { custom: 'doc-value' } },
       },
-      { type: 'text-start', id: '1' },
-      { type: 'text-delta', id: '1', delta: 'Hello from document!' },
-      { type: 'text-end', id: '1' },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hello from document!' },
+      { type: 'text-end', id: 'text-1' },
       {
         type: 'source',
         sourceType: 'document',
@@ -218,9 +274,9 @@ export const modelWithFiles = new MockLanguageModelV2({
         data: 'Hello World',
         mediaType: 'text/plain',
       },
-      { type: 'text-start', id: '1' },
-      { type: 'text-delta', id: '1', delta: 'Hello!' },
-      { type: 'text-end', id: '1' },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+      { type: 'text-end', id: 'text-1' },
       {
         type: 'file',
         data: 'QkFVRw==',
@@ -361,10 +417,10 @@ export const modelWithReasoning = new MockLanguageModelV2({
           testProvider: { signature: '0987654321' },
         } as SharedV2ProviderMetadata,
       },
-      { type: 'text-start', id: '1' },
-      { type: 'text-delta', id: '1', delta: 'Hi' },
-      { type: 'text-delta', id: '1', delta: ' there!' },
-      { type: 'text-end', id: '1' },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hi' },
+      { type: 'text-delta', id: 'text-1', delta: ' there!' },
+      { type: 'text-end', id: 'text-1' },
       {
         type: 'finish',
         finishReason: 'stop',
@@ -395,6 +451,7 @@ export const createMessageListWithUserMessage = () => {
   const messageList = new MessageList();
   messageList.add(
     {
+      id: 'msg-1',
       role: 'user',
       content: [{ type: 'text', text: 'test-input' }],
     },

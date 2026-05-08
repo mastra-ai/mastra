@@ -1,5 +1,5 @@
 ---
-title: "Integrate Mastra in your React + Vite project | Frameworks"
+title: "React + Vite | Frameworks"
 description: A step-by-step guide to integrating Mastra with React and Vite.
 ---
 
@@ -8,248 +8,283 @@ import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in your React + Vite project
 
-Mastra integrates with Vite, making it easy to:
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to React by calling the agent directly from Mastra's standalone server.
 
-- Build flexible APIs to serve AI-powered features
-- Simplify deployment with a unified codebase for frontend and backend
-- Take advantage of Mastra's Client SDK
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
-Use this guide to scaffold and integrate Mastra with your React + Vite project.
+## Before you begin
 
-:::warning
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
+- Install Node.js `v22.13.0` or later
 
-This guide assumes you're using React + Vite with React Router v7 at the root of your project, e.g., `app`.
+## Create a new React + Vite app (optional)
 
-:::
+If you already have a React + Vite app using Tailwind, skip to the next step.
 
-## Install Mastra
+### Project scaffold
 
-Install the required Mastra packages:
+Run the following command to [create a new React + Vite app](https://vite.dev/guide/#scaffolding-your-first-vite-project):
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash copy
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+```bash npm2yarn
+npm create vite@latest mastra-react -- --template react-ts
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
+This creates a project called `mastra-react`, but you can replace it with any name you want.
 
-```bash copy
-yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+Navigate to your project directory:
+
+```bash
+cd mastra-react
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
+### Tailwind
 
-```bash copy
-pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+Next, install Tailwind:
+
+```bash npm2yarn
+npm install tailwindcss @tailwindcss/vite
 ```
 
-</TabItem>
-<TabItem value="bun" label="bun">
+Configure the Vite plugins:
 
-```bash copy
-bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @mastra/client-js@beta
+```typescript title="vite.config.ts" {3-4,7-12}
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+})
 ```
 
-</TabItem>
-</Tabs>
+Replace everything in `src/index.css` with the following:
 
-## Integrate Mastra
-
-To integrate Mastra into your project, you have two options:
-
-### 1. Use the One-Liner
-
-Run the following command to quickly scaffold the default Weather agent with sensible defaults:
-
-```bash copy
-npx mastra@beta init --dir . --components agents,tools --example --llm openai
+```css title="src/index.css"
+@import 'tailwindcss';
 ```
 
-> See [mastra init](/reference/v1/cli/create-mastra) for more information.
+Add these `compilerOptions` to `tsconfig.json`:
 
-### 2. Use the Interactive CLI
+```jsonc title="tsconfig.json"
+{
+  // ...
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+    },
+  },
+}
+```
 
-If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+Edit `tsconfig.app.json` to resolve paths:
 
-```bash copy
+```jsonc title="tsconfig.app.json"
+{
+  "compilerOptions": {
+    // ...
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+    },
+    // ...
+  },
+}
+```
+
+## Initialize Mastra
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash npm2yarn
 npx mastra@latest init
 ```
 
-:::warning
+This creates a `src/mastra` folder with an example weather agent and the following files:
 
-By default, `mastra init` suggests `src` as the install location. If you're using React + Vite at the root of your project (e.g., `app`, not `src/app`), enter `.` when prompted:
+- `index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
-:::
+You'll call `weather-agent.ts` from your chat UI in the next steps.
 
-Add the `dev` and `build` scripts to `package.json`:
+## Install AI SDK UI & AI elements
 
-<Tabs>
-<TabItem value="app" label="app">
+Install AI SDK UI along with the Mastra adapter:
 
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev --dir mastra",
-    "build:mastra": "mastra build --dir mastra"
-  }
-}
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
-</TabItem>
-<TabItem value="src-app" label="src/app">
+Next, initialize AI Elements. When prompted, choose the default options:
 
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev --dir src/mastra",
-    "build:mastra": "mastra build --dir src/mastra"
-  }
-}
+```bash npm2yarn
+npx ai-elements@latest
 ```
 
-</TabItem>
-</Tabs>
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
-## Configure TypeScript
+## Create a chat route
 
-Modify the `tsconfig.json` file in your project root:
+Open ⁠`src/mastra/index.ts` and add a [⁠chatRoute()](/reference/ai-sdk/chat-route) to your config. This creates an API route your React frontend can call for AI SDK-compatible chat responses, which you’ll use with ⁠useChat() next.
 
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+// Existing imports...
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  // Existing config...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
+})
 ```
 
-## Set Up API Keys
+## Add the chat UI
 
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
+Replace the `src/App.tsx` file to create a chat interface:
 
-> Each LLM provider uses a different env var. See [Model Capabilities](https://sdk.vercel.ai/providers) for more information.
+```tsx title="src/App.tsx"
+import * as React from 'react'
+import { DefaultChatTransport, type ToolUIPart } from 'ai'
+import { useChat } from '@ai-sdk/react'
 
-## Update .gitignore
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input'
 
-Add `.mastra` to your `.gitignore` file:
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation'
 
-```bash title=".gitignore" copy
-.mastra
-```
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 
-## Start the Mastra Dev Server
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 
-Start the Mastra Dev Server to expose your agents as REST endpoints:
+export default function App() {
+  const [input, setInput] = React.useState<string>('')
 
-<Tabs>
-<TabItem value="npm" label="npm">
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat/weather-agent',
+    }),
+  })
 
-```bash copy
-npm run dev:mastra
-```
+  const handleSubmit = async () => {
+    if (!input.trim()) return
 
-</TabItem>
-<TabItem value="cli" label="CLI">
-
-```bash copy
-mastra dev:mastra
-```
-
-</TabItem>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
-
-## Start Vite Dev Server
-
-With the Mastra Dev Server running, you can start your Vite app in the usual way.
-
-## Create Mastra Client
-
-Create a new directory and file. Then add the example code:
-
-```bash copy
-mkdir lib
-touch lib/mastra.ts
-```
-
-```typescript title="lib/mastra.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
-
-export const mastraClient = new MastraClient({
-  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111",
-});
-```
-
-## Create Test Route Config
-
-Add new `route` to the config:
-
-```typescript title="app/routes.ts" showLineNumbers copy
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
-
-export default [
-  index("routes/home.tsx"),
-  route("test", "routes/test.tsx"),
-] satisfies RouteConfig;
-```
-
-## Create Test Route
-
-Create a new Route, and add the example code:
-
-```bash copy
-touch app/routes/test.tsx
-```
-
-```typescript title="app/routes/test.tsx" showLineNumbers copy
-import { useState } from "react";
-import { mastraClient } from "../../lib/mastra";
-
-export default function Test() {
-  const [result, setResult] = useState<string | null>(null);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const city = formData.get("city")?.toString();
-    const agent = mastraClient.getAgent("weatherAgent");
-
-    const response = await agent.generate({
-      messages: [{ role: "user", content: `What's the weather like in ${city}?` }]
-    });
-
-    setResult(response.text);
+    sendMessage({ text: input })
+    setInput('')
   }
 
   return (
-    <>
-      <h1>Test</h1>
-      <form onSubmit={handleSubmit}>
-        <input name="city" placeholder="Enter city" required />
-        <button type="submit">Get Weather</button>
-      </form>
-      {result && <pre>{result}</pre>}
-    </>
-  );
+    <div className="relative mx-auto size-full h-screen max-w-4xl p-6">
+      <div className="flex h-full flex-col">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map(message => (
+              <div key={message.id}>
+                {message.parts?.map((part, i) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message key={`${message.id}-${i}`} from={message.role}>
+                        <MessageContent>
+                          <MessageResponse>{part.text}</MessageResponse>
+                        </MessageContent>
+                      </Message>
+                    )
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
+                          <ToolOutput
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    )
+                  }
+
+                  return null
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={e => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Ask about the weather..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
+  )
 }
 ```
 
-> You can now navigate to `/test` in your browser to try it out.
+This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `chat/weather-agent` endpoint, sending prompts there and streaming the response back in chunks.
 
-Submitting **London** as the city would return a result similar to:
+It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
-```plaintext
-The current weather in London is partly cloudy with a temperature of 19.3°C, feeling like 17.4°C. The humidity is at 53%, and there is a wind speed of 15.9 km/h, with gusts up to 38.5 km/h.
-```
+## Test your agent
+
+In order to test your agent with the chat interface, you need to run both the Mastra server and the Vite development server.
+
+1. Start the Mastra development server:
+
+   ```bash npm2yarn
+   npx mastra dev
+   ```
+1. In a separate terminal window, start the Vite development server:
+
+   ```bash npm2yarn
+   npm run dev
+   ```
+1. Open your application at [http://localhost:5173](http://localhost:5173)
+1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
 
-- [Monorepo Deployment](/docs/v1/deployment/monorepo)
+Congratulations on building your Mastra agent with React! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/memory/overview) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and React, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/deployment/overview)

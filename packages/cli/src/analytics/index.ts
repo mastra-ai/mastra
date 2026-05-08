@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostHog } from 'posthog-node';
+import { getPackageManager } from '../commands/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +34,7 @@ export class PosthogAnalytics {
   private client?: PostHog;
   private distinctId: string;
   private version: string;
+  private packageManager: string;
 
   constructor({
     version,
@@ -44,6 +46,7 @@ export class PosthogAnalytics {
     host: string;
   }) {
     this.version = version;
+    this.packageManager = getPackageManager();
     const cliConfigPath = path.join(__dirname, 'mastra-cli.json');
     if (existsSync(cliConfigPath)) {
       try {
@@ -121,7 +124,12 @@ export class PosthogAnalytics {
       session_id: this.sessionId,
       cli_version: this.version || 'unknown',
       machine_id: os.hostname(),
+      package_manager: this.packageManager,
     };
+  }
+  private getDurationMs(startTime: [number, number]): number {
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    return seconds * 1000 + nanoseconds / 1_000_000;
   }
 
   private captureSessionStart(): void {
@@ -217,9 +225,7 @@ export class PosthogAnalytics {
 
     try {
       const result = await execution();
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      const durationMs = seconds * 1000 + nanoseconds / 1000000;
-
+      const durationMs = this.getDurationMs(startTime);
       this.trackCommand({
         command,
         args,
@@ -230,9 +236,7 @@ export class PosthogAnalytics {
 
       return result;
     } catch (error) {
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      const durationMs = seconds * 1000 + nanoseconds / 1000000;
-
+      const durationMs = this.getDurationMs(startTime);
       this.trackCommand({
         command,
         args,
@@ -247,12 +251,12 @@ export class PosthogAnalytics {
   }
 
   // Ensure PostHog client is shutdown properly
-  async shutdown(): Promise<void> {
+  async shutdown(timeoutMs?: number): Promise<void> {
     if (!this.client) {
       return;
     }
     try {
-      await this.client.shutdown();
+      await this.client.shutdown(timeoutMs);
     } catch {
       //swallow
     }

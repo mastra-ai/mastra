@@ -1,8 +1,19 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
-import type { ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData } from './validation';
+import { toStandardSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
+import type { SuspendOptions } from '../workflows';
+import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
+
+/**
+ * Marker to identify Mastra tools even when `instanceof` fails.
+ * This can happen in environments like Vite SSR where the same module
+ * may be loaded multiple times, creating different class instances.
+ * Uses Symbol.for() so the same symbol is shared across module copies.
+ * Follows the naming convention: <org>.<product>.<category>.<className>
+ */
+export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -57,17 +68,17 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
  * ```
  */
 export class Tool<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspendSchema = unknown,
+  TResumeSchema = unknown,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema, any> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>
-{
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext> {
   /** Unique identifier for the tool */
   id: TId;
 
@@ -75,16 +86,22 @@ export class Tool<
   description: string;
 
   /** Schema for validating input parameters */
-  inputSchema?: TSchemaIn;
+  inputSchema?: StandardSchemaWithJSON<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: TSchemaOut;
+  outputSchema?: StandardSchemaWithJSON<TSchemaOut>;
 
   /** Schema for suspend operation data */
-  suspendSchema?: TSuspendSchema;
+  suspendSchema?: StandardSchemaWithJSON<TSuspendSchema>;
 
   /** Schema for resume operation data */
-  resumeSchema?: TResumeSchema;
+  resumeSchema?: StandardSchemaWithJSON<TResumeSchema>;
+
+  /**
+   * Schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
+   */
+  requestContextSchema?: PublicSchema<TRequestContext>;
 
   /**
    * Tool execution function
@@ -92,20 +109,38 @@ export class Tool<
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute'];
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
 
   /**
-   * Whether the tool requires explicit user approval before execution
+   * Whether the tool requires explicit user approval before execution.
+   * Accepts a boolean for static behavior, or a function evaluated per-call
+   * for conditional approval.
    * @example
    * ```typescript
-   * // For destructive operations
+   * // Static
    * requireApproval: true
+   *
+   * // Conditional — only require approval for non-dry-run calls
+   * requireApproval: async ({ isDryRun }) => !isDryRun
    * ```
    */
-  requireApproval?: boolean;
+  requireApproval?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['requireApproval'];
+
+  /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
 
   /**
    * Provider-specific options passed to the model when this tool is used.
@@ -122,6 +157,80 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional function to transform the tool's raw output before sending it to the model.
+   * The raw result is still available for application logic; only the model sees the transformed version.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
+   * Optional MCP-specific properties including annotations and metadata.
+   * Only relevant when the tool is being used in an MCP context.
+   * @example
+   * ```typescript
+   * mcp: {
+   *   annotations: {
+   *     title: 'Weather Lookup',
+   *     readOnlyHint: true,
+   *     destructiveHint: false
+   *   },
+   *   _meta: {
+   *     version: '1.0.0',
+   *     author: 'team@example.com'
+   *   }
+   * }
+   * ```
+   */
+  mcp?: MCPToolProperties;
+
+  onInputStart?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputStart'];
+  onInputDelta?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputDelta'];
+  onInputAvailable?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputAvailable'];
+  onOutput?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onOutput'];
+
+  /**
+   * Examples of valid tool inputs passed through to the AI SDK.
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   */
+  mcpMetadata?: McpMetadata;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -135,27 +244,48 @@ export class Tool<
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
+    (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
-    this.inputSchema = opts.inputSchema;
-    this.outputSchema = opts.outputSchema;
-    this.suspendSchema = opts.suspendSchema;
-    this.resumeSchema = opts.resumeSchema;
+    this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
+    this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
+    this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
+    this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
+    this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.strict = opts.strict;
     this.providerOptions = opts.providerOptions;
+    this.toModelOutput = opts.toModelOutput;
+    this.inputExamples = opts.inputExamples;
+    this.mcp = opts.mcp;
+    this.mcpMetadata = opts.mcpMetadata;
+    this.onInputStart = opts.onInputStart;
+    this.onInputDelta = opts.onInputDelta;
+    this.onInputAvailable = opts.onInputAvailable;
+    this.onOutput = opts.onOutput;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
     // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (inputData: unknown, context?: any) => {
+      this.execute = async (inputData: TSchemaIn, context?: any) => {
         // Validate input if schema exists
         const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
-          return error as any;
+          return error;
+        }
+
+        // Validate request context if schema exists
+        const { error: requestContextError } = validateRequestContext(
+          this.requestContextSchema,
+          context?.requestContext,
+          this.id,
+        );
+        if (requestContextError) {
+          return requestContextError as any;
         }
 
         let suspendData = null;
@@ -165,9 +295,9 @@ export class Tool<
               ...context,
               ...(context.suspend
                 ? {
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return context.suspend?.(args);
+                      return context.suspend?.(args, suspendOptions);
                     },
                   }
                 : {}),
@@ -192,11 +322,21 @@ export class Tool<
 
           if (isAgentExecution && !baseContext.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
-            const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
-              baseContext;
+            const {
+              agentId,
+              toolCallId,
+              messages,
+              suspend,
+              resumeData,
+              threadId,
+              resourceId,
+              writableStream,
+              ...rest
+            } = baseContext;
             organizedContext = {
               ...rest,
               agent: {
+                agentId: agentId || '',
                 toolCallId,
                 messages,
                 suspend,
@@ -231,18 +371,19 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
-                    suspend: (args: any) => {
+                    agentId: baseContext.agent.agentId ?? '',
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return baseContext.agent?.suspend?.(args);
+                      return baseContext.agent?.suspend?.(args, suspendOptions);
                     },
                   }
                 : baseContext.agent,
               workflow: baseContext.workflow
                 ? {
                     ...baseContext.workflow,
-                    suspend: (args: any) => {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
-                      return baseContext.workflow?.suspend?.(args);
+                      return baseContext.workflow?.suspend?.(args, suspendOptions);
                     },
                   }
                 : baseContext.workflow,
@@ -275,6 +416,7 @@ export class Tool<
 
         // Validate output if schema exists
         const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
+
         if (outputValidation.error) {
           return outputValidation.error as any;
         }
@@ -361,37 +503,53 @@ export class Tool<
  * });
  * ```
  */
+type SchemaLike = PublicSchema<any> | undefined;
+type InferSchema<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+
+type CreateToolOpts<
+  TId extends string,
+  TInputSchema extends SchemaLike,
+  TOutputSchema extends SchemaLike,
+  TSuspendSchema extends SchemaLike,
+  TResumeSchema extends SchemaLike,
+  TRequestContext,
+  TContext extends ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext>,
+> = Omit<
+  ToolAction<
+    InferSchema<TInputSchema>,
+    InferSchema<TOutputSchema>,
+    InferSchema<TSuspendSchema>,
+    InferSchema<TResumeSchema>,
+    TContext,
+    TId,
+    TRequestContext
+  >,
+  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+> & {
+  inputSchema?: TInputSchema;
+  outputSchema?: TOutputSchema;
+  suspendSchema?: TSuspendSchema;
+  resumeSchema?: TResumeSchema;
+};
 export function createTool<
   TId extends string = string,
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSuspendSchema,
-    TResumeSchema
-  >,
-  TExecute extends ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId
-  >['execute'] = ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>['execute'],
+  TInputSchema extends SchemaLike = undefined,
+  TOutputSchema extends SchemaLike = undefined,
+  TSuspendSchema extends SchemaLike = undefined,
+  TResumeSchema extends SchemaLike = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext> =
+    ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext>,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-    execute?: TExecute;
-  },
-): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
-  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-      inputSchema: TSchemaIn;
-      outputSchema: TSchemaOut;
-      execute: (
-        inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
-        context?: TContext,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchema<TSchemaOut> : unknown>;
-    }
-  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
-  return new Tool(opts) as any;
+  opts: CreateToolOpts<TId, TInputSchema, TOutputSchema, TSuspendSchema, TResumeSchema, TRequestContext, TContext>,
+): Tool<
+  InferSchema<TInputSchema>,
+  InferSchema<TOutputSchema>,
+  InferSchema<TSuspendSchema>,
+  InferSchema<TResumeSchema>,
+  TContext,
+  TId,
+  TRequestContext
+> {
+  return new Tool(opts);
 }

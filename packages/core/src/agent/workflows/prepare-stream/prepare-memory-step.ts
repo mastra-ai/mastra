@@ -1,12 +1,12 @@
 import deepEqual from 'fast-deep-equal';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { Span, SpanType } from '../../../observability';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
+import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
@@ -33,50 +33,52 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
   }
 }
 
-interface PrepareMemoryStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
+  isResume?: boolean;
 }
 
-export function createPrepareMemoryStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareMemoryStep<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
   resourceId,
-  runId,
+  runId: _runId,
   requestContext,
   instructions,
   memoryConfig,
   memory,
-}: PrepareMemoryStepOptions<OUTPUT, FORMAT>) {
+  isResume,
+}: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
     inputSchema: z.object({}),
     outputSchema: prepareMemoryStepOutputSchema,
-    execute: async ({ tracingContext }) => {
+    execute: async ({ ...rest }) => {
+      const observabilityContext = resolveObservabilityContext(rest);
       const thread = threadFromArgs;
       const messageList = new MessageList({
         threadId: thread?.id,
         resourceId,
         generateMessageId: capabilities.generateMessageId,
-        // @ts-ignore Flag for agent network messages
+        logger: capabilities.logger,
+        filterIncompleteToolCalls: memoryConfig?.filterIncompleteToolCalls,
+        // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
+
+      // Create processorStates map - persists across loop iterations within this agent turn
+      // Shared by all processor methods (input and output) for state sharing
+      const processorStates = new Map<string, ProcessorState>();
 
       // Add instructions as system message(s)
       addSystemMessage(messageList, instructions);
@@ -88,20 +90,28 @@ export function createPrepareMemoryStep<
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-          requestContext,
-          tracingContext,
-          messageList,
-          inputProcessorOverrides: options.inputProcessors,
-        });
+
+        // Skip input processors during resume — the messageList has no user messages
+        // (resumeStream passes messages: []) and the real conversation state lives in the
+        // workflow snapshot. Running processors on an empty messageList would cause
+        // processors like TokenLimiterProcessor to throw a TripWire.
+        let tripwire;
+        if (!isResume) {
+          ({ tripwire } = await capabilities.runInputProcessors({
+            requestContext,
+            ...observabilityContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+            processorStates,
+          }));
+        }
+
         return {
           threadExists: false,
-          thread: undefined,
+          thread: thread as StorageThreadType | undefined,
           messageList,
-          ...(tripwireTriggered && {
-            tripwire: true,
-            tripwireReason,
-          }),
+          processorStates,
+          tripwire,
         };
       }
 
@@ -117,21 +127,9 @@ export function createPrepareMemoryStep<
           },
           text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${thread?.id}" and resourceId "${resourceId}"`,
         });
-        capabilities.logger.error(mastraError.toString());
         capabilities.logger.trackException(mastraError);
         throw mastraError;
       }
-
-      const store = memory.constructor.name;
-      capabilities.logger.debug(
-        `[Agent:${capabilities.agentName}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
-        {
-          runId,
-          resourceId,
-          threadId: thread?.id,
-          memoryStore: store,
-        },
-      );
 
       let threadObject: StorageThreadType | undefined = undefined;
       const existingThread = await memory.getThreadById({ threadId: thread?.id });
@@ -149,13 +147,17 @@ export function createPrepareMemoryStep<
           threadObject = existingThread;
         }
       } else {
+        // saveThread: true ensures the thread is persisted to the database immediately.
+        // This is required because output processors (like MessageHistory) may call
+        // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
+        // validate that the thread exists before saving messages.
         threadObject = await memory.createThread({
           threadId: thread?.id,
           metadata: thread.metadata,
           title: thread.title,
           memoryConfig,
           resourceId,
-          saveThread: false,
+          saveThread: true,
         });
       }
 
@@ -169,20 +171,26 @@ export function createPrepareMemoryStep<
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-        requestContext,
-        tracingContext,
-        messageList,
-        inputProcessorOverrides: options.inputProcessors,
-      });
+      // Skip input processors during resume — the messageList has no user messages
+      // (resumeStream passes messages: []) and the real conversation state lives in the
+      // workflow snapshot. Running processors on an empty messageList would cause
+      // processors like TokenLimiterProcessor to throw a TripWire.
+      let tripwire;
+      if (!isResume) {
+        ({ tripwire } = await capabilities.runInputProcessors({
+          requestContext,
+          ...observabilityContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+          processorStates,
+        }));
+      }
 
       return {
         thread: threadObject,
         messageList: messageList,
-        ...(tripwireTriggered && {
-          tripwire: true,
-          tripwireReason,
-        }),
+        processorStates,
+        tripwire,
         threadExists: !!existingThread,
       };
     },

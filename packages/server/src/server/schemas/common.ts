@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 
 // Path parameter schemas
 export const runIdSchema = z.object({
@@ -51,25 +51,22 @@ export const createPagePaginationSchema = (defaultPerPage?: number) => {
 };
 
 /**
- * Factory function for offset/limit pagination query params
- * @param defaultLimit - Default value for limit (omit for no default)
+ * Factory function for pagination that supports both page/perPage and limit/offset
+ * Use this when you need backwards compatibility with older clients using limit/offset
  */
-export const createOffsetPaginationSchema = (defaultLimit?: number) => {
-  const baseSchema = {
-    offset: z.coerce.number().optional().default(0),
-  };
-
-  if (defaultLimit !== undefined) {
-    return z.object({
-      ...baseSchema,
-      limit: z.coerce.number().optional().default(defaultLimit),
-    });
-  } else {
-    return z.object({
-      ...baseSchema,
-      limit: z.coerce.number().optional(),
-    });
-  }
+export const createCombinedPaginationSchema = () => {
+  return z.object({
+    page: z.coerce.number().optional(),
+    perPage: z.coerce.number().optional(),
+    /**
+     * @deprecated Use page and perPage instead
+     */
+    offset: z.coerce.number().optional(),
+    /**
+     * @deprecated Use page and perPage instead
+     */
+    limit: z.coerce.number().optional(),
+  });
 };
 
 // ============================================================================
@@ -85,6 +82,9 @@ export const tracingOptionsSchema = z.object({
   requestContextKeys: z.array(z.string()).optional(),
   traceId: z.string().optional(),
   parentSpanId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  hideInput: z.boolean().optional(),
+  hideOutput: z.boolean().optional(),
 });
 
 // ============================================================================
@@ -131,6 +131,32 @@ export const successResponseSchema = z.object({
  */
 export const messageResponseSchema = z.object({
   message: z.string(),
+});
+
+/**
+ * Partial data query parameter schema
+ * Used by list endpoints to return minimal data without schemas
+ */
+export const partialQuerySchema = z.object({
+  partial: z.string().optional(),
+});
+
+// ============================================================================
+// Status Schemas
+// ============================================================================
+
+/**
+ * Status filter for get-by-id endpoints.
+ * Controls which version is resolved:
+ * - 'published' (default) — resolve with the active (published) version.
+ * - 'draft' — resolve with the latest version (which may be ahead of the published one).
+ */
+export const statusQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Which version to resolve: published (active version) or draft (latest version)'),
 });
 
 // ============================================================================

@@ -1,3 +1,13 @@
+import { version } from '@mastra/core/package.json';
+import { AgentIcon, Breadcrumb, Crumb, Header, Icon, MainContentLayout, ToolsIcon } from '@mastra/playground-ui';
+import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import { TemplateFailure } from '@/domains/templates/template-failure';
+import { TemplateForm } from '@/domains/templates/template-form';
+import { TemplateInfo } from '@/domains/templates/template-info';
+import { TemplateInstallation } from '@/domains/templates/template-installation';
+import { TemplateSuccess } from '@/domains/templates/template-success';
 import {
   useTemplateRepo,
   useTemplateRepoEnvVars,
@@ -8,24 +18,6 @@ import {
   useObserveStreamTemplateInstall,
 } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
-import {
-  Breadcrumb,
-  Crumb,
-  Header,
-  MainContentLayout,
-  TemplateInfo,
-  TemplateForm,
-  TemplateInstallation,
-  TemplateSuccess,
-  ToolsIcon,
-  AgentIcon,
-  TemplateFailure,
-  Icon,
-} from '@mastra/playground-ui';
-import { Link, useParams, useSearchParams } from 'react-router';
-import { useEffect, useState } from 'react';
-import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
-import { version } from '@mastra/core/package.json';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
@@ -57,8 +49,8 @@ export default function Template() {
   });
 
   // Fetch agent builder workflow info for step pre-population
-  const { data: workflowInfo } = useAgentBuilderWorkflow();
-  const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
+  const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
+  const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
   const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
   const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
   const {
@@ -72,7 +64,7 @@ export default function Template() {
     const runId = searchParams.get('runId');
 
     if (runId && !success && !failure && !isStreaming && !isObserving) {
-      console.log('🔄 Checking completed run after hot reload:', { runId });
+      console.info('🔄 Checking completed run after hot reload:', { runId });
 
       setCurrentRunId(runId);
 
@@ -95,7 +87,8 @@ export default function Template() {
               setFailure(errorMessage);
               setCompletedRunValidationErrors(errors || []);
             } else {
-              setFailure(snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed');
+              const errorValue = snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed';
+              setFailure(typeof errorValue === 'string' ? errorValue : String(errorValue));
             }
           }
         })
@@ -234,13 +227,14 @@ export default function Template() {
     }
   }, [templateEnvVars]);
 
-  // Monitor for workflow errors
+  // Monitor for workflow errors — only react to phase/error changes, not full object identity
   useEffect(() => {
     const result = streamResult || observeStreamResult;
 
     if (result?.phase === 'error' && result?.error) {
-      setFailure(result.error);
+      setFailure(typeof result.error === 'string' ? result.error : String(result.error));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamResult?.phase, streamResult?.error, observeStreamResult?.phase, observeStreamResult?.error]);
 
   const handleProviderChange = (value: string) => {
@@ -345,8 +339,8 @@ export default function Template() {
           </Crumb>
         </Breadcrumb>
       </Header>
-      <div className={cn('w-full lg:px-[3rem] h-full overflow-y-scroll')}>
-        <div className="p-[1.5rem] w-full max-w-[80rem] mx-auto grid gap-y-[1rem]">
+      <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
+        <div className="p-6 w-full max-w-[80rem] mx-auto grid gap-y-4">
           <TemplateInfo
             isLoading={isLoadingTemplate}
             title={template?.title}
@@ -393,7 +387,8 @@ export default function Template() {
                   setErrors={setErrors}
                   handleInstallTemplate={handleInstallTemplate}
                   handleVariableChange={handleVariableChange}
-                  isLoadingEnvVars={isLoadingEnvVars}
+                  isLoadingEnvVars={isLoadingEnvVars || isLoadingWorkflow}
+                  isInstalling={isCreatingRun}
                   defaultModelProvider={selectedModelProvider}
                   defaultModelId={selectedModelId}
                   onModelUpdate={handleModelUpdate}

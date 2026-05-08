@@ -5,6 +5,8 @@
  * index creation to validate the performance improvements.
  */
 
+import type { MemoryStorage } from '@mastra/core/storage';
+import { PgDB } from '../db';
 import { PostgresStore } from '../index';
 
 interface PerformanceTestConfig {
@@ -32,6 +34,8 @@ interface PerformanceComparison {
 
 export class PostgresPerformanceTest {
   private store: PostgresStore;
+  private memory!: MemoryStorage;
+  private dbOps: PgDB;
   private config: PerformanceTestConfig;
 
   constructor(config: PerformanceTestConfig) {
@@ -40,10 +44,13 @@ export class PostgresPerformanceTest {
       id: 'perf-test-store',
       connectionString: config.connectionString,
     });
+    // Create a PgDB instance for index operations (since these are not exposed on the main store)
+    this.dbOps = new PgDB({ client: this.store.db });
   }
 
   async init(): Promise<void> {
     await this.store.init();
+    this.memory = (await this.store.getStore('memory'))!;
   }
 
   async cleanup(): Promise<void> {
@@ -117,7 +124,7 @@ export class PostgresPerformanceTest {
 
     for (const indexName of indexesToDrop) {
       try {
-        await this.store.stores.operations.dropIndex(indexName);
+        await this.dbOps.dropIndex(indexName);
       } catch (error) {
         // Ignore errors for non-existent indexes
         console.warn(`Could not drop index ${indexName}:`, error);
@@ -125,10 +132,11 @@ export class PostgresPerformanceTest {
     }
   }
 
-  async createAutomaticIndexes(): Promise<void> {
+  async createDefaultIndexes(): Promise<void> {
     console.info('Creating indexes...');
-    const operations = this.store.stores.operations as any; // Cast to access PG-specific method
-    await operations.createAutomaticIndexes();
+    // Note: Indexes are now created by domain classes during init()
+    // This method re-initializes the store to ensure indexes are created
+    await this.store.init();
   }
 
   async seedTestData(): Promise<void> {
@@ -364,11 +372,11 @@ export class PostgresPerformanceTest {
     const results: PerformanceResult[] = [];
 
     const resourceId = 'resource_0';
-    // Test listThreadsByResourceId
+    // Test listThreads
     results.push(
       await this.measureOperation(
-        'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
+        'listThreads',
+        () => this.memory.listThreads({ filter: { resourceId }, page: 0, perPage: 20 }),
         scenario,
       ),
     );
@@ -379,7 +387,7 @@ export class PostgresPerformanceTest {
       await this.measureOperation(
         'listMessages',
         () =>
-          this.store.listMessages({
+          this.memory.listMessages({
             threadId,
             perPage: 20,
             page: 0,
@@ -400,7 +408,7 @@ export class PostgresPerformanceTest {
     const withoutIndexes = await this.runPerformanceTests('without_indexes');
 
     // Then, test with indexes
-    await this.createAutomaticIndexes();
+    await this.createDefaultIndexes();
     await this.analyzeCurrentQueries(); // Show query plans with indexes
     const withIndexes = await this.runPerformanceTests('with_indexes');
 
@@ -432,7 +440,7 @@ export class PostgresPerformanceTest {
     console.info('\n=== Query Execution Plans ===');
 
     try {
-      // Analyze listThreadsByResourceId query
+      // Analyze listThreads query
       const threadPlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
@@ -440,7 +448,7 @@ export class PostgresPerformanceTest {
         WHERE "resourceId" = 'resource_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('listThreadsByResourceId plan:');
+      console.info('listThreads plan:');
       threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
       // Analyze listMessages query
