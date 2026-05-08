@@ -94,6 +94,7 @@ import type {
   DelegationConfig,
   DelegationStartContext,
   DelegationCompleteContext,
+  SubAgent,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -249,7 +250,7 @@ export class Agent<
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #agents: DynamicArgument<Record<string, Agent>, TRequestContext>;
+  #agents: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
   #voice: MastraVoice;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
@@ -368,7 +369,7 @@ export class Agent<
 
     this.#scorers = config.scorers || ({} as MastraScorers);
 
-    this.#agents = config.agents || ({} as Record<string, Agent>);
+    this.#agents = config.agents || ({} as Record<string, SubAgent>);
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -480,9 +481,9 @@ export class Agent<
    * configured via a function (those get resolved per-request).
    * @internal
    */
-  __getStaticAgents(): Record<string, Agent> | undefined {
+  __getStaticAgents(): Record<string, SubAgent> | undefined {
     if (typeof this.#agents === 'function') return undefined;
-    return this.#agents as Record<string, Agent> | undefined;
+    return this.#agents as Record<string, SubAgent> | undefined;
   }
 
   /**
@@ -495,7 +496,7 @@ export class Agent<
    */
   __hasSubAgentsConfigured(): boolean {
     if (typeof this.#agents === 'function') return true;
-    const record = this.#agents as Record<string, Agent> | undefined;
+    const record = this.#agents as Record<string, SubAgent> | undefined;
     return !!record && Object.keys(record).length > 0;
   }
 
@@ -532,7 +533,7 @@ export class Agent<
    * @internal
    */
   private async deriveSubAgentBackgroundConfig(
-    subAgent: Agent<any, any, any, any>,
+    subAgent: SubAgent,
     requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
     try {
@@ -552,13 +553,15 @@ export class Agent<
         }
       }
 
-      // 2. Any of the sub-agent's tools has background.enabled === true
-      const subAgentTools = await subAgent.convertTools({ requestContext, methodType: 'generate' });
-      if (subAgentTools && typeof subAgentTools === 'object') {
-        for (const tool of Object.values(subAgentTools)) {
-          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
-          if (bg?.enabled === true) {
-            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
+      // 2. Any of a full Agent sub-agent's tools has background.enabled === true
+      if (subAgent instanceof Agent) {
+        const subAgentTools = await subAgent.getToolsForExecution({ requestContext });
+        if (subAgentTools && typeof subAgentTools === 'object') {
+          for (const tool of Object.values(subAgentTools)) {
+            const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+            if (bg?.enabled === true) {
+              return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
+            }
           }
         }
       }
@@ -711,7 +714,9 @@ export class Agent<
    * console.log(Object.keys(agents)); // ['agent1', 'agent2']
    * ```
    */
-  public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}) {
+  public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+    | Record<string, SubAgent>
+    | Promise<Record<string, SubAgent>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -735,7 +740,7 @@ export class Agent<
 
       Object.entries(agents || {}).forEach(([_agentName, agent]) => {
         if (this.#mastra) {
-          agent.__registerMastra(this.#mastra);
+          agent.__registerMastra?.(this.#mastra);
         }
       });
 
@@ -3619,7 +3624,7 @@ export class Agent<
             let resolvedAgent = agent;
             const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
             const agentVersionSelector = versionOverrides?.agents?.[agent.id];
-            if (agentVersionSelector && this.#mastra) {
+            if (agentVersionSelector && this.#mastra && agent instanceof Agent) {
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
               } catch (versionError) {
@@ -3944,6 +3949,9 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
+                if (!resolvedAgent.generateLegacy) {
+                  throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement generateLegacy`);
+                }
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
@@ -4102,6 +4110,9 @@ export class Agent<
                   subAgentToolResults,
                 };
               } else {
+                if (!resolvedAgent.streamLegacy) {
+                  throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
+                }
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
@@ -4296,7 +4307,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    subAgentName: agent.name,
+                    subAgentName: agent.name ?? agent.id,
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
