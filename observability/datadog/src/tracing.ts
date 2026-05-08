@@ -16,6 +16,7 @@ import type {
   TracingEvent,
   AnyExportedSpan,
   ModelGenerationAttributes,
+  ModelInferenceAttributes,
   ModelStepAttributes,
 } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
@@ -23,6 +24,7 @@ import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
+import { isModelInferenceEnabled } from './features';
 import { formatUsageMetrics } from './metrics';
 import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './utils';
 import type { DatadogSpanKind } from './utils';
@@ -302,11 +304,13 @@ export class DatadogExporter extends BaseExporter {
       annotations.outputData = formatOutput(span.output, span.type);
     }
 
-    // Add token usage metrics on MODEL_STEP spans only.
-    // MODEL_STEP is the actual LLM API call; MODEL_GENERATION is its parent wrapper.
-    // Reporting on both would double-count cost in Datadog.
-    if (span.type === SpanType.MODEL_STEP) {
-      const usage = (span.attributes as ModelStepAttributes)?.usage;
+    // Token usage metrics attach to the LLM-kind span only, to avoid
+    // double-counting cost in Datadog. With the `model-inference-span` feature
+    // that's MODEL_INFERENCE (the actual provider call); without it, MODEL_STEP
+    // is still the API call.
+    const usageSpanType = isModelInferenceEnabled() ? SpanType.MODEL_INFERENCE : SpanType.MODEL_STEP;
+    if (span.type === usageSpanType) {
+      const usage = (span.attributes as ModelStepAttributes | ModelInferenceAttributes | undefined)?.usage;
       const metrics = formatUsageMetrics(usage);
       if (metrics) {
         annotations.metrics = metrics;

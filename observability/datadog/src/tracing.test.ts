@@ -9,6 +9,7 @@
 import type { TracingEvent, AnyExportedSpan } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { __setObservabilityFeaturesForTest } from './features';
 
 // Use vi.hoisted to define mocks before they're used in vi.mock
 const {
@@ -135,10 +136,14 @@ describe('DatadogExporter', () => {
     delete process.env.DD_LLMOBS_ML_APP;
     delete process.env.DD_SITE;
     delete process.env.DD_LLMOBS_AGENTLESS_ENABLED;
+    // Default to the model-inference-span feature being available so each
+    // test sees the current span hierarchy unless it opts into legacy.
+    __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
   });
 
   describe('configuration', () => {
@@ -212,30 +217,59 @@ describe('DatadogExporter', () => {
   });
 
   describe('span type mapping', () => {
-    it.each([
-      [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'workflow'],
-      [SpanType.MODEL_STEP, 'llm'],
-      [SpanType.MODEL_CHUNK, 'task'],
-      [SpanType.TOOL_CALL, 'tool'],
-      [SpanType.MCP_TOOL_CALL, 'tool'],
-      [SpanType.WORKFLOW_RUN, 'workflow'],
-      [SpanType.WORKFLOW_STEP, 'task'],
-      [SpanType.WORKFLOW_CONDITIONAL, 'task'],
-      [SpanType.WORKFLOW_CONDITIONAL_EVAL, 'task'],
-      [SpanType.WORKFLOW_PARALLEL, 'task'],
-      [SpanType.WORKFLOW_LOOP, 'task'],
-      [SpanType.WORKFLOW_SLEEP, 'task'],
-      [SpanType.WORKFLOW_WAIT_EVENT, 'task'],
-      [SpanType.PROCESSOR_RUN, 'task'],
-      [SpanType.GENERIC, 'task'],
-    ])('maps %s to %s kind', async (spanType, expectedKind) => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
-      const span = createMockSpan({ type: spanType });
+    describe('with model-inference-span feature (current hierarchy)', () => {
+      it.each([
+        [SpanType.AGENT_RUN, 'agent'],
+        [SpanType.MODEL_GENERATION, 'workflow'],
+        // MODEL_STEP wraps processors + inference + tool work, so it's a workflow.
+        [SpanType.MODEL_STEP, 'workflow'],
+        // MODEL_INFERENCE is the actual provider call — the LLM-kind span.
+        [SpanType.MODEL_INFERENCE, 'llm'],
+        [SpanType.MODEL_CHUNK, 'task'],
+        [SpanType.TOOL_CALL, 'tool'],
+        [SpanType.MCP_TOOL_CALL, 'tool'],
+        [SpanType.WORKFLOW_RUN, 'workflow'],
+        [SpanType.WORKFLOW_STEP, 'task'],
+        [SpanType.WORKFLOW_CONDITIONAL, 'task'],
+        [SpanType.WORKFLOW_CONDITIONAL_EVAL, 'task'],
+        [SpanType.WORKFLOW_PARALLEL, 'task'],
+        [SpanType.WORKFLOW_LOOP, 'task'],
+        [SpanType.WORKFLOW_SLEEP, 'task'],
+        [SpanType.WORKFLOW_WAIT_EVENT, 'task'],
+        [SpanType.PROCESSOR_RUN, 'task'],
+        [SpanType.GENERIC, 'task'],
+      ])('maps %s to %s kind', async (spanType, expectedKind) => {
+        const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+        const span = createMockSpan({ type: spanType });
 
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
 
-      expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({ kind: expectedKind }), expect.any(Function));
+        expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({ kind: expectedKind }), expect.any(Function));
+      });
+    });
+
+    describe('legacy hierarchy (older paired @mastra/observability)', () => {
+      beforeEach(() => {
+        __setObservabilityFeaturesForTest(undefined);
+      });
+
+      it('maps MODEL_STEP to llm (the legacy LLM-kind span)', async () => {
+        const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+        const span = createMockSpan({ type: SpanType.MODEL_STEP });
+
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+        expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({ kind: 'llm' }), expect.any(Function));
+      });
+
+      it('does not map MODEL_INFERENCE specially (falls through to task)', async () => {
+        const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+        const span = createMockSpan({ type: SpanType.MODEL_INFERENCE });
+
+        await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+        expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({ kind: 'task' }), expect.any(Function));
+      });
     });
   });
 
@@ -1084,10 +1118,10 @@ describe('DatadogExporter', () => {
   });
 
   describe('model info for LLM spans', () => {
-    it('includes modelName and modelProvider for llm spans', async () => {
+    it('includes modelName and modelProvider for llm spans (MODEL_INFERENCE)', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_INFERENCE,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1106,7 +1140,7 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('inherits modelName/modelProvider from parent MODEL_GENERATION onto MODEL_STEP children', async () => {
+    it('inherits modelName/modelProvider from parent MODEL_GENERATION onto MODEL_INFERENCE descendants', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const generation = createMockSpan({
         id: 'gen',
@@ -1123,12 +1157,21 @@ describe('DatadogExporter', () => {
         type: SpanType.MODEL_STEP,
         attributes: {},
       });
+      const inference = createMockSpan({
+        id: 'inf',
+        traceId: 'trace-inherit',
+        isRootSpan: false,
+        parentSpanId: 'step',
+        type: SpanType.MODEL_INFERENCE,
+        attributes: {},
+      });
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, step));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, inference));
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, generation));
 
-      const stepCall = mockTrace.mock.calls.find(c => c[0].kind === 'llm');
-      expect(stepCall?.[0]).toEqual(
+      const llmCall = mockTrace.mock.calls.find(c => c[0].kind === 'llm');
+      expect(llmCall?.[0]).toEqual(
         expect.objectContaining({ kind: 'llm', modelName: 'gpt-4o', modelProvider: 'openai' }),
       );
     });
@@ -1288,7 +1331,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_STEP,
+        type: SpanType.MODEL_INFERENCE,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)
@@ -1338,6 +1381,43 @@ describe('DatadogExporter', () => {
       expect(annotateCall.metadata).not.toHaveProperty('provider');
       expect(annotateCall.metadata).not.toHaveProperty('usage');
       expect(annotateCall.metadata).not.toHaveProperty('parameters');
+    });
+
+    it('does not emit usage metrics on MODEL_STEP under the current hierarchy', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        type: SpanType.MODEL_STEP,
+        attributes: {
+          // Step duplicates usage for backward compat, but tokens belong on
+          // MODEL_INFERENCE now to avoid double-counting cost in Datadog.
+          usage: { inputTokens: 100, outputTokens: 50 },
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const stepCalls = mockAnnotate.mock.calls.filter(c => c[1]?.metrics);
+      expect(stepCalls).toHaveLength(0);
+    });
+
+    it('emits usage metrics on MODEL_STEP under legacy hierarchy', async () => {
+      __setObservabilityFeaturesForTest(undefined);
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        type: SpanType.MODEL_STEP,
+        attributes: {
+          usage: { inputTokens: 100, outputTokens: 50 },
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockAnnotate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          metrics: expect.objectContaining({ inputTokens: 100, outputTokens: 50 }),
+        }),
+      );
     });
 
     it('handles spans without attributes gracefully', async () => {
