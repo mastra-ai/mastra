@@ -2919,6 +2919,12 @@ importers:
 
   packages/cli:
     dependencies:
+      '@babel/parser':
+        specifier: ^7.28.4
+        version: 7.29.2
+      '@babel/types':
+        specifier: ^7.28.4
+        version: 7.29.0
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.1.0

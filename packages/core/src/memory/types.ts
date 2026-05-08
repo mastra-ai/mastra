@@ -397,6 +397,8 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
+export type ObservationalMemoryActivationTTL = number | string | false;
+
 /**
  * Configuration for the observation step in Observational Memory.
  */
@@ -505,6 +507,20 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   bufferActivation?: number;
+
+  /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable top-level `activateAfterIdle` for observations.
+   * If unset, top-level `activateAfterIdle` is used for observations.
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * If unset, top-level `activateOnProviderChange` is used for observations.
+   */
+  activateOnProviderChange?: boolean;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -641,6 +657,20 @@ export interface ObservationalMemoryReflectionConfig {
   blockAfter?: number;
 
   /**
+   * Time before buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable idle activation for reflections.
+   * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered reflections when the actor provider/model changes.
+   * Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to enable.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Ratio (0-1) controlling when async reflection buffering starts.
    * When observation tokens reach `observationTokens * bufferActivation`,
    * reflection runs asynchronously in the background. When the full
@@ -743,21 +773,27 @@ export interface ObservationalMemoryOptions {
   scope?: 'resource' | 'thread';
 
   /**
-   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Time before buffered observations are force-activated after inactivity.
    * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
    * When the gap between the current time and the last assistant message part's `createdAt`
-   * exceeds this value, buffered observational memory activates regardless of whether the
+   * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached. Useful to align with prompt cache TTLs.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
+   * opt reflections into idle activation.
    *
    * @example 300_000
    * @example "5m"
    * @example "1hr"
    */
-  activateAfterIdle?: number | string;
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
 
   /**
-   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * Force-activate buffered observations when the actor provider/model changes.
    * Useful when switching between models that do not share prompt caches.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateOnProviderChange`
+   * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
 
@@ -1223,10 +1259,10 @@ export type SerializedObservationalMemoryConfig = {
   /** Memory scope: 'resource' or 'thread' */
   scope?: 'resource' | 'thread';
 
-  /** Inactivity TTL before forcing buffered observation/reflection activation */
-  activateAfterIdle?: number | string;
+  /** Inactivity TTL before forcing buffered observation activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
 
-  /** Force-activate buffered observation/reflection activation when the actor model changes */
+  /** Force-activate buffered observation activation when the actor model changes */
   activateOnProviderChange?: boolean;
 
   /** Share the token budget between messages and observations */
@@ -1264,6 +1300,10 @@ export type SerializedObservationalMemoryObservationConfig = {
   bufferTokens?: number | false;
   /** Ratio of buffered observations to activate */
   bufferActivation?: number;
+  /** Inactivity TTL before forcing buffered observation activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+  /** Force-activate buffered observation activation when the actor model changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
   /** Optional token budget for observer context (0 = full truncation, false = disabled) */
@@ -1284,6 +1324,10 @@ export type SerializedObservationalMemoryReflectionConfig = {
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Inactivity TTL before forcing buffered reflection activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+  /** Force-activate buffered reflection activation when the actor model changes */
+  activateOnProviderChange?: boolean;
   /** Ratio for async reflection buffering */
   bufferActivation?: number;
 };

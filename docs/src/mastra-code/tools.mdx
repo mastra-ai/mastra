@@ -136,7 +136,7 @@ Execute a shell command in the project directory.
 | `cwd` | `string` | No | Working directory (defaults to project root) |
 | `timeout` | `number` | No | Timeout in seconds (default: 30) |
 
-### `request_sandbox_access`
+### `request_access`
 
 Request access to directories outside the project root. The user is prompted to approve or deny the request.
 
@@ -178,15 +178,33 @@ Extract the full content of one or more web pages. Requires a Tavily API key (`T
 
 ### `task_write`
 
-Create or update a structured task list for tracking progress on complex, multi-step work.
+Create or replace a structured task list for tracking progress on complex, multi-step work.
 
-- Each task has a `content` (imperative form), `status` (`pending`, `in_progress`, `completed`), and `activeForm` (present continuous form shown during execution).
-- Pass the full task list each time — it replaces the previous list.
+- Each task has an `id`, `content` (imperative form), `status` (`pending`, `in_progress`, `completed`), and `activeForm` (present continuous form shown during execution).
+- Use `task_write` to create the initial task list or replace the whole list after replanning.
+- If a task omits an `id`, Mastra assigns one. The result includes the structured task list snapshot with task IDs.
+- IDs must be unique. If duplicate explicit IDs are provided, the duplicate task is returned with a generated fallback ID.
 - Only one task should be `in_progress` at a time.
+
+### `task_update`
+
+Update one tracked task by ID. The agent uses this to change a task's `content`, `status`, or `activeForm` without rewriting the full task list. The result includes the structured task list snapshot with task IDs.
+
+### `task_complete`
+
+Mark one tracked task completed by ID. The agent uses this immediately after finishing a tracked task. The result includes the structured task list snapshot with task IDs.
 
 ### `task_check`
 
-Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete.
+Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete. The result includes:
+
+- `content`: A readable status summary.
+- `tasks`: The structured task list snapshot with task IDs.
+- `summary`: Counts for `total`, `completed`, `inProgress`, `pending`, and `incomplete`, plus `hasTasks` and `allCompleted`.
+- `incompleteTasks`: The `in_progress` and `pending` tasks that still need work.
+- `isError`: `true` when the tool could not read harness task state.
+
+`summary.allCompleted` is `true` only when at least one tracked task exists and every tracked task is completed. If no tasks exist, `summary.hasTasks` is `false` and `summary.allCompleted` is `false`.
 
 ## Interactive tools
 
@@ -220,10 +238,12 @@ Not all tools are available in every mode:
 | `web_search` | Yes | Yes | Yes |
 | `web_extract` | Yes | Yes | Yes |
 | `task_write` | Yes | Yes | Yes |
+| `task_update` | Yes | Yes | Yes |
+| `task_complete` | Yes | Yes | Yes |
 | `task_check` | Yes | Yes | Yes |
 | `ask_user` | Yes | Yes | Yes |
 | `submit_plan` | No | Yes | No |
-| `request_sandbox_access` | Yes | Yes | Yes |
+| `request_access` | Yes | Yes | Yes |
 
 In Plan mode, `execute_command` is available but restricted to read-only commands (`git status`, `git log`, `git diff`, etc.).
 

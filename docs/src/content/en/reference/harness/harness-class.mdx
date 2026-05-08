@@ -252,7 +252,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'disableBuiltinTools',
     type: 'BuiltinToolId[]',
     description:
-      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_update`, `task_complete`, `task_check`, and `subagent`.',
     isOptional: true,
   },
   {
@@ -355,6 +355,17 @@ Return the current `HarnessDisplayState` snapshot for UI rendering.
 
 ```typescript
 const displayState = harness.getDisplayState()
+```
+
+#### `restoreDisplayTasks(tasks)`
+
+Restore the task portion of `HarnessDisplayState` after a UI replays persisted task tool history. This emits `display_state_changed` without emitting a live `task_updated` event.
+
+If later task tools should read the replayed tasks, persist the same task list with `setState({ tasks })` before calling `restoreDisplayTasks(tasks)`.
+
+```typescript
+await harness.setState({ tasks: replayedTasks })
+harness.restoreDisplayTasks(replayedTasks)
 ```
 
 #### `setState(updates)`
@@ -1030,8 +1041,10 @@ The harness provides built-in tools to agents in every mode:
 | - | - |
 | `ask_user` | Ask the user a question and wait for their response. Supports free text, single-select choices, and multi-select choices. |
 | `submit_plan` | Submit a plan for user review and approval. |
-| `task_write` | Create or update a structured task list for tracking progress. |
-| `task_check` | Check the completion status of the current task list. |
+| `task_write` | Create or replace a structured task list for tracking progress. Assigns task IDs when omitted and returns the structured task list snapshot. |
+| `task_update` | Update one tracked task by ID and return the structured task list snapshot. |
+| `task_complete` | Mark one tracked task completed by ID and return the structured task list snapshot. |
+| `task_check` | Check the completion status of the current task list and return `tasks`, `summary`, `incompleteTasks`, and `isError` fields. |
 | `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). Pass `forked: true` to inherit the parent conversation — see [Forked subagents](#forked-subagents). |
 
 ### `ask_user` selections
