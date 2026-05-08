@@ -1,3 +1,5 @@
+import type { CorrelationContext } from './core';
+
 // ============================================================================
 // Metric Type
 // ============================================================================
@@ -16,9 +18,14 @@ export type MetricType = 'counter' | 'gauge' | 'histogram';
  * MetricsContext - API for emitting metrics.
  * Use `emit()` to record a metric observation.
  */
+export interface MetricEmitOptions {
+  /** Canonical model/cost context for this specific metric row */
+  costContext?: CostContext;
+}
+
 export interface MetricsContext {
   /** Emit a metric observation. */
-  emit(name: string, value: number, labels?: Record<string, string>): void;
+  emit(name: string, value: number, labels?: Record<string, string>, options?: MetricEmitOptions): void;
 
   /** @deprecated Use `emit()` instead. */
   counter(name: string): Counter;
@@ -48,19 +55,37 @@ export interface Histogram {
 // ============================================================================
 
 /**
+ * Typed context used for cost estimations.
+ */
+export interface CostContext {
+  provider?: string;
+  model?: string;
+  estimatedCost?: number;
+  costUnit?: string;
+  costMetadata?: Record<string, unknown>;
+}
+
+/**
  * Metric data transported via the event bus.
  * Represents a single metric observation.
  * Must be JSON-serializable (Date serializes via toJSON()).
  *
- * Environment fields (organizationId, environment, serviceName) are stored
- * in metadata, following the same pattern as tracing spans.
- *
- * Note: Histogram aggregation (bucket counts, sum, count) is computed at
- * the storage layer, not in the individual metric event.
+ * Descriptive correlation metadata travels in `correlationContext`.
+ * Signal identity stays on the top-level `traceId` / `spanId` fields.
+ * pricing/model fields travel in `costContext`.
  */
 export interface ExportedMetric {
+  /** Unique identifier for this metric event, generated at emission time */
+  metricId: string;
+
   /** When the metric was recorded */
   timestamp: Date;
+
+  /** Trace associated with this metric (undefined = not tied to a trace) */
+  traceId?: string;
+
+  /** Specific span associated with this metric */
+  spanId?: string;
 
   /** Metric name (e.g., mastra_agent_duration_ms) */
   name: string;
@@ -71,11 +96,16 @@ export interface ExportedMetric {
   /** Metric labels for dimensional filtering */
   labels: Record<string, string>;
 
+  /** Context for correlation to traces */
+  correlationContext?: CorrelationContext;
+
+  /** Context for cost estimation */
+  costContext?: CostContext;
+
   /**
    * User-defined metadata.
-   * Environment fields are stored here: organizationId, environment,
-   * serviceName, etc. These are kept separate from labels to avoid
-   * cardinality issues.
+   * This is reserved for non-canonical metadata that does not belong
+   * in record context or cost context.
    */
   metadata?: Record<string, unknown>;
 }

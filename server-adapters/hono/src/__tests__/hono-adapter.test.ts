@@ -15,7 +15,6 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
-import type { ApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -728,88 +727,205 @@ describe('Hono Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
     });
+
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+    });
+
+    it('should allow framework-internal routes under the server prefix', async () => {
+      const customRoutes = [
+        {
+          path: '/mastra/agents/bot/channels/slack/webhook',
+          method: 'POST' as const,
+          requiresAuth: false,
+          _mastraInternal: true,
+          handler: async (c: any) => c.json({ ok: true }),
+        },
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).resolves.not.toThrow();
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
   });
 
-  describe('Custom API Route Path Validation', () => {
-    it('should throw when a manually constructed route conflicts with the default /api prefix', async () => {
-      const routes: ApiRoute[] = [{ path: '/api/my-route', method: 'GET', handler: async c => c.json({}) }];
+  describe('Reserved context key injection prevention', () => {
+    it('should strip mastra__resourceId from client-provided requestContext in body', async () => {
       const mastra = new Mastra({});
       const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+      const adapter = new MastraServer({ app, mastra });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
-    });
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
 
-    it('should throw when a manually constructed route conflicts with a custom prefix', async () => {
-      const routes: ApiRoute[] = [{ path: '/mastra/my-route', method: 'GET', handler: async c => c.json({}) }];
-      const mastra = new Mastra({});
-      const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, prefix: '/mastra', customApiRoutes: routes });
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
-    });
-
-    it('should throw when a manually constructed route path equals the prefix exactly', async () => {
-      const routes: ApiRoute[] = [{ path: '/api', method: 'GET', handler: async c => c.json({}) }];
-      const mastra = new Mastra({});
-      const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
-
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
-    });
-
-    it('should not throw for a path that shares a prefix string but is not a sub-path', async () => {
-      // "/api-custom" starts with "/api" but is not under "/api/"
-      const routes = [
-        registerApiRoute('/api-custom', {
-          method: 'GET',
-          handler: async c => c.json({ ok: true }),
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              myKey: 'safe-value',
+            },
+          }),
         }),
-      ];
-      const mastra = new Mastra({});
-      const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
-
-      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
-    });
-
-    it('should not throw for a valid route path with the default prefix', async () => {
-      const routes = [
-        registerApiRoute('/my-custom-route', {
-          method: 'GET',
-          handler: async c => c.json({ ok: true }),
-        }),
-      ];
-      const mastra = new Mastra({});
-      const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
-
-      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
-    });
-
-    it('should throw when a no-prefix route conflicts with an internal Mastra route segment', async () => {
-      const routes: ApiRoute[] = [{ path: '/agents/my-route', method: 'GET', handler: async c => c.json({}) }];
-      const mastra = new Mastra({});
-      const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
-
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /conflicts with the reserved internal Mastra API path/,
       );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
     });
 
-    it('should not throw for a non-conflicting route when empty prefix is used', async () => {
-      const routes = [
-        registerApiRoute('/health', {
-          method: 'GET',
-          handler: async c => c.json({ ok: true }),
-        }),
-      ];
+    it('should strip mastra__threadId from client-provided requestContext in body', async () => {
       const mastra = new Mastra({});
       const app = new Hono();
-      const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              mastra__threadId: 'injected-thread-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should strip reserved keys from client-provided requestContext in GET query params', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const queryContext = JSON.stringify({
+        mastra__resourceId: 'injected-victim-id',
+        mastra__threadId: 'injected-thread-id',
+        myKey: 'safe-value',
+      });
+
+      const response = await app.request(
+        new Request(`http://localhost/test/context?requestContext=${encodeURIComponent(queryContext)}`, {
+          method: 'GET',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
     });
   });
 });

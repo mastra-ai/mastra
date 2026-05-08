@@ -37,6 +37,7 @@ const mockMeResponse = {
   organizationId: 'org-1',
   role: 'admin',
   permissions: ['projects:read', 'projects:write'],
+  memberOrgIds: ['org-1'],
 };
 
 const mockVerifyResponse = {
@@ -47,6 +48,8 @@ const mockVerifyResponse = {
     lastName: '',
   },
   organizationId: 'org-2',
+  role: 'member',
+  memberOrgIds: ['org-2'],
 };
 
 // ---------------------------------------------------------------------------
@@ -124,6 +127,7 @@ describe('MastraAuthStudio', () => {
         organizationId: 'org-1',
         role: 'admin',
         permissions: ['projects:read', 'projects:write'],
+        memberOrgIds: ['org-1'],
       });
 
       // Should have called /auth/me with the cookie
@@ -148,6 +152,8 @@ describe('MastraAuthStudio', () => {
         email: 'bob@example.com',
         name: 'Bob',
         organizationId: 'org-2',
+        role: 'member',
+        memberOrgIds: ['org-2'],
       });
 
       // Should have called /auth/verify with the bearer token
@@ -175,6 +181,8 @@ describe('MastraAuthStudio', () => {
         email: 'bob@example.com',
         name: 'Bob',
         organizationId: 'org-2',
+        role: 'member',
+        memberOrgIds: ['org-2'],
       });
 
       expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -334,6 +342,7 @@ describe('MastraAuthStudio', () => {
         organizationId: 'org-1',
         role: 'admin',
         permissions: ['projects:read', 'projects:write'],
+        memberOrgIds: ['org-1'],
       });
       expect(result.tokens.accessToken).toBe('sealed-session-token');
       // cookies should NOT be returned — the Mastra server fallback path
@@ -375,6 +384,8 @@ describe('MastraAuthStudio', () => {
       expect(config).toEqual({
         provider: 'mastra-studio',
         text: 'Sign in with Mastra',
+        description:
+          'Your deployed Studio is secured by your Mastra account. Sign in with the same email you used to sign up on mastra.ai.',
       });
     });
   });
@@ -520,8 +531,50 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('refreshSession', () => {
-    it('should delegate to validateSession', async () => {
-      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+    it('should call shared API refresh endpoint and return new session', async () => {
+      // Mock the refresh endpoint response with Set-Cookie header
+      const refreshResponse = new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Set-Cookie': 'wos-session=new-sealed-token; HttpOnly; SameSite=Lax; Path=/' },
+      });
+      // Mock the subsequent validation of the new session
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
+
+      const session = await auth.refreshSession('old-sealed-token');
+
+      expect(session).not.toBeNull();
+      expect(session!.id).toBe('new-sealed-token');
+      expect(session!.userId).toBe('user-1');
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        `${SHARED_API}/auth/refresh`,
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Cookie: 'wos-session=old-sealed-token',
+          }),
+        }),
+      );
+    });
+
+    it('should fall back to validateSession when refresh fails', async () => {
+      // Mock refresh failure, then validation success
+      const refreshResponse = new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
+
+      const session = await auth.refreshSession('sealed-token');
+
+      expect(session).not.toBeNull();
+      expect(session!.userId).toBe('user-1');
+    });
+
+    it('should fall back to validateSession when refresh returns no cookie', async () => {
+      // Mock refresh success but no Set-Cookie header
+      const refreshResponse = new Response(JSON.stringify({ ok: true }), { status: 200 });
+      const meResponse = new Response(JSON.stringify(mockMeResponse), { status: 200 });
+      fetchSpy.mockResolvedValueOnce(refreshResponse).mockResolvedValueOnce(meResponse);
 
       const session = await auth.refreshSession('sealed-token');
 
@@ -817,6 +870,27 @@ describe('MastraAuthStudio org-scoping', () => {
     // mockMeResponse has organizationId: 'org-1', env has 'org-env' → reject
     const user = await auth.authenticateToken('', req);
     expect(user).toBeNull();
+  });
+
+  it('should allow user when current org differs but memberOrgIds includes instance org (cross-org access)', async () => {
+    // This is the core fix: user's "current" org is org-1, but they're also a member of org-owner
+    // The deployed studio belongs to org-owner, so access should be allowed
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
+
+    const multiOrgResponse = {
+      ...mockMeResponse,
+      organizationId: 'org-1', // user's current org
+      memberOrgIds: ['org-1', 'org-owner'], // user is member of both orgs
+    };
+
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(multiOrgResponse), { status: 200 }));
+
+    const req = mockRequest({ cookie: 'wos-session=sealed-token' });
+    const user = await auth.authenticateToken('', req);
+
+    expect(user).not.toBeNull();
+    expect(user!.organizationId).toBe('org-1'); // current org unchanged
+    expect(user!.memberOrgIds).toContain('org-owner'); // but they're a member of instance org
   });
 });
 

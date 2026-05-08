@@ -279,6 +279,11 @@ export interface LLMRecorderOptions {
    */
   debug?: boolean;
   /**
+   * When true, only accept exact hash matches during replay.
+   * Disables fuzzy/similarity matching.
+   */
+  exactMatch?: boolean;
+  /**
    * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
    * Useful for tests that must always replay regardless of environment.
    */
@@ -306,6 +311,8 @@ export interface LLMRecorderInstance {
   stop(): void;
   /** Save recordings to disk (only in record mode) */
   save(): Promise<void>;
+  /** Reset fuzzy match tracking so recordings can be reused across tests */
+  resetFuzzyMatches(): void;
   /** Current test mode */
   mode: LLMTestMode;
   /** Whether we're in record mode (legacy, use .mode instead) */
@@ -361,13 +368,20 @@ function relativizeTestFile(filepath: string): string {
  * Deep sort object keys for stable serialization
  */
 function stableSortKeys(value: unknown): unknown {
+  if (typeof value === 'string') return canonicalizeISODateString(value);
   if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(stableSortKeys);
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(value as Record<string, unknown>).sort()) {
     sorted[key] = stableSortKeys((value as Record<string, unknown>)[key]);
   }
   return sorted;
+}
+
+function canonicalizeISODateString(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return value;
+  return new Date(value).toISOString();
 }
 
 interface ParsedRequestBody {
@@ -420,9 +434,15 @@ async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
 /**
  * Serialize request content for hashing and fuzzy matching.
  */
+function normalizeRequestBody(body: unknown): unknown {
+  if (typeof body === 'string') return canonicalizeISODateString(body);
+  if (body !== null && typeof body === 'object') return stableSortKeys(body);
+  return body;
+}
+
 function serializeRequestContent(url: string, body: unknown): string {
-  const normalizedBody = typeof body === 'object' ? JSON.stringify(stableSortKeys(body)) : String(body);
-  return `${url}:${normalizedBody}`;
+  const normalizedBody = normalizeRequestBody(body);
+  return `${url}:${typeof normalizedBody === 'string' ? normalizedBody : JSON.stringify(normalizedBody)}`;
 }
 
 /**
@@ -576,8 +596,21 @@ const SIMILARITY_THRESHOLD = 0.6;
  * The fuzzy fallback handles cases where the request body changed slightly
  * between test runs (e.g. different prompt wording, extra metadata fields)
  * but the intent is clearly the same recording.
+ *
+ * `usedHashes` tracks recordings already consumed by **binary** fuzzy matches
+ * so that multiple similar requests (e.g. audio transcription calls that all
+ * serialize to near-identical strings) don't all resolve to the same recording.
+ * It is only applied to binary request matching — non-binary recordings are
+ * intentionally reusable across tests (e.g. v1/v2 model variants sharing one
+ * recording).  Exact hash matches are always exempt.
  */
-function findRecording(recordings: LLMRecording[], hash: string, url: string, body: unknown): LLMRecording | undefined {
+function findRecording(
+  recordings: LLMRecording[],
+  hash: string,
+  url: string,
+  body: unknown,
+  usedHashes?: Set<string>,
+): LLMRecording | undefined {
   // 1. Exact hash match (fast path)
   const exact = recordings.find(r => r.hash === hash);
   if (exact) {
@@ -588,9 +621,55 @@ function findRecording(recordings: LLMRecording[], hash: string, url: string, bo
     return undefined;
   }
 
-  // 2. Fuzzy match via string similarity on serialized request content.
-  //    Prefer recordings that match the request URL to avoid cross-API mismatches
-  //    (e.g. /v1/chat/completions vs /v1/responses).
+  // 2. Fuzzy match fallback.
+  //    Skip recordings already consumed by a previous fuzzy match.
+
+  // For binary requests, string similarity is unreliable because the serialized
+  // form mainly differs in the random multipart boundary and binary digest, making
+  // all candidates score nearly identically.  Instead, match by body size proximity
+  // (replayed audio is deterministic so sizes should be very close).
+  const isBinary = typeof body === 'object' && body !== null && (body as Record<string, unknown>).__binary === true;
+
+  if (isBinary) {
+    const incomingSize = (body as Record<string, unknown>).size as number;
+    let bestIndex: number | undefined;
+    let bestSizeDiff = Infinity;
+
+    for (let i = 0; i < recordings.length; i++) {
+      if (usedHashes?.has(recordings[i]!.hash)) continue;
+      if (recordings[i]!.request.url !== url) continue;
+
+      const recBody = recordings[i]!.request.body as Record<string, unknown> | undefined;
+      if (!recBody?.__binary) continue;
+
+      const recSize = recBody.size as number;
+      const diff = Math.abs(incomingSize - recSize);
+
+      // Reject candidates whose size diverges too much — the same TTS output
+      // varies by only a few bytes across runs, so a 10% relative tolerance
+      // is generous while still preventing clearly-wrong matches.
+      const maxSize = Math.max(incomingSize, recSize) || 1;
+      if (diff / maxSize > 0.1) continue;
+
+      if (diff < bestSizeDiff) {
+        bestSizeDiff = diff;
+        bestIndex = i;
+      }
+    }
+
+    if (bestIndex != null) {
+      usedHashes?.add(recordings[bestIndex]!.hash);
+      return recordings[bestIndex]!;
+    }
+    // Fall through to string similarity if no binary match found
+  }
+
+  // For non-binary requests, use string similarity on serialized request content.
+  // Prefer recordings that match the request URL to avoid cross-API mismatches
+  // (e.g. /v1/chat/completions vs /v1/responses).
+  //
+  // NOTE: usedHashes is NOT applied here.  Non-binary recordings are intentionally
+  // reusable across tests — e.g. v1 and v2 model variants share the same recording.
   const incoming = serializeRequestContent(url, body);
   let bestRating = -1;
   let bestIndex = -1;
@@ -701,12 +780,16 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       async save() {
         // no-op
       },
+      resetFuzzyMatches() {
+        // no-op in live mode
+      },
     };
     return instance;
   }
 
   const recordings: LLMRecording[] = [];
   const isRecordMode = mode === 'record';
+  const fuzzyUsedHashes = new Set<string>();
   let saved = false;
 
   // Create handlers for each LLM API host (or a filtered subset)
@@ -860,7 +943,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           console.log(`[llm-recorder]   Available hashes: ${savedRecordings.map(r => r.hash).join(', ')}`);
         }
 
-        const recording = findRecording(savedRecordings, hash, url, body);
+        const recording = findRecording(savedRecordings, hash, url, body, fuzzyUsedHashes);
 
         if (!recording) {
           console.error(`[llm-recorder] No recording found for: ${url}${model ? ` (model: ${model})` : ''}`);
@@ -888,7 +971,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           const transformedReqBody = options.transformRequest
             ? options.transformRequest({ url, body: recording.request.body }).body
             : recording.request.body;
-          const changes = diffJson(transformedReqBody!, transformedBody ?? {});
+          const changes = diffJson(
+            normalizeRequestBody(transformedReqBody)!,
+            normalizeRequestBody(transformedBody) ?? {},
+          );
           const formatted = changes
             .map(part => {
               const prefix = part.added ? '+' : part.removed ? '-' : ' ';
@@ -900,6 +986,13 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             })
             .join('\n');
           console.warn(`[llm-recorder] Diff (recorded vs actual):\n${formatted}`);
+
+          if (options.exactMatch) {
+            throw new Error(
+              `No exact match for hash ${hash}, using fuzzy match (recorded hash: ${recording.hash}). ` +
+                `Consider re-recording with UPDATE_RECORDINGS=true.`,
+            );
+          }
         }
 
         if (recording.response.isStreaming) {
@@ -1001,6 +1094,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           (deduped > 0 ? ` (${deduped} duplicates removed)` : ''),
       );
     },
+
+    resetFuzzyMatches() {
+      fuzzyUsedHashes.clear();
+    },
   };
 
   return instance;
@@ -1026,6 +1123,10 @@ export function useLLMRecording(name: string, options: Omit<LLMRecorderOptions, 
 
   beforeAll(() => {
     recorder.start();
+  });
+
+  beforeEach(() => {
+    recorder.resetFuzzyMatches();
   });
 
   afterAll(async () => {

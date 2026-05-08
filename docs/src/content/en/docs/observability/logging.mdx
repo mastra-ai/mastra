@@ -2,15 +2,15 @@
 title: "Logging | Observability"
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
 packages:
-  - "@mastra/core"
   - "@mastra/loggers"
+  - "@mastra/observability"
 ---
 
 # Logging
 
 Mastra's logging system captures function execution, input data, and output responses in a structured format.
 
-When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to the Mastra platform, logs are shown in the dashboard. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Configuring logs with `PinoLogger`
 
@@ -34,13 +34,70 @@ Visit [PinoLogger](/reference/logging/pino-logger) for all available configurati
 
 :::
 
+## Logging to observability storage
+
+When [observability](/docs/observability/overview) is configured, all logger calls are automatically forwarded to your observability storage. This means every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components appears alongside your traces.
+
+No code changes are required. Mastra wraps the configured logger so that it writes to both the original logger (console, file, or custom transport) and the observability system simultaneously.
+
+### Configuring observability log level
+
+You can control which log levels reach observability storage independently from your console logger. Add a `logging` option to your observability instance configuration:
+
+```typescript {12-15} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+import { Observability, DefaultExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: 'Mastra', level: 'debug' }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter()],
+        logging: {
+          enabled: true, // set to false to disable log forwarding
+          level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+        },
+      },
+    },
+  }),
+})
+```
+
+In this example, the console logger outputs all levels starting from `debug`, but only `info` and above are written to observability storage. This keeps your storage clean while still having verbose console output during development.
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `enabled` | `boolean` | `true` | Set to `false` to disable all log forwarding to observability storage. |
+| `level` | `LogLevel` | `'debug'` | Minimum severity level. Logs below this level are discarded. |
+
+### Querying logs
+
+Logs written to observability storage are queryable through the Mastra client SDK:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient()
+
+const logs = await client.listLogsVNext({
+  filters: { level: 'error' },
+  pagination: { page: 1, perPage: 50 },
+  orderBy: { field: 'timestamp', direction: 'desc' },
+})
+```
+
+When using a persistent storage backend like DuckDB or ClickHouse, logs survive restarts and are available for historical analysis.
+
 ## Customizing logs
 
 Mastra provides access to a logger instance via the `mastra.getLogger()` method, available inside both workflow steps and tools. The logger supports standard severity levels: `debug`, `info`, `warn`, and `error`.
 
 ### Logging from workflow steps
 
-Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step’s execution.
+Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step's execution.
 
 ```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -64,7 +121,7 @@ export const testWorkflow = createWorkflow({...})
 
 ### Logging from tools
 
-Similarly, tools have access to the logger instance via the `mastra` parameter. Use this to log tool specific activity during execution.
+Similarly, tools have access to the logger instance via the `mastra` parameter. Use this to log tool-specific activity during execution.
 
 ```typescript {6-7} title="src/mastra/tools/test-tool.ts"
 import { createTool } from '@mastra/core/tools'
@@ -84,9 +141,7 @@ export const testTool = createTool({
 
 ### Logging with additional data
 
-Logger methods accept an optional second argument for additional data. This can be any value, such as an object, string, or number.
-
-In this example, the log message includes an object with a key of `agent` and a value of the `testAgent` instance.
+Logger methods accept an optional second argument for additional data. Pass a structured object to make logs filterable in observability storage.
 
 ```typescript {9} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";

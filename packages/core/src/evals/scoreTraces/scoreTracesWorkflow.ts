@@ -1,8 +1,7 @@
 import pMap from 'p-map';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { InternalSpans, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext } from '../../observability';
+import { getEntityTypeForSpan } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
@@ -22,8 +21,7 @@ const getTraceStep = createStep({
     scorerId: z.string(),
   }),
   outputSchema: z.any(),
-  execute: async ({ inputData, mastra, ...rest }) => {
-    const observabilityContext = resolveObservabilityContext(rest);
+  execute: async ({ inputData, mastra }) => {
     const logger = mastra.getLogger();
     if (!logger) {
       console.warn(
@@ -42,7 +40,6 @@ const getTraceStep = createStep({
           scorerId: inputData.scorerId,
         },
       });
-      logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;
     }
@@ -63,7 +60,6 @@ const getTraceStep = createStep({
         },
         error,
       );
-      logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;
     }
@@ -72,7 +68,7 @@ const getTraceStep = createStep({
       inputData.targets,
       async target => {
         try {
-          await runScorerOnTarget({ storage, scorer, target, ...observabilityContext });
+          await runScorerOnTarget({ storage, scorer, target });
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -87,7 +83,6 @@ const getTraceStep = createStep({
             },
             error,
           );
-          logger?.error(mastraError.toString());
           logger?.trackException(mastraError);
         }
       },
@@ -100,12 +95,11 @@ export async function runScorerOnTarget({
   storage,
   scorer,
   target,
-  ...observabilityContext
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
-} & Partial<ObservabilityContext>) {
+}) {
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -136,12 +130,18 @@ export async function runScorerOnTarget({
 
   const scorerRun = buildScorerRun({
     scorerType: scorer.type === 'agent' ? 'agent' : undefined,
-    ...observabilityContext,
     trace,
     targetSpan: span,
   });
+  const result = await scorer.run({
+    ...scorerRun,
+    scoreSource: 'trace',
+    targetScope: 'span',
+    targetEntityType: getEntityTypeForSpan(span),
+    targetTraceId: target.traceId,
+    targetSpanId: span.spanId,
+  });
 
-  const result = await scorer.run(scorerRun);
   const scorerResult = {
     ...result,
     scorer: {
@@ -151,7 +151,7 @@ export async function runScorerOnTarget({
       hasJudge: !!scorer.judge,
     },
     traceId: target.traceId,
-    spanId: target.spanId,
+    spanId: span.spanId,
     entityId: span.entityId || span.entityName || 'unknown',
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
@@ -159,13 +159,13 @@ export async function runScorerOnTarget({
     scorerId: scorer.id,
   };
 
+  // Legacy score-store emission. This path is being deprecated.
   const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
 }
 
 /**
- * Saves the score to the legacy ScoresStorage domain.
- * TODO: Remove once all consumers migrate to observability scores (see attachScoreToSpan).
+ * @deprecated Legacy scores-store path. New score emission should use `mastra.observability.addScore()`.
  */
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
   const scoresStore = await storage.getStore('scores');
@@ -186,34 +186,21 @@ function buildScorerRun({
   scorerType,
   trace,
   targetSpan,
-  ...observabilityContext
 }: {
   scorerType?: string;
   trace: TraceRecord;
   targetSpan: SpanRecord;
-} & Partial<ObservabilityContext>): ScorerRun {
+}): ScorerRun {
   if (scorerType === 'agent') {
     const { input, output } = transformTraceToScorerInputAndOutput(trace);
-    return { input, output, ...observabilityContext };
+    return { input, output };
   }
-  return { input: targetSpan.input, output: targetSpan.output, ...observabilityContext };
+  return { input: targetSpan.input, output: targetSpan.output };
 }
 
 /**
- * Writes the score to the observability domain via two paths, each wrapped in
- * a try/catch so that one failing doesn't block the other:
- *
- * 1. **updateSpan** — attaches a score link to the span record. Works for
- *    traditional CRUD stores (libsql, pg, etc.) but fails for event-sourced /
- *    append-only stores (DuckDB) that don't support arbitrary span updates.
- *
- * 2. **createScore** — inserts a row into the observability scores table so
- *    it can be queried via listScores() with traceId/spanId filters. Works for
- *    stores that implement the new observability scores domain.
- *
- * TODO: Once all stores implement createScore and all consumers migrate to
- * the observability scores domain, remove the updateSpan path (and the old
- * ScoresStorage.saveScore() call in validateAndSaveScore above).
+ * @deprecated Legacy score-attach path. New score emission should use `mastra.observability.addScore()`
+ * which autmatically attach scores to spans.
  */
 async function attachScoreToSpan({
   storage,
@@ -234,7 +221,7 @@ async function attachScoreToSpan({
     });
   }
 
-  // Path 1: Legacy — attach score link to span (fails silently on append-only stores)
+  // Path 1: Legacy — attach score link to span
   try {
     const existingLinks = span.links || [];
     const link = {
@@ -252,25 +239,6 @@ async function attachScoreToSpan({
   } catch {
     // Expected for event-sourced stores (e.g. DuckDB) that don't support updateSpan
   }
-
-  // Path 2: New — write to observability scores table (fails silently on stores that don't implement it yet)
-  try {
-    await observabilityStore.createScore({
-      score: {
-        timestamp: scoreRecord.createdAt ? new Date(scoreRecord.createdAt) : new Date(),
-        traceId: span.traceId,
-        spanId: span.spanId,
-        scorerId: scoreRecord.scorerId ?? (scoreRecord.scorer?.id as string),
-        score: scoreRecord.score,
-        reason: scoreRecord.reason ?? null,
-        experimentId: null,
-        scoreTraceId: null,
-        metadata: scoreRecord.metadata ?? null,
-      },
-    });
-  } catch {
-    // Expected for stores that haven't implemented observability createScore yet
-  }
 }
 
 export const scoreTracesWorkflow = createWorkflow({
@@ -287,9 +255,6 @@ export const scoreTracesWorkflow = createWorkflow({
   outputSchema: z.any(),
   steps: [getTraceStep],
   options: {
-    tracingPolicy: {
-      internal: InternalSpans.ALL,
-    },
     validateInputs: false,
   },
 });

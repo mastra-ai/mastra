@@ -1,75 +1,72 @@
 import {
-  useStudioConfig,
-  StudioConfigForm,
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  Icon,
+  PageHeader,
+  PageLayout,
+  SectionCard,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SettingsIcon,
-  MainContentContent,
-  SelectField,
-  usePlaygroundStore,
+  SettingsRow,
+  useTheme,
 } from '@mastra/playground-ui';
-import { useEffect, useRef, useState } from 'react';
+import type { Theme } from '@mastra/playground-ui';
+import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 
-const THEME_OPTIONS = [
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' },
   { value: 'light', label: 'Light' },
   { value: 'system', label: 'System' },
-] as const;
+];
+
+const isTheme = (value: string): value is Theme => THEME_OPTIONS.some(option => option.value === value);
 
 export const StudioSettingsPage = () => {
-  const { baseUrl, headers, themeToggleEnabled } = useStudioConfig();
-  const { theme, setTheme } = usePlaygroundStore();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
-  const selectedThemeRef = useRef(theme);
-
-  useEffect(() => {
-    setSelectedTheme(theme);
-    selectedThemeRef.current = theme;
-  }, [theme]);
+  const { baseUrl, headers, apiPrefix } = useStudioConfig();
+  const { theme, setTheme } = useTheme();
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <SettingsIcon />
-          </Icon>
-          Settings
-        </HeaderTitle>
-      </Header>
-      <MainContentContent>
-        <div className="max-w-2xl mx-auto w-full mt-8 space-y-8">
-          {themeToggleEnabled ? (
-            <section className="rounded-lg border border-border1 bg-surface3 p-4">
-              <div className="space-y-3">
-                <h2 className="text-icon6 font-medium">Theme</h2>
-                <SelectField
-                  name="theme"
-                  label="Theme mode"
-                  value={selectedTheme}
-                  onValueChange={value => {
-                    const nextTheme = value as 'dark' | 'light' | 'system';
-                    selectedThemeRef.current = nextTheme;
-                    setSelectedTheme(nextTheme);
-                  }}
-                  options={THEME_OPTIONS.map(option => ({ ...option }))}
-                />
-              </div>
-            </section>
-          ) : null}
+    <PageLayout width="narrow">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <SettingsIcon /> Settings
+          </PageHeader.Title>
+        </PageHeader>
+      </PageLayout.TopArea>
 
-          <StudioConfigForm
-            initialConfig={{ baseUrl, headers }}
-            onSave={() => {
-              if (themeToggleEnabled) {
-                setTheme(selectedThemeRef.current);
-              }
-            }}
-          />
-        </div>
-      </MainContentContent>
-    </MainContentLayout>
+      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+        <SectionCard title="Theme" description="Customize the appearance of the studio.">
+          <SettingsRow label="Theme mode" htmlFor="theme">
+            <Select
+              value={theme}
+              onValueChange={value => {
+                if (isTheme(value)) setTheme(value);
+              }}
+            >
+              <SelectTrigger id="theme" className="w-full sm:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {THEME_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+        </SectionCard>
+
+        <SectionCard
+          title="Mastra Connection"
+          description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
+        >
+          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
+        </SectionCard>
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 };

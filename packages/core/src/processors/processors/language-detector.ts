@@ -1,5 +1,5 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -9,6 +9,8 @@ import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * Language detection result for a single text
@@ -42,7 +44,7 @@ export interface LanguageDetectionResult {
 /**
  * Configuration options for LanguageDetector
  */
-export interface LanguageDetectorOptions {
+export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection/translation agent */
   model: MastraModelConfig;
 
@@ -132,6 +134,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private minTextLength: number;
   private includeDetectionDetails: boolean;
   private translationQuality: 'speed' | 'quality' | 'balanced';
+  private lastMessageOnly: boolean;
   private providerOptions?: ProviderOptions;
 
   // Default target language
@@ -186,6 +189,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
     this.translationQuality = options.translationQuality || 'quality';
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.providerOptions = options.providerOptions;
 
     // Create internal detection and translation agent
@@ -212,9 +216,15 @@ export class LanguageDetector implements Processor<'language-detector'> {
       }
 
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Process each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (textContent.length < this.minTextLength) {
           // Text too short for reliable detection
@@ -376,6 +386,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
         const blockMessage = `Non-target language detected: ${alertMessage}`;
         console.info(`[LanguageDetector] Blocking: ${blockMessage}`);
         abort(blockMessage);
+        return null;
 
       case 'translate':
         if (result.translated_text) {

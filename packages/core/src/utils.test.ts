@@ -1,17 +1,22 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
+import type { ToolBackgroundConfig } from './background-tasks';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import {
+  ensureSerializable,
   fetchWithRetry,
   generateEmptyFromSchema,
   makeCoreTool,
   maskStreamTags,
   resolveSerializedZodOutput,
+  safeStringify,
+  selectFields,
+  setNestedValue,
 } from './utils';
 
 describe('maskStreamTags', () => {
@@ -167,6 +172,9 @@ describe('makeCoreTool', () => {
     tracingContext: {},
   };
 
+  const getCoreToolBackgroundConfig = (tool: ReturnType<typeof makeCoreTool>) =>
+    (tool as unknown as { backgroundConfig?: ToolBackgroundConfig }).backgroundConfig;
+
   it('should convert a Vercel tool correctly', async () => {
     const vercelTool = {
       name: 'test',
@@ -224,7 +232,7 @@ describe('makeCoreTool', () => {
   });
 
   it('should handle tool execution errors correctly', async () => {
-    const errorSpy = vi.spyOn(ConsoleLogger.prototype, 'error');
+    const trackExceptionSpy = vi.spyOn(ConsoleLogger.prototype, 'trackException');
     const error = new Error('Test error');
     const mastraTool = createTool({
       id: 'test',
@@ -242,9 +250,9 @@ describe('makeCoreTool', () => {
       await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
         MastraError,
       );
-      expect(errorSpy).toHaveBeenCalled();
+      expect(trackExceptionSpy).toHaveBeenCalled();
     }
-    errorSpy.mockRestore();
+    trackExceptionSpy.mockRestore();
   });
 
   it('should handle undefined execute function', () => {
@@ -326,6 +334,97 @@ describe('makeCoreTool', () => {
     expect(() => schema['~standard'].validate({})).not.toThrow();
     expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
+
+  it('should propagate requireApproval from options to the built CoreTool', () => {
+    const tool = createTool({
+      id: 'dangerous-tool',
+      description: 'Deletes something important',
+      inputSchema: z.object({ target: z.string() }),
+      requireApproval: true,
+      execute: async ({ target }) => ({ deleted: target }),
+    });
+
+    const coreToolWithFlag = makeCoreTool(tool, {
+      ...mockOptions,
+      requireApproval: (tool as any).requireApproval,
+    });
+    expect((coreToolWithFlag as any).requireApproval).toBe(true);
+
+    const coreToolWithoutFlag = makeCoreTool(tool, mockOptions);
+    expect((coreToolWithoutFlag as any).requireApproval).toBe(false);
+  });
+
+  it('should accept a createTool wrapper without casting and preserve backgroundConfig from options', () => {
+    const onComplete = vi.fn();
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+
+    const backgroundConfig = {
+      enabled: true,
+      waitTimeoutMs: 250,
+      timeoutMs: 1_000,
+      maxRetries: 2,
+      onComplete,
+    } satisfies ToolBackgroundConfig;
+
+    const coreTool = makeCoreTool(wrapperTool, {
+      ...mockOptions,
+      backgroundConfig,
+    });
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBe(backgroundConfig);
+  });
+
+  it('should prefer ToolOptions.backgroundConfig over conflicting tool-level background metadata', () => {
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+    const toolWithConflictingBackground = Object.assign(wrapperTool, {
+      background: { enabled: false, waitTimeoutMs: 1 },
+      backgroundConfig: { enabled: false, waitTimeoutMs: 2 },
+    } satisfies {
+      background: ToolBackgroundConfig;
+      backgroundConfig: ToolBackgroundConfig;
+    });
+    const optionsBackgroundConfig = { enabled: true, waitTimeoutMs: 500 } satisfies ToolBackgroundConfig;
+
+    const coreTool = makeCoreTool(toolWithConflictingBackground, {
+      ...mockOptions,
+      backgroundConfig: optionsBackgroundConfig,
+    });
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBe(optionsBackgroundConfig);
+  });
+
+  it('should not synthesize backgroundConfig from raw tool background fields when options omit it', () => {
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+    const toolWithRawBackground = Object.assign(wrapperTool, {
+      background: { enabled: true, waitTimeoutMs: 100 },
+      backgroundConfig: { enabled: true, waitTimeoutMs: 200 },
+    } satisfies {
+      background: ToolBackgroundConfig;
+      backgroundConfig: ToolBackgroundConfig;
+    });
+
+    const coreTool = makeCoreTool(toolWithRawBackground, mockOptions);
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBeUndefined();
+  });
 });
 
 it('should log correctly for Vercel tool execution', async () => {
@@ -346,7 +445,10 @@ it('should log correctly for Vercel tool execution', async () => {
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Executing tool',
+    expect.objectContaining({ agent: 'testAgent', tool: 'testTool' }),
+  );
 
   debugSpy.mockRestore();
 });
@@ -357,7 +459,7 @@ describe('fetchWithRetry', () => {
     vi.unstubAllGlobals();
   });
 
-  it('should use exponential backoff delays capped at 10 seconds', async () => {
+  function mockRetryDelays() {
     const delays: number[] = [];
 
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
@@ -369,6 +471,104 @@ describe('fetchWithRetry', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as typeof setTimeout);
 
+    return delays;
+  }
+
+  it('should return a successful response without retrying', async () => {
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', { method: 'POST' }, 3)).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith('https://example.com', { method: 'POST' });
+  });
+
+  it('should retry a failed response and return a later success', async () => {
+    const delays = mockRetryDelays();
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('error', { status: 500, statusText: 'Server Error' }))
+      .mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should retry network failures until retries are exhausted', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).rejects.toThrow('Network error');
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(delays).toEqual([2000, 4000]);
+  });
+
+  it.each([404, 408, 429])('should preserve public retry behavior for %s responses by default', async status => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockResolvedValue(new Response('error', { status }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com/missing', {}, 2)).rejects.toThrow(`status: ${status}`);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should not retry a response when shouldRetryResponse returns false', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockResolvedValue(new Response('not found', { status: 404, statusText: 'Not Found' }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      fetchWithRetry('https://example.com/missing', {}, 3, {
+        shouldRetryResponse: response => response.status >= 500,
+      }),
+    ).rejects.toThrow('status: 404 Not Found');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([]);
+  });
+
+  it('should retry network errors even when the error message contains a 4xx status', async () => {
+    const delays = mockRetryDelays();
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi.fn().mockRejectedValueOnce(new Error('upstream status: 404')).mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      fetchWithRetry('https://example.com/transient', {}, 3, {
+        shouldRetryResponse: response => response.status >= 500,
+      }),
+    ).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should throw the last response error after exhausting retries', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('first', { status: 500, statusText: 'First Error' }))
+      .mockResolvedValueOnce(new Response('second', { status: 503, statusText: 'Second Error' }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com/flaky', {}, 2)).rejects.toThrow('status: 503 Second Error');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should use exponential backoff delays capped at 10 seconds', async () => {
+    const delays = mockRetryDelays();
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
     vi.stubGlobal('fetch', mockFetch);
 
@@ -512,5 +712,145 @@ describe('generateEmptyFromSchema', () => {
       },
     };
     expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
+  });
+});
+
+describe('safeStringify', () => {
+  it('should stringify simple values', () => {
+    expect(safeStringify({ a: 1, b: 'hello' })).toBe('{"a":1,"b":"hello"}');
+    expect(safeStringify(null)).toBe('null');
+    expect(safeStringify(42)).toBe('42');
+    expect(safeStringify('text')).toBe('"text"');
+  });
+
+  it('should handle circular references without throwing', () => {
+    const obj: any = { name: 'test' };
+    obj.self = obj;
+    const result = safeStringify(obj);
+    expect(result).toBe('{"name":"test","self":"[Circular]"}');
+  });
+
+  it('should handle deeply nested circular references', () => {
+    const a: any = { id: 'a' };
+    const b: any = { id: 'b', parent: a };
+    a.child = b;
+    const result = safeStringify(a);
+    const parsed = JSON.parse(result);
+    expect(parsed.id).toBe('a');
+    expect(parsed.child.id).toBe('b');
+    expect(parsed.child.parent).toBe('[Circular]');
+  });
+
+  it('should support space parameter', () => {
+    expect(safeStringify({ a: 1 }, 2)).toBe('{\n  "a": 1\n}');
+  });
+
+  it('should preserve shared (non-circular) references by duplicating them', () => {
+    const shared = { x: 1 };
+    const obj = { a: shared, b: shared };
+    const result = JSON.parse(safeStringify(obj));
+    expect(result.a).toEqual({ x: 1 });
+    expect(result.b).toEqual({ x: 1 });
+  });
+
+  it('should handle BigInt values without throwing', () => {
+    const obj = { count: BigInt(42), name: 'test' };
+    const result = safeStringify(obj);
+    expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
+  });
+});
+
+describe('ensureSerializable', () => {
+  it('should return primitives unchanged', () => {
+    expect(ensureSerializable(null)).toBe(null);
+    expect(ensureSerializable(42)).toBe(42);
+    expect(ensureSerializable('text')).toBe('text');
+    expect(ensureSerializable(true)).toBe(true);
+  });
+
+  it('should return serializable objects unchanged (same reference)', () => {
+    const obj = { a: 1, b: [2, 3], c: { d: 'hello' } };
+    const result = ensureSerializable(obj);
+    expect(result).toBe(obj);
+  });
+
+  it('should strip circular references and return a new object', () => {
+    const obj: any = { name: 'test', value: 42 };
+    obj.self = obj;
+    const result = ensureSerializable(obj) as any;
+    expect(result).not.toBe(obj);
+    expect(result.name).toBe('test');
+    expect(result.value).toBe(42);
+    expect(result.self).toBe('[Circular]');
+    // Result should be JSON-serializable
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should handle nested circular references between parent and child objects', () => {
+    const properties: any = { color: 'red', size: 10 };
+    const screen: any = { properties };
+    properties.variantScreenInstance = screen;
+    const obj = { screen, metadata: 'test' };
+
+    const result = ensureSerializable(obj) as any;
+    expect(result.metadata).toBe('test');
+    expect(result.screen.properties.color).toBe('red');
+    expect(result.screen.properties.variantScreenInstance).toBe('[Circular]');
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+});
+
+describe('setNestedValue', () => {
+  it('sets a simple key', () => {
+    const obj: any = {};
+    setNestedValue(obj, 'a', 1);
+    expect(obj.a).toBe(1);
+  });
+
+  it('sets a nested key, creating intermediate objects', () => {
+    const obj: any = {};
+    setNestedValue(obj, 'a.b.c', 'hello');
+    expect(obj.a.b.c).toBe('hello');
+  });
+
+  it('does not overwrite existing nested objects', () => {
+    const obj: any = { a: { existing: true } };
+    setNestedValue(obj, 'a.b', 1);
+    expect(obj.a.existing).toBe(true);
+    expect(obj.a.b).toBe(1);
+  });
+
+  it('rejects __proto__ as the final key', () => {
+    const obj: any = {};
+    setNestedValue(obj, '__proto__', { polluted: true });
+    expect(({} as any).polluted).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(obj, '__proto__')).toBe(false);
+  });
+
+  it('rejects __proto__ in an intermediate path segment', () => {
+    const obj: any = {};
+    setNestedValue(obj, '__proto__.polluted', true);
+    expect(({} as any).polluted).toBeUndefined();
+  });
+
+  it('rejects constructor and prototype keys', () => {
+    const obj: any = {};
+    setNestedValue(obj, 'constructor.prototype.polluted', true);
+    setNestedValue(obj, 'prototype.polluted', true);
+    expect(({} as any).polluted).toBeUndefined();
+  });
+});
+
+describe('selectFields', () => {
+  it('extracts specified dot-path fields', () => {
+    const src = { a: { b: 1, c: 2 }, d: 3 };
+    expect(selectFields(src, ['a.b', 'd'])).toEqual({ a: { b: 1 }, d: 3 });
+  });
+
+  it('ignores unsafe keys in field list without polluting', () => {
+    const src = { __proto__: { polluted: true } } as any;
+    const result = selectFields(src, ['__proto__.polluted']);
+    expect(result).toEqual({});
+    expect(({} as any).polluted).toBeUndefined();
   });
 });

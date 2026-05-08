@@ -7,6 +7,8 @@ import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
 export type {
   MastraAuthConfig,
+  A2AAgentCardSigningConfig,
+  A2AConfig,
   ContextWithMastra,
   ApiRoute,
   HttpLoggingConfig,
@@ -59,9 +61,20 @@ type RegisterApiRouteOptions<P extends string> = {
    * When false, skips Mastra auth for this route (defaults to true)
    */
   requiresAuth?: boolean;
+  /**
+   * Explicit RBAC permission for the route.
+   */
+  requiresPermission?: ApiRoute['requiresPermission'];
+  /**
+   * Optional FGA configuration for resource-level authorization.
+   */
+  fga?: ApiRoute['fga'];
 };
 
-function validateOptions<P extends string>(path: string, options: RegisterApiRouteOptions<P>): asserts options is RegisterApiRouteOptions<P> {
+function validateOptions<P extends string>(
+  path: P,
+  options: RegisterApiRouteOptions<P>,
+): asserts options is RegisterApiRouteOptions<P> {
   const opts = options as RegisterApiRouteOptions<P>;
 
   if (opts.method === undefined) {
@@ -92,7 +105,10 @@ function validateOptions<P extends string>(path: string, options: RegisterApiRou
   }
 }
 
-export function registerApiRoute<P extends string>(path: string, options: RegisterApiRouteOptions<P>): ApiRoute {
+export function registerApiRoute<P extends string>(
+  path: P,
+  options: RegisterApiRouteOptions<P>,
+): ApiRoute {
   validateOptions(path, options);
 
   return {
@@ -103,6 +119,8 @@ export function registerApiRoute<P extends string>(path: string, options: Regist
     openapi: options.openapi,
     middleware: options.middleware,
     requiresAuth: options.requiresAuth,
+    requiresPermission: options.requiresPermission,
+    fga: options.fga,
   } as unknown as ApiRoute;
 }
 

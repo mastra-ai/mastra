@@ -6,6 +6,7 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { AuthStorage } from '../auth/storage.js';
 import { ApiKeyDialogComponent } from './components/api-key-dialog.js';
 import type { ModelItem } from './components/model-selector.js';
+import { showModalOverlay } from './overlay.js';
 
 /**
  * If the selected model doesn't have an API key, show a dialog to enter one.
@@ -40,11 +41,7 @@ export function promptForApiKeyIfNeeded(
       },
     });
 
-    ui.showOverlay(dialog, {
-      width: '70%',
-      maxHeight: '50%',
-      anchor: 'center',
-    });
+    showModalOverlay(ui, dialog, { widthPercent: 0.7, maxHeight: '50%' });
     dialog.focused = true;
   });
 }

@@ -58,7 +58,7 @@ export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel)
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning).
-const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
+export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',
   medium: 'medium',
@@ -69,7 +69,7 @@ const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefin
 /**
  * Create Codex middleware with the given reasoning effort level.
  */
-function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
+export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
   return {
     specificationVersion: 'v3',
     transformParams: async ({ params }) => {
@@ -100,66 +100,37 @@ function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddlewar
 }
 
 /**
- * Creates an OpenAI model using ChatGPT OAuth authentication
- * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
- *
- * IMPORTANT: This uses the Codex API endpoint, not the standard OpenAI API.
- * URLs are rewritten from /v1/responses or /chat/completions to the Codex endpoint.
+ * Build a fetch function that handles OpenAI Codex OAuth.
+ * Preserves non-authorization headers from init.
+ * When rewriteUrl is true (default), rewrites /v1/responses and /chat/completions
+ * to the Codex API endpoint. Set rewriteUrl: false for gateway usage where the
+ * SDK already targets the correct URL.
  */
-export function openaiCodexProvider(
-  modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: ThinkingLevel },
-): MastraModelConfig {
-  // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
-  // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
-  // GPT-5.* models are floored to at least "low" on Codex.
-  const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
-  const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
-  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-  const middleware = createCodexMiddleware(reasoningEffort);
+export function buildOpenAICodexOAuthFetch(
+  opts: { authStorage?: AuthStorage; rewriteUrl?: boolean } = {},
+): typeof fetch {
+  return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
+    const storage = opts.authStorage ?? getAuthStorage();
+    storage.reload();
 
-  // Test environment: use API key
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    const openai = createOpenAI({
-      apiKey: 'test-api-key',
-    });
-    return wrapLanguageModel({
-      model: openai.responses(modelId),
-      middleware: [middleware],
-    });
-  }
-
-  // Custom fetch that handles OAuth and URL rewriting
-  const oauthFetch = async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
-    const authStorage = getAuthStorage();
-
-    // Reload from disk to handle multi-instance refresh
-    authStorage.reload();
-
-    // Get credentials (includes accountId)
-    const cred = authStorage.get('openai-codex');
-
+    const cred = storage.get('openai-codex');
     if (!cred || cred.type !== 'oauth') {
       throw new Error('Not logged in to OpenAI Codex. Run /login first.');
     }
 
-    // Check if token needs refresh
     let accessToken = cred.access;
     if (Date.now() >= cred.expires) {
-      // Token expired, need to refresh via getApiKey which handles refresh
-      const refreshedToken = await authStorage.getApiKey('openai-codex');
+      const refreshedToken = await storage.getApiKey('openai-codex');
       if (!refreshedToken) {
         throw new Error('Failed to refresh OpenAI Codex token. Please /login again.');
       }
       accessToken = refreshedToken;
-      // Reload to get updated accountId
-      authStorage.reload();
+      storage.reload();
     }
 
-    // Get accountId from credentials
     const accountId = (cred as any).accountId as string | undefined;
 
-    // Build headers - remove any existing authorization header first
+    // Preserve non-authorization headers
     const headers = new Headers();
     if (init?.headers) {
       if (init.headers instanceof Headers) {
@@ -183,30 +154,64 @@ export function openaiCodexProvider(
       }
     }
 
-    // Set authorization header with access token
     headers.set('Authorization', `Bearer ${accessToken}`);
-
-    // Set ChatGPT-Account-Id header for organization subscriptions
     if (accountId) {
       headers.set('ChatGPT-Account-Id', accountId);
     }
 
-    // Rewrite URL to Codex endpoint if it's a chat/responses request
+    // URL rewriting — only when rewriteUrl !== false
     const parsed = url instanceof URL ? url : new URL(typeof url === 'string' ? url : (url as Request).url);
-
-    const shouldRewrite = parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions');
+    const shouldRewrite =
+      opts.rewriteUrl !== false &&
+      (parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions'));
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
-    return fetch(finalUrl, {
-      ...init,
+    try {
+      return await fetch(finalUrl, { ...init, headers });
+    } catch (error) {
+      if (error && typeof error === 'object') {
+        Object.assign(error as Record<string, unknown>, {
+          requestUrl: finalUrl.toString(),
+        });
+      }
+      throw error;
+    }
+  }) as typeof fetch;
+}
+
+/**
+ * Creates an OpenAI model using ChatGPT OAuth authentication
+ * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
+ *
+ * IMPORTANT: This uses the Codex API endpoint, not the standard OpenAI API.
+ * URLs are rewritten from /v1/responses or /chat/completions to the Codex endpoint.
+ */
+export function openaiCodexProvider(
+  modelId: string = 'codex-mini-latest',
+  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string> },
+): MastraModelConfig {
+  const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+  const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
+  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
+  const middleware = createCodexMiddleware(reasoningEffort);
+  const headers = options?.headers;
+
+  // Test environment: use API key
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    const openai = createOpenAI({
+      apiKey: 'test-api-key',
       headers,
     });
-  };
+    return wrapLanguageModel({
+      model: openai.responses(modelId),
+      middleware: [middleware],
+    });
+  }
 
   const openai = createOpenAI({
-    // Use a dummy API key since we're using OAuth
     apiKey: 'oauth-dummy-key',
-    fetch: oauthFetch as any,
+    headers,
+    fetch: buildOpenAICodexOAuthFetch() as any,
   });
 
   // Use the responses API for Codex models

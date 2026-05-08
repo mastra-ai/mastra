@@ -5,7 +5,7 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { getSingleDummyResponseModel } from './mock-model';
@@ -474,11 +474,24 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
       const testRequestContext = new RequestContext();
       testRequestContext.set('test-key', 'test-value');
 
-      // Call convertTools which internally calls listAgentTools -> agent.getModel()
-      await orchestratorAgent['convertTools']({
+      // getModel is called during tool execution (not tool creation) so we
+      // need to invoke the agent tool's execute to trigger it.
+      const tools = await orchestratorAgent['convertTools']({
         requestContext: testRequestContext,
         methodType: 'generate',
       });
+
+      const agentTool = tools['agent-subAgent'];
+      expect(agentTool).toBeDefined();
+
+      // Execute the tool — it will call resolvedAgent.getModel({ requestContext })
+      // during version resolution. The generate call itself will fail since the
+      // mock model isn't wired for a full conversation, but getModel is invoked first.
+      try {
+        await agentTool.execute!({ prompt: 'hello' }, { toolCallId: 'test-call', messages: [] } as any);
+      } catch {
+        // Expected — the mock model doesn't support a full generate flow
+      }
 
       // Verify that the sub-agent's model function received the correct requestContext
       expect(receivedRequestContext).toBeDefined();

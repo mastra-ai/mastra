@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../tool';
 import { CoreToolBuilder } from '../tool-builder/builder';

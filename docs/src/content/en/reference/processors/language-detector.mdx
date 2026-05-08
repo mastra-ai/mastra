@@ -19,6 +19,7 @@ const processor = new LanguageDetector({
   targetLanguages: ['English', 'en'],
   threshold: 0.8,
   strategy: 'translate',
+  lastMessageOnly: true,
 })
 ```
 
@@ -79,6 +80,14 @@ const processor = new LanguageDetector({
             description: 'Custom detection instructions for the agent. If not provided, uses default instructions',
             isOptional: true,
             default: 'undefined',
+          },
+          {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description:
+              'Whether to detect language only for the most recent message in the batch instead of checking every message. Use this to keep LLM calls flat as conversation history grows.',
+            isOptional: true,
+            default: 'false',
           },
           {
             name: 'minTextLength',
