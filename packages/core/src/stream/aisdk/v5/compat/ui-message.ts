@@ -1,5 +1,15 @@
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from '@internal/ai-sdk-v5';
 
+export type ToolOutputDeniedUIMessageChunk = {
+  type: 'tool-output-denied';
+  toolCallId: string;
+  reason?: string;
+};
+
+export type MastraUIMessageChunk<UI_MESSAGE extends UIMessage> =
+  | InferUIMessageChunk<UI_MESSAGE>
+  | ToolOutputDeniedUIMessageChunk;
+
 export function getResponseUIMessageId({
   originalMessages,
   responseMessageId,
@@ -41,7 +51,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}): InferUIMessageChunk<UI_MESSAGE> | undefined {
+}): MastraUIMessageChunk<UI_MESSAGE> | undefined {
   const partType = part.type;
 
   switch (partType) {
@@ -161,6 +171,17 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-result': {
+      // `denied`/`deniedReason` are Mastra-specific fields injected by the transform layer
+      // (see stream/aisdk/v5/transform.ts) and are not part of the upstream AI SDK type.
+      const deniedPart = part as typeof part & { denied?: boolean; deniedReason?: string };
+      if (deniedPart.denied === true) {
+        return {
+          type: 'tool-output-denied',
+          toolCallId: part.toolCallId,
+          ...(deniedPart.deniedReason ? { reason: deniedPart.deniedReason } : {}),
+        };
+      }
+
       return {
         type: 'tool-output-available',
         toolCallId: part.toolCallId,

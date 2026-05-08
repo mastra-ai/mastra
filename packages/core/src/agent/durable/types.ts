@@ -263,6 +263,10 @@ export interface DurableToolCallInput {
 export interface DurableToolCallOutput extends DurableToolCallInput {
   /** Result from tool execution */
   result?: unknown;
+  /** Whether the tool call was denied by approval flow */
+  denied?: boolean;
+  /** Reason the tool call was denied */
+  deniedReason?: string;
   /** Error if tool execution failed */
   error?: {
     name: string;

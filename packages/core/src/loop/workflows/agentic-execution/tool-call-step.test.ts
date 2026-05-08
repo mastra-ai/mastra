@@ -256,6 +256,8 @@ describe('createToolCallStep tool approval workflow', () => {
 
     expect(result).toEqual({
       result: 'Tool call was not approved by the user',
+      denied: true,
+      deniedReason: 'Tool call was not approved by the user',
       ...inputData,
     });
     expectNoToolExecution();

@@ -105,6 +105,7 @@ export function createDurableLLMMappingStep() {
               toolName: toolResult.toolName,
               args: toolResult.args,
               result: resultContent,
+              ...(toolResult.denied === true ? { denied: true, deniedReason: toolResult.deniedReason } : {}),
             },
           };
         });

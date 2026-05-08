@@ -118,6 +118,8 @@ export class MessageMerger {
               step: part.toolInvocation.step,
               state: 'result',
               result: part.toolInvocation.result,
+              denied: part.toolInvocation.denied,
+              deniedReason: part.toolInvocation.deniedReason,
               args: {
                 ...existingCallPart.toolInvocation.args,
                 ...part.toolInvocation.args,

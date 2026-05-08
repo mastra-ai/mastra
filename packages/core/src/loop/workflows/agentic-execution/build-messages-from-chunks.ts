@@ -52,7 +52,15 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: any;
+      args: any;
+      providerMetadata: any;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+      denied?: boolean;
+      deniedReason?: string;
+    }
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
@@ -63,6 +71,8 @@ export function buildMessagesFromChunks({
         providerMetadata: p.providerMetadata,
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
+        denied: p.denied,
+        deniedReason: p.deniedReason,
       });
     }
   }
@@ -250,6 +260,7 @@ export function buildMessagesFromChunks({
               toolName: p.toolName,
               args: p.args,
               result: result.result,
+              ...(result.denied === true ? { denied: true, deniedReason: result.deniedReason } : {}),
             },
             providerMetadata: result.providerMetadata ?? p.providerMetadata,
             providerExecuted: resultProviderExecuted,

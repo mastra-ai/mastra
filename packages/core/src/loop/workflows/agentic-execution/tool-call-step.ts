@@ -361,8 +361,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             await removeToolMetadata(inputData.toolName, 'approval');
 
             if (!resumeData.approved) {
+              const deniedReason = 'Tool call was not approved by the user';
               return {
-                result: 'Tool call was not approved by the user',
+                result: deniedReason,
+                denied: true,
+                deniedReason,
                 ...inputData,
               };
             }

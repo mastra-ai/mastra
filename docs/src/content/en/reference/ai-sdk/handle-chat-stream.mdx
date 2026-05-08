@@ -34,6 +34,20 @@ The `object` field contains your full structured output value. Mastra emits this
 
 Read this event with AI SDK UI's custom data handling, such as `onData`, or render it from message data parts.
 
+## Tool approval denial in UI streams
+
+When an agent tool approval is declined, `handleChatStream()` emits a semantic AI SDK UI stream part:
+
+```json
+{
+  "type": "tool-output-denied",
+  "toolCallId": "tool-call-123",
+  "reason": "Tool call was not approved by the user"
+}
+```
+
+Use this part to distinguish a declined approval from a tool execution failure. Tool failures continue to emit `tool-output-error`.
+
 ## Usage example
 
 Next.js App Router example:
