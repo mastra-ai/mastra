@@ -1,16 +1,14 @@
-import {
-  SearchClient,
-  SearchIndexClient,
-  AzureKeyCredential,
-  type VectorQuery,
-  type VectorSearchOptions,
-  type SemanticSearchOptions,
-  type SearchRequestOptions,
-  type VectorizedQuery,
-  type VectorizableTextQuery,
-  type SearchClientOptions,
-} from '@azure/search-documents';
 import type { TokenCredential } from '@azure/core-auth';
+import type {
+  VectorQuery,
+  VectorSearchOptions,
+  SemanticSearchOptions,
+  SearchRequestOptions,
+  VectorizedQuery,
+  VectorizableTextQuery,
+  SearchClientOptions,
+} from '@azure/search-documents';
+import { SearchClient, SearchIndexClient, AzureKeyCredential } from '@azure/search-documents';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type {
   CreateIndexParams,
@@ -296,7 +294,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       // Return the found vector field name, or default to 'vector' for backward compatibility
       return vectorField?.name || 'vector';
-    } catch (error) {
+    } catch {
       // If we can't determine the vector field name, fall back to 'vector' for backward compatibility
       return 'vector';
     }

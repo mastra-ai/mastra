@@ -1,8 +1,8 @@
 ---
-'@mastra/azure': minor
+'@mastra/azure-ai-search': minor
 ---
 
-Added a new `@mastra/azure` vector store package for Azure AI Search.
+Added a new `@mastra/azure-ai-search` vector store package for Azure AI Search.
 
 - Supports index creation, updates, deletes, and similarity search operations.
 - Supports filtering in vector queries for more precise retrieval.
@@ -12,7 +12,7 @@ Added a new `@mastra/azure` vector store package for Azure AI Search.
 **Usage**
 
 ```ts
-import { AzureAISearchVector } from '@mastra/azure';
+import { AzureAISearchVector } from '@mastra/azure-ai-search';
 
 const vectorStore = new AzureAISearchVector({
   endpoint: process.env.AZURE_AISEARCH_ENDPOINT!,

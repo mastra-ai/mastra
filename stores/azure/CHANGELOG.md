@@ -1,4 +1,4 @@
-# @mastra/azure
+# @mastra/azure-ai-search
 
 ## 1.0.0-beta.0
 

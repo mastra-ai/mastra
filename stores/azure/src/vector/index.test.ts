@@ -1,7 +1,10 @@
+import type * as AzureSearchDocuments from '@azure/search-documents';
 import dotenv from 'dotenv';
-import { describe, it, expect, beforeEach, vi, type Mock, beforeAll, afterAll, afterEach } from 'vitest';
-import { AzureAISearchVector, type AzureAISearchCreateIndexParams } from './index';
-import { AzureAISearchFilterTranslator, type AzureAISearchVectorFilter } from './filter';
+import type { Mock } from 'vitest';
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vitest';
+import type { AzureAISearchVectorFilter } from './filter';
+import { AzureAISearchFilterTranslator } from './filter';
+import { AzureAISearchVector } from './index';
 
 dotenv.config();
 
@@ -81,7 +84,7 @@ describe('AzureAISearchVector Unit Tests', () => {
 
     // Get the mocked constructors
     const { SearchIndexClient, SearchClient, AzureKeyCredential } =
-      await vi.importMock<typeof import('@azure/search-documents')>('@azure/search-documents');
+      await vi.importMock<typeof AzureSearchDocuments>('@azure/search-documents');
 
     // Setup mock implementations
     (SearchIndexClient as Mock).mockImplementation(() => mockIndexClient);
@@ -206,11 +209,6 @@ describe('AzureAISearchVector Unit Tests', () => {
 
   describe('describeIndex', () => {
     it('should return index statistics', async () => {
-      const mockStats = {
-        documentCount: 100,
-        storageSize: 1024,
-      };
-
       mockIndexClient.getIndex.mockResolvedValue({
         name: 'test-index',
         fields: [
@@ -1097,7 +1095,7 @@ describe('AzureAISearchVector Memory Integration Tests', () => {
 
     // Mock constructors
     const { SearchIndexClient, SearchClient, AzureKeyCredential } =
-      await vi.importMock<typeof import('@azure/search-documents')>('@azure/search-documents');
+      await vi.importMock<typeof AzureSearchDocuments>('@azure/search-documents');
     (SearchIndexClient as Mock).mockImplementation(() => mockIndexClient);
     (SearchClient as Mock).mockImplementation(() => mockSearchClient);
     (AzureKeyCredential as Mock).mockImplementation((key: string) => ({ key }));
@@ -1197,7 +1195,7 @@ describe('AzureAISearchVector Memory Integration Tests', () => {
 // ADVANCED FEATURES TESTS (Skip if no credentials)
 // ==========================================
 
-describeIntegration('AzureAISearchVector Advanced Features', () => {
+describeIntegration('AzureAISearchVector Advanced Features Integration Tests', () => {
   let azureVector: AzureAISearchVector;
   const testIndexName = `test-mastra-advanced-${Date.now()}`;
 

@@ -1,3 +1,6 @@
-import pluginLint from '@internal/lint';
+import { createConfig } from '@internal/lint/eslint';
 
-export default pluginLint;
+const config = await createConfig();
+
+/** @type {import("eslint").Linter.Config[]} */
+export default config;
