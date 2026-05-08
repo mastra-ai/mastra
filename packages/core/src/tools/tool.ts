@@ -3,7 +3,7 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext, ToolPayloadProjection } from './types';
+import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext, ToolPayloadTransform } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -163,9 +163,9 @@ export class Tool<
   toModelOutput?: (output: TSchemaOut) => unknown;
 
   /**
-   * Optional target-aware projection for display and transcript payloads.
+   * Optional target-aware transform for display and transcript payloads.
    */
-  payloadProjection?: ToolPayloadProjection<TSchemaIn, TSchemaOut>;
+  transform?: ToolPayloadTransform<TSchemaIn, TSchemaOut>;
 
   /**
    * Optional MCP-specific properties including annotations and metadata.
@@ -263,7 +263,7 @@ export class Tool<
     this.strict = opts.strict;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
-    this.payloadProjection = opts.payloadProjection;
+    this.transform = opts.transform;
     this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
     this.mcpMetadata = opts.mcpMetadata;

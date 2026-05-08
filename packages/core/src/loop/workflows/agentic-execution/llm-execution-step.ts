@@ -16,7 +16,8 @@ import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
 import { executeWithContextSync } from '../../../observability/utils';
-import type { ProcessorStreamWriter } from '../../../processors/index';
+import type { InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
+import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
@@ -31,7 +32,7 @@ import type {
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
-import { ChunkFrom } from '../../../stream/types';
+import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
 import {
   projectToolPayloadForTargets,
   withToolPayloadProjectionMetadata,
@@ -50,6 +51,33 @@ import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
+
+function getRequestInputProcessors({
+  inputProcessors,
+  llmRequestInputProcessors,
+}: {
+  inputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+}): InputProcessorOrWorkflow[] {
+  if (!llmRequestInputProcessors?.length) {
+    return inputProcessors || [];
+  }
+
+  if (!inputProcessors?.length) {
+    return llmRequestInputProcessors;
+  }
+
+  const requestProcessorIds = new Set(
+    llmRequestInputProcessors.filter(processor => !isProcessorWorkflow(processor)).map(processor => processor.id),
+  );
+  const additionalInputProcessors = inputProcessors.filter(
+    processor => !isProcessorWorkflow(processor) && !requestProcessorIds.has(processor.id),
+  );
+
+  return additionalInputProcessors.length
+    ? [...llmRequestInputProcessors, ...additionalInputProcessors]
+    : llmRequestInputProcessors;
+}
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
@@ -100,7 +128,7 @@ async function addToolPayloadProjectionToChunk<OUTPUT>(
     Object.values(tools || {}).find((candidate: any) => `id` in candidate && candidate.id === toolName);
   const source = {
     policy,
-    toolProjection: (tool as { payloadProjection?: unknown } | undefined)?.payloadProjection as any,
+    toolProjection: (tool as { transform?: unknown } | undefined)?.transform as any,
   };
   let projection;
 
@@ -203,6 +231,67 @@ function buildResponseModelMetadata(
   }
 
   return Object.keys(metadata).length > 0 ? { metadata } : undefined;
+}
+
+function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = ToolSet>({
+  error,
+  controller,
+  runId,
+  model,
+  messageList,
+  messageId,
+  stepTools,
+  _internal,
+}: {
+  error: TripWire;
+  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  runId: string;
+  model: MastraLanguageModel;
+  messageList: MessageList;
+  messageId: string;
+  stepTools?: TOOLS;
+  _internal: OuterLLMRun<TOOLS, OUTPUT>['_internal'];
+}) {
+  const tripwireChunk: ChunkType<OUTPUT> = {
+    type: 'tripwire',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: {
+      reason: error.message,
+      retry: error.options?.retry,
+      metadata: error.options?.metadata,
+      processorId: error.processorId,
+    },
+  };
+
+  safeEnqueue(controller, tripwireChunk);
+
+  const runState = new AgenticRunState({
+    _internal,
+    model,
+  });
+
+  return {
+    callBail: true,
+    outputStream: new MastraModelOutput<OUTPUT>({
+      model: {
+        modelId: model.modelId,
+        provider: model.provider,
+        version: model.specificationVersion,
+      },
+      stream: new ReadableStream({
+        start(c) {
+          c.enqueue(tripwireChunk);
+          c.close();
+        },
+      }),
+      messageList,
+      messageId,
+      options: { runId },
+    }),
+    runState,
+    stepTools,
+  };
 }
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -480,6 +569,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   structuredOutput,
   outputProcessors,
   inputProcessors,
+  llmRequestInputProcessors,
   errorProcessors,
   logger,
   agentId,
@@ -523,7 +613,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
-      let modelResult;
+      let modelResult: ReturnType<typeof execute> | undefined;
       let warnings: any;
       let request: any;
       let rawResponse: any;
@@ -728,46 +818,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   processorId: error.processorId,
                   retry: error.options?.retry,
                 });
-                // Emit tripwire chunk to the stream
-                safeEnqueue(controller, {
-                  type: 'tripwire',
+                return buildTripWireBailResponse({
+                  error,
+                  controller,
                   runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    reason: error.message,
-                    retry: error.options?.retry,
-                    metadata: error.options?.metadata,
-                    processorId: error.processorId,
-                  },
-                });
-
-                // Create a minimal runState for the bail response
-                const runState = new AgenticRunState({
-                  _internal: _internal!,
                   model,
-                });
-
-                // Return via bail to properly signal the tripwire
-                return {
-                  callBail: true,
-                  outputStream: new MastraModelOutput({
-                    model: {
-                      modelId: model.modelId,
-                      provider: model.provider,
-                      version: model.specificationVersion,
-                    },
-                    stream: new ReadableStream({
-                      start(c) {
-                        c.close();
-                      },
-                    }),
-                    messageList,
-                    messageId: currentStep.messageId,
-                    options: { runId },
-                  }),
-                  runState,
+                  messageList,
+                  messageId: currentStep.messageId,
                   stepTools: tools,
-                };
+                  _internal: _internal!,
+                });
               }
               logger?.error('Error in processInputStep processors:', error);
               throw error;
@@ -887,6 +947,59 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
+          // Run `processLLMRequest` for any input processors that implement it.
+          // This hook lets processors rewrite the outbound prompt transiently
+          // without persisting changes back to the message list.
+          {
+            const requestStepRunner = new ProcessorRunner({
+              inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
+              outputProcessors: [],
+              logger: logger || new ConsoleLogger({ level: 'error' }),
+              agentName: agentId || 'unknown',
+              processorStates,
+            });
+            const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? {
+                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
+                    outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
+                }
+              : undefined;
+            try {
+              const requestStepResult = await requestStepRunner.runProcessLLMRequest({
+                prompt: inputMessages,
+                model: currentStep.model,
+                stepNumber: inputData.output?.steps?.length || 0,
+                steps: inputData.output?.steps || [],
+                retryCount: inputData.processorRetryCount || 0,
+                requestContext,
+                tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                writer: requestStepWriter,
+                abortSignal: options?.abortSignal,
+              });
+              inputMessages = requestStepResult.prompt;
+            } catch (error) {
+              if (error instanceof TripWire) {
+                logger?.warn('Streaming request processor tripwire triggered', {
+                  reason: error.message,
+                  processorId: error.processorId,
+                  retry: error.options?.retry,
+                });
+                return buildTripWireBailResponse({
+                  error,
+                  controller,
+                  runId,
+                  model: currentStep.model,
+                  messageList,
+                  messageId: currentStep.messageId,
+                  stepTools: currentStep.tools,
+                  _internal: _internal!,
+                });
+              }
+              logger?.error('Error in processLLMRequest processors:', error);
+              throw error;
+            }
+          }
+
           if (isSupportedLanguageModel(currentStep.model)) {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -986,7 +1099,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           let transportResolver: (() => StreamTransport | undefined) | undefined;
           if (currentStep.model instanceof ModelRouterLanguageModel) {
             const routerModel = currentStep.model;
-            transportResolver = () => routerModel._getStreamTransport();
+            transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
           }
 
           try {

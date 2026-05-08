@@ -1,7 +1,8 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
+import { useAui } from '@assistant-ui/react';
 
 import type { MastraUIMessage } from '@mastra/react';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
@@ -14,6 +15,8 @@ import {
   isBrowserToolError,
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
+import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
+import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 
@@ -34,6 +37,18 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const browserCtx = useBrowserToolCallsSafe();
   const isBrowser = isBrowserTool(toolName);
   const { activateSkill } = useActivatedSkills();
+  const { data: mcpAppToolsMap } = useMcpAppTools();
+  const aui = useAui();
+
+  const handleMcpAppSendMessage = useCallback(
+    (content: string) => {
+      aui.thread().append({
+        role: 'user',
+        content: [{ type: 'text', text: content }],
+      });
+    },
+    [aui],
+  );
 
   useEffect(() => {
     if (!isBrowser || !browserCtx) return;
@@ -193,18 +208,30 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     );
   }
 
+  const mcpAppInfo = mcpAppToolsMap?.[toolName];
+
   return (
-    <ToolBadge
-      toolName={toolName}
-      args={args}
-      result={result}
-      toolOutput={result?.toolOutput || []}
-      metadata={metadata}
-      toolCallId={toolCallId}
-      toolApprovalMetadata={toolApprovalMetadata}
-      suspendPayload={suspendedToolMetadata?.suspendPayload}
-      isNetwork={isNetwork}
-      toolCalled={toolCalled}
-    />
+    <>
+      <ToolBadge
+        toolName={toolName}
+        args={args}
+        result={result}
+        toolOutput={result?.toolOutput || []}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+      />
+      {mcpAppInfo && result !== undefined && (
+        <McpAppToolResult
+          appInfo={mcpAppInfo}
+          toolArgs={args}
+          toolResult={result}
+          onSendMessage={handleMcpAppSendMessage}
+        />
+      )}
+    </>
   );
 };

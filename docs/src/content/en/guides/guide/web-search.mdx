@@ -30,7 +30,7 @@ Some LLM providers include built-in web search capabilities that can be used dir
     Install dependencies
 
     <Tabs>
-      <TabItem value="openai" label="Open AI">
+      <TabItem value="openai" label="OpenAI">
         ```bash npm2yarn
         npm install @ai-sdk/openai
         ```
@@ -48,7 +48,7 @@ Some LLM providers include built-in web search capabilities that can be used dir
     Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
     <Tabs>
-      <TabItem value="openai" label="Open AI">
+      <TabItem value="openai" label="OpenAI">
         ```ts title="src/mastra/agents/searchAgent.ts"
         import { Agent } from '@mastra/core/agent'
 
@@ -56,7 +56,7 @@ Some LLM providers include built-in web search capabilities that can be used dir
           id: 'search-agent',
           name: 'Search Agent',
           instructions: 'You are a search agent that can search the web for information.',
-          model: 'openai/gpt-5.4',
+          model: 'openai/gpt-5.5',
         })
         ```
       </TabItem>
@@ -80,7 +80,7 @@ Some LLM providers include built-in web search capabilities that can be used dir
     Setup the tool:
 
     <Tabs>
-      <TabItem value="openai" label="Open AI">
+      <TabItem value="openai" label="OpenAI">
         ```ts title="src/mastra/agents/searchAgent.ts" {1,9-12}
         import { openai } from '@ai-sdk/openai'
         import { Agent } from '@mastra/core/agent'
@@ -89,7 +89,7 @@ Some LLM providers include built-in web search capabilities that can be used dir
           id: 'search-agent',
           name: 'Search Agent',
           instructions: 'You are a search agent that can search the web for information.',
-          model: 'openai/gpt-5.4',
+          model: 'openai/gpt-5.5',
           tools: {
             webSearch: openai.tools.webSearch(),
           },
@@ -165,7 +165,7 @@ For more control over search behavior, you can integrate external search APIs as
       id: 'search-agent',
       name: 'Search Agent',
       instructions: 'You are a search agent that can search the web for information.',
-      model: 'openai/gpt-5.4',
+      model: 'openai/gpt-5.5',
     })
     ```
   </StepItem>
@@ -221,7 +221,7 @@ For more control over search behavior, you can integrate external search APIs as
       id: 'search-agent',
       name: 'Search Agent',
       instructions: 'You are a search agent that can search the web for information.',
-      model: 'openai/gpt-5.4',
+      model: 'openai/gpt-5.5',
       tools: {
         webSearch,
       },

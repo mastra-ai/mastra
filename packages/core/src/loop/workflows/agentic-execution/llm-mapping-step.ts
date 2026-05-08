@@ -161,7 +161,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           Object.values(rest.tools || {}).find((t: any) => `id` in t && t.id === toolCall.toolName);
         const source = {
           policy: _internal?.toolPayloadProjection,
-          toolProjection: (tool as { payloadProjection?: unknown } | undefined)?.payloadProjection as any,
+          toolProjection: (tool as { transform?: unknown } | undefined)?.transform as any,
         };
         const inputProjection = await projectToolPayloadForTargets(
           {
@@ -174,7 +174,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           source,
           rest.logger,
         );
-        const payloadProjection = await projectToolPayloadForTargets(
+        const transform = await projectToolPayloadForTargets(
           {
             phase,
             toolName: toolCall.toolName,
@@ -188,10 +188,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.logger,
         );
 
-        return withToolPayloadProjectionMetadata(
-          withToolPayloadProjectionMetadata(chunk, inputProjection),
-          payloadProjection,
-        );
+        return withToolPayloadProjectionMetadata(withToolPayloadProjectionMetadata(chunk, inputProjection), transform);
       }
 
       if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {

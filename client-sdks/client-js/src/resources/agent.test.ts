@@ -98,6 +98,37 @@ describe('Agent.stream', () => {
     const requestBody = mockRequest.mock.calls[0][1].body;
     expect(requestBody.clientTools).toEqual(processClientTools(clientTools));
   });
+
+  it('should handle vNext step-finish and finish chunks without stepResult payloads', async () => {
+    const encoder = new TextEncoder();
+    const chunks = [{ type: 'text-delta', payload: { text: 'hello' } }, { type: 'step-finish' }, { type: 'finish' }];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+        controller.close();
+      },
+    });
+    const updates: any[] = [];
+    const onFinish = vi.fn();
+
+    await expect(
+      (agent as any).processChatResponse_vNext({
+        stream,
+        update: (update: any) => updates.push(update),
+        onFinish,
+        lastMessage: undefined,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(updates[updates.length - 1].message.content).toBe('hello');
+    expect(onFinish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        finishReason: 'unknown',
+      }),
+    );
+  });
 });
 
 describe('Agent.streamUntilIdle', () => {
@@ -498,13 +529,12 @@ describe('Agent Client Methods', () => {
     const result = await agent.listVersions({
       page: 0,
       perPage: 10,
-      orderBy: 'createdAt',
-      sortDirection: 'DESC',
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
 
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/stored/agents/test-agent/versions?page=0&perPage=10&orderBy=createdAt&sortDirection=DESC`,
+      `${clientOptions.baseUrl}/api/stored/agents/test-agent/versions?page=0&perPage=10&orderBy%5Bfield%5D=createdAt&orderBy%5Bdirection%5D=DESC`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

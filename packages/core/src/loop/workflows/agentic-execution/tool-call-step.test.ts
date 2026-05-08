@@ -86,6 +86,7 @@ describe('createToolCallStep background task stream replay', () => {
       }),
       cancel: vi.fn(),
       waitForNextTask: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
     };
     const tools = {
       'background-tool': {

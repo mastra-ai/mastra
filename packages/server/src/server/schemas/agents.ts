@@ -303,6 +303,13 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
 });
+
+export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
+  maxIdleMs: z.number().int().positive().optional(),
+});
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data

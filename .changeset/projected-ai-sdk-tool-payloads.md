@@ -8,7 +8,7 @@ Added support for showing different tool values to users than the values used in
 const lookupCustomer = createTool({
   // Runtime still receives the full input and returns the full output.
   execute: async ({ customerId, internalPath }) => lookupCustomerRecord(customerId, internalPath),
-  payloadProjection: {
+  transform: {
     display: {
       input: ({ input }) => ({ customerId: input?.customerId }),
       output: ({ output }) => ({ displayName: output?.displayName }),

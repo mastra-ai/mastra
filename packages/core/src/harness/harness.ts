@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -659,6 +661,11 @@ export class Harness<TState = {}> {
     return this.resourceId;
   }
 
+  async getResolvedMemory(): Promise<MastraMemory | null> {
+    if (!this.config.memory) return null;
+    return this.resolveMemory();
+  }
+
   setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
@@ -1014,30 +1021,42 @@ export class Harness<TState = {}> {
       const meta = thread?.metadata as Record<string, unknown> | undefined;
       const updates: Record<string, unknown> = {};
 
-      // Load model ID: per-mode first, then global
-      const modeModelKey = `modeModelId_${this.currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        updates.currentModelId = meta[modeModelKey];
-      } else if (meta?.currentModelId) {
-        updates.currentModelId = meta.currentModelId;
-      }
-
-      // Restore mode
+      // Restore the saved mode FIRST so we resolve currentModelId for the
+      // correct mode. Otherwise we'd look up modeModelId_<defaultMode> first
+      // and then never overwrite it when the saved mode has no per-mode
+      // override persisted (e.g. user only ever used the mode's default
+      // model), leaving the wrong mode's model active on restart.
+      let previousModeIdForEmit: string | undefined;
       if (meta?.currentModeId) {
         const savedModeId = meta.currentModeId as string;
         const modeExists = this.config.modes.some(m => m.id === savedModeId);
         if (modeExists && savedModeId !== this.currentModeId) {
+          previousModeIdForEmit = this.currentModeId;
           this.currentModeId = savedModeId;
-          const restoredModeModelKey = `modeModelId_${savedModeId}`;
-          if (meta[restoredModeModelKey]) {
-            updates.currentModelId = meta[restoredModeModelKey];
-          }
-          this.emit({
-            type: 'mode_changed',
-            modeId: savedModeId,
-            previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
-          });
         }
+      }
+
+      // Resolve the model for the (now-restored) current mode.
+      // Order: per-mode thread metadata → mode's defaultModelId → legacy
+      // global currentModelId (set by createThread).
+      const modeModelKey = `modeModelId_${this.currentModeId}`;
+      if (meta?.[modeModelKey]) {
+        updates.currentModelId = meta[modeModelKey];
+      } else {
+        const currentMode = this.config.modes.find(m => m.id === this.currentModeId);
+        if (currentMode?.defaultModelId) {
+          updates.currentModelId = currentMode.defaultModelId;
+        } else if (meta?.currentModelId) {
+          updates.currentModelId = meta.currentModelId;
+        }
+      }
+
+      if (previousModeIdForEmit !== undefined) {
+        this.emit({
+          type: 'mode_changed',
+          modeId: this.currentModeId,
+          previousModeId: previousModeIdForEmit,
+        });
       }
 
       // Restore observer/reflector model IDs
@@ -1519,6 +1538,45 @@ export class Harness<TState = {}> {
     return this.listMessagesForThread({ threadId: this.currentThreadId, limit: options?.limit });
   }
 
+  async saveSystemReminderMessage({
+    message,
+    reminderType,
+    role = 'user',
+    metadata,
+  }: {
+    message: string;
+    reminderType: string;
+    role?: 'user' | 'assistant' | 'system';
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessMessage | null> {
+    if (!this.currentThreadId || !this.config.storage) return null;
+
+    const memoryStorage = await this.getMemoryStorage();
+    const dbMessage = {
+      id: randomUUID(),
+      role,
+      threadId: this.currentThreadId,
+      resourceId: this.resourceId,
+      createdAt: new Date(),
+      content: {
+        format: 2 as const,
+        parts: [],
+        content: '',
+        metadata: {
+          systemReminder: {
+            type: reminderType,
+            message,
+            ...metadata,
+          },
+        },
+      },
+    };
+
+    const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
+    const saved = result.messages[0] ?? dbMessage;
+    return this.convertToHarnessMessage(saved);
+  }
+
   async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.config.storage) return [];
 
@@ -1618,6 +1676,14 @@ export class Harness<TState = {}> {
         timestamp:
           'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
             ? systemReminder.timestamp
+            : undefined,
+        goalMaxTurns:
+          'goalMaxTurns' in systemReminder && typeof systemReminder.goalMaxTurns === 'number'
+            ? systemReminder.goalMaxTurns
+            : undefined,
+        judgeModelId:
+          'judgeModelId' in systemReminder && typeof systemReminder.judgeModelId === 'string'
+            ? systemReminder.judgeModelId
             : undefined,
       });
 
@@ -1747,9 +1813,9 @@ export class Harness<TState = {}> {
                 ? (part as { image?: string }).image!
                 : '';
           content.push({
-            type: 'file',
+            type: 'image',
             data: imgData,
-            mediaType:
+            mimeType:
               (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
           });
           break;

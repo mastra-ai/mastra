@@ -28,9 +28,9 @@ export type VercelToolV5 = ToolV5;
 
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
-export type ToolPayloadProjectionTarget = 'display' | 'transcript';
+export type ToolPayloadTransformTarget = 'display' | 'transcript';
 
-export type ToolPayloadProjectionPhase =
+export type ToolPayloadTransformPhase =
   | 'input-delta'
   | 'input-available'
   | 'output-available'
@@ -39,9 +39,9 @@ export type ToolPayloadProjectionPhase =
   | 'suspend'
   | 'resume';
 
-export type ToolPayloadProjectionContext<TInput = unknown, TOutput = unknown, TError = unknown> = {
-  target: ToolPayloadProjectionTarget;
-  phase: ToolPayloadProjectionPhase;
+export type ToolPayloadTransformContext<TInput = unknown, TOutput = unknown, TError = unknown> = {
+  target: ToolPayloadTransformTarget;
+  phase: ToolPayloadTransformPhase;
   toolName: string;
   toolCallId: string;
   input?: TInput;
@@ -54,24 +54,48 @@ export type ToolPayloadProjectionContext<TInput = unknown, TOutput = unknown, TE
   context?: Record<string, unknown>;
 };
 
-export type ToolPayloadProjectionResult = unknown;
+export type ToolPayloadTransformResult = unknown;
 
-export type ToolPayloadProjectionFunction<TInput = unknown, TOutput = unknown, TError = unknown> = (
-  context: ToolPayloadProjectionContext<TInput, TOutput, TError>,
-) => ToolPayloadProjectionResult | Promise<ToolPayloadProjectionResult>;
+export type ToolPayloadTransformFunction<TInput = unknown, TOutput = unknown, TError = unknown> = (
+  context: ToolPayloadTransformContext<TInput, TOutput, TError>,
+) => ToolPayloadTransformResult | Promise<ToolPayloadTransformResult>;
 
-export type ToolPayloadProjectionTargetConfig<TInput = unknown, TOutput = unknown, TError = unknown> = {
-  input?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  inputDelta?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  output?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  error?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  approval?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  suspend?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
-  resume?: ToolPayloadProjectionFunction<TInput, TOutput, TError>;
+export type ToolPayloadTransformTargetConfig<TInput = unknown, TOutput = unknown, TError = unknown> = {
+  input?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
+  inputDelta?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
+  output?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
+  error?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
+  approval?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
+  suspend?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
+  resume?: ToolPayloadTransformFunction<TInput, TOutput, TError>;
 };
 
-export type ToolPayloadProjection<TInput = unknown, TOutput = unknown, TError = unknown> = Partial<
-  Record<ToolPayloadProjectionTarget, ToolPayloadProjectionTargetConfig<TInput, TOutput, TError>>
+export type ToolPayloadTransform<TInput = unknown, TOutput = unknown, TError = unknown> = Partial<
+  Record<ToolPayloadTransformTarget, ToolPayloadTransformTargetConfig<TInput, TOutput, TError>>
+>;
+
+export type ToolPayloadProjectionTarget = ToolPayloadTransformTarget;
+export type ToolPayloadProjectionPhase = ToolPayloadTransformPhase;
+export type ToolPayloadProjectionContext<
+  TInput = unknown,
+  TOutput = unknown,
+  TError = unknown,
+> = ToolPayloadTransformContext<TInput, TOutput, TError>;
+export type ToolPayloadProjectionResult = ToolPayloadTransformResult;
+export type ToolPayloadProjectionFunction<
+  TInput = unknown,
+  TOutput = unknown,
+  TError = unknown,
+> = ToolPayloadTransformFunction<TInput, TOutput, TError>;
+export type ToolPayloadProjectionTargetConfig<
+  TInput = unknown,
+  TOutput = unknown,
+  TError = unknown,
+> = ToolPayloadTransformTargetConfig<TInput, TOutput, TError>;
+export type ToolPayloadProjection<TInput = unknown, TOutput = unknown, TError = unknown> = ToolPayloadTransform<
+  TInput,
+  TOutput,
+  TError
 >;
 
 export type ToolPayloadProjectionPolicy = {
@@ -295,7 +319,7 @@ export type CoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
-  payloadProjection?: ToolPayloadProjection;
+  transform?: ToolPayloadTransform;
   /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.
@@ -353,7 +377,7 @@ export type InternalCoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
-  payloadProjection?: ToolPayloadProjection;
+  transform?: ToolPayloadTransform;
   /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.
@@ -458,13 +482,13 @@ export interface ToolAction<
    */
   toModelOutput?: (output: TSchemaOut) => unknown;
   /**
-   * Optional target-aware projection for tool payloads that leave runtime.
+   * Optional target-aware transform for tool payloads that leave runtime.
    *
-   * Runtime execution still receives raw inputs and outputs. These projectors
+   * Runtime execution still receives raw inputs and outputs. These transforms
    * are used by display and transcript serializers to avoid exposing internal
    * payload fields.
    */
-  payloadProjection?: ToolPayloadProjection<TSchemaIn, TSchemaOut>;
+  transform?: ToolPayloadTransform<TSchemaIn, TSchemaOut>;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
