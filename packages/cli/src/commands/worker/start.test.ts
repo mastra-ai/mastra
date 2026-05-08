@@ -47,13 +47,13 @@ describe('mastra worker start', () => {
     }) as typeof process.exit);
   });
 
-  it('spawns worker.mjs from the output directory', async () => {
+  it('spawns index.mjs from the worker output directory', async () => {
     const { startWorker } = await import('./start');
     await startWorker({});
 
     expect(spawnMock).toHaveBeenCalled();
     const args = spawnMock.mock.calls[0][1] as string[];
-    expect(args).toEqual(['worker.mjs']);
+    expect(args).toEqual(['index.mjs']);
   });
 
   it('passes name as MASTRA_WORKERS env when [name] is given', async () => {
@@ -73,7 +73,7 @@ describe('mastra worker start', () => {
     expect(opts.env.MASTRA_WORKERS).toBeUndefined();
   });
 
-  it('errors with a clear message when worker.mjs is missing', async () => {
+  it('errors with a clear message when the worker bundle is missing', async () => {
     existsSyncMock.mockReturnValue(false);
     const { startWorker } = await import('./start');
 

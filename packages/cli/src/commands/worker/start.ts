@@ -18,14 +18,14 @@ export async function startWorker(options: StartWorkerOptions = {}) {
 
   const outputDir = options.dir || '.mastra/output';
   const outputPath = join(process.cwd(), outputDir);
-  const workerFile = join(outputPath, 'worker.mjs');
+  const workerFile = join(outputPath, 'index.mjs');
 
   if (!fs.existsSync(workerFile)) {
     logger.error(`Worker bundle not found at ${workerFile}. Run \`mastra worker build\` first.`);
     process.exit(1);
   }
 
-  const child = spawn(process.execPath, ['worker.mjs'], {
+  const child = spawn(process.execPath, ['index.mjs'], {
     cwd: outputPath,
     stdio: ['inherit', 'inherit', 'pipe'],
     env: {

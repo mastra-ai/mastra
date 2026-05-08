@@ -175,21 +175,25 @@ const workerCommand = program.command('worker').description('Build and run stand
 
 workerCommand
   .command('build')
-  .description('Bundle a worker artifact to .mastra/output/worker.mjs')
+  .description('Bundle a worker artifact (defaults to .mastra/output/index.mjs)')
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option(
+    '-o, --output-dir <path>',
+    'Output directory for the worker bundle. Defaults to .mastra/output (overwrites the server bundle if both are built in the same project — fine for split deploys). Pass a different path (relative or absolute) to redirect the worker bundle and leave the server bundle alone.',
+  )
   .option('--debug', 'Enable debug logs', false)
-  .action((opts: { dir?: string; root?: string; tools?: string; debug: boolean }) => {
+  .action((opts: { dir?: string; root?: string; tools?: string; outputDir?: string; debug: boolean }) => {
     return buildWorker(opts);
   });
 
 workerCommand
   .command('start [name]')
   .description(
-    'Start the built worker (.mastra/output/worker.mjs). [name] sets MASTRA_WORKERS for the spawned process.',
+    'Start the built worker (defaults to .mastra/output/index.mjs). [name] sets MASTRA_WORKERS for the spawned process.',
   )
-  .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
+  .option('-d, --dir <path>', 'Path to your built worker output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to load')
   .action((name: string | undefined, opts: { dir?: string; env?: string }) => {
     return startWorker({ name, ...opts });
@@ -201,10 +205,17 @@ workerCommand
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option(
+    '-o, --output-dir <path>',
+    'Output directory for the worker bundle. Defaults to .mastra/output. Pass a different path to keep server and worker bundles side by side.',
+  )
   .option('-e, --env <env>', 'Custom env file to load')
   .option('--debug', 'Enable debug logs', false)
   .action(
-    (name: string | undefined, opts: { dir?: string; root?: string; tools?: string; env?: string; debug: boolean }) => {
+    (
+      name: string | undefined,
+      opts: { dir?: string; root?: string; tools?: string; outputDir?: string; env?: string; debug: boolean },
+    ) => {
       return devWorker({ name, ...opts });
     },
   );
