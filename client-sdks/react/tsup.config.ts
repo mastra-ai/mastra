@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { generateTypes } from '@internal/types-builder';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { defineConfig } from 'tsup';
 
 /**
