@@ -561,7 +561,7 @@ export interface ObservabilityEvents {
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
 
-  /** Handle structured events for dropped observability events */
+  /** Handle exporter pipeline droppedEvent */
   onDroppedEvent?(event: ObservabilityDropEvent): void | Promise<void>;
 
   /** Export tracing events */
