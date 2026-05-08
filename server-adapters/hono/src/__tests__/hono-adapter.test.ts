@@ -17,8 +17,22 @@ import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MastraServer } from '../index';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
+  const start = Date.now();
+  while (!assertion()) {
+    if (Date.now() - start > timeout) {
+      throw new Error('Timed out waiting for assertion');
+    }
+    await sleep(1);
+  }
+}
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {
@@ -726,6 +740,46 @@ describe('Hono Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+
+    it('should propagate request abort signals to custom API route handlers', async () => {
+      const signalAbort = vi.fn();
+      let routeSignal: AbortSignal | undefined;
+      const customRoutes = [
+        registerApiRoute('/signal', {
+          method: 'GET',
+          handler: async c => {
+            routeSignal = c.req.raw.signal;
+            routeSignal.addEventListener('abort', signalAbort);
+            return c.json({ aborted: routeSignal.aborted });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      const controller = new AbortController();
+      const response = await app.request(
+        new Request('http://localhost/signal', {
+          signal: controller.signal,
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ aborted: false });
+      expect(routeSignal?.aborted).toBe(false);
+
+      controller.abort();
+      await waitFor(() => signalAbort.mock.calls.length > 0);
+      expect(routeSignal?.aborted).toBe(true);
     });
 
     it('should throw when a custom route path starts with the server prefix', async () => {

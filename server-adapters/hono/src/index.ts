@@ -683,6 +683,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           reqHeaders,
           c.req.raw.body,
           c.get('requestContext'),
+          c.req.raw.signal,
         );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);

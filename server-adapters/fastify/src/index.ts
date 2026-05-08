@@ -792,13 +792,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           request.headers as Record<string, string | string[] | undefined>,
           request.body,
           request.requestContext,
+          request.abortSignal,
         );
         if (!response) {
           reply.status(404).send({ error: 'Not Found' });
           return;
         }
         reply.hijack();
-        await this.writeCustomRouteResponse(response, reply.raw);
+        await this.writeCustomRouteResponse(response, reply.raw, request.abortSignal);
       };
 
       if (route.method === 'ALL') {

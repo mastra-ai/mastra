@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -84,6 +86,30 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function isAbortSignalError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code, name } = error as { code?: string; name?: string };
+  return name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function isExpectedResponseCloseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code } = error as { code?: string };
+  return (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === 'ERR_STREAM_DESTROYED' ||
+    code === 'ERR_STREAM_WRITE_AFTER_END' ||
+    code === 'ERR_STREAM_PREMATURE_CLOSE'
+  );
+}
+
+function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
+  return Boolean(response.writableEnded || response.destroyed);
 }
 
 function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
@@ -616,6 +642,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     headers: Record<string, string | string[] | undefined>,
     body: unknown,
     requestContext?: RequestContext,
+    signal?: AbortSignal,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -628,7 +655,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         });
     }
 
-    const init: RequestInit = { method, headers: fetchHeaders };
+    const init: RequestInit = { method, headers: fetchHeaders, signal };
     if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
@@ -662,7 +689,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       writeHead(status: number, headers: Record<string, string | string[]>): void;
       write(chunk: unknown): void;
       end(data?: string): void;
-    },
+      writableEnded?: boolean;
+      destroyed?: boolean;
+    } & NodeJS.WritableStream,
+    signal?: AbortSignal,
   ): Promise<void> {
     const headers: Record<string, string | string[]> = {};
     response.headers.forEach((value, key) => {
@@ -677,18 +707,37 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     nodeRes.writeHead(response.status, headers);
 
     if (response.body) {
-      const reader = response.body.getReader();
+      let responseBodyError: unknown;
+      let responseBodyErrorAfterResponseClosed = false;
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          nodeRes.write(value);
+        const responseStream = Readable.fromWeb(response.body as any);
+        // This listener must run before pipeline's cleanup so source errors are
+        // not mistaken for client disconnects after pipeline destroys nodeRes.
+        responseStream.once('error', error => {
+          responseBodyError = error;
+          responseBodyErrorAfterResponseClosed = isResponseClosed(nodeRes);
+        });
+        if (signal) {
+          await pipeline(responseStream, nodeRes, { signal });
+        } else {
+          await pipeline(responseStream, nodeRes);
         }
-      } finally {
-        nodeRes.end();
+      } catch (error) {
+        const expectedSignalAbort = signal?.aborted && isAbortSignalError(error);
+        const expectedResponseClose =
+          (!responseBodyError || responseBodyErrorAfterResponseClosed) &&
+          isResponseClosed(nodeRes) &&
+          isExpectedResponseCloseError(error);
+        // If the request signal aborted, cancellation wins over late body errors.
+        if (!expectedSignalAbort && !expectedResponseClose) {
+          throw error;
+        }
       }
     } else {
-      nodeRes.end(await response.text());
+      const text = await response.text();
+      if (!isResponseClosed(nodeRes)) {
+        nodeRes.end(text);
+      }
     }
   }
 
