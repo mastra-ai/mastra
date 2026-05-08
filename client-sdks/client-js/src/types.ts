@@ -110,13 +110,21 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
-export interface SendAgentSignalParams<OUTPUT = unknown> {
-  signal: AgentSignal;
-  runId?: string;
-  resourceId?: string;
-  threadId?: string;
-  streamOptions?: Omit<AgentExecutionOptions<OUTPUT>, 'messages'>;
-}
+export type SendAgentSignalParams<OUTPUT = unknown> =
+  | {
+      signal: AgentSignal;
+      runId: string;
+      resourceId?: string;
+      threadId?: string;
+      streamOptions?: never;
+    }
+  | {
+      signal: AgentSignal;
+      runId?: string;
+      resourceId: string;
+      threadId: string;
+      streamOptions?: Omit<AgentExecutionOptions<OUTPUT>, 'messages'>;
+    };
 
 export interface SubscribeAgentThreadParams {
   resourceId?: string;

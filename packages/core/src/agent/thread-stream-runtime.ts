@@ -38,12 +38,22 @@ type PreparedThreadRun = {
   cleanup: () => void;
 };
 
+type PendingIdleSignal<OUTPUT = unknown> = {
+  agent: Agent<any, any, any, any>;
+  signal: CreatedAgentSignal;
+  runId: string;
+  resourceId: string;
+  threadId: string;
+  streamOptions: AgentExecutionOptions<OUTPUT>;
+};
+
 export class AgentThreadStreamRuntime {
   #threadRunsById = new Map<string, AgentThreadRunRecord<any>>();
   #threadKeysByRunId = new Map<string, string>();
   #activeThreadRunIds = new Map<string, string>();
   #threadRunSubscribers = new Map<string, Set<(run: AgentThreadRunRecord<any>) => void>>();
   #pendingSignalsByThread = new Map<string, CreatedAgentSignal[]>();
+  #pendingIdleSignalsByThread = new Map<string, PendingIdleSignal<any>[]>();
   #watchedThreadRunIds = new Set<string>();
   #preparedRunsById = new Map<string, PreparedThreadRun>();
   #abortedRunIds = new Set<string>();
@@ -168,31 +178,60 @@ export class AgentThreadStreamRuntime {
     }
 
     const queue = this.#pendingSignalsByThread.get(key);
-    if (!queue) {
+    const signal = queue?.shift();
+    if (signal && queue) {
+      if (queue.length === 0) {
+        this.#pendingSignalsByThread.delete(key);
+      }
+
+      const output = await previousRun.agent.stream(signal, {
+        ...(previousRun.streamOptions as any),
+        runId: randomUUID(),
+        memory: withThreadMemory(
+          previousRun.streamOptions.memory,
+          previousRun.resourceId ?? '',
+          previousRun.threadId ?? '',
+        ),
+      });
+
+      if (queue.length > 0) {
+        const nextRecord = this.#threadRunsById.get(output.runId);
+        if (nextRecord) {
+          this.#watchThreadRunCompletion(key, nextRecord);
+        }
+      }
       return;
     }
-    const signal = queue.shift();
-    if (!signal) {
+
+    const idleQueue = this.#pendingIdleSignalsByThread.get(key);
+    const pendingIdle = idleQueue?.shift();
+    if (!pendingIdle || !idleQueue) {
       return;
     }
-    if (queue.length === 0) {
-      this.#pendingSignalsByThread.delete(key);
+    if (idleQueue.length === 0) {
+      this.#pendingIdleSignalsByThread.delete(key);
     }
 
-    const output = await previousRun.agent.stream(signal, {
-      ...(previousRun.streamOptions as any),
-      runId: randomUUID(),
-      memory: withThreadMemory(
-        previousRun.streamOptions.memory,
-        previousRun.resourceId ?? '',
-        previousRun.threadId ?? '',
-      ),
-    });
+    this.#activeThreadRunIds.set(key, pendingIdle.runId);
+    this.#threadKeysByRunId.set(pendingIdle.runId, key);
+    try {
+      const output = await pendingIdle.agent.stream(pendingIdle.signal, {
+        ...(pendingIdle.streamOptions as any),
+        runId: pendingIdle.runId,
+        memory: withThreadMemory(pendingIdle.streamOptions.memory, pendingIdle.resourceId, pendingIdle.threadId),
+      });
 
-    if (queue.length > 0) {
-      const nextRecord = this.#threadRunsById.get(output.runId);
-      if (nextRecord) {
-        this.#watchThreadRunCompletion(key, nextRecord);
+      if ((idleQueue?.length ?? 0) > 0) {
+        const nextRecord = this.#threadRunsById.get(output.runId);
+        if (nextRecord) {
+          this.#watchThreadRunCompletion(key, nextRecord);
+        }
+      }
+    } catch {
+      this.#threadKeysByRunId.delete(pendingIdle.runId);
+      this.#cleanupPreparedRun(pendingIdle.runId);
+      if (this.#activeThreadRunIds.get(key) === pendingIdle.runId) {
+        this.#activeThreadRunIds.delete(key);
       }
     }
   }
@@ -379,12 +418,22 @@ export class AgentThreadStreamRuntime {
 
     runId = randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
-    if (!this.#activeThreadRunIds.has(key)) {
-      // No active same-agent run accepted the signal. Reserve the thread before starting
-      // the idle stream so concurrent callers do not launch duplicate runs.
-      this.#activeThreadRunIds.set(key, runId);
-      this.#threadKeysByRunId.set(runId, key);
+    if (this.#activeThreadRunIds.has(key)) {
+      // Another run owns the thread. Queue this idle-start request and let the watcher
+      // launch it only after the active run clears the thread reservation.
+      const idleQueue = this.#pendingIdleSignalsByThread.get(key) ?? [];
+      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle.streamOptions });
+      this.#pendingIdleSignalsByThread.set(key, idleQueue);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(key, activeRecord);
+      }
+      return { accepted: true, runId, signal };
     }
+
+    // No active same-agent run accepted the signal. Reserve the thread before starting
+    // the idle stream so concurrent callers do not launch duplicate runs.
+    this.#activeThreadRunIds.set(key, runId);
+    this.#threadKeysByRunId.set(runId, key);
     void agent
       .stream(signal, {
         ...(target.ifIdle.streamOptions as any),

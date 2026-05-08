@@ -304,6 +304,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     };
 
+    if (!streamResponse.body) {
+      throw new Error('No response body');
+    }
+
     streamResponse.processDataStream = async ({
       onChunk,
     }: {

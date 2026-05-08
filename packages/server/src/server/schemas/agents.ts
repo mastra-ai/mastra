@@ -661,13 +661,24 @@ export const observeAgentBodySchema = z.object({
   offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });
 
-export const sendAgentSignalBodySchema = z.object({
+const sendAgentSignalBaseBodySchema = z.object({
   signal: agentSignalSchema,
-  runId: z.string().optional(),
-  resourceId: z.string().optional(),
-  threadId: z.string().optional(),
-  streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
 });
+
+export const sendAgentSignalBodySchema = z.union([
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string(),
+    resourceId: z.string().optional(),
+    threadId: z.string().optional(),
+    streamOptions: z.undefined().optional(),
+  }),
+  sendAgentSignalBaseBodySchema.extend({
+    runId: z.string().optional(),
+    resourceId: z.string(),
+    threadId: z.string(),
+    streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+  }),
+]);
 
 export const subscribeAgentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
