@@ -1,6 +1,6 @@
 ---
 title: "Custom adapters | Server"
-description: "Create a custom server adapter for frameworks beyond the built-in Express, Hono, Fastify, Koa, and LoopBack adapters."
+description: "Create a custom server adapter for frameworks beyond the built-in adapters."
 packages:
   - "@mastra/core"
   - "@mastra/express"
@@ -15,7 +15,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Custom adapters
 
-Create a custom adapter when the prebuilt server adapters (Hono, Express, Fastify, Koa, LoopBack) don't support your framework or you have specific request or response handling requirements.
+Create a custom adapter when the prebuilt server adapters don't support your framework or you have specific request or response handling requirements.
 
 A custom adapter translates between Mastra's route definitions and your framework's routing system. You'll implement methods that register middleware, handle requests, and send responses using your framework's APIs.
 
