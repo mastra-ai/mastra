@@ -135,12 +135,65 @@ type ModelFallbacks = {
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
 
+type ProcessorLoadedToolsProvider = {
+  getLoadedToolsForRequestContext?: (args: {
+    requestContext: RequestContext;
+  }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
+};
+
+type ProcessorWorkflowChildrenContainer = {
+  steps?: Record<string, unknown> | unknown[];
+  children?: Record<string, unknown> | unknown[];
+  stepGraph?: Array<{
+    step?: unknown;
+    steps?: Array<{ step?: unknown } | unknown>;
+  }>;
+};
+
 function resolveMaybePromise<T, R = void>(value: T | Promise<T> | PromiseLike<T>, cb: (value: T) => R): R | Promise<R> {
   if (value instanceof Promise || (value != null && typeof (value as PromiseLike<T>).then === 'function')) {
     return Promise.resolve(value).then(cb);
   }
 
   return cb(value as T);
+}
+
+function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
+  const workflowChildren = workflow as ProcessorWorkflowChildrenContainer;
+  const children: unknown[] = [];
+  const seen = new Set<unknown>();
+
+  const addChild = (child: unknown) => {
+    if (!child || seen.has(child)) {
+      return;
+    }
+    seen.add(child);
+    children.push(child);
+  };
+
+  const addChildren = (value: ProcessorWorkflowChildrenContainer['steps']) => {
+    if (Array.isArray(value)) {
+      value.forEach(addChild);
+      return;
+    }
+    Object.values(value ?? {}).forEach(addChild);
+  };
+
+  addChildren(workflowChildren.steps);
+  addChildren(workflowChildren.children);
+
+  for (const entry of workflowChildren.stepGraph ?? []) {
+    addChild(entry.step);
+    for (const stepEntry of entry.steps ?? []) {
+      addChild(
+        stepEntry && typeof stepEntry === 'object' && 'step' in stepEntry
+          ? (stepEntry as { step?: unknown }).step
+          : stepEntry,
+      );
+    }
+  }
+
+  return children;
 }
 
 function hasConfiguredProcessor(
@@ -856,6 +909,11 @@ export class Agent<
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const toolProvider = processor as ProcessorLoadedToolsProvider;
+        if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+          (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+            toolProvider.getLoadedToolsForRequestContext.bind(processor);
+        }
       }
       workflow = workflow.then(step);
     }
@@ -2918,24 +2976,22 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
 
-    for (const processor of processors) {
+    const collectLoadedTools = async (processor: InputProcessorOrWorkflow | unknown) => {
       if (isProcessorWorkflow(processor)) {
-        continue;
+        for (const childProcessor of listProcessorWorkflowChildren(processor)) {
+          await collectLoadedTools(childProcessor);
+        }
       }
 
-      const toolProvider = processor as {
-        getLoadedToolsForRequestContext?: (args: {
-          requestContext: RequestContext;
-        }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
-      };
+      const toolProvider = processor as ProcessorLoadedToolsProvider;
 
       if (typeof toolProvider.getLoadedToolsForRequestContext !== 'function') {
-        continue;
+        return;
       }
 
       const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
-        continue;
+        return;
       }
 
       const workspace = await this.getWorkspace({ requestContext });
@@ -2973,6 +3029,10 @@ export class Agent<
           convertedProcessorTools[toolName] = tool as CoreTool;
         }
       }
+    };
+
+    for (const processor of processors) {
+      await collectLoadedTools(processor);
     }
 
     return convertedProcessorTools;

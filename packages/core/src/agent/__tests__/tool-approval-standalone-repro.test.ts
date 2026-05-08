@@ -21,8 +21,10 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { ToolSearchProcessor } from '../../processors';
 import type { ProcessInputStepArgs, Processor } from '../../processors';
+import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../../processors/step-schema';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
+import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MessageList } from '../message-list';
 import { TripWire } from '../trip-wire';
@@ -405,11 +407,19 @@ describe('resumeStream with input processors', () => {
 });
 
 describe('tool approval with ToolSearchProcessor', () => {
-  it('executes a dynamically loaded tool after approval resume', async () => {
+  const expectDynamicallyLoadedToolAfterApprovalResume = async ({
+    toolId,
+    agentId,
+    inputProcessors,
+  }: {
+    toolId: string;
+    agentId: string;
+    inputProcessors: (args: { toolId: string; dynamicApprovalTool: any }) => any[];
+  }) => {
     const executeDynamicTool = vi.fn().mockResolvedValue({ ok: true });
 
     const dynamicApprovalTool = createTool({
-      id: 'dynamic_approval_tool',
+      id: toolId,
       description: 'Runs an action that requires approval',
       inputSchema: z.object({ value: z.string() }),
       requireApproval: true,
@@ -432,7 +442,7 @@ describe('tool approval with ToolSearchProcessor', () => {
                 type: 'tool-call',
                 toolCallId: 'load-call',
                 toolName: 'load_tool',
-                input: JSON.stringify({ toolName: 'dynamic_approval_tool' }),
+                input: JSON.stringify({ toolName: toolId }),
                 providerExecuted: false,
               },
               {
@@ -454,7 +464,7 @@ describe('tool approval with ToolSearchProcessor', () => {
               {
                 type: 'tool-call',
                 toolCallId: 'dynamic-call',
-                toolName: 'dynamic_approval_tool',
+                toolName: toolId,
                 input: JSON.stringify({ value: 'approved input' }),
                 providerExecuted: false,
               },
@@ -487,17 +497,11 @@ describe('tool approval with ToolSearchProcessor', () => {
     });
 
     const userAgent = new Agent({
-      id: 'tool-search-approval-agent',
+      id: agentId,
       name: 'Tool Search Approval Agent',
       instructions: 'Load and use dynamic tools.',
       model: mockModel,
-      inputProcessors: [
-        new ToolSearchProcessor({
-          tools: {
-            dynamic_approval_tool: dynamicApprovalTool,
-          },
-        }),
-      ],
+      inputProcessors: inputProcessors({ toolId, dynamicApprovalTool }),
     });
 
     const mastra = new Mastra({
@@ -529,5 +533,42 @@ describe('tool approval with ToolSearchProcessor', () => {
 
     expect(toolErrors).toEqual([]);
     expect(executeDynamicTool).toHaveBeenCalledWith({ value: 'approved input' });
+  };
+
+  it('executes a dynamically loaded tool after approval resume', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_approval_tool',
+      agentId: 'tool-search-approval-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => [
+        new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        }),
+      ],
+    });
+  }, 30000);
+
+  it('executes a dynamically loaded tool from a processor workflow after approval resume', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_workflow_approval_tool',
+      agentId: 'workflow-tool-search-approval-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => {
+        const toolSearchProcessor = new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        });
+        const inputProcessorWorkflow = createWorkflow({
+          id: 'tool-search-approval-processor-workflow',
+          inputSchema: ProcessorStepInputSchema,
+          outputSchema: ProcessorStepOutputSchema,
+        })
+          .then(createStep(toolSearchProcessor))
+          .commit();
+
+        return [inputProcessorWorkflow];
+      },
+    });
   }, 30000);
 });

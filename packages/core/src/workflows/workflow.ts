@@ -646,6 +646,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   DefaultEngineType
 > {
+  type ProcessorLoadedToolsProvider = {
+    getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
+  };
+
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -703,7 +707,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   // but TypeScript type inference has issues with the complex discriminated union types.
   // We use type assertions here since toStandardSchema returns the schema directly
   // when it already implements StandardSchemaWithJSON.
-  return {
+  const step = {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
@@ -1435,6 +1439,14 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     DefaultEngineType
   >;
+
+  const toolProvider = processor as ProcessorLoadedToolsProvider;
+  if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
+    (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
+      toolProvider.getLoadedToolsForRequestContext.bind(processor);
+  }
+
+  return step;
 }
 
 export function cloneStep<TStepId extends string>(
