@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 1.33.0-alpha.6
+
+### Patch Changes
+
+- Fixed title generation to send plain text instead of JSON-serialized part objects to the title model. Previously, internal metadata like providerOptions and framework details leaked into the title prompt. Now formats messages using role-prefixed plain text (similar to observational memory formatting), supporting both single-message and multi-turn conversations. ([#15798](https://github.com/mastra-ai/mastra/pull/15798))
+
+- Added extra defensive checks to prevent edge cases where system messages may have already been stored in message history. ([#15787](https://github.com/mastra-ai/mastra/pull/15787))
+
+- Replace `js-tiktoken` with `tokenx` in `@mastra/core` to reduce bundle size by removing the bundled BPE rank tables. Token limiting and truncation now use heuristic token estimates, which is appropriate for output limiting and truncation. ([#16326](https://github.com/mastra-ai/mastra/pull/16326))
+
+## 1.33.0-alpha.5
+
+### Patch Changes
+
+- Fixed guardrail processor schemas so structured output works with Anthropic models. ([#15739](https://github.com/mastra-ai/mastra/pull/15739))
+
+- Added `/goal` to Mastra Code, a persistent autonomous task loop similar to the goal modes in Codex and Hermes Agent. ([#16065](https://github.com/mastra-ai/mastra/pull/16065))
+
+  A user can start a goal with `/goal <objective>`. Mastra Code saves that objective to the current thread, runs the normal assistant turn, then asks a separate judge model whether the goal is `done`, should `continue`, or is `waiting` on an explicit user checkpoint. When the judge says to continue, Mastra Code feeds the judge feedback back into the conversation and keeps working until the goal is complete, paused, cleared, or reaches the configured attempt limit.
+
+  Use `/judge` to configure the default judge model and max attempts used by future goals.
+
+  Approved plans can be selected as a goal from the inline plan approval UI, slash commands can opt into `/goal/<command>` with top-level `goal: true`, and skills can opt into goal commands with `metadata.goal: true`. `/goal` objectives can also span multiple lines.
+
+- Fixed a bug where orphaned provider-executed tool calls (e.g. Anthropic `web_search`, Gemini `code_execution`) could brick a thread. When a provider dropped the tool-result chunk ([#15668](https://github.com/mastra-ai/mastra/issues/15668)) or a run aborted mid-stream ([#14148](https://github.com/mastra-ai/mastra/issues/14148)), the unresolved call was replayed on every subsequent request — causing Gemini to return empty text and Anthropic to reject the tool-call/tool-result invariant. ([#15682](https://github.com/mastra-ai/mastra/pull/15682))
+
+  `sanitizeV5UIMessages` now only keeps an `input-available` provider-executed tool part on the most recent assistant message, and only when no user turn has followed it. Orphans on earlier assistant turns are dropped so the outgoing history always satisfies the tool-call/tool-result pairing required by provider APIs.
+
+- Fixes tool call args being lost when split across messages in client tools. When a tool invocation spans multiple messages (call with args, result with empty args), the `findToolCallArgs` function now continues searching for non-empty args instead of returning the first match. ([#12454](https://github.com/mastra-ai/mastra/pull/12454))
+
 ## 1.33.0-alpha.4
 
 ### Patch Changes

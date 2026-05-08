@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { estimateTokenCount } from 'tokenx';
 
 const TOKEN_LIMIT = 500;

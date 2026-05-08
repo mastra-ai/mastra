@@ -101,7 +101,7 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string },
+  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -114,6 +114,8 @@ function createReminderComponent(
     message: options.message,
     reminderType,
     path: options.path,
+    goalMaxTurns: options.goalMaxTurns,
+    judgeModelId: options.judgeModelId,
   });
 }
 
@@ -157,10 +159,13 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   );
 
   if (reminderPart) {
+    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
       gapText: reminderPart.gapText,
+      goalMaxTurns: goalMetadata.goalMaxTurns,
+      judgeModelId: goalMetadata.judgeModelId,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
@@ -189,7 +194,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     const reminderType = attrs.match(/\stype="([^"]+)"/)?.[1];
     const path = attrs.match(/\spath="([^"]+)"/)?.[1];
     const precedesMessageId = attrs.match(/\sprecedesMessageId="([^"]+)"/)?.[1];
-    const reminderText = legacyReminderMatch.groups.body.trim();
+    const reminderText = unescapeSystemReminderText(legacyReminderMatch.groups.body.trim());
     const reminderComponent = createReminderComponent(reminderType, {
       message: reminderText,
       path,
@@ -508,4 +513,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
 
   state.ui.requestRender();
+}
+
+function unescapeSystemReminderText(text: string): string {
+  return text.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
 }

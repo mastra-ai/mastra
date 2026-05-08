@@ -609,8 +609,10 @@ export interface ListMemoryThreadsParams {
   agentId?: string;
   page?: number;
   perPage?: number;
-  orderBy?: 'createdAt' | 'updatedAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -1479,8 +1481,10 @@ export interface AgentVersionResponse {
 export interface ListAgentVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListAgentVersionsResponse {
@@ -1568,8 +1572,10 @@ export interface ScorerVersionResponse {
 export interface ListScorerVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListScorerVersionsResponse {
@@ -2497,8 +2503,10 @@ export interface PromptBlockVersionResponse {
 export interface ListPromptBlockVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListPromptBlockVersionsResponse {
