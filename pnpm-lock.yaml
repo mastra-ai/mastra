@@ -2958,8 +2958,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1
       posthog-node:
-        specifier: 5.17.2
-        version: 5.17.2
+        specifier: ^5.30.6
+        version: 5.30.6(rxjs@7.8.1)
       semver:
         specifier: ^7.7.4
         version: 7.7.4
@@ -3354,7 +3354,7 @@ importers:
         specifier: ^13.1.3
         version: 13.1.3
       posthog-node:
-        specifier: ^5.28.2
+        specifier: ^5.30.6
         version: 5.30.6(rxjs@7.8.1)
       tinyexec:
         specifier: ^1.1.1
@@ -13587,9 +13587,6 @@ packages:
   '@posthog/core@1.27.7':
     resolution: {integrity: sha512-6rzOZajUkhuezgPeF+ReMMly0D9oiwIZtMQrsJtZcS/mwi5OtvuYgxeaohgP9PKOhkK1c7cvGskX0Y2YUtBYCw==}
 
-  '@posthog/core@1.7.1':
-    resolution: {integrity: sha512-kjK0eFMIpKo9GXIbts8VtAknsoZ18oZorANdtuTj1CbgS28t4ZVq//HAWhnxEuXRTrtkd+SUJ6Ux3j2Af8NCuA==}
-
   '@posthog/react@1.9.0':
     resolution: {integrity: sha512-lVdTsWT5+PtHBu44gSQ7QohbLjAYqHkFAIGAQ+HV8Eh9yj+OcnQ7mXCmyhaMlTBD3z7D0H1eWMp4vQaFnsIyWQ==}
     peerDependencies:
@@ -23611,10 +23608,6 @@ packages:
 
   posthog-js@1.372.3:
     resolution: {integrity: sha512-CpKWMt6RkgY4lPpyvYzKcilKKB5VhL2gmS8HgibxmXZkEk/2rUxrEtRMScH8xi4n5WDaNSluCo87dh9yo9zArQ==}
-
-  posthog-node@5.17.2:
-    resolution: {integrity: sha512-lz3YJOr0Nmiz0yHASaINEDHqoV+0bC3eD8aZAG+Ky292dAnVYul+ga/dMX8KCBXg8hHfKdxw0SztYD5j6dgUqQ==}
-    engines: {node: '>=20'}
 
   posthog-node@5.30.6:
     resolution: {integrity: sha512-deZuSiLkpdEipiywkww1FhQoKpVVFmJP6SAVQcZcMbugTLwJRYSGjgm+qV0Y91xghf2yP6Nr5Plfl52i9Qj15Q==}
@@ -35054,10 +35047,6 @@ snapshots:
   '@posthog/core@1.27.7':
     dependencies:
       '@posthog/types': 1.372.3
-
-  '@posthog/core@1.7.1':
-    dependencies:
-      cross-spawn: 7.0.6
 
   '@posthog/react@1.9.0(@types/react@19.2.14)(posthog-js@1.372.3)(react@19.2.5)':
     dependencies:
@@ -47306,10 +47295,6 @@ snapshots:
       preact: 10.29.0
       query-selector-shadow-dom: 1.0.1
       web-vitals: 5.1.0
-
-  posthog-node@5.17.2:
-    dependencies:
-      '@posthog/core': 1.7.1
 
   posthog-node@5.30.6(rxjs@7.8.1):
     dependencies:
