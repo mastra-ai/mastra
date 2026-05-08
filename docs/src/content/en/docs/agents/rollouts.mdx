@@ -122,6 +122,8 @@ Rules only apply to canary rollouts. Server restarts reset the in-memory window 
 
 ## Endpoints
 
+Rollouts are managed through the agent rollout HTTP routes. See [Server routes — Agent rollouts](/reference/server/routes#agent-rollouts) for full request and response shapes.
+
 | Method | Path | Description |
 | - | - | - |
 | `GET` | `/agents/:agentId/rollout` | Get the active rollout, including live score summaries |
@@ -145,3 +147,4 @@ Rollouts are persisted in the `mastra_rollouts` storage domain. Storage adapters
 - [Editor overview](/docs/editor/overview)
 - [Observability overview](/docs/observability/overview)
 - [Scorers](/docs/evals/overview)
+- [Server routes — Agent rollouts](/reference/server/routes#agent-rollouts)
