@@ -39,8 +39,6 @@ const reader = createWorkflowStateReader(state)
 const suspendedStep = reader.getSuspendedStep()
 ```
 
-Returns: `WorkflowStateReader`
-
 ### `getWorkflowStepOutput(state, stepId)`
 
 Returns the output for a step ID, including nested workflow dot paths such as `parent.child`. For `foreach` steps, returns one entry per iteration; suspended iterations can have `undefined` output entries.
@@ -48,8 +46,6 @@ Returns the output for a step ID, including nested workflow dot paths such as `p
 ```typescript
 const output = getWorkflowStepOutput(state, 'extract-data')
 ```
-
-Returns: `any | Array<any | undefined> | undefined`
 
 ### `getWorkflowStepPayload(state, stepId)`
 
@@ -59,8 +55,6 @@ Returns the payload that was passed to a step. For `foreach` steps, returns one 
 const payload = getWorkflowStepPayload(state, 'extract-data')
 ```
 
-Returns: `any | Array<any | undefined> | undefined`
-
 ### `getWorkflowSuspendedStep(state)`
 
 Returns the first suspended step from the workflow state. When multiple steps are suspended, ordering follows the order stored in `suspendedPaths`.
@@ -68,8 +62,6 @@ Returns the first suspended step from the workflow state. When multiple steps ar
 ```typescript
 const suspendedStep = getWorkflowSuspendedStep(state)
 ```
-
-Returns: `WorkflowSuspendedStep | undefined`
 
 ### `getWorkflowSuspendedSteps(state)`
 
@@ -79,8 +71,6 @@ Returns all suspended steps from the workflow state. Each result includes the to
 const suspendedSteps = getWorkflowSuspendedSteps(state)
 ```
 
-Returns: `WorkflowSuspendedStep[]`
-
 ### `getWorkflowResumeLabel(state, label)`
 
 Returns a resume label by name.
@@ -89,8 +79,6 @@ Returns a resume label by name.
 const label = getWorkflowResumeLabel(state, 'approve')
 ```
 
-Returns: `{ stepId: string; foreachIndex?: number } | undefined`
-
 ### `getWorkflowResumeLabels(state)`
 
 Returns all resume labels from the workflow state.
@@ -98,8 +86,6 @@ Returns all resume labels from the workflow state.
 ```typescript
 const labels = getWorkflowResumeLabels(state)
 ```
-
-Returns: `Record<string, { stepId: string; foreachIndex?: number }>`
 
 ## Reader methods
 
@@ -134,46 +120,26 @@ Returns: `Record<string, { stepId: string; foreachIndex?: number }>`
   },
   {
     name: 'getSuspendedStep',
-    type: '() => WorkflowSuspendedStep | undefined',
+    type: '() => { stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> } | undefined',
     description: 'Returns the first suspended step.',
   },
   {
     name: 'getSuspendedSteps',
-    type: '() => WorkflowSuspendedStep[]',
+    type: '() => Array<{ stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> }>',
     description: 'Returns all suspended steps.',
   },
   {
     name: 'getResumeLabel',
-    type: '(label: string) => WorkflowResumeLabel | undefined',
+    type: '(label: string) => { stepId: string; foreachIndex?: number } | undefined',
     description: 'Returns a resume label by name.',
   },
   {
     name: 'getResumeLabels',
-    type: '() => Record<string, WorkflowResumeLabel>',
+    type: '() => Record<string, { stepId: string; foreachIndex?: number }>',
     description: 'Returns all resume labels.',
   },
 ]}
 />
-
-## Types
-
-```typescript
-type WorkflowSuspendedStep = {
-  stepId: string
-  path: string[]
-  executionPath?: number[]
-  step?: WorkflowStateStepResult
-  payload?: any
-  suspendPayload?: any
-  suspendOutput?: any
-  resumeLabels: Record<string, WorkflowResumeLabel>
-}
-
-type WorkflowResumeLabel = {
-  stepId: string
-  foreachIndex?: number
-}
-```
 
 ## Notes
 
