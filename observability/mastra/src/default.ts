@@ -30,6 +30,7 @@ import {
 } from './recorded';
 import { ObservabilityRegistry } from './registry';
 import { SensitiveDataFilter } from './span_processors';
+import type { SensitiveDataFilterOptions } from './span_processors';
 
 /**
  * Type guard to check if an object is a BaseObservability instance
@@ -105,20 +106,37 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       }
     }
 
+    // Resolve sensitive data filter setting (defaults to enabled).
+    const sensitiveDataFilterSetting = config.sensitiveDataFilter ?? true;
+    const shouldAutoApplySensitiveFilter = sensitiveDataFilterSetting !== false;
+    const sensitiveDataFilterOptions: SensitiveDataFilterOptions | undefined =
+      typeof sensitiveDataFilterSetting === 'object' && sensitiveDataFilterSetting !== null
+        ? sensitiveDataFilterSetting
+        : undefined;
+
+    const buildAutoSensitiveFilter = (): SensitiveDataFilter | undefined => {
+      if (!shouldAutoApplySensitiveFilter) {
+        return undefined;
+      }
+      return new SensitiveDataFilter(sensitiveDataFilterOptions);
+    };
+
     // Setup default config if enabled (deprecated)
     if (config.default?.enabled) {
       console.warn(
         '[Mastra Observability] The "default: { enabled: true }" configuration is deprecated and will be removed in a future version. ' +
-          'Please use explicit configs with DefaultExporter, CloudExporter, and SensitiveDataFilter instead. ' +
+          'Please use explicit configs with DefaultExporter and CloudExporter instead. ' +
+          'Sensitive data filtering is applied by default and can be controlled via the top-level "sensitiveDataFilter" option. ' +
           'See https://mastra.ai/docs/observability/tracing/overview for the recommended configuration.',
       );
 
+      const autoFilter = buildAutoSensitiveFilter();
       const defaultInstance = new DefaultObservabilityInstance({
         serviceName: 'mastra',
         name: 'default',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [new DefaultExporter(), new CloudExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
+        spanOutputProcessors: autoFilter ? [autoFilter] : [],
       });
 
       // Register as default with high priority
@@ -130,9 +148,38 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       const instances = Object.entries(config.configs);
 
       instances.forEach(([name, tracingDef], index) => {
-        const instance = isInstance(tracingDef)
-          ? tracingDef // Pre-instantiated custom implementation
-          : new DefaultObservabilityInstance({ ...tracingDef, name }); // Config -> Observability with instance name
+        let instance: ObservabilityInstance;
+        if (isInstance(tracingDef)) {
+          // Pre-instantiated custom implementation. We don't mutate it since
+          // the caller already owns it; warn if no SensitiveDataFilter is
+          // present and auto-apply is enabled.
+          instance = tracingDef;
+          if (shouldAutoApplySensitiveFilter) {
+            const processors = instance.getSpanOutputProcessors?.() ?? [];
+            const hasFilter = processors.some(p => p instanceof SensitiveDataFilter);
+            if (!hasFilter) {
+              this.logger?.warn(
+                '[Mastra Observability] Pre-instantiated observability instance does not include a SensitiveDataFilter. ' +
+                  'Auto-applied filtering is skipped for pre-instantiated instances. ' +
+                  'Add a SensitiveDataFilter to spanOutputProcessors when constructing the instance to redact sensitive data.',
+                { instanceName: name },
+              );
+            }
+          }
+        } else {
+          const userProcessors = tracingDef.spanOutputProcessors ?? [];
+          const hasFilter = userProcessors.some(p => p instanceof SensitiveDataFilter);
+          const autoFilter = !hasFilter ? buildAutoSensitiveFilter() : undefined;
+          // Auto-applied filter runs LAST so any sensitive data introduced by
+          // user processors (e.g. enrichment that copies headers/config into
+          // attributes) is still redacted before export.
+          const spanOutputProcessors = autoFilter ? [...userProcessors, autoFilter] : userProcessors;
+          instance = new DefaultObservabilityInstance({
+            ...tracingDef,
+            name,
+            spanOutputProcessors,
+          });
+        }
 
         // First user-provided instance becomes default only if no default config
         const isDefault = !config.default?.enabled && index === 0;

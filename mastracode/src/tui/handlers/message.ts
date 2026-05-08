@@ -47,6 +47,8 @@ type StreamedSystemReminderPart = {
   path?: string;
   precedesMessageId?: string;
   gapText?: string;
+  goalMaxTurns?: number;
+  judgeModelId?: string;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -70,6 +72,8 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     path: reminder.path,
     precedesMessageId: typeof reminder.precedesMessageId === 'string' ? reminder.precedesMessageId : undefined,
     gapText: typeof reminder.gapText === 'string' ? reminder.gapText : undefined,
+    goalMaxTurns: typeof reminder.goalMaxTurns === 'number' ? reminder.goalMaxTurns : undefined,
+    judgeModelId: typeof reminder.judgeModelId === 'string' ? reminder.judgeModelId : undefined,
   };
 }
 
@@ -85,6 +89,8 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
     message: reminder.message,
     reminderType: reminder.reminderType,
     path: reminder.path,
+    goalMaxTurns: reminder.goalMaxTurns,
+    judgeModelId: reminder.judgeModelId,
   });
 }
 

@@ -1,5 +1,5 @@
-import type { ApiCommandDescriptor } from './commands.js';
 import { ApiCliError } from './errors.js';
+import type { ApiCommandDescriptor } from './types.js';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 

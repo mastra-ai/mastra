@@ -1,4 +1,4 @@
-import type { ApiResponseShape } from './commands.js';
+import type { ApiResponseShape } from './types.js';
 
 interface PaginationInfo {
   total: number;

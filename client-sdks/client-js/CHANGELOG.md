@@ -1,5 +1,49 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962)]:
+  - @mastra/core@1.33.0-alpha.5
+
+## 1.18.0-alpha.4
+
+### Minor Changes
+
+- Added experimental A2A Agent Card signature verification to `getAgentCard`. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const card = await a2a.getAgentCard({
+    verifySignature: {
+      algorithms: ['ES256'],
+      keyProvider: async ({ kid, jku }) => {
+        return fetchTrustedPublicJwk({ kid, jku });
+      },
+    },
+  });
+  ```
+
+  When verification is configured, `client-js` now verifies signed Agent Cards when the server includes `signatures`. Unsigned cards are still returned unchanged.
+
+  This also adds the new exported types `GetAgentCardOptions`, `VerifyAgentCardSignatureOptions`, `AgentCardVerificationKey`, and `AgentCardSignatureKeyProviderInput`.
+
+- Add `agent.resumeStreamUntilIdle()` to resume a suspended agent stream and keep the SSE connection open through the follow-up turn. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+### Patch Changes
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a)]:
+  - @mastra/core@1.33.0-alpha.4
+
+## 1.17.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
 ## 1.17.2-alpha.2
 
 ### Patch Changes

@@ -4802,7 +4802,9 @@ export const API_ROUTE_METADATA = {
       "runId",
       "status",
       "threadId",
-      "toDate"
+      "toDate",
+      "toolCallId",
+      "toolName"
     ],
     "bodyParams": [],
     "hasQuery": true,

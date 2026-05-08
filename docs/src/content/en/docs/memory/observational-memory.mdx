@@ -231,7 +231,7 @@ The Observer and Reflector run in the background. Any model that works with Mast
 
 Generally speaking, we recommend using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `openai/gpt-5-mini`, `anthropic/claude-haiku-4-5`, `deepseek/deepseek-reasoner`, `qwen3`, and `glm-4.7`.
+If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `openai/gpt-5-mini`, `anthropic/claude-haiku-4-5`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
 
 ```typescript
 const memory = new Memory({
@@ -244,6 +244,14 @@ const memory = new Memory({
 ```
 
 See [model configuration](/reference/memory/observational-memory#custom-model) for using different models per agent.
+
+:::note
+
+`google/gemini-2.5-flash` is unusually good at preserving detail in long output. As a result, the Reflector can produce reflections that stay above the configured `reflection.observationTokens` threshold even after the maximum compression retry. When this happens, the Reflector returns the smallest non-degenerate candidate produced during retries so the loop terminates instead of running forever.
+
+If you'd rather have more aggressive compression on the Reflector, swap to a model that condenses more readily, such as `xai/grok-4-1-fast`, `deepseek/deepseek-v4-pro`, or `deepseek/deepseek-v4-flash`. You can keep `google/gemini-2.5-flash` for the Observer and use a different model for the Reflector — see [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
+
+:::
 
 ### Token-tiered model selection
 

@@ -1033,8 +1033,10 @@ ${workingMemory}`;
     });
 
     try {
-      // Then strip working memory tags from all messages
+      // System messages are runtime instructions and should never be stored in memory.
+      // Then strip working memory tags from all persistable messages.
       const updatedMessages = messages
+        .filter(m => m.role !== 'system')
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
@@ -1478,8 +1480,12 @@ ${workingMemory}`;
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
+
+    const persistableMessages = messages.filter(m => m.role !== 'system');
+    if (persistableMessages.length === 0) return;
+
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.saveMessages({ messages: messages.map(stripLegacyMessageFields) });
+    await memoryStore.saveMessages({ messages: persistableMessages.map(stripLegacyMessageFields) });
   }
 
   /**
