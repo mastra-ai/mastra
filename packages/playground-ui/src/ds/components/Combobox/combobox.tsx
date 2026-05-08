@@ -73,9 +73,12 @@ export function Combobox({
             className,
           )}
         >
-          <span className="truncate flex items-center gap-2">
+          {/* Keep truncation off the outer wrapper so start adornments are not clipped. */}
+          <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
-            <BaseCombobox.Value placeholder={placeholder} />
+            <span className="truncate">
+              <BaseCombobox.Value placeholder={placeholder} />
+            </span>
           </span>
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>

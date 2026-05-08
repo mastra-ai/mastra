@@ -5,13 +5,12 @@ export const comboboxStyles = {
   /** Root wrapper */
   root: 'flex flex-col gap-1.5',
 
-  /** Trigger — form input look (rounded-lg, single border, subtle hover/open state).
-   *  Sized to mirror SelectTrigger: bg-transparent, no pill, no accent ring on focus. */
+  /** Trigger — form input look, sized to mirror SelectTrigger. */
   trigger: cn(
     'inline-flex w-full min-w-32 select-none items-center justify-between gap-1.5 whitespace-nowrap',
     'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
     'outline-none transition-colors duration-normal ease-out-custom',
-    'hover:bg-surface3 hover:text-neutral6 hover:border-border2',
+    'hover:bg-surface3 hover:text-neutral6 hover:border-border2 active:bg-surface4',
     'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
     'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
     'disabled:cursor-not-allowed disabled:opacity-50',
