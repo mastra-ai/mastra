@@ -114,6 +114,10 @@ class ProcessorTestExporter implements ObservabilityExporter {
     return this.getSpansByType(SpanType.MODEL_STEP);
   }
 
+  getModelInferenceSpans() {
+    return this.getSpansByType(SpanType.MODEL_INFERENCE);
+  }
+
   getWorkflowStepSpans() {
     return this.getSpansByType(SpanType.WORKFLOW_STEP);
   }
@@ -802,16 +806,19 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 1 step processor span
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       // Step processors only run during inputStep phase (per LLM call in agent loop)
       const inputStepSpans = processorSpans.filter(
@@ -828,15 +835,17 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Step processor span is child of MODEL_STEP span
+      // 3. Step processor span is child of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 4. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 4. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: input_step_processor → model_chunks
-      const firstChunkInStep = chunkSpansInStep[0];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
+      const firstChunkInInference = chunkSpansInInference[0];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
 
       testExporter.finalExpectations();
     });
@@ -873,16 +882,19 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 1 step processor span
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       const outputStepSpans = processorSpans.filter(
         s => s.name?.includes('output step processor') || s.entityType === EntityType.OUTPUT_STEP_PROCESSOR,
@@ -898,15 +910,17 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Step processor span is child of MODEL_STEP span
+      // 3. Step processor span is child of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 4. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 4. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: model_chunks → output_step_processor
-      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
-      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
+      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
       testExporter.finalExpectations();
     });
@@ -947,17 +961,20 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 4 processor spans
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
       expect(processorSpans.length).toBe(4);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       // Verify correct entity types for each phase
       const inputSpan = processorSpans.find(s => s.name === 'input processor: full-input');
@@ -978,22 +995,24 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 3. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 4. Step processors are children of MODEL_STEP span
+      // 4. Step processors are children of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 5. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 6. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER: input -> MODEL_GENERATION -> output
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
       // EXECUTION ORDER within MODEL_STEP: input_step → model_chunks → output_step
-      const firstChunkInStep = chunkSpansInStep[0];
-      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
-      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+      const firstChunkInInference = chunkSpansInInference[0];
+      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
+      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
       testExporter.finalExpectations();
     });

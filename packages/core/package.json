@@ -501,6 +501,16 @@
         "default": "./dist/workflows/evented/index.cjs"
       }
     },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.js"
+      },
+      "require": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.cjs"
+      }
+    },
     "./workspace": {
       "import": {
         "types": "./dist/workspace/index.d.ts",
