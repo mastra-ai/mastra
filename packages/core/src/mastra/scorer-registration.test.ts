@@ -1,12 +1,7 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createScorer } from '../evals/base';
-import { RequestContext } from '../request-context';
-import { createStep, createWorkflow } from '../workflows';
-import { DefaultExecutionEngine } from '../workflows/default';
-import { runScorersForStep } from '../workflows/handlers/step';
 import { Mastra } from './index';
 
 /**
@@ -211,58 +206,5 @@ describe('Scorer Registration', () => {
     expect(Object.keys(allScorers || {})).toHaveLength(2);
     expect(allScorers?.['mastra-level-scorer']).toBeDefined();
     expect(allScorers?.['agent-level-scorer']).toBeDefined();
-  });
-
-  it('should register static workflow step scorers before addWorkflow returns', () => {
-    const workflowScorer = createTestScorer('workflow-step-scorer');
-    const step = createStep({
-      id: 'scored-step',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-      scorers: {
-        workflowStep: { scorer: workflowScorer },
-      },
-      execute: async ({ inputData }) => inputData,
-    });
-    const workflow = createWorkflow({
-      id: 'scored-workflow',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-    })
-      .then(step)
-      .commit();
-
-    const mastra = new Mastra({ logger: false });
-    mastra.addWorkflow(workflow);
-
-    expect(mastra.getScorerById('workflow-step-scorer')).toBe(workflowScorer);
-  });
-
-  it('should register dynamic workflow step scorers before running them', async () => {
-    const workflowScorer = createTestScorer('dynamic-workflow-step-scorer');
-    const mastra = new Mastra({ logger: false });
-    const engine = new DefaultExecutionEngine({
-      mastra,
-      options: {
-        validateInputs: true,
-        shouldPersistSnapshot: () => true,
-      },
-    });
-
-    await runScorersForStep({
-      engine,
-      scorers: async () => ({
-        dynamicWorkflowStep: { scorer: workflowScorer },
-      }),
-      runId: 'run-1',
-      workflowId: 'workflow-1',
-      stepId: 'step-1',
-      input: { value: 'input' },
-      output: { value: 'output' },
-      requestContext: new RequestContext(),
-      disableScorers: false,
-    });
-
-    expect(mastra.getScorerById('dynamic-workflow-step-scorer')).toBe(workflowScorer);
   });
 });

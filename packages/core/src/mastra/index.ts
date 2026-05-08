@@ -3115,22 +3115,6 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
-    this.registerStaticWorkflowScorers(workflow);
-
-    // Dynamic scorer functions need request context, so they cannot be fully
-    // resolved synchronously here. Resolve what we can in the background for
-    // registry discovery; execution-time registration handles the live path.
-    workflow
-      .listScorers()
-      .then(scorers => {
-        for (const [, entry] of Object.entries(scorers || {})) {
-          this.addScorer(entry.scorer, undefined, { source: 'code' });
-        }
-      })
-      .catch(err => {
-        this.#logger?.debug(`Failed to register scorers from workflow ${workflowKey}:`, err);
-      });
-
     // If a schedule is declared, mark the flag and either register into the
     // running scheduler or trigger a lazy ensure.
     if (hasSchedule) {
@@ -3150,19 +3134,6 @@ export class Mastra<
         })();
       } else {
         this.#ensureScheduler();
-      }
-    }
-  }
-
-  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
-    for (const step of Object.values(workflow.steps ?? {})) {
-      const scorers = step.scorers;
-      if (!scorers || typeof scorers === 'function') {
-        continue;
-      }
-
-      for (const [, entry] of Object.entries(scorers)) {
-        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }
