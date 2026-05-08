@@ -16,15 +16,16 @@ function headersToRecord(headers: Headers): Record<string, string> {
 }
 
 async function parseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-  if (contentType.includes('application/json')) {
-    try {
-      return await response.json();
-    } catch {
-      return await response.text();
-    }
+  if (!contentType.includes('application/json')) {
+    return text;
   }
-  return await response.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
 }
 
 export async function mrScraperGet(url: string, init?: RequestInit & { timeoutMs?: number }): Promise<MrScraperApiResult> {
