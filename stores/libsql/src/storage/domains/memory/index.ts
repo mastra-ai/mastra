@@ -970,7 +970,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }): Promise<StorageThreadType | null> {
     try {
       const keys: Record<string, any> = { id: threadId };
-      if (resourceId) {
+      if (resourceId !== undefined) {
         keys.resourceId = resourceId;
       }
 

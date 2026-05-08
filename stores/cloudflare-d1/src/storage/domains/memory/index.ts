@@ -207,7 +207,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       keys: { id: threadId },
     });
 
-    if (!thread || (resourceId && thread.resourceId !== resourceId)) return null;
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
 
     try {
       return {

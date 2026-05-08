@@ -101,6 +101,16 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         expect(result).toBeNull();
       });
 
+      it('should treat an empty string resourceId as an explicit scope', async () => {
+        const id = `thread-empty-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: '' });
+        expect(result).toBeNull();
+      });
+
       it('should return thread when resourceId is not provided (backwards compatibility)', async () => {
         const id = `thread-no-resourceId-${randomUUID()}`;
         const resourceId = `tenant-${randomUUID()}`;

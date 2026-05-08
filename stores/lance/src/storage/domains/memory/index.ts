@@ -122,7 +122,7 @@ export class StoreMemoryLance extends MemoryStorage {
     try {
       const thread = await this.#db.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
 
-      if (!thread || (resourceId && thread.resourceId !== resourceId)) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
 

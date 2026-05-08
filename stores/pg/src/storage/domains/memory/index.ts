@@ -338,7 +338,7 @@ export class MemoryPG extends MemoryStorage {
       let query = `SELECT * FROM ${tableName} WHERE id = $1`;
       let params: any[] = [threadId];
 
-      if (resourceId) {
+      if (resourceId !== undefined) {
         query += ` AND "resourceId" = $2`;
         params.push(resourceId);
       }

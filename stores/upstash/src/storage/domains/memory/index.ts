@@ -73,7 +73,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         keys: { id: threadId },
       });
 
-      if (!thread || (resourceId && thread.resourceId !== resourceId)) return null;
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
 
       return {
         ...thread,

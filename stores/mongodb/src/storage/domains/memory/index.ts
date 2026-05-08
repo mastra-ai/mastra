@@ -898,7 +898,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
       const result = await collection.findOne<any>({ id: threadId });
-      if (!result || (resourceId && result.resourceId !== resourceId)) {
+      if (!result || (resourceId !== undefined && result.resourceId !== resourceId)) {
         return null;
       }
 

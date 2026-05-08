@@ -66,7 +66,7 @@ export class MemoryConvex extends MemoryStorage {
       keys: { id: threadId },
     });
 
-    if (!row || (resourceId && row.resourceId !== resourceId)) return null;
+    if (!row || (resourceId !== undefined && row.resourceId !== resourceId)) return null;
 
     return {
       ...row,

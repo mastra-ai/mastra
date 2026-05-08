@@ -55,7 +55,7 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
     const thread = this.db.threads.get(threadId);
-    if (!thread || (resourceId && thread.resourceId !== resourceId)) return null;
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
     return { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata };
   }
 

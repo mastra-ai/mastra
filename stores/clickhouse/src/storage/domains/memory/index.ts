@@ -765,7 +765,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const rows = await result.json();
       const thread = transformRow(rows.data[0]) as StorageThreadType;
 
-      if (!thread || (resourceId && thread.resourceId !== resourceId)) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
 

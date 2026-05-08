@@ -67,7 +67,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
     const thread = await this.#db.load<StorageThreadType>({ tableName: TABLE_THREADS, keys: { id: threadId } });
-    if (!thread || (resourceId && thread.resourceId !== resourceId)) return null;
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
 
     try {
       return {

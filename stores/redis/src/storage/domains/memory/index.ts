@@ -63,7 +63,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         keys: { id: threadId },
       });
 
-      if (!thread || (resourceId && thread.resourceId !== resourceId)) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
 

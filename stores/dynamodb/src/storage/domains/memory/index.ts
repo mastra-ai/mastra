@@ -140,7 +140,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     try {
       const result = await this.service.entities.thread.get({ entity: 'thread', id: threadId }).go();
 
-      if (!result.data || (resourceId && result.data.resourceId !== resourceId)) {
+      if (!result.data || (resourceId !== undefined && result.data.resourceId !== resourceId)) {
         return null;
       }
 

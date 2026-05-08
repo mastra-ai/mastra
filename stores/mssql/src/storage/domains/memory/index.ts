@@ -165,7 +165,7 @@ export class MemoryMSSQL extends MemoryStorage {
       request.input('threadId', threadId);
       const resultSet = await request.query(sql);
       const thread = resultSet.recordset[0] || null;
-      if (!thread || (resourceId && thread.resourceId !== resourceId)) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
       return {
