@@ -68,7 +68,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'activateAfterIdle',
     type: 'number | string | false',
     description:
-      'Time before buffered observations are forced to activate after inactivity, even if the observation token threshold has not been reached yet. Accepts milliseconds, duration strings like `300_000`, `"5m"`, or `"1hr"`, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
+      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
     isOptional: true,
   },
   {
