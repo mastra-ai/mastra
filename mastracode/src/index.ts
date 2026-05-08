@@ -31,6 +31,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
+import { attachCavemanThreadStatePersistence, restoreCavemanForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
@@ -113,6 +114,16 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /**
+   * Override the memory instance (or dynamic factory) passed to the Harness.
+   * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
+   * uses mastracode's built-in model resolution (Anthropic OAuth, OpenAI Codex,
+   * models.dev gateway).
+   *
+   * Use this when your models are served by a custom provider (e.g. Augment)
+   * that mastracode's `resolveModel` cannot resolve.
+   */
+  memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: MastraBrowser;
 }
@@ -308,7 +319,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
 
-  const memory = getDynamicMemory(storage, vectorStore);
+  const memory = config?.memory ?? getDynamicMemory(storage, vectorStore);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
@@ -354,6 +365,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),
+      new ProviderHistoryCompat(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
@@ -442,6 +454,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
+  const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -487,6 +500,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   if (effectiveReflectionThreshold !== undefined) {
     globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
+  }
+  if (effectiveCavemanObservations !== undefined) {
+    globalInitialState.cavemanObservations = effectiveCavemanObservations;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
@@ -605,6 +621,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
     });
   }
+
+  // Persist /om caveman-observations toggle per-thread (mastracode-only concern;
+  // intentionally not in core's harness loadThreadMetadata).
+  const cavemanHarness = harness as unknown as Harness<Record<string, unknown>>;
+  attachCavemanThreadStatePersistence(cavemanHarness);
+  await restoreCavemanForCurrentThread(cavemanHarness).catch(() => {
+    // Persistence is best-effort; don't crash startup if storage hiccups.
+  });
 
   return {
     harness,

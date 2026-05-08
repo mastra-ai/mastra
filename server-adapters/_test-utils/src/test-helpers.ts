@@ -413,7 +413,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Create real MCP servers with tools
+  // Create real MCP servers with tools and app resources
   const mcpServer1 = new MCPServer({
     name: 'Test Server 1',
     version: '1.0.0',
@@ -421,6 +421,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     tools: {
       getWeather: weatherTool,
       calculate: calculatorTool,
+    },
+    appResources: {
+      'ui://test/app': {
+        name: 'Test App',
+        html: '<html><body>Test</body></html>',
+      },
     },
   });
 
@@ -430,6 +436,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     description: 'Test MCP Server 2',
     tools: {
       failingTool: failingTool,
+    },
+    appResources: {
+      'ui://test/app2': {
+        name: 'Test App 2',
+        html: '<html><body>Test 2</body></html>',
+      },
     },
   });
 
@@ -711,6 +723,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       await backgroundTasks.updateTask('test-background-task-id', {
         status: 'running',
         startedAt: new Date(),
+      });
+    }
+
+    const schedules = await storage.getStore('schedules');
+    if (schedules) {
+      const now = Date.now();
+      await schedules.createSchedule({
+        id: 'test-schedule',
+        target: { type: 'workflow', workflowId: 'test-workflow' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 

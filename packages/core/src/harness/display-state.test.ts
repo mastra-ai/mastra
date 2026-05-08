@@ -671,6 +671,40 @@ describe('usage_update', () => {
     expect(usage.totalTokens).toBe(150);
   });
 
+  it('preserves richer token usage fields from internal token counters', () => {
+    (harness as any).tokenUsage = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 220,
+      reasoningTokens: 70,
+      cachedInputTokens: 25,
+      cacheCreationInputTokens: 5,
+      raw: { provider: 'test-provider' },
+    };
+    emit(harness, {
+      type: 'usage_update',
+      usage: {
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 220,
+        reasoningTokens: 70,
+        cachedInputTokens: 25,
+        cacheCreationInputTokens: 5,
+        raw: { provider: 'test-provider' },
+      },
+    });
+
+    expect(harness.getDisplayState().tokenUsage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 220,
+      reasoningTokens: 70,
+      cachedInputTokens: 25,
+      cacheCreationInputTokens: 5,
+      raw: { provider: 'test-provider' },
+    });
+  });
+
   it('accumulates usage across multiple updates', () => {
     (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });

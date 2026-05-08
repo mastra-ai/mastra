@@ -77,16 +77,34 @@ export const mastra = new Mastra({
 
 ## Configuration
 
-### User Authorization
+### Default authorization
 
-By default, `MastraAuthWorkos` checks whether the authenticated user has an 'admin' role in any of their organization memberships. The authorization process:
+By default, `MastraAuthWorkos` grants access to any authenticated WorkOS user. The authorization check succeeds when the resolved user object contains both a Mastra user ID and a WorkOS user ID.
 
-1. Retrieves the user's organization memberships using their user ID
-1. Extracts all roles from their memberships
-1. Checks if any role has the slug 'admin'
-1. Grants access only if the user has admin role in at least one organization
+### FGA membership loading
 
-To customize user authorization, provide a custom `authorizeUser` function:
+Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/docs/server/auth/fga). This tells the auth provider to load the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
+
+const workosAuth = new MastraAuthWorkos({
+  apiKey: process.env.WORKOS_API_KEY,
+  clientId: process.env.WORKOS_CLIENT_ID,
+  fetchMemberships: true,
+})
+
+const workosFga = new MastraFGAWorkos({
+  apiKey: process.env.WORKOS_API_KEY,
+  clientId: process.env.WORKOS_CLIENT_ID,
+})
+```
+
+When `fetchMemberships` is `false`, Mastra skips the extra WorkOS `listOrganizationMemberships()` call on each authenticated request.
+
+### Service tokens and custom JWT templates
+
+For machine-to-machine or service-account access, you can configure `MastraAuthWorkos` to trust verified bearer-token claims from a WorkOS custom JWT template.
 
 ```typescript title="src/mastra/auth.ts"
 import { MastraAuthWorkos } from '@mastra/auth-workos'
@@ -94,9 +112,34 @@ import { MastraAuthWorkos } from '@mastra/auth-workos'
 const workosAuth = new MastraAuthWorkos({
   apiKey: process.env.WORKOS_API_KEY,
   clientId: process.env.WORKOS_CLIENT_ID,
-  authorizeUser: async user => {
-    return !!user
+  redirectUri: process.env.WORKOS_REDIRECT_URI,
+  trustJwtClaims: true,
+  jwtClaims: {
+    organizationId: 'org_id',
+    organizationMembershipId: 'urn:mastra:organization_membership_id',
   },
+})
+```
+
+This is useful when your JWT template already includes the exact FGA context Mastra needs, such as `organizationMembershipId`, tenant IDs, or service-principal identifiers. When `trustJwtClaims` is enabled, Mastra can fall back to those verified claims if a bearer token is not meant to round-trip through `workos.userManagement.getUser()`.
+
+### Custom authorization
+
+If you need stricter authorization, subclass `MastraAuthWorkos` and override `authorizeUser()`:
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+import type { HonoRequest } from 'hono'
+
+class AdminOnlyWorkosAuth extends MastraAuthWorkos {
+  async authorizeUser(user: any, _request: HonoRequest): Promise<boolean> {
+    return user?.metadata?.role === 'admin'
+  }
+}
+
+const workosAuth = new AdminOnlyWorkosAuth({
+  apiKey: process.env.WORKOS_API_KEY,
+  clientId: process.env.WORKOS_CLIENT_ID,
 })
 ```
 

@@ -239,6 +239,11 @@ const sidebars = {
           id: 'workflows/error-handling',
           label: 'Error Handling',
         },
+        {
+          type: 'doc',
+          id: 'workflows/scheduled-workflows',
+          label: 'Scheduled Workflows',
+        },
       ],
     },
     {
@@ -308,6 +313,11 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mcp/mcp-apps',
+          label: 'MCP Apps',
         },
       ],
     },
@@ -453,6 +463,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/firebase',
               label: 'Firebase',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
             },
             {
               type: 'doc',

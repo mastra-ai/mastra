@@ -213,6 +213,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepIndex = (inputData as any).stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
+            // Apply request-side context to MODEL_INFERENCE spans the tracker creates.
+            // setInferenceContext is optional on the interface; older trackers
+            // without the method gracefully no-op.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: currentModelSettings as Record<string, unknown> | undefined,
+              availableTools: currentTools ? Object.keys(currentTools) : undefined,
+              toolChoice: currentToolChoice,
+              responseFormat: execOptions.structuredOutput ? 'json_schema' : undefined,
+            });
+
             // Build structured output for AI SDK if configured
             const structuredOutputConfig = execOptions.structuredOutput;
             const structuredOutput =
@@ -349,12 +359,30 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               for await (const chunk of trackedStream) {
                 if (!chunk) continue;
 
-                // Emit chunk via pubsub for streaming to client
-                // NOTE: Do NOT emit 'finish' chunks - they will be sent as a proper FINISH event
-                // at the end of the agentic loop. Emitting finish chunks here would cause
-                // the client's MastraModelOutput to close prematurely in multi-step workflows.
+                // Emit chunk via pubsub for streaming to client.
+                // Two special transforms:
+                //
+                // - 'finish' chunks are NEVER forwarded as-is. The agent run's
+                //   real terminal signal is the FINISH event published at the
+                //   end of the agentic loop; emitting a CHUNK 'finish' here
+                //   would close the client's MastraModelOutput prematurely in
+                //   multi-step workflows.
+                //
+                // - The inner LLM stream emits 'finish' but never 'step-finish'
+                //   (the non-durable agentic-loop wraps the LLM call and emits
+                //   step-finish itself; the durable workflow bypasses that
+                //   wrapper and calls `execute` directly). Without a step-finish
+                //   chunk, the client's MastraModelOutput never populates its
+                //   bufferedSteps, so `getFullOutput().text` returns ''. Convert
+                //   each inner 'finish' into a 'step-finish' chunk so the client
+                //   sees the same shape it would in the non-durable path.
                 if (pubsub && chunk.type !== 'finish') {
                   await emitChunkEvent(pubsub, runId, chunk);
+                } else if (pubsub && chunk.type === 'finish') {
+                  await emitChunkEvent(pubsub, runId, {
+                    ...chunk,
+                    type: 'step-finish',
+                  } as any);
                 }
 
                 // Process different chunk types

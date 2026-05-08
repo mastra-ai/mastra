@@ -44,6 +44,8 @@ export enum SpanType {
   MODEL_GENERATION = 'model_generation',
   /** Single model execution step within a generation (one API call) */
   MODEL_STEP = 'model_step',
+  /** Model provider call within a step - wraps only the inference, excluding processors and tool executions */
+  MODEL_INFERENCE = 'model_inference',
   /** Individual model streaming chunk/event */
   MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
@@ -250,6 +252,61 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   isContinued?: boolean;
   /** Result warnings */
   warnings?: Record<string, any>;
+}
+
+/**
+ * Model Inference attributes - for the provider call within a MODEL_STEP.
+ *
+ * Wraps only the model's inference (HTTP roundtrip / stream lifetime),
+ * excluding input/output processors and tool executions. Use this span
+ * to measure pure model latency.
+ *
+ * Fields are intentionally duplicated from ModelStepAttributes /
+ * ModelGenerationAttributes so existing integrations that read those
+ * attributes continue to work unchanged.
+ */
+export interface ModelInferenceAttributes extends AIBaseAttributes {
+  /** Model name (e.g., 'gpt-4', 'claude-3') */
+  model?: string;
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider?: string;
+  /** Index of the parent step in the generation (0, 1, 2, ...) */
+  stepIndex?: number;
+  /** Token usage statistics */
+  usage?: UsageStats;
+  /** Reason this inference finished (stop, tool-calls, length, etc.) */
+  finishReason?: string;
+  /** Whether this was a streaming response */
+  streaming?: boolean;
+  /**
+   * When the first token/chunk of the completion was received.
+   * Used to calculate time-to-first-token (TTFT) metrics.
+   * Only applicable for streaming responses.
+   */
+  completionStartTime?: Date;
+  /** Result warnings */
+  warnings?: Record<string, any>;
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string;
+  /** Unique identifier for the response */
+  responseId?: string;
+  /** Model parameters sent on the request (temperature, maxOutputTokens, topP, etc.) */
+  parameters?: Record<string, unknown>;
+  /** Provider-specific options forwarded on the request */
+  providerOptions?: Record<string, unknown>;
+  /** Names of tools made available to the model on this inference call */
+  availableTools?: string[];
+  /**
+   * How the model was instructed to choose tools: 'auto', 'none', 'required',
+   * or a specific tool selection. Distinguishes "model could have called a
+   * tool but didn't" from "model was blocked/forced".
+   */
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  /**
+   * Requested response format. Distinguishes plain text generation from
+   * structured-output (JSON / JSON schema) runs.
+   */
+  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string };
 }
 
 /**
@@ -570,6 +627,7 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
   [SpanType.MODEL_STEP]: ModelStepAttributes;
+  [SpanType.MODEL_INFERENCE]: ModelInferenceAttributes;
   [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [SpanType.TOOL_CALL]: ToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
@@ -834,6 +892,19 @@ export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENE
   providerMetadata?: ProviderMetadata;
 }
 
+/**
+ * Static request-side context applied to every MODEL_INFERENCE span the
+ * tracker creates. These fields describe what was sent to the model and
+ * are constant across the steps of a single generation in the common case.
+ */
+export interface ModelInferenceContext {
+  parameters?: ModelInferenceAttributes['parameters'];
+  providerOptions?: ModelInferenceAttributes['providerOptions'];
+  availableTools?: ModelInferenceAttributes['availableTools'];
+  toolChoice?: ModelInferenceAttributes['toolChoice'];
+  responseFormat?: ModelInferenceAttributes['responseFormat'];
+}
+
 /** Tracks model execution steps and streaming chunks within a MODEL_GENERATION span. */
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
@@ -843,6 +914,13 @@ export interface IModelSpanTracker {
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
+
+  /**
+   * Set the request-side context applied to subsequent MODEL_INFERENCE spans
+   * (parameters, providerOptions, availableTools, toolChoice, responseFormat).
+   * Call once after creating the tracker; later calls overwrite.
+   */
+  setInferenceContext?(context: ModelInferenceContext): void;
 
   /**
    * Enable or disable deferred step closing for durable execution.
