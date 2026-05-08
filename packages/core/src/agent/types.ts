@@ -121,7 +121,7 @@ export interface AgentCreateOptions {
 
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
 // Without this TS doesn't understand the function/string union type from DynamicArgument
-type DynamicModel<TRequestContext extends Record<string, any> | unknown = unknown> = ({
+type DynamicModel<TRequestContext = unknown> = ({
   requestContext,
   mastra,
 }: {
@@ -129,7 +129,7 @@ type DynamicModel<TRequestContext extends Record<string, any> | unknown = unknow
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
-type ModelWithRetries<TRequestContext extends Record<string, any> | unknown = unknown> = {
+type ModelWithRetries<TRequestContext = unknown> = {
   id?: string;
   model: MastraModelConfig | DynamicModel<TRequestContext>;
   maxRetries?: number; //defaults to 0
