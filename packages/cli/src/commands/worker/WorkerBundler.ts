@@ -3,11 +3,8 @@ import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class WorkerBundler extends Bundler {
-  private workerName: string;
-
-  constructor(workerName: string = 'all') {
+  constructor() {
     super('Worker');
-    this.workerName = workerName;
     this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
@@ -34,18 +31,16 @@ export class WorkerBundler extends Bundler {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths, undefined, 'worker');
   }
 
   protected getEntry(): string {
-    const nameArg = this.workerName === 'all' ? 'undefined' : JSON.stringify(this.workerName);
-    const startedLabel = this.workerName === 'all' ? 'Workers' : `Worker ${JSON.stringify(this.workerName)}`;
     return `
     import { mastra } from '#mastra';
 
-    await mastra.startWorkers(${nameArg});
+    await mastra.startWorkers();
 
-    console.log(${JSON.stringify(`[mastra] ${startedLabel} started`)});
+    console.log('[mastra] Workers started');
 
     const shutdown = async () => {
       console.log('[mastra] Shutting down workers...');

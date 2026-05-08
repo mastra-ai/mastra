@@ -209,6 +209,7 @@ export abstract class Bundler extends MastraBundler {
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
     { enableSourcemap, enableEsmShim, externals }: BundlerOptions,
+    entryName: string = 'index',
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -227,7 +228,7 @@ export abstract class Bundler extends MastraBundler {
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     if (isVirtual) {
-      inputOptions.input = { index: '#entry', ...toolsInputOptions };
+      inputOptions.input = { [entryName]: '#entry', ...toolsInputOptions };
 
       if (Array.isArray(inputOptions.plugins)) {
         inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
@@ -235,7 +236,7 @@ export abstract class Bundler extends MastraBundler {
         inputOptions.plugins = [virtual({ '#entry': serverFile })];
       }
     } else {
-      inputOptions.input = { index: serverFile, ...toolsInputOptions };
+      inputOptions.input = { [entryName]: serverFile, ...toolsInputOptions };
     }
 
     return inputOptions;
@@ -315,6 +316,7 @@ export abstract class Bundler extends MastraBundler {
     },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
+    entryName: string = 'index',
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
 
@@ -417,6 +419,7 @@ export abstract class Bundler extends MastraBundler {
         analyzedBundleInfo,
         toolsPaths,
         internalBundlerOptions,
+        entryName,
       );
 
       const bundler = await this.createBundler(

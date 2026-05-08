@@ -34,7 +34,9 @@ import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
-import { startWorker } from './commands/worker/worker';
+import { buildWorker } from './commands/worker/build';
+import { devWorker } from './commands/worker/dev';
+import { startWorker } from './commands/worker/start';
 
 function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
   return (...args: any[]) => {
@@ -169,16 +171,43 @@ program
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
 
-program
-  .command('worker [name]')
-  .description('Build and start a standalone worker (orchestration, scheduler, backgroundTasks, or all)')
+const workerCommand = program.command('worker').description('Build and run standalone Mastra worker bundles');
+
+workerCommand
+  .command('build')
+  .description('Bundle a worker artifact to .mastra/output/worker.mjs')
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('--debug', 'Enable debug logs', false)
-  .action((name: string | undefined, opts: { dir?: string; root?: string; tools?: string; debug: boolean }) => {
+  .action((opts: { dir?: string; root?: string; tools?: string; debug: boolean }) => {
+    return buildWorker(opts);
+  });
+
+workerCommand
+  .command('start [name]')
+  .description(
+    'Start the built worker (.mastra/output/worker.mjs). [name] sets MASTRA_WORKERS for the spawned process.',
+  )
+  .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
+  .option('-e, --env <env>', 'Custom env file to load')
+  .action((name: string | undefined, opts: { dir?: string; env?: string }) => {
     return startWorker({ name, ...opts });
   });
+
+workerCommand
+  .command('dev [name]')
+  .description('Build and start a worker in one step. [name] sets MASTRA_WORKERS for the spawned process.')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('-e, --env <env>', 'Custom env file to load')
+  .option('--debug', 'Enable debug logs', false)
+  .action(
+    (name: string | undefined, opts: { dir?: string; root?: string; tools?: string; env?: string; debug: boolean }) => {
+      return devWorker({ name, ...opts });
+    },
+  );
 
 program
   .command('start')
