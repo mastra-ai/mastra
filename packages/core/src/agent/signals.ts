@@ -67,6 +67,14 @@ function escapeXmlAttribute(value: string): string {
   return escapeXml(value).replaceAll('"', '&quot;');
 }
 
+const XML_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+
+function assertXmlName(name: string, label: string): void {
+  if (!XML_NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid signal XML ${label}: ${name}`);
+  }
+}
+
 function signalAttributesToXml(attributes?: AgentSignalInput['attributes']): string {
   if (!attributes) {
     return '';
@@ -74,13 +82,17 @@ function signalAttributesToXml(attributes?: AgentSignalInput['attributes']): str
 
   const serialized = Object.entries(attributes)
     .filter((entry): entry is [string, string | number | boolean] => entry[1] !== null && entry[1] !== undefined)
-    .map(([key, value]) => `${key}="${escapeXmlAttribute(String(value))}"`)
+    .map(([key, value]) => {
+      assertXmlName(key, 'attribute name');
+      return `${key}="${escapeXmlAttribute(String(value))}"`;
+    })
     .join(' ');
 
   return serialized ? ` ${serialized}` : '';
 }
 
 export function signalToXmlMarkup(signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>): string {
+  assertXmlName(signal.type, 'tag name');
   return `<${signal.type}${signalAttributesToXml(signal.attributes)}>${escapeXml(signalContentsToText(signal.contents))}</${signal.type}>`;
 }
 

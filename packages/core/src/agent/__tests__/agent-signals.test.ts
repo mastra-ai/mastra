@@ -56,9 +56,13 @@ async function readNextRun(iterator: AsyncIterator<any>) {
   }
 }
 
-async function waitForActiveRun(subscription: { activeRunId: () => string | null }) {
+async function waitForActiveRun(subscription: { activeRunId: () => string | null }, timeoutMs = 500) {
+  const startedAt = Date.now();
   let runId = subscription.activeRunId();
   while (!runId) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Timed out waiting for active run');
+    }
     await nextTick();
     runId = subscription.activeRunId();
   }
@@ -153,6 +157,23 @@ describe('Agent signals', () => {
     expect(fileSignal.toLLMMessage()).toEqual(fileContents);
     expect(fileSignal.toDataPart().data.contents).toEqual(fileContents);
     expect(mastraDBMessageToSignal(fileSignal.toDBMessage()).contents).toEqual(fileContents);
+  });
+
+  it('rejects invalid XML names for contextual signal markup', () => {
+    expect(() =>
+      createSignal({
+        type: 'system reminder',
+        contents: 'invalid tag name',
+      }).toLLMMessage(),
+    ).toThrow('Invalid signal XML tag name: system reminder');
+
+    expect(() =>
+      createSignal({
+        type: 'system-reminder',
+        contents: 'invalid attribute name',
+        attributes: { 'bad attr': 'value' },
+      }).toLLMMessage(),
+    ).toThrow('Invalid signal XML attribute name: bad attr');
   });
 
   it('subscribes to a future thread run', async () => {
