@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ARIZE_AX_ENDPOINT, ArizeExporter } from './tracing';
 
 // Mock OtelExporter to spy on its constructor
@@ -80,6 +80,109 @@ describe('ArizeExporterConfig', () => {
       }),
     );
   });
+  describe('endpoint env var resolution', () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      delete process.env.PHOENIX_COLLECTOR_ENDPOINT;
+      delete process.env.PHOENIX_ENDPOINT;
+    });
+
+    afterEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    it('uses PHOENIX_COLLECTOR_ENDPOINT when set', async () => {
+      const { OtelExporter } = await import('@mastra/otel-exporter');
+      const otelExporterSpy = vi.mocked(OtelExporter);
+      otelExporterSpy.mockClear();
+
+      process.env.PHOENIX_COLLECTOR_ENDPOINT = 'https://phoenix-collector.example.com/v1/traces';
+
+      new ArizeExporter();
+
+      expect(otelExporterSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: {
+            custom: {
+              endpoint: 'https://phoenix-collector.example.com/v1/traces',
+              headers: {},
+              protocol: 'http/protobuf',
+            },
+          },
+        }),
+      );
+    });
+
+    it('falls back to PHOENIX_ENDPOINT when PHOENIX_COLLECTOR_ENDPOINT is not set', async () => {
+      const { OtelExporter } = await import('@mastra/otel-exporter');
+      const otelExporterSpy = vi.mocked(OtelExporter);
+      otelExporterSpy.mockClear();
+
+      process.env.PHOENIX_ENDPOINT = 'https://phoenix-legacy.example.com/v1/traces';
+
+      new ArizeExporter();
+
+      expect(otelExporterSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: {
+            custom: {
+              endpoint: 'https://phoenix-legacy.example.com/v1/traces',
+              headers: {},
+              protocol: 'http/protobuf',
+            },
+          },
+        }),
+      );
+    });
+
+    it('prefers PHOENIX_COLLECTOR_ENDPOINT over PHOENIX_ENDPOINT', async () => {
+      const { OtelExporter } = await import('@mastra/otel-exporter');
+      const otelExporterSpy = vi.mocked(OtelExporter);
+      otelExporterSpy.mockClear();
+
+      process.env.PHOENIX_COLLECTOR_ENDPOINT = 'https://phoenix-collector.example.com/v1/traces';
+      process.env.PHOENIX_ENDPOINT = 'https://phoenix-legacy.example.com/v1/traces';
+
+      new ArizeExporter();
+
+      expect(otelExporterSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: {
+            custom: {
+              endpoint: 'https://phoenix-collector.example.com/v1/traces',
+              headers: {},
+              protocol: 'http/protobuf',
+            },
+          },
+        }),
+      );
+    });
+
+    it('config.endpoint takes precedence over both env vars', async () => {
+      const { OtelExporter } = await import('@mastra/otel-exporter');
+      const otelExporterSpy = vi.mocked(OtelExporter);
+      otelExporterSpy.mockClear();
+
+      process.env.PHOENIX_COLLECTOR_ENDPOINT = 'https://phoenix-collector.example.com/v1/traces';
+      process.env.PHOENIX_ENDPOINT = 'https://phoenix-legacy.example.com/v1/traces';
+
+      new ArizeExporter({ endpoint: 'https://config-endpoint.example.com/v1/traces' });
+
+      expect(otelExporterSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: {
+            custom: {
+              endpoint: 'https://config-endpoint.example.com/v1/traces',
+              headers: {},
+              protocol: 'http/protobuf',
+            },
+          },
+        }),
+      );
+    });
+  });
+
   it('merges resource attributes when provided', async () => {
     const { OtelExporter } = await import('@mastra/otel-exporter');
     const otelExporterSpy = vi.mocked(OtelExporter);
