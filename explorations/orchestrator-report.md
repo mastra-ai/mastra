@@ -1158,6 +1158,15 @@ app.post('/workflows/:workflowId/runs/:runId/steps/execute', workerAuthMiddlewar
 
 ### Auth
 
+> **Historical — pre-implementation design.** The `MASTRA_WORKER_API_KEY` /
+> `workerAuthMiddleware` / `stepExecution.auth` shape below describes the
+> original exploration. The shipped implementation reuses the framework's
+> existing `experimental_auth` flow instead of a dedicated worker-secret
+> pathway — see "Worker-to-server auth uses the framework's existing auth
+> provider" in the Diverged-from-original-plan section above (lines 82-85).
+> The example is preserved here for historical context; do not follow it for
+> shipped deployments.
+
 Service-to-service authentication:
 - Configured on server: `MASTRA_WORKER_API_KEY=secret`
 - Configured on worker: `stepExecution.auth: { type: 'api-key', key: 'secret' }`

@@ -3946,13 +3946,17 @@ export class Mastra<
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
         const cb: EventCallback = (event, ack) => {
-          void this.handleWorkflowEvent(event).then(result => {
-            if (result.ok && ack) {
-              return ack().catch(err => this.#logger?.error?.('Error acking workflow event in push subscription', err));
-            }
-            // Push transports without nack semantics (EventEmitter) treat
-            // a non-ack as a failure signal; we already logged inside handle().
-          });
+          void this.handleWorkflowEvent(event)
+            .then(result => {
+              if (result.ok && ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                );
+              }
+              // Push transports without nack semantics (EventEmitter) treat
+              // a non-ack as a failure signal; we already logged inside handle().
+            })
+            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
         };
         await this.#pubsub.subscribe('workflows', cb);
         this.#pushSubscription = { topic: 'workflows', cb };
