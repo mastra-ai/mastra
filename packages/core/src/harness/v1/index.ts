@@ -8,6 +8,16 @@
  */
 
 export { Harness } from './harness';
+export { Session } from './session';
+export type { SessionLifecycleState } from './session';
+
+export {
+  HarnessConfigError,
+  HarnessSessionClosedError,
+  HarnessSessionLockedError,
+  HarnessSessionNotFoundError,
+  HarnessStorageError,
+} from './errors';
 
 export type {
   AttachmentDeleteOptions,
@@ -15,10 +25,10 @@ export type {
   AttachmentUploadOptions,
   HarnessConfig,
   HarnessMode,
-  Session,
   SessionListOptions,
   SessionLoadByIdOptions,
   SessionRecord,
+  SessionResolveByResource,
   SessionResolveById,
   SessionResolveByIdScoped,
   SessionResolveByThread,

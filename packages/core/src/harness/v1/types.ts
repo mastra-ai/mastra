@@ -145,13 +145,6 @@ export interface HarnessConfig {
   [key: string]: unknown;
 }
 
-/** Runtime Session class (§4.2). Stubbed when we get to session.ts. */
-export interface Session {
-  readonly id: string;
-  readonly threadId: string;
-  readonly resourceId: string;
-}
-
 /**
  * Persisted session shape (§5.1). The canonical definition lives in
  * `@mastra/core/storage/domains/harness/types` because adapters need it; the
@@ -177,9 +170,14 @@ interface SessionResolveCommon {
 }
 
 export interface SessionResolveByThread extends SessionResolveCommon {
-  threadId: string;
+  /**
+   * Existing thread id, or `{ fresh: true }` to force a brand-new thread.
+   * `{ fresh: true }` also flips `SessionRecord.ownsThread` to `true` so the
+   * thread is deleted on cascade (§5.5).
+   */
+  threadId: string | { fresh: true };
   resourceId: string;
-  sessionId?: never;
+  sessionId?: string;
 }
 
 export interface SessionResolveById extends SessionResolveCommon {
@@ -194,7 +192,22 @@ export interface SessionResolveByIdScoped extends SessionResolveCommon {
   threadId?: never;
 }
 
-export type SessionResolveOptions = SessionResolveByThread | SessionResolveById | SessionResolveByIdScoped;
+/**
+ * Resource-only resolution: hydrate the most-recent active session for
+ * `resourceId`, or create a fresh thread + session if none exists. Useful
+ * for single-user CLIs that just want "give me a session for this user".
+ */
+export interface SessionResolveByResource extends SessionResolveCommon {
+  resourceId: string;
+  threadId?: never;
+  sessionId?: never;
+}
+
+export type SessionResolveOptions =
+  | SessionResolveByThread
+  | SessionResolveById
+  | SessionResolveByIdScoped
+  | SessionResolveByResource;
 
 // ---------------------------------------------------------------------------
 // Sub-namespace option shapes for the Harness class.
