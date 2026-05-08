@@ -217,7 +217,7 @@ describe('addUserMessage', () => {
     ]);
   });
 
-  it('replaces a pending signal with the echoed user message', () => {
+  it('replaces a pending signal with the echoed user message once the stream is settled', () => {
     const state = createState();
 
     addPendingUserMessage(state, 'pending-signal-1', 'continue with this');

@@ -189,10 +189,16 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   if (!state.streamingComponent) {
-    if (systemReminderParts.length > 0) {
-      state.ui.requestRender();
+    const trailingParts = getTrailingContentParts(message);
+    if (trailingParts.length === 0) {
+      if (systemReminderParts.length > 0) {
+        state.ui.requestRender();
+      }
+      return;
     }
-    return;
+
+    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    ctx.addChildBeforeFollowUps(state.streamingComponent);
   }
 
   state.streamingMessage = message;

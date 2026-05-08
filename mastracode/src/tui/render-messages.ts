@@ -203,11 +203,25 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+    state.streamingComponent = undefined;
+    state.streamingMessage = undefined;
+  }
+
+  replacePendingUserMessage(state, messageId, text);
+}
+
+function replacePendingUserMessage(state: TUIState, messageId: string, text: string): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+
   const confirmed = new UserMessageComponent(text);
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
     state.chatContainer.invalidate();
+  } else {
+    addChildBeforeFollowUps(state, confirmed);
   }
   state.pendingSignalMessageComponentsById.delete(messageId);
   state.messageComponentsById.set(messageId, confirmed);
