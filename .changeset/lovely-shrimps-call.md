@@ -1,5 +1,6 @@
 ---
+'@mastra/core': patch
 '@mastra/memory': patch
 ---
 
-Disabled early reflection activation so reflection summaries are only activated after reaching the reflection token threshold.
+Default top-level observational memory early activation settings to observations only, while allowing per-phase overrides under `observation` and `reflection`.
