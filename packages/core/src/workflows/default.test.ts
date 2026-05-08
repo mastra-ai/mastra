@@ -24,6 +24,81 @@ class TestableExecutionEngine extends DefaultExecutionEngine {
   }
 }
 
+describe('DefaultExecutionEngine.serializeRequestContext', () => {
+  it('should correctly serialize serializable values', () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const ctx = new RequestContext();
+    ctx.set('userId', 'user-123');
+    ctx.set('feature', 'dark-mode');
+    ctx.set('count', 42);
+
+    const result = engine.serializeRequestContext(ctx);
+
+    expect(result).toEqual({
+      userId: 'user-123',
+      feature: 'dark-mode',
+      count: 42,
+    });
+  });
+
+  it('should skip non-serializable values (functions)', () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const ctx = new RequestContext();
+    ctx.set('userId', 'user-123');
+    ctx.set('callback', () => {});
+
+    const result = engine.serializeRequestContext(ctx);
+
+    expect(result).toEqual({
+      userId: 'user-123',
+    });
+    expect(result).not.toHaveProperty('callback');
+  });
+
+  it('should skip objects with circular references', () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const ctx = new RequestContext();
+    ctx.set('userId', 'user-123');
+
+    const circular: Record<string, unknown> = { name: 'circular' };
+    circular.self = circular;
+    ctx.set('circular', circular);
+
+    const result = engine.serializeRequestContext(ctx);
+
+    expect(result).toEqual({
+      userId: 'user-123',
+    });
+    expect(result).not.toHaveProperty('circular');
+  });
+
+  it('should skip non-serializable objects like RPC proxies', () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const ctx = new RequestContext();
+    ctx.set('userId', 'user-123');
+
+    const rpcProxy = new Proxy(
+      {},
+      {
+        get(target, prop) {
+          if (prop === 'toJSON') {
+            throw new TypeError('The RPC receiver does not implement the method "toJSON".');
+          }
+          return Reflect.get(target, prop);
+        },
+      },
+    );
+    ctx.set('rpcProxy', rpcProxy);
+
+    const result = engine.serializeRequestContext(ctx);
+
+    expect(result).toEqual({
+      userId: 'user-123',
+    });
+    expect(result).not.toHaveProperty('rpcProxy');
+  });
+});
+
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let engine: DefaultExecutionEngine;
   let pubsub: PubSub;
@@ -608,6 +683,23 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
 });
 
 describe('DefaultExecutionEngine.deserializeRequestContext', () => {
+  it('should produce JSON-safe serialized request context values', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const requestContext = new RequestContext();
+    const circular: any = { name: 'service' };
+    circular.self = circular;
+
+    requestContext.set('userId', 'user-123');
+    requestContext.set('progressEmitter', () => undefined);
+    requestContext.set('service', circular);
+
+    const serialized = engine.serializeRequestContext(requestContext);
+
+    expect(() => JSON.stringify(requestContext.toJSON())).not.toThrow();
+    expect(() => JSON.stringify(serialized)).not.toThrow();
+    expect(serialized).toEqual({ userId: 'user-123' });
+  });
+
   it('should return a RequestContext instance with all entries from the plain object', () => {
     const engine = new TestableExecutionEngine({ mastra: undefined });
     const plainObj = { userId: 'user-123', tenantId: 'tenant-456', nested: { flag: true } };

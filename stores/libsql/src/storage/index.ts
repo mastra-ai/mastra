@@ -15,6 +15,7 @@ import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { RolloutsLibSQL } from './domains/rollouts';
+import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
@@ -35,6 +36,7 @@ export {
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
   RolloutsLibSQL,
+  SchedulesLibSQL,
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
   SkillsLibSQL,
@@ -173,6 +175,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const blobs = new BlobsLibSQL(domainConfig);
     const rollouts = new RolloutsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
+    const schedules = new SchedulesLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -192,6 +195,7 @@ export class LibSQLStore extends MastraCompositeStore {
       blobs,
       rollouts,
       backgroundTasks,
+      schedules,
     };
   }
 }

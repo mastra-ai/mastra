@@ -16,6 +16,7 @@ interface ObservabilityRegistryConfig {
   default?: { enabled?: boolean }
   configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>
   configSelector?: ConfigSelector
+  sensitiveDataFilter?: boolean | SensitiveDataFilterOptions
 }
 ```
 
@@ -37,6 +38,13 @@ interface ObservabilityRegistryConfig {
     name: 'configSelector',
     type: 'ConfigSelector',
     description: 'Runtime configuration selector function',
+    required: false,
+  },
+  {
+    name: 'sensitiveDataFilter',
+    type: 'boolean | SensitiveDataFilterOptions',
+    description:
+      'Controls whether a [SensitiveDataFilter](/reference/observability/tracing/processors/sensitive-data-filter) is auto-applied to every configured instance. Defaults to `true`. Pass `false` to opt out, or pass a `SensitiveDataFilterOptions` object to customize fields, redaction token, or redaction style. If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, it is not duplicated. Pre-instantiated instances are not modified.',
     required: false,
   },
 ]}

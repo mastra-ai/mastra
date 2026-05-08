@@ -39,3 +39,25 @@ You can set environment variables like so:
 
 - **Studio**: Environment variables are read from your local `.env` files and bundled into the deploy artifact. To update them, redeploy.
 - **Server**: On the first deploy, the CLI automatically seeds environment variables from your local `.env` files. After that, manage them per-project through the dashboard or API.
+
+To pin the deploy to a specific env file (instead of relying on the default selection), pass `--env-file`:
+
+```bash
+mastra studio deploy --env-file .env.production --yes
+```
+
+## Multiple environments
+
+A platform project maps to a single deployed instance with one set of env vars. There is no built-in concept of `staging` vs `production` slots within a project. To run the same codebase across multiple environments, create one project per environment and override `.mastra-project.json` per deploy.
+
+```bash
+# Create-and-deploy each environment (first time only)
+mastra studio deploy --project "my-app-staging" --env-file .env.staging --yes
+mastra studio deploy --project "my-app-production" --env-file .env.production --yes
+
+# Subsequent deploys — set MASTRA_PROJECT_ID per environment
+MASTRA_PROJECT_ID="<staging-id>" mastra studio deploy --env-file .env.staging --yes
+MASTRA_PROJECT_ID="<production-id>" mastra studio deploy --env-file .env.production --yes
+```
+
+Each project has its own Studio URL and its own observability data. When using [`CloudExporter`](/docs/observability/tracing/exporters/cloud), set `MASTRA_PROJECT_ID` and `MASTRA_CLOUD_ACCESS_TOKEN` per environment so traces route to the matching Studio project.

@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
+const gitIdentityEnv = {
+  GIT_AUTHOR_NAME: 'GitHub Action',
+  GIT_AUTHOR_EMAIL: 'action@github.com',
+  GIT_COMMITTER_NAME: 'GitHub Action',
+  GIT_COMMITTER_EMAIL: 'action@github.com',
+};
 
 // 10 minutes timeout for changeset operations - CI can be slow
 const defaultTimeout = 10 * 60 * 1000;
@@ -121,7 +127,7 @@ function stripWorkspaceTrustPolicy(monorepoDir) {
 /**
  *
  * @param {string} monorepoDir
- * @param {typeof import('globby').globby} glob
+ * @param {typeof import('tinyglobby').glob} glob
  * @param {string} tag
  * @returns
  */
@@ -145,7 +151,12 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         stdio: ['inherit', 'inherit', 'inherit'],
         env: {
           ...process.env,
+          ...gitIdentityEnv,
           HUSKY: '0',
+          GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'Mastra CI',
+          GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'ci@mastra.ai',
+          GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'Mastra CI',
+          GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'ci@mastra.ai',
         },
       });
       shelvedChanges = true;

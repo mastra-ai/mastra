@@ -310,7 +310,10 @@ const sidebars = {
             {
               type: 'category',
               label: 'Bridges',
-              items: [{ type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' }],
+              items: [
+                { type: 'doc', id: 'observability/tracing/bridges/datadog', label: 'DatadogBridge' },
+                { type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' },
+              ],
             },
             {
               type: 'category',
@@ -372,6 +375,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
+        { type: 'doc', id: 'processors/cost-guard-processor', label: 'CostGuardProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
@@ -383,6 +387,8 @@ const sidebars = {
           id: 'processors/prompt-injection-detector',
           label: 'PromptInjectionDetector',
         },
+        { type: 'doc', id: 'processors/provider-history-compat', label: 'ProviderHistoryCompat' },
+        { type: 'doc', id: 'processors/regex-filter-processor', label: 'RegexFilterProcessor' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
         { type: 'doc', id: 'processors/stream-error-retry-processor', label: 'StreamErrorRetryProcessor' },

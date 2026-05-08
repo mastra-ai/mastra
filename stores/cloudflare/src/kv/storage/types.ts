@@ -32,6 +32,8 @@ import type {
   TABLE_SKILL_VERSIONS,
   TABLE_SKILL_BLOBS,
   TABLE_ROLLOUTS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -164,6 +166,8 @@ export type RecordTypes = {
   [TABLE_SKILL_BLOBS]: StorageBlobEntry;
   [TABLE_ROLLOUTS]: Record<string, any>;
   mastra_background_tasks: Record<string, any>;
+  [TABLE_SCHEDULES]: Record<string, any>;
+  [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;
   mastra_channel_installations: Record<string, any>;
   mastra_channel_config: Record<string, any>;
 };

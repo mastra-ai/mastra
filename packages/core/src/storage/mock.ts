@@ -13,6 +13,7 @@ import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
 import { RolloutsInMemory } from './domains/rollouts/inmemory';
+import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
@@ -74,6 +75,7 @@ export class InMemoryStore extends MastraCompositeStore {
       skills: new InMemorySkillsStorage({ db: this.#db }),
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
+      schedules: new InMemorySchedulesStorage({ db: this.#db }),
     };
   }
 

@@ -19,6 +19,7 @@ import type {
 } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { z } from 'zod/v4';
+import type { SensitiveDataFilterOptions } from './span_processors';
 
 // ============================================================================
 // Sampling Strategy Types
@@ -148,6 +149,25 @@ export interface ObservabilityRegistryConfig {
   configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>;
   /** Optional selector function to choose which tracing instance to use */
   configSelector?: ConfigSelector;
+  /**
+   * Controls whether a `SensitiveDataFilter` span output processor is automatically
+   * applied to every configured observability instance. This protects against
+   * accidentally exporting secrets (API keys, tokens, passwords, etc.) to
+   * exporters such as the Mastra cloud exporter.
+   *
+   * - `true` (default): apply `SensitiveDataFilter` with default options.
+   * - `false`: do not auto-apply the filter. You can still add it manually via
+   *   `spanOutputProcessors` on a specific config.
+   * - an object: apply `SensitiveDataFilter` with the provided options.
+   *
+   * If a config already includes a `SensitiveDataFilter` in
+   * `spanOutputProcessors`, the auto-applied filter is skipped to avoid
+   * double redaction. The auto-applied filter runs last (after any
+   * user-provided processors) so that sensitive data introduced or
+   * surfaced by upstream processors is still redacted before export.
+   * Pre-instantiated `ObservabilityInstance` values are not modified.
+   */
+  sensitiveDataFilter?: boolean | SensitiveDataFilterOptions;
 }
 
 // ============================================================================
@@ -268,6 +288,14 @@ export const observabilityConfigValueSchema = z.object(observabilityInstanceConf
  * both plain config objects and pre-instantiated ObservabilityInstance objects.
  * The schema is permissive to handle edge cases gracefully (arrays, null values).
  */
+const sensitiveDataFilterOptionsSchema = z
+  .object({
+    sensitiveFields: z.array(z.string()).optional(),
+    redactionToken: z.string().optional(),
+    redactionStyle: z.enum(['full', 'partial']).optional(),
+  })
+  .strict();
+
 export const observabilityRegistryConfigSchema = z
   .object({
     default: z
@@ -278,6 +306,7 @@ export const observabilityRegistryConfigSchema = z
       .nullable(),
     configs: z.union([z.record(z.string(), z.any()), z.array(z.any()), z.null()]).optional(),
     configSelector: z.function().optional(),
+    sensitiveDataFilter: z.union([z.boolean(), sensitiveDataFilterOptionsSchema]).optional(),
   })
   .passthrough() // Allow additional properties
   .refine(
