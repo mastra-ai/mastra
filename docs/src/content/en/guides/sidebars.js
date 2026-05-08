@@ -50,6 +50,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'getting-started/nestjs',
+          label: 'NestJS',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/hono',
           label: 'Hono',
         },
@@ -138,18 +143,28 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/inngest',
+          label: 'Inngest',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/mastra-platform',
+          label: 'Mastra Platform',
+        },
+        {
+          type: 'doc',
           id: 'deployment/netlify',
           label: 'Netlify',
         },
         {
           type: 'doc',
-          id: 'deployment/vercel',
-          label: 'Vercel',
+          id: 'deployment/temporal',
+          label: 'Temporal',
         },
         {
           type: 'doc',
-          id: 'deployment/inngest',
-          label: 'Inngest',
+          id: 'deployment/vercel',
+          label: 'Vercel',
         },
       ],
     },
@@ -176,6 +191,11 @@ const sidebars = {
               type: 'doc',
               id: 'guide/web-search',
               label: 'Tools: Web Search',
+            },
+            {
+              type: 'doc',
+              id: 'guide/firecrawl',
+              label: 'Tools: Firecrawl',
             },
             {
               type: 'doc',
@@ -228,13 +248,23 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
+          id: 'guide/github-actions-pr-description',
+          label: 'GitHub Actions: PR Description',
         },
         {
           type: 'doc',
-          id: 'guide/github-actions-pr-description',
-          label: 'GitHub Actions: PR Description',
+          id: 'guide/slack-assistant',
+          label: 'Channels: Slack Assistant',
+        },
+        {
+          type: 'doc',
+          id: 'guide/publishing-mcp-server',
+          label: 'Publishing an MCP Server',
+        },
+        {
+          type: 'doc',
+          id: 'guide/whatsapp-chat-bot',
+          label: 'WhatsApp Chat Bot',
         },
       ],
     },
@@ -336,23 +366,28 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'migrations/vnext-to-standard-apis',
-          label: 'VNext → Standard APIs',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/agentnetwork',
-          label: 'AgentNetwork → .network()',
+          id: 'migrations/mastra-cloud',
+          label: 'Mastra Cloud to Mastra Platform',
         },
         {
           type: 'doc',
           id: 'migrations/network-to-supervisor',
-          label: '.network() → Supervisor Agents',
+          label: '.network() to Supervisor Agents',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/vnext-to-standard-apis',
+          label: 'VNext to Standard APIs',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/agentnetwork',
+          label: 'AgentNetwork to .network()',
         },
         {
           type: 'doc',
           id: 'migrations/ai-sdk-v4-to-v5',
-          label: 'AI SDK v4 → v5',
+          label: 'AI SDK v4 to v5',
         },
       ],
     },

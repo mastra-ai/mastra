@@ -65,6 +65,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: "'thread'",
   },
   {
+    name: 'activateAfterIdle',
+    type: 'number | string',
+    description:
+      'Time before buffered observations or buffered reflections are forced to activate after inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. When the gap between the current time and the last assistant message part timestamp exceeds this value, buffered observational memory activates before the next prompt. Useful for aligning with prompt cache TTLs.',
+    isOptional: true,
+  },
+  {
     name: 'shareTokenBudget',
     type: 'boolean',
     description:
@@ -73,10 +80,18 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
-    name: 'retrieval',
+    name: 'temporalMarkers',
     type: 'boolean',
     description:
-      "**Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history. Retrieval mode is only active when `scope` is `'thread'`. If you set `retrieval: true` with `scope: 'resource'`, OM keeps resource-scoped memory behavior but skips retrieval-mode context and does not register the `recall` tool.",
+      'Insert temporal-gap reminder markers before new user messages when the previous message in the thread is at least 10 minutes older. The marker is persisted in memory, emitted as an inline reminder event so clients can render it specially, and shown to the observer so it can anchor observations to when events occurred.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'retrieval',
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    description:
+      "**Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -794,18 +809,40 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 ## Recall tool
 
-When `retrieval: true` is set with `scope: 'thread'`, OM registers a `recall` tool that the agent can call to page through the raw messages behind an observation group's `_range`. The tool is automatically added to the agent's tool list — no manual registration is needed.
+When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.
 
 ### Parameters
 
 <PropertiesTable
   content={[
   {
+    name: 'mode',
+    type: "'messages' | 'threads' | 'search'",
+    isOptional: true,
+    defaultValue: "'messages'",
+    description:
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists all threads for the current user. `"search"` finds messages by semantic similarity across all threads (requires vector store and embedder).',
+  },
+  {
+    name: 'query',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Search query for `mode: "search"`. Finds messages semantically similar to this text across all threads for the current user.',
+  },
+  {
     name: 'cursor',
     type: 'string',
-    isOptional: false,
+    isOptional: true,
     description:
-      'A message ID to anchor the recall query. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID.',
+      'A message ID to anchor the recall query. Required for `mode: "messages"` when browsing the current thread. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID. Can be omitted when `threadId` is provided to start reading from the beginning of that thread.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Browse a different thread by its ID. Use `mode: "threads"` first to discover thread IDs. When provided without a `cursor`, reading starts from the beginning of the thread.',
   },
   {
     name: 'page',
@@ -813,14 +850,14 @@ When `retrieval: true` is set with `scope: 'thread'`, OM registers a `recall` to
     isOptional: true,
     defaultValue: '1',
     description:
-      'Pagination offset from the cursor. Positive values page forward (messages after the cursor), negative values page backward (messages before the cursor). `0` is treated as `1`.',
+      'Pagination offset. For messages: positive values page forward from cursor, negative values page backward. For threads: page number (0-indexed). `0` is treated as `1` for messages.',
   },
   {
     name: 'limit',
     type: 'number',
     isOptional: true,
     defaultValue: '20',
-    description: 'Maximum number of messages per page.',
+    description: 'Maximum number of items to return per page.',
   },
   {
     name: 'detail',
@@ -837,10 +874,24 @@ When `retrieval: true` is set with `scope: 'thread'`, OM registers a `recall` to
     description:
       'Fetch a single message part at full detail by its positional index. Use this when a low-detail recall shows an interesting part at `[p1]` — call again with `partIndex: 1` to see the full content without loading every part.',
   },
+  {
+    name: 'before',
+    type: 'string',
+    isOptional: true,
+    description:
+      'For `mode: "threads"` only. Filter to threads created before this date. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
+  },
+  {
+    name: 'after',
+    type: 'string',
+    isOptional: true,
+    description:
+      'For `mode: "threads"` only. Filter to threads created after this date. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
+  },
 ]}
 />
 
-### Returns
+### Returns (messages mode)
 
 <PropertiesTable
   content={[
@@ -895,6 +946,52 @@ When `retrieval: true` is set with `scope: 'thread'`, OM registers a `recall` to
 ]}
 />
 
+### Returns (threads mode)
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threads',
+    type: 'string',
+    description:
+      'Formatted thread listing. Each thread shows its title, ID, and dates. The current thread is marked with `← current`.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of threads returned.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'The page number returned.',
+  },
+  {
+    name: 'hasMore',
+    type: 'boolean',
+    description: 'Whether more threads exist on the next page.',
+  },
+]}
+/>
+
+### Returns (search mode)
+
+<PropertiesTable
+  content={[
+  {
+    name: 'results',
+    type: 'string',
+    description:
+      'Formatted search results grouped by thread. Each result shows the thread title, thread ID, relevance score, message preview, and a cursor ID for browsing into that thread.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of matching messages found.',
+  },
+]}
+/>
+
 ### ModelByInputTokens
 
 `ModelByInputTokens` selects a model based on the input token count. It chooses the model for the smallest threshold that covers the actual input size.
@@ -923,7 +1020,7 @@ const selector = new ModelByInputTokens({
 
 #### Behavior
 
-- Thresholds are sorted internally, so the order in the config object does not matter.
+- Thresholds are sorted internally, so the order in the config object doesn't matter.
 - `inputTokens ≤ smallest threshold` → uses that threshold's model
 - `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
 - OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly

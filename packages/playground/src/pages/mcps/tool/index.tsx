@@ -1,17 +1,8 @@
-import {
-  Header,
-  Breadcrumb,
-  Crumb,
-  McpServerIcon,
-  Icon,
-  Button,
-  HeaderAction,
-  DocsIcon,
-  MCPToolPanel,
-  useMCPServerTool,
-  useMCPServers,
-} from '@mastra/playground-ui';
+import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, McpServerIcon } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
+import { MCPToolPanel } from '@/domains/mcps/components/MCPToolPanel';
+import { useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
+import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 
 const MCPServerToolExecutor = () => {
   const { data: mcpServers } = useMCPServers();
@@ -28,7 +19,7 @@ const MCPServerToolExecutor = () => {
   if (!mcpTool) return null;
 
   return (
-    <div className="h-full w-full bg-surface2 overflow-y-hidden">
+    <div className="h-full w-full bg-surface2 overflow-y-auto">
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/mcps`}>

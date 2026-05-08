@@ -6,6 +6,7 @@ import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { showModalOverlay } from '../overlay.js';
 import type { TUIState } from '../state.js';
 import { theme } from '../theme.js';
 
@@ -36,6 +37,7 @@ export async function handleAskQuestion(
   options?: Array<{ label: string; description?: string }>,
 ): Promise<void> {
   const { state } = ctx;
+
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
       // Capture the current ask_user component reference now, before it can be
@@ -47,10 +49,14 @@ export async function handleAskQuestion(
           let questionComponent: AskQuestionInlineComponent;
 
           if (askUserComponent) {
-            // Activate the existing streaming component with interactive elements
+            // Activate the existing streaming component with interactive elements.
+            // ask_user is the agent's free-text channel — opt into multiline so users
+            // can paste logs / write paragraph-length replies.
             askUserComponent.activate({
               question,
               options,
+              multiline: true,
+              tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.harness.respondToQuestion({ questionId, answer });
@@ -66,11 +72,13 @@ export async function handleAskQuestion(
             });
             questionComponent = askUserComponent;
           } else {
-            // Fallback: create a new component if no streaming one exists
+            // Fallback: create a new component if no streaming one exists.
+            // Multiline opt-in matches the streaming branch above.
             questionComponent = new AskQuestionInlineComponent(
               {
                 question,
                 options,
+                multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.harness.respondToQuestion({ questionId, answer });
@@ -115,10 +123,12 @@ export async function handleAskQuestion(
         activate();
       }
     } else {
-      // Dialog mode: Show overlay
+      // Dialog mode: Show overlay. Multiline opt-in matches the inline branch.
       const dialog = new AskQuestionDialogComponent({
         question,
         options,
+        multiline: true,
+        tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.harness.respondToQuestion({ questionId, answer });
@@ -130,7 +140,7 @@ export async function handleAskQuestion(
           resolve();
         },
       });
-      state.ui.showOverlay(dialog, { width: '70%', anchor: 'center' });
+      showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
       dialog.focused = true;
     }
 
@@ -207,6 +217,30 @@ export async function handleSandboxAccessRequest(
  * Handle a plan_approval_required event from the submit_plan tool.
  * Shows the plan inline with Approve/Reject/Request Changes options.
  */
+async function approvePlan(ctx: EventHandlerContext, planId: string, title: string, plan: string): Promise<void> {
+  const { state } = ctx;
+  await state.harness.setState({
+    activePlan: {
+      title,
+      plan,
+      approvedAt: new Date().toISOString(),
+    },
+  });
+  savePlanToDisk({
+    title,
+    plan,
+    resourceId: state.harness.getResourceId(),
+  }).catch(() => {});
+  await state.harness.respondToPlanApproval({
+    planId,
+    response: { action: 'approved' },
+  });
+}
+
+function formatPlanGoalObjective(title: string, plan: string): string {
+  return `# ${title}\n\n${plan}`;
+}
+
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
   planId: string,
@@ -222,25 +256,7 @@ export async function handlePlanApproval(
         plan,
         onApprove: async () => {
           state.activeInlinePlanApproval = undefined;
-          // Store the approved plan in harness state
-          await state.harness.setState({
-            activePlan: {
-              title,
-              plan,
-              approvedAt: new Date().toISOString(),
-            },
-          });
-          // Persist plan to disk (fire-and-forget, best-effort)
-          savePlanToDisk({
-            title,
-            plan,
-            resourceId: state.harness.getResourceId(),
-          }).catch(() => {});
-          // Wait for plan approval to complete (switches mode, aborts stream)
-          await state.harness.respondToPlanApproval({
-            planId,
-            response: { action: 'approved' },
-          });
+          await approvePlan(ctx, planId, title, plan);
 
           // Now that mode switch is complete, add system reminder and trigger build agent
           // Use setTimeout to ensure the plan approval component has fully rendered
@@ -255,6 +271,12 @@ export async function handlePlanApproval(
             ctx.fireMessage(reminderText);
           }, 50);
 
+          resolve();
+        },
+        onGoal: async () => {
+          state.activeInlinePlanApproval = undefined;
+          await approvePlan(ctx, planId, title, plan);
+          await ctx.startGoal(formatPlanGoalObjective(title, plan), 'Goal cancelled.');
           resolve();
         },
         onReject: async (feedback?: string) => {

@@ -284,4 +284,137 @@ describe('analyzeEntry', () => {
     // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)
   });
+
+  it('should deduplicate Rollup instances when analyzeCache is provided', async () => {
+    const entryFilePath = join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts');
+
+    const analyzeCache = new Map();
+    const opts = {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+      analyzeCache,
+    };
+
+    // First call: cache miss — creates a Rollup instance
+    const result1 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
+
+    // Second call with the same entry: cache hit — no new Rollup instance
+    const result2 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
+
+    // Only 1 Rollup instance created despite 2 analyzeEntry calls
+    expect(rollup).toHaveBeenCalledTimes(1);
+    // Both return the same result
+    expect(result1).toBe(result2);
+    expect(result1.dependencies.size).toBe(4);
+    // Cache populated
+    expect(analyzeCache.size).toBe(1);
+  });
+
+  it('should avoid re-analyzing sibling workspace packages that share a transitive dependency', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    vi.mocked(resolveModule).mockImplementation(dep => {
+      if (dep === '@internal/a') {
+        return join(root, 'packages', 'a', 'src', 'index.ts');
+      }
+      if (dep === '@internal/b') {
+        return join(root, 'packages', 'b', 'src', 'index.ts');
+      }
+      if (dep === '@internal/shared') {
+        return join(root, 'packages', 'shared', 'src', 'index.ts');
+      }
+
+      return undefined;
+    });
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/b',
+        {
+          location: `${root}/packages/b`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const baseOpts = {
+      shouldCheckTransitiveDependencies: true,
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap,
+      projectRoot: root,
+    };
+
+    const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
+    const uncachedCalls = vi.mocked(rollup).mock.calls.length;
+
+    expect(uncachedResult.dependencies.size).toBe(3);
+    expect(uncachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(uncachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    expect(uncachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+
+    vi.mocked(rollup).mockClear();
+
+    const analyzeCache = new Map();
+    const cachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+      ...baseOpts,
+      analyzeCache,
+    });
+    const cachedCalls = vi.mocked(rollup).mock.calls.length;
+
+    expect(cachedCalls).toBeLessThan(uncachedCalls);
+    expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
+    expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+    expect(analyzeCache.size).toBe(3);
+  });
+
+  it('should not cache virtual file entries', async () => {
+    const entryCode = `
+      import { Mastra } from '@mastra/core/mastra';
+      export const mastra = new Mastra({});
+    `;
+
+    const analyzeCache = new Map();
+    const opts = {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+      analyzeCache,
+    };
+
+    await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
+    await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
+
+    // Virtual files have no stable path — each call creates a new Rollup instance
+    expect(rollup).toHaveBeenCalledTimes(2);
+    expect(analyzeCache.size).toBe(0);
+  });
 });

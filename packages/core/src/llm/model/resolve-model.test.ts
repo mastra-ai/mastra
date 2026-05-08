@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, it, expect } from 'vitest';
 import { RequestContext } from '../../request-context';
+import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
@@ -100,7 +101,7 @@ describe('resolveModelConfig', () => {
       expect(result).toBe(model);
     });
 
-    it('should still wrap v1 models as legacy (no AISDKV5LanguageModel wrapping)', async () => {
+    it('should wrap v1 models in AISDKV4LegacyLanguageModel (not AISDKV5LanguageModel)', async () => {
       const model = {
         specificationVersion: 'v1',
         provider: 'test',
@@ -109,8 +110,12 @@ describe('resolveModelConfig', () => {
         doStream: async () => ({}),
       };
       const result = await resolveModelConfig(model as any);
+      expect(result).toBeInstanceOf(AISDKV4LegacyLanguageModel);
       expect(result).not.toBeInstanceOf(AISDKV5LanguageModel);
-      expect(result).toBe(model);
+      // Identity fields preserved
+      expect(result.specificationVersion).toBe('v1');
+      expect(result.provider).toBe('test');
+      expect(result.modelId).toBe('test-model');
     });
   });
 

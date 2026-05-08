@@ -29,7 +29,7 @@ Multi-agent patterns are useful when the system needs a clear way to divide cont
 
 ## Handoffs
 
-A handoff pattern transfers control from one agent to another. Unlike a supervisor pattern, the first agent does not stay in charge for the full task. Instead, the active specialist takes ownership of the next part of the interaction.
+A handoff pattern transfers control from one agent to another. Unlike a supervisor pattern, the first agent doesn't stay in charge for the full task. Instead, the active specialist takes ownership of the next part of the interaction.
 
 Use handoffs when the next specialist should continue the interaction directly instead of reporting back through a central coordinator. The tradeoff is that context management becomes more important, since the system must decide what the next agent inherits and what remains scoped.
 
@@ -41,13 +41,13 @@ A workflow pattern defines the execution path in code. Instead of asking an agen
 
 Use workflows when the task is well understood and the execution path is known in advance. The main advantage is predictability: The system is easier to debug, reason about, and audit because the structure is explicit. The tradeoff is flexibility, since workflows are less adaptive when the task changes as it unfolds.
 
-In Mastra, [workflows](/docs/workflows/overview) can implement several coordination patterns, including handoffs and councils. What makes a workflow distinct is not which agents it calls, but that the control logic lives in the workflow itself.
+In Mastra, [workflows](/docs/workflows/overview) can implement several coordination patterns, including handoffs and councils. What makes a workflow distinct isn't which agents it calls, but that the control logic lives in the workflow itself.
 
 ## Supervisors
 
 A supervisor pattern keeps one lead agent in control for the full task. The supervisor decides when to delegate, which specialist to call, what context to pass, and how to combine the result.
 
-Use this pattern when the task is open-ended and the full sequence is not known in advance. For example, a research task may require different lines of inquiry based on what earlier steps uncover. A supervisor can adapt as the task unfolds.
+Use this pattern when the task is open-ended and the full sequence isn't known in advance. For example, a research task may require different lines of inquiry based on what earlier steps uncover. A supervisor can adapt as the task unfolds.
 The tradeoff is that the supervisor becomes the main coordination point. That makes the pattern flexible, but it also means the result depends heavily on good delegation behavior and clear subagent boundaries.
 
 In Mastra, this pattern maps directly to [supervisor agents](/docs/agents/supervisor-agents). A supervisor agent defines subagents on the `agents` property and uses `stream()` or `generate()` to coordinate them. Mastra also provides delegation hooks, message filtering, and memory isolation to help control this pattern.
@@ -64,7 +64,7 @@ A council pattern asks multiple agents to work on the same problem independently
 
 Use this pattern when the question is ambiguous, evaluative, or high-stakes and answer quality matters more than speed. The tradeoff is cost, since councils intentionally duplicate effort and usually take longer and use more tokens than other patterns.
 
-Mastra does not provide a dedicated council primitive. In Mastra, implement this pattern with [agents](/docs/agents/overview) and [workflows](/docs/workflows/overview): Run multiple agents in parallel, collect their outputs, and add a final synthesis or review step. Workflow control flow methods such as `.parallel()` provide the structure for this pattern.
+Mastra doesn't provide a dedicated council primitive. In Mastra, implement this pattern with [agents](/docs/agents/overview) and [workflows](/docs/workflows/overview): Run multiple agents in parallel, collect their outputs, and add a final synthesis or review step. Workflow control flow methods such as `.parallel()` provide the structure for this pattern.
 
 ## Choosing a pattern
 

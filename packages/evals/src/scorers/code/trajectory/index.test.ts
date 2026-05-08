@@ -112,7 +112,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should return 1 for exact match', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }])));
 
@@ -122,7 +122,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should penalize extra steps with calculated penalty', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(
         makeRun(makeTrajectory([{ name: 'search' }, { name: 'summarize' }, { name: 'format' }])),
@@ -136,7 +136,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should return 0 when steps are reversed', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'summarize' }, { name: 'search' }])));
 
@@ -146,7 +146,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     test('should identify missing steps', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory,
-        comparisonOptions: { strictOrder: true },
+        comparisonOptions: { ordering: 'strict' },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search' }])));
 
@@ -157,6 +157,7 @@ describe('createTrajectoryAccuracyScorerCode', () => {
 
   describe('step data comparison', () => {
     test('should match when step data is identical', async () => {
+      // Expected trajectory has toolArgs set → auto-compared
       const expected: Trajectory = {
         steps: [
           { stepType: 'tool_call', name: 'search', toolArgs: { query: 'test' } },
@@ -165,7 +166,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       const result = await scorer.run(
         makeRun(
@@ -185,7 +185,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search', toolArgs: { query: 'different' } }])));
 
@@ -198,7 +197,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       const result = await scorer.run(makeRun(makeTrajectory([{ name: 'search', toolResult: { count: 5 } }])));
 
@@ -211,7 +209,6 @@ describe('createTrajectoryAccuracyScorerCode', () => {
       };
       const scorer = createTrajectoryAccuracyScorerCode({
         expectedTrajectory: expected,
-        comparisonOptions: { compareStepData: true },
       });
       // actual step has same name but different stepType
       const actual: Trajectory = {
@@ -496,11 +493,11 @@ describe('createTrajectoryScorerCode', () => {
       expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(0);
     });
 
-    test('should match ExpectedStep with data comparison', async () => {
+    test('should auto-compare ExpectedStep data when fields are present', async () => {
       const scorer = createTrajectoryScorerCode({
         defaults: {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
-          compareStepData: true,
+          // toolArgs specified → auto-compared
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         },
       });
 
@@ -509,11 +506,10 @@ describe('createTrajectoryScorerCode', () => {
       expect(result.preprocessStepResult?.accuracy?.matchedSteps).toBe(1);
     });
 
-    test('should fail ExpectedStep data mismatch', async () => {
+    test('should fail when ExpectedStep data fields do not match', async () => {
       const scorer = createTrajectoryScorerCode({
         defaults: {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
-          compareStepData: true,
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         },
       });
 
@@ -979,6 +975,82 @@ describe('createTrajectoryScorerCode', () => {
       expect(result.score).toBe(0);
       expect(result.reason).toContain('Nested blacklist violation');
       expect(result.reason).toContain('agent');
+    });
+  });
+
+  describe('configurable weights', () => {
+    test('should use custom weights for scoring', async () => {
+      // Create two scorers with opposite weights to verify they produce different scores
+      const accuracyHeavy = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+          maxSteps: 1, // over budget → efficiency penalty
+        },
+        weights: { accuracy: 0.9, efficiency: 0.1, toolFailures: 0, blacklist: 0 },
+      });
+
+      const efficiencyHeavy = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+          maxSteps: 1, // over budget → efficiency penalty
+        },
+        weights: { accuracy: 0.1, efficiency: 0.9, toolFailures: 0, blacklist: 0 },
+      });
+
+      // 2 steps, both matched (accuracy = 1.0), but over maxSteps of 1 (efficiency < 1.0)
+      const actual = makeTrajectory([
+        { name: 'search', success: true },
+        { name: 'summarize', success: true },
+      ]);
+
+      const accuracyResult = await accuracyHeavy.run(makeRun(actual));
+      const efficiencyResult = await efficiencyHeavy.run(makeRun(actual));
+
+      // Accuracy-heavy should score higher since accuracy is perfect
+      expect(accuracyResult.score).toBeGreaterThan(efficiencyResult.score);
+    });
+
+    test('should use default weights when not specified', async () => {
+      const withDefaults = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }],
+          maxSteps: 5,
+        },
+      });
+
+      const withExplicitDefaults = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }],
+          maxSteps: 5,
+        },
+        weights: { accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 },
+      });
+
+      const actual = makeTrajectory([{ name: 'search', success: true }]);
+      const run = makeRun(actual);
+
+      const defaultResult = await withDefaults.run(run);
+      const explicitResult = await withExplicitDefaults.run(run);
+
+      expect(defaultResult.score).toBe(explicitResult.score);
+    });
+
+    test('should allow zeroing out a dimension', async () => {
+      // Zero out accuracy weight — missing steps should not affect score
+      const scorer = createTrajectoryScorerCode({
+        defaults: {
+          steps: [{ name: 'search' }, { name: 'summarize' }],
+          maxSteps: 5,
+        },
+        weights: { accuracy: 0, efficiency: 1, toolFailures: 0, blacklist: 0 },
+      });
+
+      // Only 1 of 2 expected steps — accuracy is low, but weight is 0
+      const actual = makeTrajectory([{ name: 'search', success: true }]);
+      const result = await scorer.run(makeRun(actual));
+
+      // Score should be based entirely on efficiency (1 step, max 5 = good)
+      expect(result.score).toBe(1);
     });
   });
 });

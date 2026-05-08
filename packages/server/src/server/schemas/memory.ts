@@ -25,92 +25,96 @@ export const optionalAgentIdQuerySchema = z.object({
  * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
  * Handles JSON parsing from query strings
  */
-const storageOrderBySchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        return undefined;
+const storageOrderBySchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return undefined;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .object({
+      return val;
+    },
+    z.object({
       field: z.enum(['createdAt', 'updatedAt']).optional(),
       direction: z.enum(['ASC', 'DESC']).optional(),
-    })
-    .optional(),
-);
+    }),
+  )
+  .optional();
 
 /**
  * Storage order by configuration for messages (only have createdAt)
  * Handles JSON parsing from query strings
  */
-const messageOrderBySchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        return undefined;
+const messageOrderBySchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return undefined;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .object({
+      return val;
+    },
+    z.object({
       field: z.enum(['createdAt']).optional(),
       direction: z.enum(['ASC', 'DESC']).optional(),
-    })
-    .optional(),
-);
+    }),
+  )
+  .optional();
 
 /**
  * Include schema for message listing - handles JSON parsing from query strings
  */
-const includeSchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        // Return invalid string to fail validation (z.array will reject string type)
-        return val;
+const includeSchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.array will reject string type)
+          return val;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .array(
+      return val;
+    },
+    z.array(
       z.object({
         id: z.string(),
         threadId: z.string().optional(),
         withPreviousMessages: z.number().optional(),
         withNextMessages: z.number().optional(),
       }),
-    )
-    .optional(),
-);
+    ),
+  )
+  .optional();
 
 /**
  * Filter schema for message listing - handles JSON parsing from query strings
  */
-const filterSchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        // Return invalid string to fail validation (z.object will reject string type)
-        return val;
+const filterSchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.object will reject string type)
+          return val;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .object({
+      return val;
+    },
+    z.object({
       dateRange: z
         .object({
           start: z.coerce.date().optional(),
@@ -120,24 +124,30 @@ const filterSchema = z.preprocess(
         })
         .optional(),
       roles: z.array(z.string()).optional(),
-    })
-    .optional(),
-);
+    }),
+  )
+  .optional();
 
 /**
  * Memory config schema - handles JSON parsing from query strings
  */
-const memoryConfigSchema = z.preprocess(val => {
-  if (typeof val === 'string') {
-    try {
-      return JSON.parse(val);
-    } catch {
-      // Return invalid string to fail validation (z.record will reject string type)
+const memoryConfigSchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
       return val;
-    }
-  }
-  return val;
-}, z.record(z.string(), z.unknown()).optional());
+    },
+    z.record(z.string(), z.unknown()),
+  )
+  .optional();
 
 /**
  * Thread object structure
@@ -190,20 +200,23 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(
-    val => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          // Return invalid string to fail validation (z.record will reject string type)
-          return val;
+  metadata: z
+    .preprocess(
+      val => {
+        if (val === undefined) return val;
+        if (typeof val === 'string') {
+          try {
+            return JSON.parse(val);
+          } catch {
+            // Return invalid string to fail validation (z.record will reject string type)
+            return val;
+          }
         }
-      }
-      return val;
-    },
-    z.optional(z.record(z.string(), z.any())),
-  ),
+        return val;
+      },
+      z.record(z.string(), z.any()),
+    )
+    .optional(),
   orderBy: storageOrderBySchema,
 });
 
@@ -226,6 +239,14 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
+  includeSystemReminders: z
+    .preprocess(val => {
+      if (val === undefined) return val;
+      if (val === 'true') return true;
+      if (val === 'false') return false;
+      return val;
+    }, z.boolean())
+    .optional(),
 });
 
 /**
@@ -273,20 +294,23 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(
-    val => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          // Return invalid string to fail validation (z.record will reject string type)
-          return val;
+  metadata: z
+    .preprocess(
+      val => {
+        if (val === undefined) return val;
+        if (typeof val === 'string') {
+          try {
+            return JSON.parse(val);
+          } catch {
+            // Return invalid string to fail validation (z.record will reject string type)
+            return val;
+          }
         }
-      }
-      return val;
-    },
-    z.optional(z.record(z.string(), z.any())),
-  ),
+        return val;
+      },
+      z.record(z.string(), z.any()),
+    )
+    .optional(),
   orderBy: storageOrderBySchema,
 });
 
@@ -351,6 +375,7 @@ export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
  */
 export const memoryStatusResponseSchema = z.object({
   result: z.boolean(),
+  memoryType: z.enum(['local', 'gateway']).optional(),
   observationalMemory: z
     .object({
       enabled: z.boolean(),
@@ -392,6 +417,7 @@ const observationalMemoryConfigSchema = z.object({
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
+  memoryType: z.enum(['local', 'gateway']).optional(),
   config: z
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),
@@ -562,6 +588,10 @@ export const getObservationalMemoryQuerySchema = z.object({
   agentId: z.string(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).optional(),
 });
 
 /**

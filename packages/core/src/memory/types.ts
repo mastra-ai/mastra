@@ -727,6 +727,25 @@ export interface ObservationalMemoryOptions {
   scope?: 'resource' | 'thread';
 
   /**
+   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observational memory activates regardless of whether the
+   * token threshold has been reached. Useful to align with prompt cache TTLs.
+   *
+   * @example 300_000
+   * @example "5m"
+   * @example "1hr"
+   */
+  activateAfterIdle?: number | string;
+
+  /**
+   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * Useful when switching between models that do not share prompt caches.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Share the token budget between messages and observations.
    * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
@@ -739,15 +758,32 @@ export interface ObservationalMemoryOptions {
   shareTokenBudget?: boolean;
 
   /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity. These markers are persisted in memory and also emitted
+   * as inline reminder events for clients that want to render them specially.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
+
+  /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
    *
+   * - `true` — recall tool with cross-thread browsing by default
+   * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
+   * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
+   * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
+   *
+   * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
+   * Set to `'thread'` to restrict to the current thread only.
+   *
    * @experimental
    * @default false
    */
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 }
 
 /**
@@ -904,6 +940,25 @@ type BaseMemoryConfig = {
          */
         instructions?: DynamicArgument<string>;
       };
+
+  /**
+   * Whether to filter out incomplete (suspended) tool calls when sending messages to the LLM.
+   * When true, tool calls in `input-available` state are stripped from the prompt,
+   * preventing the agent from seeing its own suspended tool calls in thread history.
+   *
+   * Set to false to allow the agent to see suspended tool calls in context.
+   * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
+   *
+   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
+   * Anthropic handles incomplete tool calls without issues.
+   *
+   * @default true
+   * @example
+   * ```typescript
+   * filterIncompleteToolCalls: false // Keep suspended tool calls visible in context
+   * ```
+   */
+  filterIncompleteToolCalls?: boolean;
 
   /**
    * Thread management configuration.
@@ -1152,14 +1207,23 @@ export type SerializedObservationalMemoryConfig = {
   /** Memory scope: 'resource' or 'thread' */
   scope?: 'resource' | 'thread';
 
+  /** Inactivity TTL before forcing buffered observation/reflection activation */
+  activateAfterIdle?: number | string;
+
+  /** Force-activate buffered observation/reflection activation when the actor model changes */
+  activateOnProviderChange?: boolean;
+
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
+
+  /** Persist inline temporal gap markers for long pauses between messages */
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
    * @experimental
    */
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

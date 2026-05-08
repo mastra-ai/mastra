@@ -38,6 +38,20 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }
 
   /**
+   * Internal workflows (registered via `Mastra.__registerInternalWorkflow`)
+   * are resolvable from the workflow event processor but `Mastra.getWorkflow`
+   * intentionally only sees public ones. The `execute` resume/time-travel
+   * branches need access to the workflow's step graph by id, so prefer the
+   * internal registry when present.
+   */
+  private resolveWorkflow(workflowId: string) {
+    if (this.mastra?.__hasInternalWorkflow(workflowId)) {
+      return this.mastra.__getInternalWorkflow(workflowId);
+    }
+    return this.mastra!.getWorkflow(workflowId);
+  }
+
+  /**
    * Executes a workflow run with the provided execution graph and input
    * @param graph The execution graph to execute
    * @param input The input data for the workflow
@@ -120,7 +134,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
     try {
       if (params.resume) {
-        const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
+        const prevStep = getStep(this.resolveWorkflow(params.workflowId), params.resume.resumePath);
         const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
         // Extract state from stepResults.__state or use initialState
         const resumeState = params.resume.stepResults?.__state ?? params.initialState ?? {};
@@ -146,7 +160,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.timeTravel) {
-        const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.timeTravel.executionPath);
+        const prevStep = getStep(this.resolveWorkflow(params.workflowId), params.timeTravel.executionPath);
         const prevResult = params.timeTravel.stepResults[prevStep?.id ?? 'input'];
         await pubsub.publish('workflows', {
           type: 'workflow.start',

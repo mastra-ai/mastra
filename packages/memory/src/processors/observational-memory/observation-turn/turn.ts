@@ -1,10 +1,12 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import type { ObservationModelContext } from '../types';
 
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
@@ -51,21 +53,29 @@ export class ObservationTurn {
   /** Optional request context for observation calls. */
   requestContext?: RequestContext;
 
-  /** Optional processor-provided hooks for turn/step lifecycle integration. */
-  readonly hooks?: ObservationTurnHooks;
+  /** Optional observability context for nested OM spans. */
+  observabilityContext?: ObservabilityContext;
+
+  /** Current actor model for this step. Updated by the processor before prepare(). */
+  actorModelContext?: ObservationModelContext;
+
+  /** Processor-provided hooks for turn/step lifecycle integration. */
+  readonly hooks: ObservationTurnHooks;
 
   constructor(opts: {
     om: ObservationalMemory;
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
     this.om = opts.om;
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
-    this.hooks = opts.hooks;
+    this.observabilityContext = opts.observabilityContext;
+    this.hooks = opts.hooks ?? {};
   }
 
   readonly om: ObservationalMemory;
@@ -88,6 +98,11 @@ export class ObservationTurn {
   /** The current step, if one exists. */
   get currentStep(): ObservationStep | undefined {
     return this._currentStep;
+  }
+
+  addHooks(hooks?: ObservationTurnHooks): void {
+    if (!hooks) return;
+    Object.assign(this.hooks, hooks);
   }
 
   /**

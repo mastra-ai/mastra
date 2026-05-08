@@ -3,7 +3,6 @@ import {
   commonFilterFields,
   contextFields,
   metadataField,
-  observabilitySignalFilterFields,
   paginationArgsSchema,
   paginationInfoSchema,
   sortDirectionSchema,
@@ -32,6 +31,7 @@ const logDataField = z.record(z.string(), z.unknown()).describe('Structured data
  */
 export const logRecordSchema = z
   .object({
+    logId: z.string().nullish().describe('Unique id for this log event'),
     timestamp: z.date().describe('When the log was created'),
     level: logLevelSchema.describe('Log severity level'),
     message: messageField,
@@ -41,11 +41,13 @@ export const logRecordSchema = z
     traceId: traceIdField.nullish(),
     spanId: spanIdField.nullish(),
 
-    // Context fields (same as tracing)
+    // Context fields
     ...contextFields,
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().nullish().describe('Execution source'),
 
-    // Filtering
-    tags: tagsField.nullish(),
     metadata: metadataField.nullish(),
   })
   .describe('Log record as stored in the database');
@@ -101,9 +103,12 @@ export type BatchCreateLogsArgs = z.infer<typeof batchCreateLogsArgsSchema>;
 export const logsFilterSchema = z
   .object({
     ...commonFilterFields,
-    ...observabilitySignalFilterFields,
 
     // Log-specific filters
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().optional().describe('Filter by execution source'),
     level: z
       .union([logLevelSchema, z.array(logLevelSchema)])
       .optional()

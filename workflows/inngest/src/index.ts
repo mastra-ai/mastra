@@ -10,7 +10,7 @@ import type { Processor, ProcessorStepOutput, ProcessorStepInputSchema, OutputRe
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
-import type { ChunkType } from '@mastra/core/stream';
+import type { ChunkType, LanguageModelUsage } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, createTool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
@@ -28,6 +28,7 @@ export * from './pubsub';
 export * from './run';
 export * from './serve';
 export * from './types';
+export * from './durable-agent';
 
 // ============================================
 // Type Guards
@@ -581,6 +582,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -669,6 +671,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -987,6 +990,11 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultUsage: LanguageModelUsage = {
+                inputTokens: undefined,
+                outputTokens: undefined,
+                totalTokens: undefined,
+              };
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -995,6 +1003,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 finishReason,
                 toolCalls: toolCalls as any,
                 text,
+                usage: (usage as LanguageModelUsage) ?? defaultUsage,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
                 state: {},

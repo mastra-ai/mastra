@@ -34,19 +34,14 @@ interface TrajectoryAccuracyScorerCodeOptions {
  * Convert a TrajectoryStep to an ExpectedStep, preserving step-specific data.
  */
 function trajectoryStepToExpectedStep(step: TrajectoryStep): ExpectedStep {
-  const result: ExpectedStep = { name: step.name, stepType: step.stepType };
-  const data: Record<string, unknown> = {};
-  if (step.stepType === 'tool_call' || step.stepType === 'mcp_tool_call') {
-    if (step.toolArgs !== undefined) data.input = step.toolArgs;
-    if (step.toolResult !== undefined) data.output = step.toolResult;
-  } else if (step.stepType === 'workflow_step') {
-    if (step.output !== undefined) data.output = step.output;
-  }
-  if (Object.keys(data).length > 0) result.data = data;
+  // Spread all variant-specific fields directly — ExpectedStep mirrors TrajectoryStep
+  // but with all fields optional. Drop runtime-only fields (durationMs, metadata).
+  const { durationMs: _, metadata: _m, children, ...rest } = step;
+  const result: ExpectedStep = rest as ExpectedStep;
   // Recursively convert children so nested hierarchies are preserved
-  if (step.children && step.children.length > 0) {
+  if (children && children.length > 0) {
     result.children = {
-      steps: step.children.map(trajectoryStepToExpectedStep),
+      steps: children.map(trajectoryStepToExpectedStep),
     };
   }
   return result;
@@ -97,10 +92,7 @@ function expectationToExpectedSteps(expectation: TrajectoryExpectation): Expecte
 export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracyScorerCodeOptions = {}) {
   const { expectedTrajectory: staticExpectedTrajectory, comparisonOptions = {} } = options;
 
-  const { ordering, strictOrder, compareStepData = false, allowRepeatedSteps = true } = comparisonOptions;
-
-  // Resolve ordering for display
-  const resolvedOrdering = ordering ?? (strictOrder ? 'strict' : 'relaxed');
+  const { ordering = 'relaxed', allowRepeatedSteps = true } = comparisonOptions;
 
   // Normalize the static expected trajectory into ExpectedStep[]
   const staticExpectedSteps: ExpectedStep[] | undefined = staticExpectedTrajectory
@@ -116,9 +108,9 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
   const getDescription = () => {
     if (staticExpectedSteps) {
       const expectedStepNames = staticExpectedSteps.map((s: ExpectedStep) => s.name).join(' → ');
-      return `Evaluates whether the trajectory matches the expected path: [${expectedStepNames}] (${resolvedOrdering} ordering)`;
+      return `Evaluates whether the trajectory matches the expected path: [${expectedStepNames}] (${ordering} ordering)`;
     }
-    return `Evaluates trajectory accuracy against expected trajectory from dataset items (${resolvedOrdering} ordering)`;
+    return `Evaluates trajectory accuracy against expected trajectory from dataset items (${ordering} ordering)`;
   };
 
   return createScorer({
@@ -151,8 +143,7 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
 
       // Merge comparison options: dataset item ordering overrides constructor if present
       const itemExpectation = run.expectedTrajectory as TrajectoryExpectation | undefined;
-      const effectiveOrdering = itemExpectation?.ordering ?? resolvedOrdering;
-      const effectiveCompareData = itemExpectation?.compareStepData ?? compareStepData;
+      const effectiveOrdering = itemExpectation?.ordering ?? ordering;
       const effectiveAllowRepeated = itemExpectation?.allowRepeatedSteps ?? allowRepeatedSteps;
 
       const comparison = compareTrajectories(
@@ -160,7 +151,6 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
         { steps: resolvedExpectedSteps },
         {
           ordering: effectiveOrdering,
-          compareStepData: effectiveCompareData,
           allowRepeatedSteps: effectiveAllowRepeated,
         },
       );
@@ -212,6 +202,7 @@ export type NestedEvaluationResult = {
 function evaluateNestedExpectations(
   expectedSteps: ExpectedStep[],
   actualSteps: TrajectoryStep[],
+  weights: Required<TrajectoryScoreWeights> = { accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 },
 ): NestedEvaluationResult[] {
   const results: NestedEvaluationResult[] = [];
   const matchedIndices = new Set<number>();
@@ -266,7 +257,6 @@ function evaluateNestedExpectations(
         { steps: childConfig.steps },
         {
           ordering: childConfig.ordering ?? 'relaxed',
-          compareStepData: childConfig.compareStepData ?? false,
           allowRepeatedSteps: childConfig.allowRepeatedSteps ?? true,
         },
       );
@@ -304,26 +294,27 @@ function evaluateNestedExpectations(
     });
 
     // --- Recursive nested evaluation ---
-    const nested = childConfig.steps ? evaluateNestedExpectations(childConfig.steps, actualStep.children) : [];
+    const nested = childConfig.steps ? evaluateNestedExpectations(childConfig.steps, actualStep.children, weights) : [];
 
     // Compute weighted score for this level
     const scores: Array<{ weight: number; value: number }> = [];
-    if (accuracy) scores.push({ weight: 0.4, value: accuracy.score });
-    if (efficiency) scores.push({ weight: 0.3, value: efficiency.score });
-    if (toolFailures && toolFailures.patterns.length > 0) scores.push({ weight: 0.2, value: toolFailures.score });
+    if (accuracy) scores.push({ weight: weights.accuracy, value: accuracy.score });
+    if (efficiency) scores.push({ weight: weights.efficiency, value: efficiency.score });
+    if (toolFailures && toolFailures.patterns.length > 0)
+      scores.push({ weight: weights.toolFailures, value: toolFailures.score });
     if (blacklist) {
       if (blacklist.score === 0) {
         // Hard fail for blacklist violation at this level
         results.push({ stepName: expectedStep.name, score: 0, accuracy, efficiency, blacklist, toolFailures, nested });
         continue;
       }
-      scores.push({ weight: 0.1, value: blacklist.score });
+      scores.push({ weight: weights.blacklist, value: blacklist.score });
     }
 
     let levelScore = 1;
     if (scores.length > 0) {
       const totalWeight = scores.reduce((sum, s) => sum + s.weight, 0);
-      levelScore = scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0);
+      levelScore = totalWeight > 0 ? scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0) : 1;
     }
 
     // Average with nested scores if any
@@ -373,12 +364,29 @@ export type TrajectoryScoreResult = {
   nested?: NestedEvaluationResult[];
 };
 
-interface TrajectoryScorerCodeOptions {
+export interface TrajectoryScoreWeights {
+  /** Weight for accuracy dimension (default: 0.4) */
+  accuracy?: number;
+  /** Weight for efficiency dimension (default: 0.3) */
+  efficiency?: number;
+  /** Weight for tool failures dimension (default: 0.2) */
+  toolFailures?: number;
+  /** Weight for blacklist dimension (default: 0.1) */
+  blacklist?: number;
+}
+
+export interface TrajectoryScorerCodeOptions {
   /**
    * Default expectation config for all runs.
    * Per-item `run.expectedTrajectory` values override these defaults.
    */
   defaults?: TrajectoryExpectation;
+  /**
+   * Weights for combining dimension scores into the final score.
+   * Only active dimensions are used — weights are normalized to sum to 1.0.
+   * Blacklist violations always override to 0 regardless of weight.
+   */
+  weights?: TrajectoryScoreWeights;
 }
 
 /**
@@ -410,11 +418,18 @@ interface TrajectoryScorerCodeOptions {
  *     noRedundantCalls: true,
  *     blacklistedTools: ['deleteAll'],
  *   },
+ *   weights: { accuracy: 0.5, efficiency: 0.3, toolFailures: 0.1, blacklist: 0.1 },
  * });
  * ```
  */
 export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions = {}) {
-  const { defaults = {} } = options;
+  const { defaults = {}, weights: userWeights = {} } = options;
+  const w = {
+    accuracy: Math.max(0, userWeights.accuracy ?? 0.4),
+    efficiency: Math.max(0, userWeights.efficiency ?? 0.3),
+    toolFailures: Math.max(0, userWeights.toolFailures ?? 0.2),
+    blacklist: Math.max(0, userWeights.blacklist ?? 0.1),
+  };
 
   return createScorer({
     id: 'code-trajectory-scorer',
@@ -441,7 +456,6 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
           { steps: config.steps },
           {
             ordering: config.ordering ?? 'relaxed',
-            compareStepData: config.compareStepData ?? false,
             allowRepeatedSteps: config.allowRepeatedSteps ?? true,
           },
         );
@@ -481,7 +495,7 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       // --- Nested expectations ---
       const nested =
         config.steps && config.steps.length > 0
-          ? evaluateNestedExpectations(config.steps, actualTrajectory.steps)
+          ? evaluateNestedExpectations(config.steps, actualTrajectory.steps, w)
           : undefined;
 
       return {
@@ -505,16 +519,16 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       const scores: Array<{ weight: number; value: number }> = [];
 
       if (accuracy) {
-        scores.push({ weight: 0.4, value: accuracy.score });
+        scores.push({ weight: w.accuracy, value: accuracy.score });
       }
       if (efficiency) {
-        scores.push({ weight: 0.3, value: efficiency.score });
+        scores.push({ weight: w.efficiency, value: efficiency.score });
       }
       if (toolFailures && toolFailures.patterns.length > 0) {
-        scores.push({ weight: 0.2, value: toolFailures.score });
+        scores.push({ weight: w.toolFailures, value: toolFailures.score });
       }
       if (blacklist) {
-        scores.push({ weight: 0.1, value: blacklist.score });
+        scores.push({ weight: w.blacklist, value: blacklist.score });
       }
 
       if (scores.length === 0 && !nested) {
@@ -525,7 +539,7 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       let levelScore = 1;
       if (scores.length > 0) {
         const totalWeight = scores.reduce((sum, s) => sum + s.weight, 0);
-        levelScore = scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0);
+        levelScore = totalWeight > 0 ? scores.reduce((sum, s) => sum + (s.weight / totalWeight) * s.value, 0) : 1;
       }
 
       // Factor in nested scores

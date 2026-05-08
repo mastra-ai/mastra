@@ -98,6 +98,7 @@ export class DatasetsManager {
     metadata?: Record<string, unknown>;
     targetType?: TargetType;
     targetIds?: string[];
+    scorerIds?: string[];
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
 

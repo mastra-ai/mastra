@@ -28,13 +28,12 @@
           "instructions": "Return a simple response"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": "Return a list of items separated by commas",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "object": {
             "items": "test structured output"
           },
@@ -58,9 +57,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -77,7 +74,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -103,9 +101,7 @@
               },
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -144,13 +140,21 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
-                },
-                "input": {},
-                "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
                   },
+                  "environment": "test"
+                },
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "Return a simple response"
+                  },
+                  {
+                    "role": "user",
+                    "content": "Return a list of items separated by commas"
+                  }
+                ],
+                "output": {
+                  "text": "Mock V2 stream response",
                   "toolCalls": [],
                   "object": {
                     "items": "test structured output"
@@ -175,12 +179,11 @@
                       "sequenceNumber": 0
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 stream response"
                     }
                   }
                 },
@@ -201,7 +204,8 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
-                      "runId": "<runId-1>"
+                      "runId": "<runId-1>",
+                      "environment": "test"
                     },
                     "output": {
                       "items": "test structured output"
@@ -229,23 +233,16 @@
               "processorIndex": 0
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
-              "totalChunks": {
-                "__or__": [5, 3]
-              },
-              "accumulatedText": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              }
+              "totalChunks": 3,
+              "accumulatedText": "Mock V2 stream response"
             },
             "output": {
-              "totalChunks": {
-                "__or__": [5, 3]
-              },
-              "accumulatedText": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              }
+              "totalChunks": 3,
+              "accumulatedText": "Mock V2 stream response"
             }
           },
           "children": [
@@ -265,14 +262,10 @@
                   "instructions": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
                 },
                 "metadata": {
-                  "runId": "<runId-2>"
+                  "runId": "<runId-2>",
+                  "environment": "test"
                 },
-                "input": {
-                  "__or__": [
-                    "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 generate response",
-                    "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 stream response"
-                  ]
-                },
+                "input": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response",
                 "output": {
                   "text": "{\"items\":\"test structured output\"}",
                   "object": {
@@ -298,9 +291,7 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {
-                        "temperature": 0
-                      },
+                      "parameters": {},
                       "finishReason": "stop",
                       "responseId": "<responseId-2>",
                       "responseModel": "mock-model-id",
@@ -317,7 +308,8 @@
                       }
                     },
                     "metadata": {
-                      "runId": "<runId-2>"
+                      "runId": "<runId-2>",
+                      "environment": "test"
                     },
                     "input": {
                       "messages": [
@@ -330,12 +322,7 @@
                           "content": [
                             {
                               "type": "text",
-                              "text": {
-                                "__or__": [
-                                  "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 generate response",
-                                  "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 stream response"
-                                ]
-                              }
+                              "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
                             }
                           ]
                         }
@@ -387,9 +374,19 @@
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
-                          }
+                          },
+                          "environment": "test"
                         },
-                        "input": {},
+                        "input": [
+                          {
+                            "role": "system",
+                            "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                          },
+                          {
+                            "role": "user",
+                            "content": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                          }
+                        ],
                         "output": {
                           "text": "{\"items\":\"test structured output\"}",
                           "toolCalls": [],
@@ -416,7 +413,8 @@
                               "sequenceNumber": 0
                             },
                             "metadata": {
-                              "runId": "<runId-2>"
+                              "runId": "<runId-2>",
+                              "environment": "test"
                             },
                             "output": {}
                           }
@@ -438,7 +436,8 @@
                               "sequenceNumber": 1
                             },
                             "metadata": {
-                              "runId": "<runId-2>"
+                              "runId": "<runId-2>",
+                              "environment": "test"
                             },
                             "output": {
                               "items": "test structured output"
