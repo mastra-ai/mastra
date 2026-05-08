@@ -273,11 +273,7 @@ function mapMastraMessageToResponseToolItems({
         ? toolInvocation.toolCallId
         : getToolKey(null, message.id, partIndex);
 
-    if (
-      getMessageRole(message) === 'assistant' &&
-      toolName &&
-      !emittedCallIds.has(toolCallId)
-    ) {
+    if (getMessageRole(message) === 'assistant' && toolName && !emittedCallIds.has(toolCallId)) {
       items.push(
         createFunctionCallItem({
           itemId: toolCallId,
