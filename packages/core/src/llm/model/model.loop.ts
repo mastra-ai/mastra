@@ -183,7 +183,9 @@ export class MastraLLMVNext extends MastraBase {
       });
     }
 
-    // Create model span tracker that will be shared across all LLM execution steps
+    // Create model span tracker that will be shared across all LLM execution steps.
+    // The agentic loop calls setInferenceContext + startInference per-step so the
+    // MODEL_INFERENCE span reflects the post-processor tool set / parameters.
     const modelSpanTracker = modelSpan?.createTracker();
 
     try {

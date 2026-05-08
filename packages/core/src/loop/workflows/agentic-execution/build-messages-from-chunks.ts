@@ -12,6 +12,7 @@ import type {
   ToolCallPayload,
   ToolResultPayload,
 } from '../../../stream/types';
+import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 
 /**
@@ -19,7 +20,12 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
  * We only store the type, payload, and visibility — everything needed to
  * reconstruct messages post-stream while preserving processor-set visibility.
  */
-export type CollectedChunk = { type: string; payload: any; visibility?: ChunkVisibility };
+export type CollectedChunk = {
+  type: string;
+  payload: any;
+  metadata?: Record<string, any>;
+  visibility?: ChunkVisibility;
+};
 
 /**
  * Merge two visibility values, returning the more restrictive one.
@@ -90,7 +96,7 @@ export function buildMessagesFromChunks({
       toolResults.set(p.toolCallId, {
         result: p.result,
         args: p.args,
-        providerMetadata: p.providerMetadata,
+        providerMetadata: withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata),
         providerExecuted: p.providerExecuted,
         toolName: p.toolName,
         visibility: chunk.visibility,
@@ -333,6 +339,7 @@ export function buildMessagesFromChunks({
         const p = chunk.payload as ToolCallPayload;
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
+        const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
 
         // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);
@@ -352,7 +359,7 @@ export function buildMessagesFromChunks({
                   args: p.args,
                   result: result.result,
                 },
-                providerMetadata: result.providerMetadata ?? p.providerMetadata,
+                providerMetadata: result.providerMetadata ?? providerMetadata,
                 providerExecuted: resultProviderExecuted,
               } as MastraMessagePart,
               mergeVisibility(mergeVisibility(undefined, chunk.visibility), result.visibility),
@@ -370,7 +377,7 @@ export function buildMessagesFromChunks({
                   toolName: p.toolName,
                   args: p.args,
                 },
-                providerMetadata: p.providerMetadata,
+                providerMetadata,
                 providerExecuted,
               } as MastraMessagePart,
               mergeVisibility(undefined, chunk.visibility),

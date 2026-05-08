@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.17.2-alpha.3",
+  "version": "1.18.0-alpha.7",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -47,6 +47,8 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "canonicalize": "^1.0.8",
+    "jose": "^6.2.1",
     "json-schema": "^0.4.0"
   },
   "peerDependencies": {

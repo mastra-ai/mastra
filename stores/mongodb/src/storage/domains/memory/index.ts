@@ -888,11 +888,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
       const result = await collection.findOne<any>({ id: threadId });
-      if (!result) {
+      if (!result || (resourceId !== undefined && result.resourceId !== resourceId)) {
         return null;
       }
 
