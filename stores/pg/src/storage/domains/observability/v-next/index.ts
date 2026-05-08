@@ -41,14 +41,38 @@ import type {
   GetEntityTypesResponse,
   GetEnvironmentsArgs,
   GetEnvironmentsResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetMetricAggregateArgs,
+  GetMetricAggregateResponse,
+  GetMetricBreakdownArgs,
+  GetMetricBreakdownResponse,
   GetMetricLabelKeysArgs,
   GetMetricLabelKeysResponse,
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
   GetMetricNamesArgs,
   GetMetricNamesResponse,
+  GetMetricPercentilesArgs,
+  GetMetricPercentilesResponse,
+  GetMetricTimeSeriesArgs,
+  GetMetricTimeSeriesResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
   GetServiceNamesArgs,
   GetServiceNamesResponse,
   GetSpanArgs,
@@ -326,6 +350,114 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       return await feedbackOps.listFeedback(this.#client, this.#schema, args);
     } catch (error) {
       wrapError('LIST_FEEDBACK', error);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // OLAP — metrics
+  // -------------------------------------------------------------------------
+
+  override async getMetricAggregate(args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
+    try {
+      return await metricsOps.getMetricAggregate(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_METRIC_AGGREGATE', error);
+    }
+  }
+
+  override async getMetricBreakdown(args: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
+    try {
+      return await metricsOps.getMetricBreakdown(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_METRIC_BREAKDOWN', error);
+    }
+  }
+
+  override async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
+    try {
+      return await metricsOps.getMetricTimeSeries(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_METRIC_TIME_SERIES', error);
+    }
+  }
+
+  override async getMetricPercentiles(args: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
+    try {
+      return await metricsOps.getMetricPercentiles(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_METRIC_PERCENTILES', error);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // OLAP — scores
+  // -------------------------------------------------------------------------
+
+  override async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    try {
+      return await scoresOps.getScoreAggregate(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_SCORE_AGGREGATE', error);
+    }
+  }
+
+  override async getScoreBreakdown(args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    try {
+      return await scoresOps.getScoreBreakdown(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_SCORE_BREAKDOWN', error);
+    }
+  }
+
+  override async getScoreTimeSeries(args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    try {
+      return await scoresOps.getScoreTimeSeries(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_SCORE_TIME_SERIES', error);
+    }
+  }
+
+  override async getScorePercentiles(args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    try {
+      return await scoresOps.getScorePercentiles(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_SCORE_PERCENTILES', error);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // OLAP — feedback
+  // -------------------------------------------------------------------------
+
+  override async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    try {
+      return await feedbackOps.getFeedbackAggregate(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_FEEDBACK_AGGREGATE', error);
+    }
+  }
+
+  override async getFeedbackBreakdown(args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    try {
+      return await feedbackOps.getFeedbackBreakdown(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_FEEDBACK_BREAKDOWN', error);
+    }
+  }
+
+  override async getFeedbackTimeSeries(args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    try {
+      return await feedbackOps.getFeedbackTimeSeries(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_FEEDBACK_TIME_SERIES', error);
+    }
+  }
+
+  override async getFeedbackPercentiles(args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    try {
+      return await feedbackOps.getFeedbackPercentiles(this.#client, this.#schema, args);
+    } catch (error) {
+      wrapError('GET_FEEDBACK_PERCENTILES', error);
     }
   }
 

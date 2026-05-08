@@ -19,4 +19,6 @@ const storage = new PostgresStoreVNext({
 
 The adapter declares the `insert-only` observability strategy. Set `maxBatchSize: 1` on the default exporter to emulate realtime semantics during local development.
 
-OLAP query methods (`getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, `getMetricPercentiles`, and the score/feedback equivalents) are not yet implemented and will be added in a follow-up release. Retention cleanup is out of scope for this release; the partitioning skeleton is designed so a future `mastra retention` CLI command can drop or compress old partitions without further migrations.
+The full ObservabilityStorage surface is implemented, including the OLAP queries that back the Studio dashboards: `getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, `getMetricPercentiles`, and the score / feedback equivalents. OLAP queries use standard Postgres aggregates (`SUM`, `AVG`, `percentile_cont`, `FILTER (WHERE …)`) and a portable epoch-floor bucket expression, so the same query plan works on vanilla Postgres and on a TimescaleDB hypertable.
+
+Retention cleanup is out of scope for this release; the partitioning skeleton is designed so a future `mastra retention` CLI command can drop or compress old partitions without further migrations.
