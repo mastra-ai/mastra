@@ -479,18 +479,16 @@ export class Memory extends MastraMemory {
               );
             }
 
+            const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
+            const userFilter = typeof config.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
+            const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
+
             vectorResults.push(
               ...(await this.vector.query({
                 indexName,
                 queryVector: embedding,
                 topK: vectorConfig.topK,
-                filter: resourceScope
-                  ? {
-                      resource_id: resourceId,
-                    }
-                  : {
-                      thread_id: threadId,
-                    },
+                filter: combinedFilter,
               })),
             );
           }),
@@ -1033,8 +1031,10 @@ ${workingMemory}`;
     });
 
     try {
-      // Then strip working memory tags from all messages
+      // System messages are runtime instructions and should never be stored in memory.
+      // Then strip working memory tags from all persistable messages.
       const updatedMessages = messages
+        .filter(m => m.role !== 'system')
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
@@ -1057,10 +1057,43 @@ ${workingMemory}`;
       let totalTokens = 0;
 
       if (this.vector && config.semanticRecall) {
+        const messagesByThread = new Map<string, MastraDBMessage[]>();
+        updatedMessages.forEach(message => {
+          if (message.threadId) {
+            if (!messagesByThread.has(message.threadId)) {
+              messagesByThread.set(message.threadId, []);
+            }
+            messagesByThread.get(message.threadId)!.push(message);
+          }
+        });
+
+        const threadMetadataMap = new Map<string, Record<string, unknown>>();
+        await Promise.all(
+          Array.from(messagesByThread.keys()).map(async threadId => {
+            try {
+              const thread = await memoryStore.getThreadById({ threadId });
+              if (thread?.metadata) {
+                threadMetadataMap.set(threadId, thread.metadata);
+              }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              throw new Error(
+                `Could not fetch metadata for thread ${threadId} while saving semantic recall embeddings: ${message}`,
+              );
+            }
+          }),
+        );
+
         // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
         const embeddingData: Array<{
           embeddings: number[][];
-          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+          metadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          >;
         }> = [];
         let dimension: number | undefined;
 
@@ -1093,9 +1126,12 @@ ${workingMemory}`;
               totalTokens += result.usage.tokens;
             }
 
+            const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
+
             embeddingData.push({
               embeddings: result.embeddings,
               metadata: result.chunks.map(() => ({
+                ...threadMetadata,
                 message_id: message.id,
                 thread_id: message.threadId,
                 resource_id: message.resourceId,
@@ -1114,11 +1150,13 @@ ${workingMemory}`;
 
           // Flatten all embeddings and metadata into single arrays
           const allVectors: number[][] = [];
-          const allMetadata: Array<{
-            message_id: string;
-            thread_id: string | undefined;
-            resource_id: string | undefined;
-          }> = [];
+          const allMetadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          > = [];
 
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
@@ -1486,8 +1524,12 @@ ${workingMemory}`;
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
+
+    const persistableMessages = messages.filter(m => m.role !== 'system');
+    if (persistableMessages.length === 0) return;
+
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.saveMessages({ messages });
+    await memoryStore.saveMessages({ messages: persistableMessages });
   }
 
   /**

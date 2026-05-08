@@ -398,6 +398,12 @@ export const MastraFGAPermissions = {
   PROCESSORS_EXECUTE: 'processors:execute',
   /** View processors */
   PROCESSORS_READ: 'processors:read',
+  /** Execute schedules */
+  SCHEDULES_EXECUTE: 'schedules:execute',
+  /** View schedules */
+  SCHEDULES_READ: 'schedules:read',
+  /** Create and modify schedules */
+  SCHEDULES_WRITE: 'schedules:write',
   /** View evaluation scores */
   SCORES_READ: 'scores:read',
   /** Create and modify evaluation scores */

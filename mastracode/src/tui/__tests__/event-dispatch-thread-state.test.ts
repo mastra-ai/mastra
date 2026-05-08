@@ -40,6 +40,12 @@ function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIS
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
     editor: { escapeEnabled: false },
+    goalManager: {
+      getGoal: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+      loadFromThreadMetadata: vi.fn(),
+      consumePersistOnNextThreadCreate: vi.fn(() => false),
+    },
   } as unknown as TUIState;
 }
 
@@ -100,6 +106,36 @@ describe('thread lifecycle clears per-thread harness state', () => {
         sandboxAllowedPaths: [],
       }),
     );
+  });
+
+  it('persists only explicitly pending goals to created threads', async () => {
+    const goalManager = state.goalManager as any;
+    goalManager.consumePersistOnNextThreadCreate.mockReturnValueOnce(true);
+
+    await dispatchEvent(
+      { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New', metadata: { goal: null } } } as any,
+      ectx,
+      state,
+    );
+
+    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
+  });
+
+  it('loads thread metadata instead of copying non-pending goals to created threads', async () => {
+    const goalManager = state.goalManager as any;
+
+    await dispatchEvent(
+      {
+        type: 'thread_created',
+        thread: { id: 'brand-new', title: 'Brand New', metadata: { goal: { status: 'done' } } },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: { status: 'done' } });
   });
 
   it('resets taskWriteInsertIndex on thread_changed', async () => {

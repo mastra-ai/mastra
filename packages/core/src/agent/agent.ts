@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
+import type { UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
@@ -2310,14 +2310,68 @@ export class Agent<
     return fork;
   }
 
+  /**
+   * Extract plain text lines from a single message's parts array.
+   * Modeled after observational memory's formatObserverMessage — switches on
+   * part type, emits role-prefixed text, and drops all metadata.
+   */
+  private formatMessagePartsForTitle(parts: Array<{ type: string; [key: string]: any }>, role: string): string[] {
+    const lines: string[] = [];
+    for (const part of parts) {
+      if (part.type === 'text') {
+        lines.push(`${role}: ${part.text}`);
+      } else if (part.type === 'tool-invocation') {
+        const inv = part.toolInvocation;
+        if (inv.state === 'result') {
+          const resultStr = typeof inv.result === 'string' ? inv.result : JSON.stringify(inv.result);
+          lines.push(`Tool Result ${inv.toolName}: ${resultStr.slice(0, 200)}`);
+        } else {
+          lines.push(`Tool Call ${inv.toolName}: ${JSON.stringify(inv.args).slice(0, 200)}`);
+        }
+      } else if (part.type === 'reasoning') {
+        if (part.reasoning) {
+          lines.push(`Reasoning: ${part.reasoning}`);
+        }
+      } else if (part.type === 'source-url') {
+        lines.push(`${role}: User added URL: ${part.url.substring(0, 100)}`);
+      } else if (part.type === 'file') {
+        lines.push(`${role}: User added ${part.mediaType} file: ${part.url.slice(0, 100)}`);
+      }
+    }
+    return lines;
+  }
+
+  /**
+   * Format an array of UI messages into plain text for title generation.
+   * Like observational memory's formatMessagesForObserver — loops over messages,
+   * formats each one's parts with role context, and joins the results.
+   */
+  formatMessagesForTitle(
+    messages: Array<{ role: string; content?: string; parts?: Array<{ type: string; [key: string]: any }> }>,
+  ): string {
+    const lines: string[] = [];
+    for (const msg of messages) {
+      const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
+      if (typeof msg.content === 'string' && msg.content) {
+        lines.push(`${role}: ${msg.content}`);
+      }
+      if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
+        lines.push(...this.formatMessagePartsForTitle(msg.parts, role));
+      }
+    }
+    return lines.join('\n');
+  }
+
   async generateTitleFromUserMessage({
     message,
+    messages,
     requestContext = new RequestContext(),
     model,
     instructions,
     ...rest
   }: {
-    message: string | MessageInput;
+    message?: string | MessageInput;
+    messages?: Array<{ role: string; content?: string; parts?: Array<{ type: string; [key: string]: any }> }>;
     requestContext?: RequestContext;
     model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
@@ -2326,26 +2380,24 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
-    if (!normMessage) {
-      throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
+    let userContent: string;
+
+    if (messages && messages.length > 0) {
+      // Multi-message path: format all messages with roles
+      userContent = this.formatMessagesForTitle(messages);
+    } else if (message) {
+      // Single message path (backward compat): normalize and format
+      const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
+      if (!normMessage) {
+        throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
+      }
+      userContent = this.formatMessagesForTitle([normMessage]);
+    } else {
+      throw new Error('Either message or messages must be provided');
     }
 
-    const partsToGen: TextPart[] = [];
-    for (const part of normMessage.parts) {
-      if (part.type === `text`) {
-        partsToGen.push(part);
-      } else if (part.type === `source-url`) {
-        partsToGen.push({
-          type: 'text',
-          text: `User added URL: ${part.url.substring(0, 100)}`,
-        });
-      } else if (part.type === `file`) {
-        partsToGen.push({
-          type: 'text',
-          text: `User added ${part.mediaType} file: ${part.url.slice(0, 100)}`,
-        });
-      }
+    if (!userContent) {
+      return undefined;
     }
 
     // Resolve instructions using the dedicated method
@@ -2368,7 +2420,7 @@ export class Agent<
           [
             {
               role: 'user',
-              content: JSON.stringify(partsToGen),
+              content: userContent,
             },
           ],
           'input',
@@ -2394,7 +2446,7 @@ export class Agent<
           },
           {
             role: 'user',
-            content: JSON.stringify(partsToGen),
+            content: userContent,
           },
         ],
       });
@@ -2418,8 +2470,18 @@ export class Agent<
     observabilityContext: ObservabilityContext,
     model?: DynamicArgument<MastraModelConfig, TRequestContext>,
     instructions?: DynamicArgument<string>,
+    uiMessages?: Array<{ role: string; content?: string; parts?: Array<{ type: string; [key: string]: any }> }>,
   ) {
     try {
+      if (uiMessages && uiMessages.length > 0) {
+        return await this.generateTitleFromUserMessage({
+          messages: uiMessages,
+          requestContext,
+          ...observabilityContext,
+          model,
+          instructions,
+        });
+      }
       if (userMessage) {
         const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
         if (normMessage) {
@@ -5436,7 +5498,14 @@ export class Agent<
           const userMessage = this.getMostRecentUserMessage(uiMessages);
 
           if (userMessage) {
-            void this.genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions).then(
+            void this.genTitle(
+              userMessage,
+              requestContext,
+              observabilityContext,
+              titleModel,
+              titleInstructions,
+              uiMessages,
+            ).then(
               async title => {
                 if (title) {
                   await memory.createThread({

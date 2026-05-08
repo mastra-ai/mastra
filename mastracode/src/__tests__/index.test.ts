@@ -26,6 +26,12 @@ const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const harnessSubscribeMock = vi.fn();
+const harnessGetCurrentThreadIdMock = vi.fn();
+const harnessListThreadsMock = vi.fn();
+const harnessSetStateMock = vi.fn();
+const harnessSetThreadSettingMock = vi.fn();
+let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
   return {
@@ -45,6 +51,7 @@ function createMockSettings() {
       reflectorModelOverride: null,
       omObservationThreshold: null,
       omReflectionThreshold: null,
+      omCavemanObservations: null,
       subagentModels: {},
     },
     preferences: {
@@ -80,7 +87,24 @@ vi.mock('@mastra/core/harness', () => ({
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
-    subscribe() {}
+    subscribe(eventHandler: unknown) {
+      harnessSubscribeMock(eventHandler);
+    }
+    getCurrentThreadId() {
+      return harnessGetCurrentThreadIdMock();
+    }
+    getState() {
+      return harnessStateMock;
+    }
+    listThreads(options: unknown) {
+      return harnessListThreadsMock(options);
+    }
+    setState(state: unknown) {
+      return harnessSetStateMock(state);
+    }
+    setThreadSetting(setting: unknown) {
+      return harnessSetThreadSettingMock(setting);
+    }
   },
   taskWriteTool: {},
   taskCheckTool: {},
@@ -209,7 +233,7 @@ vi.mock('./utils/project.js', () => ({
   getResourceIdOverride: vi.fn(() => undefined),
 }));
 
-const createStorageMock = vi.fn(() => ({ storage: {} }));
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('./utils/storage-factory.js', () => ({
@@ -234,6 +258,16 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
+    harnessSubscribeMock.mockReset();
+    harnessGetCurrentThreadIdMock.mockReset();
+    harnessGetCurrentThreadIdMock.mockReturnValue(undefined);
+    harnessListThreadsMock.mockReset();
+    harnessListThreadsMock.mockResolvedValue([]);
+    harnessSetStateMock.mockReset();
+    harnessSetStateMock.mockResolvedValue(undefined);
+    harnessSetThreadSettingMock.mockReset();
+    harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    harnessStateMock = { cavemanObservations: false };
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
@@ -268,6 +302,31 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('restores the current thread caveman observation setting at startup', async () => {
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+  });
+
+  it('restores an explicit false caveman observation setting at startup', async () => {
+    harnessStateMock = { cavemanObservations: true };
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(harnessSubscribeMock).toHaveBeenCalled();
+    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
   });
 
   it('enables OpenAI Responses stream error retries by default', async () => {
