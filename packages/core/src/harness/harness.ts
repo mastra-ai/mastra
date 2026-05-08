@@ -26,6 +26,7 @@ import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
+  ActiveSubagentState,
   HarnessConfig,
   HarnessDisplayState,
   HarnessDisplayStateListener,
@@ -38,6 +39,8 @@ import type {
   HarnessQuestionAnswer,
   HarnessRequestContext,
   HarnessSession,
+  HarnessSubagentHistoryEntry,
+  HarnessSubagentHistoryStatus,
   HarnessThread,
   ModelAuthStatus,
   PermissionPolicy,
@@ -45,6 +48,33 @@ import type {
   TokenUsage,
   ToolCategory,
 } from './types';
+
+function createSubagentHistoryEntry({
+  toolCallId,
+  subagent,
+  status,
+  parentEndReason,
+  order,
+}: {
+  toolCallId: string;
+  subagent: ActiveSubagentState;
+  status: HarnessSubagentHistoryStatus;
+  parentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+  order: number;
+}): HarnessSubagentHistoryEntry {
+  const entry: HarnessSubagentHistoryEntry = {
+    ...subagent,
+    toolCallId,
+    status,
+    toolCalls: subagent.toolCalls.map(toolCall => ({ ...toolCall })),
+    endedAt: new Date(),
+    order,
+  };
+  if (parentEndReason) {
+    entry.parentEndReason = parentEndReason;
+  }
+  return entry;
+}
 
 function createEmptyTokenUsage(): TokenUsage {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -2426,6 +2456,7 @@ export class Harness<TState = {}> {
     this.displayState.pendingQuestion = null;
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
+    this.displayState.subagentHistory = [];
     this.displayState.currentMessage = null;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];
@@ -2752,6 +2783,7 @@ export class Harness<TState = {}> {
         ds.isRunning = true;
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
+        ds.subagentHistory = [];
         ds.currentMessage = null;
         ds.pendingApproval = null;
         ds.pendingSuspension = null;
@@ -2769,6 +2801,20 @@ export class Harness<TState = {}> {
         for (const [, tool] of ds.activeTools) {
           if (tool.status === 'running' || tool.status === 'streaming_input') {
             tool.status = 'error';
+          }
+        }
+        for (const [toolCallId, subagent] of ds.activeSubagents) {
+          if (subagent.status === 'running') {
+            ds.subagentHistory.push(
+              createSubagentHistoryEntry({
+                toolCallId,
+                subagent,
+                status: 'aborted',
+                // External event emitters may omit reason, but internal agent_end events always set it.
+                parentEndReason: event.reason ?? 'aborted',
+                order: ds.subagentHistory.length,
+              }),
+            );
           }
         }
         ds.activeSubagents = new Map();
@@ -2960,10 +3006,18 @@ export class Harness<TState = {}> {
 
       case 'subagent_end': {
         const endedSub = ds.activeSubagents.get(event.toolCallId);
-        if (endedSub) {
+        if (endedSub?.status === 'running') {
           endedSub.status = event.isError ? 'error' : 'completed';
           endedSub.durationMs = event.durationMs;
           endedSub.result = event.result;
+          ds.subagentHistory.push(
+            createSubagentHistoryEntry({
+              toolCallId: event.toolCallId,
+              subagent: endedSub,
+              status: endedSub.status,
+              order: ds.subagentHistory.length,
+            }),
+          );
         }
         break;
       }

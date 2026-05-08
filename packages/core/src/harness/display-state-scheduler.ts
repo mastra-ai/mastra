@@ -126,6 +126,11 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
         },
       ]),
     ),
+    subagentHistory: state.subagentHistory.map(entry => ({
+      ...entry,
+      toolCalls: entry.toolCalls.map(toolCall => cloneUnknown(toolCall)),
+      endedAt: new Date(entry.endedAt.getTime()),
+    })),
     omProgress: {
       ...state.omProgress,
       buffered: {
