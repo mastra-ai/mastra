@@ -85,8 +85,10 @@ describe('gateway oauth fetch wrappers', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [calledUrl, calledInit] = fetchMock.mock.calls[0];
-    // URL should be rewritten to the api host implied by proxy-ep.
-    expect(calledUrl.toString()).toBe('https://api.individual.githubcopilot.com/v1/chat/completions');
+    // URL should be rewritten to the api host implied by proxy-ep, and the `/v1`
+    // prefix that @ai-sdk/openai adds must be stripped — Copilot's endpoints live
+    // at `/chat/completions` etc., not `/v1/chat/completions`.
+    expect(calledUrl.toString()).toBe('https://api.individual.githubcopilot.com/chat/completions');
     const headers = calledInit?.headers as Headers;
     expect(headers.get('Authorization')).toMatch(/^Bearer /);
     expect(headers.get('Editor-Version')).toBeTruthy();
@@ -141,8 +143,30 @@ describe('gateway oauth fetch wrappers', () => {
     const fetchWithOAuth = buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any });
 
     await expect(fetchWithOAuth('https://api.openai.com/v1/chat/completions', { headers: {} })).rejects.toMatchObject({
-      requestUrl: 'https://api.individual.githubcopilot.com/v1/chat/completions',
+      requestUrl: 'https://api.individual.githubcopilot.com/chat/completions',
     });
+  });
+
+  it('strips the `/v1` prefix from the request path for non-completions endpoints too', async () => {
+    githubCopilotStorage.get.mockReturnValue({
+      type: 'oauth',
+      access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
+      refresh: 'ghu_x',
+      expires: Date.now() + 60_000,
+    });
+    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
+    const fetchWithOAuth = buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any });
+
+    await fetchWithOAuth('https://api.openai.com/v1/responses', { headers: {} });
+    expect(fetchMock.mock.calls[0]![0].toString()).toBe('https://api.individual.githubcopilot.com/responses');
+
+    fetchMock.mockClear();
+    // Paths that don't start with `/v1` should be left alone.
+    await fetchWithOAuth('https://api.openai.com/chat/completions', { headers: {} });
+    expect(fetchMock.mock.calls[0]![0].toString()).toBe('https://api.individual.githubcopilot.com/chat/completions');
   });
 
   it('throws a friendly error when the user is not logged in to GitHub Copilot', async () => {

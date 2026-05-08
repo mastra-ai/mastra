@@ -198,8 +198,14 @@ export function buildGitHubCopilotOAuthFetch(
 function rewriteToCopilotBase(url: string | URL | Request, token: string, enterpriseDomain?: string): URL {
   const original = url instanceof URL ? url : new URL(typeof url === 'string' ? url : (url as Request).url);
   const base = new URL(getGitHubCopilotBaseUrl(token, enterpriseDomain));
-  // Preserve the path/search of the original request, anchored at the Copilot base.
-  return new URL(`${original.pathname}${original.search}`, base);
+  // Copilot's OpenAI-compatible API serves endpoints at the root of the base host
+  // (`/chat/completions`, `/responses`, `/models`, ...) — not under a `/v1/` prefix
+  // like api.openai.com does. The @ai-sdk/openai default baseURL is
+  // `https://api.openai.com/v1`, so the SDK builds requests like
+  // `https://api.openai.com/v1/chat/completions`. Strip the leading `/v1` segment
+  // when rewriting onto the Copilot base or Copilot will return 404 Not Found.
+  const pathname = original.pathname.replace(/^\/v1(\/|$)/, '/');
+  return new URL(`${pathname}${original.search}`, base);
 }
 
 /**
