@@ -189,13 +189,17 @@ export function replaceString(
     throw new StringNotUniqueError(oldString, count);
   }
 
+  // Escape $ in newString to prevent replacement pattern interpretation.
+  // In String.prototype.replace(), $& means "matched substring", $$ means literal $, etc.
+  // We want literal replacement, so escape all $ as $$.
+  const escapedNewString = newString.replace(/\$/g, '$$$$');
   if (replaceAll) {
-    // Replace all occurrences
+    // Replace all occurrences - split/join doesn't interpret $ patterns
     const result = content.split(oldString).join(newString);
     return { content: result, replacements: count };
   } else {
-    // Replace first (and only) occurrence
-    const result = content.replace(oldString, newString);
+    // Replace first (and only) occurrence - use escaped string
+    const result = content.replace(oldString, escapedNewString);
     return { content: result, replacements: 1 };
   }
 }

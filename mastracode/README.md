@@ -1,16 +1,22 @@
 # Mastra Code
 
-A terminal-based coding agent TUI built with [Mastra](https://mastra.ai) and [pi-tui](https://github.com/badlogic/pi-mono).
+A coding agent that never compacts. Built with [Mastra](https://mastra.ai) and [pi-tui](https://github.com/badlogic/pi-mono).
+
+Learn more in the [documentation](https://code.mastra.ai/) and [announcement post](https://mastra.ai/blog/announcing-mastra-code).
+
+![Screenshot of the Mastra Code TUI. At the top it shows in green letters "Mastra Code". It then displays the version, project, resource ID, and user. The user and assistant message have green borders. At the bottom is a green input field. Below the input is on the left the current mode and model displayed. In the middle the Observational Memory status is shown. On the right is the current directory.](https://res.cloudinary.com/mastra-assets/image/upload/v1778048981/mastracode-init_tny2pb.png)
 
 ## Features
 
-- 🤖 **Multi-model support**: Use Claude, GPT, Gemini, and 70+ other models via Mastra's unified model router
-- 🔐 **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
-- 💾 **Persistent conversations**: Threads are saved per-project and resume automatically
-- 🛠️ **Coding tools**: View files, edit code, run shell commands
-- 📋 **Plan persistence**: Approved plans are saved as markdown files for future reference
-- 📊 **Token tracking**: Monitor usage with persistent token counts per thread
-- 🎨 **Beautiful TUI**: Polished terminal interface with streaming responses
+- **Observational Memory built-in**: Never deal with compaction again. [Observational Memory](https://mastra.ai/docs/memory/observational-memory) automatically extracts and stores observations from every conversation, then injects relevant context into future requests.
+- **Multi-model support**: Use Claude, GPT, Gemini, and thousands of other models via Mastra's unified model router
+- **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
+- **Persistent conversations**: Threads are saved per-project and resume automatically
+- **Coding tools**: View files, edit code, run shell commands
+- **Goals**: Pursue longer-running objectives with configurable judge models and goal-enabled commands/skills
+- **Plan persistence**: Approved plans are saved as markdown files for future reference
+- **Token tracking**: Monitor usage with persistent token counts per thread
+- **Beautiful TUI**: Polished terminal interface with streaming responses
 
 ## Installation
 
@@ -28,10 +34,10 @@ npx mastracode
 
 On first launch, an interactive onboarding wizard guides you through:
 
-1. **Authentication** — log in with your AI provider (Anthropic, OpenAI, etc.)
-2. **Model packs** — choose default models for each mode (build / plan / fast)
-3. **Observational Memory** — pick a model for OM (learns about you over time)
-4. **YOLO mode** — auto-approve tool calls, or require manual confirmation
+1. **Authentication**: Log in with your AI provider (Anthropic, OpenAI, etc.)
+2. **Model packs**: Choose default models for each mode (build / plan / fast)
+3. **Observational Memory**: Pick a model for OM (learns about you over time)
+4. **YOLO mode**: Auto-approve tool calls, or require manual confirmation
 
 You can re-run setup anytime with `/setup`.
 
@@ -60,7 +66,7 @@ On Ubuntu/Debian the binary is called `fdfind` — mastracode detects both `fd` 
 
 ### Starting a conversation
 
-Type your message and press Enter. The agent responds with streaming text.
+Type your message and press Enter. If the agent is already working, Enter queues your next message and sends it after the current run finishes.
 
 ### `@` file references
 
@@ -74,43 +80,92 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Slash commands
 
-| Command             | Description                                      |
-| ------------------- | ------------------------------------------------ |
-| `/new`              | Start a new conversation thread                  |
-| `/threads`          | List and switch between threads                  |
-| `/models`           | Switch/manage model packs (built-in/custom)      |
-| `/custom-providers` | Manage custom OpenAI-compatible providers/models |
-| `/mode`             | Switch agent mode                                |
-| `/subagents`        | Configure subagent model defaults                |
-| `/om`               | Configure Observational Memory models            |
-| `/think`            | Set thinking level (Anthropic)                   |
-| `/skills`           | List available skills                            |
-| `/diff`             | Show modified files or git diff                  |
-| `/name`             | Rename current thread                            |
-| `/cost`             | Show token usage and estimated costs             |
-| `/review`           | Review a GitHub pull request                     |
-| `/hooks`            | Show/reload configured hooks                     |
-| `/mcp`              | Show/reload MCP server connections               |
-| `/sandbox`          | Manage allowed paths (add/remove dirs)           |
-| `/permissions`      | View/manage tool approval permissions            |
-| `/settings`         | General settings (notifications, YOLO, etc.)     |
-| `/yolo`             | Toggle YOLO mode (auto-approve all tools)        |
-| `/resource`         | Show/switch resource ID (tag for sharing)        |
-| `/thread:tag-dir`   | Tag current thread with this directory           |
-| `/login`            | Authenticate with OAuth providers                |
-| `/logout`           | Log out from a provider                          |
-| `/setup`            | Re-run the interactive setup wizard              |
-| `/help`             | Show available commands                          |
-| `/exit`             | Exit the TUI                                     |
+| Command             | Description                                                                 |
+| ------------------- | --------------------------------------------------------------------------- |
+| `/new`              | Start a new conversation thread                                             |
+| `/threads`          | List and switch between threads with freshness-checked cached lazy previews |
+| `/models`           | Switch/manage model packs (built-in/custom)                                 |
+| `/custom-providers` | Manage custom OpenAI-compatible providers/models                            |
+| `/mode`             | Switch agent mode                                                           |
+| `/subagents`        | Configure subagent model defaults                                           |
+| `/om`               | Configure Observational Memory models                                       |
+| `/think`            | Set thinking level (Anthropic)                                              |
+| `/judge`            | Configure the default judge model and max attempts for goals                |
+| `/goal`             | Start or manage an autonomous goal                                          |
+| `/skills`           | List available skills                                                       |
+| `/diff`             | Show modified files or git diff                                             |
+| `/name`             | Rename current thread                                                       |
+| `/cost`             | Show token usage and estimated costs                                        |
+| `/review`           | Review a GitHub pull request                                                |
+| `/hooks`            | Show/reload configured hooks                                                |
+| `/mcp`              | Show/reload MCP server connections                                          |
+| `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
+| `/permissions`      | View/manage tool approval permissions                                       |
+| `/settings`         | General settings (notifications, YOLO, etc.)                                |
+| `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
+| `/resource`         | Show/switch resource ID (tag for sharing)                                   |
+| `/thread:tag-dir`   | Tag current thread with this directory                                      |
+| `/login`            | Authenticate with OAuth providers                                           |
+| `/logout`           | Log out from a provider                                                     |
+| `/setup`            | Re-run the interactive setup wizard                                         |
+| `/help`             | Show available commands                                                     |
+| `/exit`             | Exit the TUI                                                                |
+
+### Goals
+
+Use `/goal <objective>` to have Mastra Code keep working toward an objective across turns. Goals use a judge model to decide whether the goal is complete, should continue, or should wait for an explicit user checkpoint. Configure defaults with `/judge`.
+
+Goal objectives can span multiple lines:
+
+```text
+/goal Fix the failing release checks
+and open a PR when everything passes.
+```
+
+When a plan is submitted with `submit_plan`, the inline approval UI also includes **Use as /goal**. That saves/approves the plan and starts a goal using the plan text as the objective.
+
+Custom slash commands can opt into goal mode with top-level frontmatter:
+
+```md
+---
+name: pr-triage
+description: Triage open PRs
+goal: true
+---
+
+Inspect every open PR before pair-reviewing candidates.
+```
+
+Run goal-enabled commands with `/goal/<command-name>`. The processed command content becomes the goal objective, so `$ARGUMENTS` and other command template features still apply.
+
+Skills can opt into goal mode with skill metadata:
+
+```md
+---
+name: review-prs
+description: Review pull requests
+metadata:
+  goal: true
+---
+
+Review PRs until all relevant candidates have been categorized.
+```
+
+Run goal-enabled skills with `/goal/<skill-name>`. Skill instructions become the goal objective; any extra arguments are included as context.
 
 ### Keyboard shortcuts
 
-| Shortcut | Action                            |
-| -------- | --------------------------------- |
-| `Ctrl+C` | Interrupt current operation       |
-| `Ctrl+D` | Exit (when editor is empty)       |
-| `Ctrl+T` | Toggle thinking blocks visibility |
-| `Ctrl+E` | Expand/collapse all tool outputs  |
+| Shortcut    | Action                                                          |
+| ----------- | --------------------------------------------------------------- |
+| `Ctrl+C`    | Interrupt current operation or clear input                      |
+| `Ctrl+C` ×2 | Exit (double-tap)                                               |
+| `Ctrl+D`    | Exit (when editor is empty)                                     |
+| `Ctrl+Z`    | Suspend process (`fg` to resume)                                |
+| `Alt+Z`     | Undo last clear                                                 |
+| `Ctrl+T`    | Toggle thinking blocks visibility                               |
+| `Ctrl+E`    | Expand/collapse all tool outputs                                |
+| `Enter`     | Send a message, or queue a follow-up while the agent is running |
+| `Ctrl+Y`    | Toggle YOLO mode                                                |
 
 ## Configuration
 
@@ -135,8 +190,8 @@ The SQLite database is stored in your system's application data directory:
 
 For **Anthropic** models, mastracode supports two authentication methods:
 
-1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription. This is the recommended approach.
-2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
+1. **Claude Max OAuth (primary)**: Use `/login` to authenticate with a Claude Pro/Max subscription.
+2. **API key (fallback)**: Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
 
 When both are available, Claude Max OAuth takes priority.
 
@@ -157,9 +212,19 @@ Once saved, provider models appear in existing selectors like `/models` and `/su
 
 Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
 
+### macOS sleep prevention
+
+On macOS, Mastra Code starts the built-in `caffeinate` utility while the agent is actively running, then stops it as soon as the run completes, errors, aborts, or the TUI exits. Idle sessions do not keep your machine awake.
+
+To disable this behavior, set `MASTRACODE_DISABLE_CAFFEINATE=1` before launching Mastra Code:
+
+```bash
+export MASTRACODE_DISABLE_CAFFEINATE=1
+```
+
 ### Plan persistence
 
-When you approve a plan (via `submit_plan`), it is saved as a markdown file in the app data directory:
+When you approve a plan (via `submit_plan`) or choose **Use as /goal** from the inline plan approval UI, it is saved as a markdown file in the app data directory:
 
 - **macOS**: `~/Library/Application Support/mastracode/plans/<resourceId>/`
 - **Linux**: `~/.local/share/mastracode/plans/<resourceId>/`
@@ -222,9 +287,9 @@ pnpm build
 
 ## Credits
 
-- [Mastra](https://mastra.ai) - AI agent framework
-- [pi-mono](https://github.com/badlogic/pi-mono) - TUI primitives and inspiration
-- [OpenCode](https://github.com/sst/opencode) - OAuth provider patterns
+- [Mastra](https://mastra.ai): AI agent framework
+- [pi-mono](https://github.com/badlogic/pi-mono): TUI primitives and inspiration
+- [OpenCode](https://github.com/sst/opencode): OAuth provider patterns
 
 ## License
 

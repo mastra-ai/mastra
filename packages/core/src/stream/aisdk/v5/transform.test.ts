@@ -307,6 +307,29 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('should repair JSON with unquoted date values in tool args (issue #14230)', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-repair-dates',
+        toolName: 'edit_milestone',
+        input: '{"milestoneId": "abc123", "name": "Sprint 1", "dueStart": 2026-04-15, "dueEnd": 2026-06-30}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({
+          milestoneId: 'abc123',
+          name: 'Sprint 1',
+          dueStart: '2026-04-15',
+          dueEnd: '2026-06-30',
+        });
+      }
+    });
+
     it('should repair JSON with trailing commas', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
@@ -468,6 +491,31 @@ describe('convertFullStreamChunkToMastra', () => {
       const result = tryRepairJson('{_id:"123",_type:"user"}');
       expect(result).toEqual({ _id: '123', _type: 'user' });
     });
+
+    it('should quote unquoted date values like YYYY-MM-DD (issue #14230)', () => {
+      const result = tryRepairJson(
+        '{"milestoneId": "abc123", "name": "Sprint 1", "dueStart": 2026-04-15, "dueEnd": 2026-06-30}',
+      );
+      expect(result).toEqual({
+        milestoneId: 'abc123',
+        name: 'Sprint 1',
+        dueStart: '2026-04-15',
+        dueEnd: '2026-06-30',
+      });
+    });
+
+    it('should quote unquoted date value before closing brace (issue #14230)', () => {
+      const result = tryRepairJson('{"date": 2026-04-15}');
+      expect(result).toEqual({ date: '2026-04-15' });
+    });
+
+    it('should quote unquoted datetime values with time component (issue #14230)', () => {
+      const result = tryRepairJson('{"start": 2026-04-15T09:00:00, "end": 2026-04-15T17:00:00}');
+      expect(result).toEqual({
+        start: '2026-04-15T09:00:00',
+        end: '2026-04-15T17:00:00',
+      });
+    });
   });
 
   describe('other chunk types', () => {
@@ -500,6 +548,7 @@ describe('convertFullStreamChunkToMastra', () => {
           inputTokens: 10,
           outputTokens: 20,
           totalTokens: 30,
+          cacheCreationInputTokens: 7,
         },
         providerMetadata: {},
         messages: {
@@ -514,6 +563,82 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(result?.type).toBe('finish');
       if (result?.type === 'finish') {
         expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(7);
+        expect(result.payload.providerMetadata).toEqual({});
+        expect(result.payload.metadata.providerMetadata).toEqual({});
+      }
+    });
+
+    it('should preserve providerMetadata for AI SDK v6 finish chunks', () => {
+      const providerMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 94,
+          cacheCreationInputTokens: 6,
+        },
+      };
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'end_turn' },
+        usage: {
+          inputTokens: { total: 100, noCache: 6, cacheRead: 94, cacheWrite: 6 },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+        },
+        providerMetadata,
+        messages: {
+          all: [],
+          user: [],
+          nonUser: [],
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cachedInputTokens).toBe(94);
+        expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
+        expect(result.payload.providerMetadata).toEqual(providerMetadata);
+        expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
+      }
+    });
+
+    it('should preserve Google/Gemini providerMetadata for finish chunks', () => {
+      const providerMetadata = {
+        google: {
+          usageMetadata: {
+            cachedContentTokenCount: 150,
+            thoughtsTokenCount: 250,
+          },
+          groundingMetadata: {
+            webSearchQueries: ['mastra ai'],
+          },
+        },
+      };
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 200, noCache: 50, cacheRead: 150 },
+          outputTokens: { total: 400, text: 150, reasoning: 250 },
+        },
+        providerMetadata,
+        messages: {
+          all: [],
+          user: [],
+          nonUser: [],
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.output.usage.cachedInputTokens).toBe(150);
+        expect(result.payload.output.usage.reasoningTokens).toBe(250);
+        expect(result.payload.providerMetadata).toEqual(providerMetadata);
+        expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }
     });
   });

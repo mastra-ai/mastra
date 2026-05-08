@@ -194,7 +194,7 @@ const workspace = new Workspace({
 
 When the workspace starts, the filesystems are automatically mounted at the specified paths. Code running in the sandbox can then access files at `/s3-data` and `/gcs-data` as if they were local directories.
 
-#### Via sandbox.mount()
+#### Via `sandbox.mount()`
 
 Mount manually at any point after the sandbox has started:
 
@@ -468,7 +468,7 @@ await handle.kill()
 
 See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
-## Mounting Cloud Storage
+## Mounting cloud storage
 
 Daytona sandboxes can mount S3 or GCS buckets, making cloud storage accessible as local directories inside the sandbox. This is useful for:
 

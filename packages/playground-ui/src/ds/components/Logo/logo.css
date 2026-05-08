@@ -1,0 +1,70 @@
+.logo svg {
+  shape-rendering: geometricprecision;
+  overflow: visible;
+}
+
+.logo .logo-fill {
+  fill: currentcolor;
+  transition: fill-opacity 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Inner stroke: clipPath clips the stroke to the shape so only the inside
+   half renders — reads as a line drawn inside, not a border around. */
+.logo .logo-stroke {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 0;
+  transition: stroke-width 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logo-animate-on-hover .logo-fill {
+  animation: logo-fill-cycle 1500ms cubic-bezier(0.4, 0, 0.2, 1) 1;
+}
+
+.logo-animate-on-hover .logo-stroke {
+  animation: logo-stroke-cycle 1500ms cubic-bezier(0.4, 0, 0.2, 1) 1;
+}
+
+@keyframes logo-fill-cycle {
+  0% {
+    fill-opacity: 1;
+  }
+
+  23.3% {
+    fill-opacity: 0;
+  }
+
+  43.3% {
+    fill-opacity: 0;
+  }
+
+  100% {
+    fill-opacity: 1;
+  }
+}
+
+@keyframes logo-stroke-cycle {
+  0% {
+    stroke-width: 0;
+  }
+
+  23.3% {
+    stroke-width: 2;
+  }
+
+  43.3% {
+    stroke-width: 2;
+  }
+
+  100% {
+    stroke-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo .logo-fill,
+  .logo .logo-stroke {
+    transition: none;
+    animation: none;
+  }
+}

@@ -24,8 +24,12 @@ Real-time monitoring, suspend/resume, and step-level observability are enabled v
 Install the required packages:
 
 ```bash npm2yarn
-npm install @mastra/inngest@latest inngest @inngest/realtime
+npm install @mastra/inngest@latest inngest
 ```
+
+:::note
+Requires `inngest@^4` and Inngest Dev Server `v1.18.0` or later. Realtime is built into the SDK in v4, so `@inngest/realtime` and `realtimeMiddleware` are no longer used.
+:::
 
 ## Building an Inngest workflow
 
@@ -39,13 +43,11 @@ In development:
 
 ```ts title="src/mastra/inngest/index.ts"
 import { Inngest } from 'inngest'
-import { realtimeMiddleware } from '@inngest/realtime/middleware'
 
 export const inngest = new Inngest({
   id: 'mastra',
   baseUrl: 'http://localhost:8288',
   isDev: true,
-  middleware: [realtimeMiddleware()],
 })
 ```
 
@@ -53,11 +55,9 @@ In production:
 
 ```ts title="src/mastra/inngest/index.ts"
 import { Inngest } from 'inngest'
-import { realtimeMiddleware } from '@inngest/realtime/middleware'
 
 export const inngest = new Inngest({
   id: 'mastra',
-  middleware: [realtimeMiddleware()],
 })
 ```
 
@@ -126,7 +126,7 @@ export const mastra = new Mastra({
     host: '0.0.0.0',
     apiRoutes: [
       {
-        path: '/api/inngest',
+        path: '/inngest/api',
         method: 'ALL',
         createHandler: async ({ mastra }) => {
           return serve({ mastra, inngest })
@@ -138,6 +138,10 @@ export const mastra = new Mastra({
 })
 ```
 
+:::note
+The path is `/inngest/api`, not `/api/inngest`. Mastra reserves the `/api` prefix for built-in routes (agents, workflows, memory). Custom `apiRoutes` paths that start with the server's `apiPrefix` (default `/api`) throw at startup. See [#15743](https://github.com/mastra-ai/mastra/pull/15743) for context, or skip to [Using a custom `apiPrefix`](#using-a-custom-apiprefix) if you need to keep `/api/inngest`.
+:::
+
 ## Running workflows
 
 ### Running locally
@@ -147,11 +151,11 @@ export const mastra = new Mastra({
 1. Start the Inngest Dev Server. In a new terminal, run:
 
    ```bash
-   npx inngest-cli@latest dev -u http://localhost:4111/api/inngest
+   npx inngest-cli@latest dev -u http://localhost:4111/inngest/api
    ```
 
    :::note
-   The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint
+   The URL after `-u` tells the Inngest dev server where to find your Mastra `/inngest/api` endpoint
    :::
 
 1. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
@@ -215,6 +219,10 @@ Before you begin, make sure you have:
    ```
 
 1. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by selecting **Sync new app with Vercel** and following the instructions
+
+   :::warning
+   Inngest's auto-discover convention assumes `/api/inngest`. Because this guide uses `/inngest/api`, set the **URL** field on the Inngest app to your deployed origin plus `/inngest/api` (for example `https://your-app.vercel.app/inngest/api`). If you leave it on the default, the Inngest dashboard will not find your app's functions.
+   :::
 
 1. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, selecting **All actions** > **Invoke**, and providing the following input:
 
@@ -281,7 +289,7 @@ export const mastra = new Mastra({
     host: '0.0.0.0',
     apiRoutes: [
       {
-        path: '/api/inngest',
+        path: '/inngest/api',
         method: 'ALL',
         createHandler: async ({ mastra }) => {
           return serve({
@@ -303,7 +311,7 @@ When you include custom functions:
 
 1. Mastra workflows are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
 1. Custom functions retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
-1. All functions are served together on the same `/api/inngest` endpoint
+1. All functions are served together on the same `/inngest/api` endpoint
 
 This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
 
@@ -325,7 +333,7 @@ const app = express()
 app.use(express.json())
 
 const handler = createServe(expressAdapter)({ mastra, inngest })
-app.use('/api/inngest', handler)
+app.use('/inngest/api', handler)
 
 app.listen(3000)
 ```
@@ -345,7 +353,7 @@ const handler = createServe(fastifyAdapter)({ mastra, inngest })
 
 fastify.route({
   method: ['GET', 'POST', 'PUT'],
-  url: '/api/inngest',
+  url: '/inngest/api',
   handler,
 })
 
@@ -369,7 +377,7 @@ const router = new Router()
 app.use(bodyParser())
 
 const handler = createServe(koaAdapter)({ mastra, inngest })
-router.all('/api/inngest', handler)
+router.all('/inngest/api', handler)
 
 app.use(router.routes())
 app.use(router.allowedMethods())
@@ -379,7 +387,7 @@ app.listen(3000)
 
 ### Next.js
 
-```ts title="app/api/inngest/route.ts"
+```ts title="app/inngest/api/route.ts"
 import { createServe } from '@mastra/inngest'
 import { serve as nextAdapter } from 'inngest/next'
 import { mastra, inngest } from '@/mastra'
@@ -392,6 +400,35 @@ export { handler as GET, handler as POST, handler as PUT }
 ### Available adapters
 
 The `createServe` function works with any Inngest adapter. See the [Inngest serve documentation](https://www.inngest.com/docs/reference/serve) for a complete list of available adapters including AWS Lambda, Cloudflare Workers, and more.
+
+## Using a custom `apiPrefix`
+
+If you need to keep `/api/inngest` (for example to match Inngest's auto-discover convention without changing the dashboard URL), set `server.apiPrefix` to relocate Mastra's built-in routes:
+
+```ts title="src/mastra/index.ts" {7,10}
+import { Mastra } from '@mastra/core'
+import { serve } from '@mastra/inngest'
+import { inngest } from './inngest'
+
+export const mastra = new Mastra({
+  server: {
+    apiPrefix: '/_mastra',
+    apiRoutes: [
+      {
+        path: '/api/inngest',
+        method: 'ALL',
+        createHandler: async ({ mastra }) => serve({ mastra, inngest }),
+      },
+    ],
+  },
+})
+```
+
+Mastra's built-in routes now resolve under `/_mastra/agents`, `/_mastra/workflows`, and so on, freeing the `/api/inngest` path for your custom route.
+
+:::warning
+The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*` as public. When you change `apiPrefix`, those defaults no longer match and built-in routes fall outside the protected pattern. Update `server.auth.protected` and `server.auth.public` to reference the new prefix, and update any client code (including [`MastraClient`](/docs/server/mastra-client) `apiPrefix`) that hits `/api/*`.
+:::
 
 ## Flow control
 

@@ -33,6 +33,17 @@ process.once('SIGTERM', async () => {
 describe('externals: true', () => {
   let fixturePath: string;
   const pkgManager = 'pnpm';
+  let buildPromise: Promise<void> | undefined;
+
+  async function buildFixture() {
+    buildPromise ??= execa(pkgManager, ['build'], {
+      cwd: fixturePath,
+      stdio: 'inherit',
+      env: process.env,
+    }).then(() => {});
+
+    return buildPromise;
+  }
 
   beforeAll(
     async () => {
@@ -41,12 +52,6 @@ describe('externals: true', () => {
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-no-bundling-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
       await setupTemplate(fixturePath, pkgManager);
-
-      await execa(pkgManager, ['build'], {
-        cwd: fixturePath,
-        stdio: 'inherit',
-        env: process.env,
-      });
     },
     10 * 60 * 1000,
   );
@@ -60,6 +65,10 @@ describe('externals: true', () => {
   });
 
   describe('build', () => {
+    beforeAll(async () => {
+      await buildFixture();
+    }, timeout);
+
     it('should include external deps in output/package.json', async () => {
       const packageJsonPath = join(fixturePath, '.mastra', 'output', 'package.json');
       const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
@@ -73,6 +82,21 @@ describe('externals: true', () => {
       const zodChunkPath = join(fixturePath, '.mastra', '.build', 'zod.mjs');
       await expect(readFile(zodChunkPath)).rejects.toThrow();
     });
+
+    it('should resolve tsconfig alias imports that use .js extensions', async () => {
+      const bundlePath = join(fixturePath, '.mastra', 'output', 'index.mjs');
+      const bundleContent = await readFile(bundlePath, 'utf-8');
+
+      expect(bundleContent).not.toContain('~/utils/build-flags.js');
+    });
+
+    it('should not treat tsconfig aliases as installable packages', async () => {
+      const packageJsonPath = join(fixturePath, '.mastra', 'output', 'package.json');
+      const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
+      const packageJson = JSON.parse(packageJsonContent);
+
+      expect(packageJson.dependencies?.['~']).toBeUndefined();
+    });
   });
 
   describe('start', () => {
@@ -84,6 +108,7 @@ describe('externals: true', () => {
     it(
       'should start server successfully',
       async () => {
+        await buildFixture();
         port = await getPort();
 
         proc = execa('npm', ['run', 'start'], {

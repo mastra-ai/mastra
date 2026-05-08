@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import type { HarnessEvent } from './types';
 
-function createHarness() {
+function createHarness(storage = new InMemoryStore()) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -12,7 +13,7 @@ function createHarness() {
 
   return new Harness({
     id: 'test-harness',
-    storage: new InMemoryStore(),
+    storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
 }
@@ -73,6 +74,72 @@ describe('step-finish token usage extraction', () => {
     expect(tokenUsage.totalTokens).toBe(280);
   });
 
+  it('preserves provider totalTokens and richer usage fields', async () => {
+    const usage = {
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 220,
+      reasoningTokens: 70,
+      cachedInputTokens: 25,
+      cacheCreationInputTokens: 5,
+      raw: { provider: 'test-provider' },
+    };
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    await (harness as any).processStream({ fullStream: mockStream(usage) });
+
+    const expectedUsage = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 220,
+      reasoningTokens: 70,
+      cachedInputTokens: 25,
+      cacheCreationInputTokens: 5,
+      raw: { provider: 'test-provider' },
+    };
+    expect(harness.getTokenUsage()).toEqual(expectedUsage);
+    expect(harness.getDisplayState().tokenUsage).toEqual(expectedUsage);
+    expect(events.find(event => event.type === 'usage_update')).toEqual({
+      type: 'usage_update',
+      usage: expectedUsage,
+    });
+  });
+
+  it('persists richer token usage in thread metadata', async () => {
+    const storage = new InMemoryStore();
+    harness = createHarness(storage);
+    await harness.init();
+    const thread = await harness.createThread();
+    const usage = {
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 220,
+      reasoningTokens: 70,
+      cachedInputTokens: 25,
+      cacheCreationInputTokens: 5,
+      raw: { provider: 'test-provider' },
+    };
+
+    await (harness as any).processStream({ fullStream: mockStream(usage) });
+
+    await expect
+      .poll(async () => {
+        const memory = await storage.getStore('memory');
+        const savedThread = await memory?.getThreadById({ threadId: thread.id });
+        return savedThread?.metadata?.tokenUsage;
+      })
+      .toEqual({
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 220,
+        reasoningTokens: 70,
+        cachedInputTokens: 25,
+        cacheCreationInputTokens: 5,
+        raw: { provider: 'test-provider' },
+      });
+  });
+
   it('accumulates token usage across multiple step-finish chunks', async () => {
     const usage1 = { inputTokens: 100, outputTokens: 50 };
     const usage2 = { inputTokens: 150, outputTokens: 70 };
@@ -118,21 +185,23 @@ describe('step-finish token usage extraction', () => {
     expect(tokenUsage.totalTokens).toBe(370);
   });
 
-  it('extracts cachedInputTokens from usage', async () => {
-    const usage = { inputTokens: 500, outputTokens: 100, totalTokens: 600, cachedInputTokens: 300 };
-
-    await (harness as any).processStream({ fullStream: mockStream(usage) });
-
-    const tokenUsage = harness.getTokenUsage();
-    expect(tokenUsage.promptTokens).toBe(500);
-    expect(tokenUsage.completionTokens).toBe(100);
-    expect(tokenUsage.totalTokens).toBe(600);
-    expect(tokenUsage.cachedInputTokens).toBe(300);
-  });
-
-  it('accumulates cachedInputTokens across multiple steps', async () => {
-    const usage1 = { inputTokens: 100, outputTokens: 50, cachedInputTokens: 40 };
-    const usage2 = { inputTokens: 200, outputTokens: 80, cachedInputTokens: 120 };
+  it('accumulates richer usage fields across multiple step-finish chunks', async () => {
+    const usage1 = {
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 180,
+      reasoningTokens: 30,
+      cachedInputTokens: 10,
+      raw: { step: 1 },
+    };
+    const usage2 = {
+      inputTokens: 150,
+      outputTokens: 70,
+      totalTokens: 260,
+      reasoningTokens: 40,
+      cacheCreationInputTokens: 12,
+      raw: { step: 2 },
+    };
 
     async function* multiStepStream() {
       yield {
@@ -169,25 +238,18 @@ describe('step-finish token usage extraction', () => {
 
     await (harness as any).processStream({ fullStream: multiStepStream() });
 
-    const tokenUsage = harness.getTokenUsage();
-    expect(tokenUsage.promptTokens).toBe(300);
-    expect(tokenUsage.completionTokens).toBe(130);
-    expect(tokenUsage.cachedInputTokens).toBe(160);
+    expect(harness.getTokenUsage()).toEqual({
+      promptTokens: 250,
+      completionTokens: 120,
+      totalTokens: 440,
+      reasoningTokens: 70,
+      cachedInputTokens: 10,
+      cacheCreationInputTokens: 12,
+      raw: { step: 2 },
+    });
   });
 
-  it('extracts cacheCreationInputTokens from usage', async () => {
-    const usage = { inputTokens: 500, outputTokens: 100, totalTokens: 600, cacheCreationInputTokens: 200 };
-
-    await (harness as any).processStream({ fullStream: mockStream(usage) });
-
-    const tokenUsage = harness.getTokenUsage();
-    expect(tokenUsage.promptTokens).toBe(500);
-    expect(tokenUsage.completionTokens).toBe(100);
-    expect(tokenUsage.totalTokens).toBe(600);
-    expect(tokenUsage.cacheCreationInputTokens).toBe(200);
-  });
-
-  it('defaults cachedInputTokens to 0 when not present in usage', async () => {
+  it('defaults cache usage fields to 0 when not present in usage', async () => {
     const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
 
     await (harness as any).processStream({ fullStream: mockStream(usage) });

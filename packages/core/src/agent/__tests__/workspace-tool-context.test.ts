@@ -7,10 +7,11 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { WORKSPACE_TOOLS } from '../../workspace/constants';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';
@@ -670,6 +671,223 @@ describe('Dynamic workspace configuration', () => {
 
     expect(toolCall?.result?.workspaceId).toBe('async-workspace');
     expect(capturedWorkspaceId).toBe('async-workspace');
+  });
+});
+
+/**
+ * Regression test for GH-14203: listWorkspaceTools() must include workspace
+ * in ToolOptions when converting workspace tools via makeCoreTool().
+ *
+ * CoreToolBuilder.createExecute() resolves workspace as:
+ *   workspace: execOptions.workspace ?? options.workspace
+ *
+ * The agent pipeline's tool-call-step.ts provides execOptions.workspace at
+ * runtime, but options.workspace (the build-time fallback) was missing because
+ * listWorkspaceTools() didn't include workspace in ToolOptions. This test
+ * gets the CoreTools produced by listWorkspaceTools() and calls execute
+ * directly WITHOUT workspace in execOptions, verifying the build-time fallback.
+ */
+describe('Workspace tools receive workspace via ToolOptions fallback (GH-14203)', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-options-fallback-'));
+    await fs.writeFile(path.join(tempDir, 'hello.txt'), 'hello from fallback test');
+  });
+
+  afterEach(async () => {
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should provide workspace through ToolOptions when execOptions.workspace is absent', async () => {
+    const filesystem = new LocalFilesystem({ basePath: tempDir });
+    const workspace = new Workspace({
+      id: 'options-fallback-workspace',
+      name: 'Options Fallback Workspace',
+      filesystem,
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'done' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'tooloptions-fallback-agent',
+      name: 'ToolOptions Fallback Agent',
+      instructions: 'test',
+      model: mockModel,
+      workspace,
+    });
+
+    // Get the CoreTools that listWorkspaceTools() produces — these have
+    // workspace baked into ToolOptions at build time (the fix).
+    const coreTools = await (agent as any).listWorkspaceTools({
+      requestContext: new RequestContext(),
+    });
+
+    const listFilesCoreTool = coreTools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES];
+    expect(listFilesCoreTool).toBeDefined();
+    expect(listFilesCoreTool.execute).toBeDefined();
+
+    // Call execute WITHOUT workspace in execOptions — simulates execution
+    // outside the normal agent pipeline (no tool-call-step.ts runtime injection).
+    const result = await listFilesCoreTool.execute!({ path: '.' }, {
+      toolCallId: 'test-call-1',
+      messages: [],
+    } as any);
+
+    expect(result).toBeDefined();
+    expect(typeof result).toBe('string');
+    expect(result).toContain('hello.txt');
+  });
+});
+
+describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
+  let tempDirA: string;
+  let tempDirB: string;
+
+  beforeEach(async () => {
+    tempDirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dynfs-a-'));
+    tempDirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dynfs-b-'));
+  });
+
+  afterEach(async () => {
+    for (const dir of [tempDirA, tempDirB]) {
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should resolve filesystem per-request in auto-injected read_file tool', async () => {
+    // Create different content in each directory
+    await fs.writeFile(path.join(tempDirA, 'config.txt'), 'admin config');
+    await fs.writeFile(path.join(tempDirB, 'config.txt'), 'user config');
+
+    // Single workspace with dynamic filesystem resolver
+    const workspace = new Workspace({
+      id: 'dynamic-fs-workspace',
+      filesystem: ({ requestContext }: { requestContext: RequestContext }) => {
+        const role = requestContext.get('role') as string;
+        return role === 'admin'
+          ? new LocalFilesystem({ basePath: tempDirA })
+          : new LocalFilesystem({ basePath: tempDirB });
+      },
+    });
+
+    // Mock model that calls mastra_workspace_read_file
+    const readFileMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'tool-call',
+            toolCallType: 'function',
+            toolCallId: 'call-read-1',
+            toolName: 'mastra_workspace_read_file',
+            input: '{"path":"config.txt","showLineNumbers":false}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'dynamic-fs-agent',
+      name: 'Dynamic FS Agent',
+      instructions: 'You are an agent with dynamic filesystem.',
+      model: readFileMockModel,
+      workspace,
+    });
+
+    // Call as admin — should read from tempDirA
+    const adminCtx = new RequestContext([['role', 'admin']]);
+    const adminResponse = await agent.generate('Read config', { requestContext: adminCtx });
+    const adminResult = adminResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
+      ?.payload?.result;
+    // Tool returns a string containing the file content
+    expect(adminResult).toContain('admin config');
+
+    // Call as user — should read from tempDirB
+    const userCtx = new RequestContext([['role', 'user']]);
+    const userResponse = await agent.generate('Read config', { requestContext: userCtx });
+    const userResult = userResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
+      ?.payload?.result;
+    expect(userResult).toContain('user config');
+  });
+
+  it('should block writes on read-only resolved filesystem via auto-injected tools', async () => {
+    // Single workspace that resolves to read-only filesystem
+    const workspace = new Workspace({
+      id: 'readonly-resolver-workspace',
+      filesystem: () => new LocalFilesystem({ basePath: tempDirA, readOnly: true }),
+    });
+
+    // Mock model that calls mastra_workspace_write_file
+    const writeFileMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'tool-call',
+            toolCallType: 'function',
+            toolCallId: 'call-write-1',
+            toolName: 'mastra_workspace_write_file',
+            input: '{"path":"test.txt","content":"should fail"}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'readonly-resolver-agent',
+      name: 'ReadOnly Resolver Agent',
+      instructions: 'You are an agent.',
+      model: writeFileMockModel,
+      workspace,
+    });
+
+    await agent.generate('Write a file', { requestContext: new RequestContext() });
+
+    // The tool error is caught by the framework — verify the write was blocked
+    // The file should NOT exist (read-only enforcement prevented the write)
+    const fileExists = await fs
+      .access(path.join(tempDirA, 'test.txt'))
+      .then(() => true)
+      .catch(() => false);
+    expect(fileExists).toBe(false);
   });
 });
 

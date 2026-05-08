@@ -4,6 +4,7 @@
 
 import type { Sandbox } from '@daytonaio/sdk';
 
+import type { DaytonaAzureBlobMountConfig } from './azure';
 import type { DaytonaGCSMountConfig } from './gcs';
 import type { DaytonaS3MountConfig } from './s3';
 
@@ -12,7 +13,7 @@ export const LOG_PREFIX = '[@mastra/daytona]';
 /**
  * Union of mount configs supported by Daytona sandbox.
  */
-export type DaytonaMountConfig = DaytonaS3MountConfig | DaytonaGCSMountConfig;
+export type DaytonaMountConfig = DaytonaS3MountConfig | DaytonaGCSMountConfig | DaytonaAzureBlobMountConfig;
 
 /**
  * Context for mount operations.
@@ -57,6 +58,32 @@ export function validateEndpoint(endpoint: string): void {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(`Invalid endpoint URL scheme: "${parsed.protocol}". Only http: and https: are allowed.`);
   }
+}
+
+/**
+ * Validate and normalize a mount prefix before interpolating into shell commands.
+ * Returns the normalized prefix (no leading/trailing slashes).
+ *
+ * Shell safety is handled by shellQuote() at the call site, so this function
+ * only enforces path-level rules (no traversal, no empty result, no control chars).
+ */
+export function validatePrefix(prefix: string): string {
+  // Trim leading/trailing slashes
+  let normalized = prefix;
+  while (normalized.startsWith('/')) normalized = normalized.slice(1);
+  while (normalized.endsWith('/')) normalized = normalized.slice(0, -1);
+
+  if (!normalized) {
+    throw new Error('Mount prefix cannot be empty after normalization.');
+  }
+  if (normalized.includes('//') || normalized.split('/').some(s => s === '.' || s === '..')) {
+    throw new Error(`Invalid mount prefix: "${prefix}". Path traversal is not allowed.`);
+  }
+  // Block control characters (U+0000–U+001F, U+007F) which are invalid in filesystem paths
+  if (/[\x00-\x1f\x7f]/.test(normalized)) {
+    throw new Error(`Invalid mount prefix: "${prefix}". Control characters are not allowed.`);
+  }
+  return normalized;
 }
 
 /**

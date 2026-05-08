@@ -6,10 +6,10 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { mastra } from '../theme.js';
+import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
 
 const MAX_COLLAPSED_LINES = 3;
-const BORDER_COLOR = mastra.purple;
+const getBorderColor = () => mastra.green;
 
 export class SlashCommandComponent extends Container {
   private commandName: string;
@@ -31,20 +31,20 @@ export class SlashCommandComponent extends Container {
 
   private rebuild(): void {
     this.clear();
-    this.addChild(new Spacer(1));
 
-    const border = (char: string) => chalk.bold.hex(BORDER_COLOR)(char);
-    const termWidth = process.stdout.columns || 80;
-    const maxLineWidth = termWidth - 6;
+    const border = (char: string) => chalk.bold.hex(getBorderColor())(char);
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
 
-    // Top border with command name
     const heading = chalk.hex(mastra.specialGray)(`/${this.commandName}`);
-    this.addChild(new Text(`${border('┌──')} ${heading}`, 0, 0));
 
     if (this.contentLines.length === 0) {
-      this.addChild(new Text(`${border('└──')}`, 0, 0));
+      this.addChild(new Text(`${border('╰──')} ${heading}`, BOX_INDENT, 0));
       return;
     }
+
+    // Top border
+    this.addChild(new Text(`${border('╭──')}`, BOX_INDENT, 0));
 
     // Word-wrap content lines
     const wrappedLines: string[] = [];
@@ -72,16 +72,17 @@ export class SlashCommandComponent extends Container {
           `${border('│')} ${chalk.hex(mastra.mainGray)(line.length > maxLineWidth ? line.slice(0, maxLineWidth - 1) + '…' : line)}`,
       )
       .join('\n');
-    this.addChild(new Text(contentText, 0, 0));
+    this.addChild(new Text(contentText, BOX_INDENT, 0));
 
     if (truncated) {
       const moreText = chalk.hex(mastra.darkGray)(
         `... ${wrappedLines.length - MAX_COLLAPSED_LINES} more lines (ctrl+e to expand)`,
       );
-      this.addChild(new Text(`${border('│')} ${moreText}`, 0, 0));
+      this.addChild(new Text(`${border('│')} ${moreText}`, BOX_INDENT, 0));
     }
 
-    // Bottom border
-    this.addChild(new Text(`${border('└──')}`, 0, 0));
+    // Bottom border with command name
+    this.addChild(new Text(`${border('╰──')} ${heading}`, BOX_INDENT, 0));
+    this.addChild(new Spacer(1));
   }
 }

@@ -1,31 +1,23 @@
-import {
-  Header,
-  HeaderTitle,
-  Icon,
-  MainContentContent,
-  MainContentLayout,
-  RequestContext,
-  RequestContextWrapper,
-} from '@mastra/playground-ui';
+import { PageHeader, PageLayout } from '@mastra/playground-ui';
 import { Globe } from 'lucide-react';
+import { RequestContext, RequestContextWrapper } from '@/domains/agents/components/request-context';
 
 export default function RequestContextPage() {
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <Globe />
-          </Icon>
-          Request Context
-        </HeaderTitle>
-      </Header>
+    <PageLayout width="narrow">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <Globe /> Request Context
+          </PageHeader.Title>
+        </PageHeader>
+      </PageLayout.TopArea>
 
-      <MainContentContent>
+      <PageLayout.MainArea>
         <RequestContextWrapper>
           <RequestContext />
         </RequestContextWrapper>
-      </MainContentContent>
-    </MainContentLayout>
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 }

@@ -1,0 +1,8 @@
+---
+"@mastra/core": patch
+---
+dependencies updates:
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.25` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.25) (from `npm:@ai-sdk/provider-utils@3.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.26` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.26) (from `npm:@ai-sdk/provider-utils@4.0.23`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v5@npm:@ai-sdk/provider@2.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v5/v/2.0.3) (from `npm:@ai-sdk/provider@2.0.1`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.10) (from `npm:@ai-sdk/provider@3.0.8`, in `dependencies`)

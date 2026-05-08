@@ -3,9 +3,9 @@
  * syntax highlighting, and smart summarization.
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Box, Container, Text, Spacer } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
-import { theme } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 
 export interface ErrorInfo {
@@ -154,9 +154,13 @@ export class ErrorDisplayComponent extends Container {
   private build(): void {
     const info = parseErrorInfo(this.error);
 
+    // Wrap everything in a box (borders provide structure, no extra padding)
+    const box = new Box(BOX_INDENT, 0, (text: string) => text);
+    this.addChild(box);
+
     // Add a visible border around the entire error display
-    const borderTop = new Text(theme.fg('error', '┌─ Error ─' + '─'.repeat(50) + '┐'), 0, 0);
-    this.addChild(borderTop);
+    const borderTop = new Text(theme.fg('error', '╭─ Error ─' + '─'.repeat(50) + '╮'), 0, 0);
+    box.addChild(borderTop);
 
     // Error header container with background
     const errorContainer = new Container();
@@ -184,23 +188,25 @@ export class ErrorDisplayComponent extends Container {
       errorContainer.addChild(new Text(theme.fg('muted', `  at ${location}`), 0, 0));
     }
 
-    this.addChild(errorContainer);
+    box.addChild(errorContainer);
 
     // Code context if available
     if (this.options.showContext && info.context) {
-      this.addChild(new Spacer(1));
-      this.addChild(this.createCodeContext(info.context, info.line));
+      box.addChild(new Spacer(1));
+      box.addChild(this.createCodeContext(info.context, info.line));
     }
 
     // Stack trace (collapsible)
     if (this.options.showStack && info.stack) {
-      this.addChild(new Spacer(1));
-      this.addChild(new CollapsibleStackTrace(info.stack, { expanded: this.options.expanded }, this.ui));
+      box.addChild(new Spacer(1));
+      box.addChild(new CollapsibleStackTrace(info.stack, { expanded: this.options.expanded }, this.ui));
     }
 
     // Add bottom border
-    const borderBottom = new Text(theme.fg('error', '└' + '─'.repeat(60) + '┘'), 0, 0);
-    this.addChild(borderBottom);
+    const borderBottom = new Text(theme.fg('error', '╰' + '─'.repeat(59) + '╯'), 0, 0);
+    box.addChild(borderBottom);
+
+    this.addChild(new Spacer(1));
   }
 
   private createCodeContext(context: NonNullable<ErrorInfo['context']>, errorLine?: number): Container {

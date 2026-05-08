@@ -11,13 +11,35 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 A SpanOutputProcessor that redacts sensitive information from span fields.
 
+## Auto-applied by default
+
+`Observability` automatically appends a `SensitiveDataFilter` to every configured instance's `spanOutputProcessors` so secrets are redacted before they reach exporters such as the Mastra cloud exporter. The filter runs last (after any user-provided processors) so that sensitive data introduced or surfaced by upstream processors is still redacted. You do not need to add it manually unless you want to customize its options.
+
+To opt out or customize the auto-applied filter, use the `sensitiveDataFilter` option on the [`Observability` registry config](/reference/observability/tracing/configuration#observabilityregistryconfig):
+
+```typescript
+import { Observability } from '@mastra/observability'
+
+new Observability({
+  configs: {
+    /* ... */
+  },
+  // disable the auto-applied filter
+  sensitiveDataFilter: false,
+  // or customize it
+  // sensitiveDataFilter: { sensitiveFields: ['mySecret'], redactionStyle: 'partial' },
+})
+```
+
+If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values are not modified — add a `SensitiveDataFilter` to their processors yourself if needed.
+
 ## Constructor
 
 ```typescript prettier:false
 new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
 ```
 
-## SensitiveDataFilterOptions
+## `SensitiveDataFilterOptions`
 
 ```typescript
 interface SensitiveDataFilterOptions {
@@ -70,7 +92,7 @@ interface SensitiveDataFilterOptions {
 ]}
 />
 
-## RedactionStyle
+## `RedactionStyle`
 
 ```typescript
 type RedactionStyle = 'full' | 'partial'
@@ -113,7 +135,7 @@ No cleanup needed for this processor.
 readonly name = 'sensitive-data-filter';
 ```
 
-## Default Sensitive Fields
+## Default sensitive fields
 
 When no custom fields are provided:
 
@@ -137,7 +159,7 @@ When no custom fields are provided:
 ]
 ```
 
-## Processing Behavior
+## Processing behavior
 
 ### Field Matching
 
@@ -159,7 +181,7 @@ All matched values replaced with redactionToken.
 - Values ≤ 6 characters are fully redacted
 - Non-string values are converted to strings before partial redaction
 
-### Error Handling
+### Error handling
 
 If filtering a field fails, the field is replaced with:
 

@@ -80,14 +80,34 @@ export class LocalSkillSource implements SkillSource {
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
     const resolved = this.#resolvePath(skillPath);
     const entries = await fs.readdir(resolved, { withFileTypes: true });
-    // Note: Dirent.isDirectory() returns false for symlinks pointing to directories,
-    // so symlinked directories appear as { type: 'file', isSymlink: true }. This is
-    // intentional — #walkForDirectories skips symlinks to prevent cycles, and treating
-    // them as files ensures they're never recursed into by other consumers either.
-    return entries.map(entry => ({
-      name: entry.name,
-      type: entry.isDirectory() ? 'directory' : 'file',
-      isSymlink: entry.isSymbolicLink() || undefined,
-    }));
+    // Dirent.isDirectory() returns false for symlinks, even when they point to
+    // directories. Detect the target type so skill discovery can load symlinked
+    // skills while still letting higher layers decide whether to recurse.
+    return Promise.all(
+      entries.map(async entry => {
+        const entryPath = path.join(resolved, entry.name);
+        const isSymlink = entry.isSymbolicLink();
+        let type: SkillSourceEntry['type'] = entry.isDirectory() ? 'directory' : 'file';
+
+        if (isSymlink) {
+          try {
+            const targetStat = await fs.stat(entryPath);
+            type = targetStat.isDirectory() ? 'directory' : 'file';
+          } catch {
+            type = 'file';
+          }
+        }
+
+        return {
+          name: entry.name,
+          type,
+          isSymlink: isSymlink || undefined,
+        };
+      }),
+    );
+  }
+
+  async realpath(skillPath: string): Promise<string> {
+    return fs.realpath(this.#resolvePath(skillPath));
   }
 }

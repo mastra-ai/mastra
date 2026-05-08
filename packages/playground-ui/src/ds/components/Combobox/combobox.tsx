@@ -1,10 +1,10 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { buttonVariants } from '@/ds/components/Button/Button';
-import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
-import { type FormElementSize } from '@/ds/primitives/form-element';
 import { comboboxStyles } from './combobox-styles';
+import { formElementSizes } from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {
   label: string;
@@ -23,8 +23,9 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
-  size?: FormElementSize;
+  /** Kept for API compatibility; trigger styling is intrinsic to the Combobox now. */
+  variant?: 'default' | 'ghost' | 'link';
+  size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -40,8 +41,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'default',
-  size = 'md',
+  size = 'default',
   open,
   onOpenChange,
   container,
@@ -67,15 +67,18 @@ export function Combobox({
       >
         <BaseCombobox.Trigger
           className={cn(
-            buttonVariants({ variant, size }),
             comboboxStyles.trigger,
+            formElementSizes[size],
             error && comboboxStyles.triggerError,
             className,
           )}
         >
-          <span className="truncate flex items-center gap-2">
+          {/* Keep truncation off the outer wrapper so start adornments are not clipped. */}
+          <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
-            <BaseCombobox.Value placeholder={placeholder} />
+            <span className="truncate">
+              <BaseCombobox.Value placeholder={placeholder} />
+            </span>
           </span>
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>

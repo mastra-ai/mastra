@@ -1,3 +1,5 @@
+import { stripEphemeralAnchorIds } from './anchor-ids';
+import { reconcileObservationGroupsFromReflection, stripObservationGroups } from './observation-groups';
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_OUTPUT_FORMAT_BASE,
@@ -59,6 +61,8 @@ When consolidating observations:
 - Preserve and include dates/times when present (temporal context is critical)
 - Retain the most relevant timestamps (start times, completion times, significant events)
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - Condense older observations more aggressively, retain more detail for recent ones
 
 CRITICAL: USER ASSERTIONS vs QUESTIONS
@@ -130,12 +134,24 @@ User messages are extremely important. If the user asks a question or gives a ne
 export const REFLECTOR_SYSTEM_PROMPT = buildReflectorSystemPrompt();
 
 /**
+ * Valid compression level values (0 = no guidance, 4 = most extreme).
+ */
+export type CompressionLevel = 0 | 1 | 2 | 3 | 4;
+
+/**
+ * The highest available compression level.
+ */
+export const MAX_COMPRESSION_LEVEL: CompressionLevel = 4;
+
+/**
  * Compression guidance by level.
  * - Level 0: No compression guidance (used as first attempt for regular reflection)
- * - Level 1: Gentle compression guidance (original wording — "slightly more" goes a long way for LLMs)
- * - Level 2: Aggressive compression guidance (stronger push when level 1 didn't work)
+ * - Level 1: Gentle compression guidance
+ * - Level 2: Aggressive compression guidance
+ * - Level 3: Critical compression guidance
+ * - Level 4: Extreme compression
  */
-export const COMPRESSION_GUIDANCE: Record<0 | 1 | 2 | 3, string> = {
+export const COMPRESSION_GUIDANCE: Record<CompressionLevel, string> = {
   0: '',
   1: `
 ## COMPRESSION REQUIRED
@@ -147,9 +163,11 @@ Please re-process with slightly more compression:
 - Closer to the end, retain more fine details (recent context matters more)
 - Memory is getting long - use a more condensed style throughout
 - Combine related items more aggressively but do not lose important specific details of names, places, events, and people
-- For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
+- Combine repeated similar tool calls (e.g. multiple file views, searches, or edits in the same area) into a single summary line describing what was explored/changed and the outcome
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 
-Your current detail level was a 10/10, lets aim for a 8/10 detail level.
+Aim for a 8/10 detail level.
 `,
   2: `
 ## AGGRESSIVE COMPRESSION REQUIRED
@@ -161,10 +179,13 @@ Please re-process with much more aggressive compression:
 - Closer to the end, retain fine details (recent context matters more)
 - Memory is getting very long - use a significantly more condensed style throughout
 - Combine related items aggressively but do not lose important specific details of names, places, events, and people
-- For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
+- Combine repeated similar tool calls (e.g. multiple file views, searches, or edits in the same area) into a single summary line describing what was explored/changed and the outcome
+- If the same file or module is mentioned across many observations, merge into one entry covering the full arc
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - Remove redundant information and merge overlapping observations
 
-Your current detail level was a 10/10, lets aim for a 6/10 detail level.
+Aim for a 6/10 detail level.
 `,
   3: `
 ## CRITICAL COMPRESSION REQUIRED
@@ -175,11 +196,32 @@ Please re-process with maximum compression:
 - Summarize the oldest observations (first 50-70%) into brief high-level paragraphs — only key facts, decisions, and outcomes
 - For the most recent observations (last 30-50%), retain important details but still use a condensed style
 - Ruthlessly merge related observations — if 10 observations are about the same topic, combine into 1-2 lines
+- Combine all tool call sequences (file views, searches, edits, builds) into outcome-only summaries — drop individual steps entirely
 - Drop procedural details (tool calls, retries, intermediate steps) — keep only final outcomes
 - Drop observations that are no longer relevant or have been superseded by newer information
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - Preserve: names, dates, decisions, errors, user preferences, and architectural choices
 
-Your current detail level was a 10/10, lets aim for a 4/10 detail level.
+Aim for a 4/10 detail level.
+`,
+  4: `
+## EXTREME COMPRESSION REQUIRED
+
+Multiple compression attempts have failed. The content may already be dense from a prior reflection.
+
+You MUST dramatically reduce the number of observations while keeping the standard observation format (date groups with bullet points and priority emojis):
+- Tool call observations are the biggest source of bloat. Collapse ALL tool call sequences into outcome-only observations — e.g. 10 observations about viewing/searching/editing files become 1 observation about what was actually learned or achieved (e.g. "Investigated auth module and found token validation was skipping expiry check")
+- Never preserve individual tool calls (viewed file X, searched for Y, ran build) — only preserve what was discovered or accomplished
+- Consolidate many related observations into single, more generic observations
+- Merge all same-day date groups into at most 2-3 date groups per day
+- For older content, each topic or task should be at most 1-2 observations capturing the key outcome
+- For recent content, retain more detail but still merge related items aggressively
+- If multiple observations describe incremental progress on the same task, keep only the final state
+- Preserve ✅ completion markers and their outcomes but merge related completions into fewer lines
+- Preserve: user preferences, key decisions, architectural choices, and unresolved issues
+
+Aim for a 2/10 detail level. Fewer, more generic observations are better than many specific ones that exceed the budget.
 `,
 };
 
@@ -194,15 +236,16 @@ export const COMPRESSION_RETRY_PROMPT = COMPRESSION_GUIDANCE[1];
 export function buildReflectorPrompt(
   observations: string,
   manualPrompt?: string,
-  compressionLevel?: boolean | 0 | 1 | 2 | 3,
+  compressionLevel?: boolean | CompressionLevel,
   skipContinuationHints?: boolean,
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
-  const level: 0 | 1 | 2 | 3 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+  const level: CompressionLevel = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+  const reflectionView = stripObservationGroups(observations);
 
   let prompt = `## OBSERVATIONS TO REFLECT ON
 
-${observations}
+${reflectionView}
 
 ---
 
@@ -234,7 +277,7 @@ ${guidance}`;
  * Parse the Reflector's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseReflectorOutput(output: string): ReflectorResult {
+export function parseReflectorOutput(output: string, sourceObservations?: string): ReflectorResult {
   // Check for degenerate repetition before parsing
   if (detectDegenerateRepetition(output)) {
     return {
@@ -244,13 +287,13 @@ export function parseReflectorOutput(output: string): ReflectorResult {
   }
 
   const parsed = parseReflectorSectionXml(output);
-
-  // Return observations WITHOUT current-task/suggested-response tags
-  // Those are stored separately in thread metadata and injected dynamically
-  const observations = sanitizeObservationLines(parsed.observations || '');
+  const sanitizedObservations = sanitizeObservationLines(stripEphemeralAnchorIds(parsed.observations || ''));
+  const reconciledObservations = sourceObservations
+    ? reconcileObservationGroupsFromReflection(sanitizedObservations, sourceObservations)
+    : null;
 
   return {
-    observations,
+    observations: reconciledObservations ?? sanitizedObservations,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     // Note: Reflector's currentTask is not used - thread metadata preserves per-thread tasks
   };

@@ -20,7 +20,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "value": "child-span-test"
@@ -45,6 +46,10 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
             "input": {
               "value": "child-span-test"
             },
@@ -66,6 +71,8 @@
                 "entityType": "workflow_step",
                 "entityId": "child-span",
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "environment": "test",
                   "childOperation": "processing",
                   "inputValue": "child-span-test",
                   "endValue": "pizza"

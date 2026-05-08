@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys, agentGenerate } from '@internal/test-utils';
+import { agentGenerate } from '@internal/test-utils';
 import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig, CoreMessage } from '@mastra/core/llm';
@@ -18,8 +17,6 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 export async function getAgentMemoryTests({
   model,
@@ -463,7 +460,7 @@ export async function getAgentMemoryTests({
 
     it.skipIf(!reasoningModel)(
       'should consolidate reasoning into single part when saving to memory',
-      { retry: 2 },
+      { retry: 2, timeout: 60000 },
       async () => {
         const reasoningAgent = new Agent({
           id: 'reasoning-test-agent',
@@ -513,7 +510,6 @@ export async function getAgentMemoryTests({
         // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
         expect(retrievedReasoningParts?.length).toBe(1);
       },
-      60000,
     );
   });
 
@@ -613,7 +609,7 @@ export async function getAgentMemoryTests({
 
     it('should use generateTitle with request context', async () => {
       const threadId = randomUUID();
-      const resourceId = 'gen-title-metadata';
+      const resourceId = 'gen-title-with-request-context';
       const metadata = { foo: 'bar', custom: 123 };
 
       const thread = await memoryWithTitle.createThread({

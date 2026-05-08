@@ -1,23 +1,15 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import {
-  WorkflowRunProvider,
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  MainContentContent,
-  useWorkflow,
-  WorkflowRunList,
-  WorkflowInformation,
-  useWorkflowRun,
-  Skeleton,
-  Txt,
-  TracingSettingsProvider,
-  WorkflowLayout as WorkflowLayoutUI,
-  SchemaRequestContextProvider,
-} from '@mastra/playground-ui';
+import { Header, HeaderTitle, MainContentLayout, MainContentContent, Skeleton, Txt } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
-
 import { WorkflowHeader } from './workflow-header';
+import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
+import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
+import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
+import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
+import { WorkflowRunList } from '@/domains/workflows/runs/workflow-run-list';
+import { useWorkflowRun } from '@/hooks/use-workflow-runs';
+import { useWorkflow } from '@/hooks/use-workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();

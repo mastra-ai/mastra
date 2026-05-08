@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { JsonSchema } from '@/lib/json-schema';
-import { CodeEditor } from './code-editor';
 import { TooltipProvider } from '../Tooltip';
+import { CodeEditor } from './code-editor';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof CodeEditor> = {
   title: 'Composite/CodeEditor',
@@ -16,7 +16,6 @@ const meta: Meta<typeof CodeEditor> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     showCopyButton: {
       control: { type: 'boolean' },
@@ -95,7 +94,7 @@ export const WithoutCopyButton: Story = {
   args: {
     data: { message: 'Hello, World!' },
     showCopyButton: false,
-    className: 'w-[300px]',
+    className: 'w-dropdown-max-height',
   },
 };
 

@@ -3,7 +3,7 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext, ToolPayloadTransform } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -115,14 +115,32 @@ export class Tool<
   mastra?: Mastra;
 
   /**
-   * Whether the tool requires explicit user approval before execution
+   * Whether the tool requires explicit user approval before execution.
+   * Accepts a boolean for static behavior, or a function evaluated per-call
+   * for conditional approval.
    * @example
    * ```typescript
-   * // For destructive operations
+   * // Static
    * requireApproval: true
+   *
+   * // Conditional — only require approval for non-dry-run calls
+   * requireApproval: async ({ isDryRun }) => !isDryRun
    * ```
    */
-  requireApproval?: boolean;
+  requireApproval?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['requireApproval'];
+
+  /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
 
   /**
    * Provider-specific options passed to the model when this tool is used.
@@ -143,6 +161,11 @@ export class Tool<
    * The raw result is still available for application logic; only the model sees the transformed version.
    */
   toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
+   * Optional target-aware transform for display and transcript payloads.
+   */
+  transform?: ToolPayloadTransform<TSchemaIn, TSchemaOut>;
 
   /**
    * Optional MCP-specific properties including annotations and metadata.
@@ -207,6 +230,12 @@ export class Tool<
   inputExamples?: Array<{ input: Record<string, unknown> }>;
 
   /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   */
+  mcpMetadata?: McpMetadata;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -231,10 +260,13 @@ export class Tool<
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.strict = opts.strict;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
+    this.transform = opts.transform;
     this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
+    this.mcpMetadata = opts.mcpMetadata;
     this.onInputStart = opts.onInputStart;
     this.onInputDelta = opts.onInputDelta;
     this.onInputAvailable = opts.onInputAvailable;
@@ -296,11 +328,21 @@ export class Tool<
 
           if (isAgentExecution && !baseContext.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
-            const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
-              baseContext;
+            const {
+              agentId,
+              toolCallId,
+              messages,
+              suspend,
+              resumeData,
+              threadId,
+              resourceId,
+              writableStream,
+              ...rest
+            } = baseContext;
             organizedContext = {
               ...rest,
               agent: {
+                agentId: agentId || '',
                 toolCallId,
                 messages,
                 suspend,
@@ -335,6 +377,7 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
+                    agentId: baseContext.agent.agentId ?? '',
                     suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
                       return baseContext.agent?.suspend?.(args, suspendOptions);
