@@ -1400,6 +1400,7 @@ export class Harness<TState = {}> {
     }
 
     const operationId = ++this.currentOperationId;
+    this.abortRequested = false;
     this.abortController = new AbortController();
     this.currentTraceId = null;
     const agent = this.getCurrentAgent();
