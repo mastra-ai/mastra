@@ -16,14 +16,14 @@ export interface SkillsShOrigin {
   skillName: string;
 }
 
-export interface LibraryForkOrigin {
-  type: 'library-fork';
+export interface LibraryCopyOrigin {
+  type: 'library-copy';
   sourceSkillId: string;
   sourceSkillName: string;
   sourceAuthorId?: string;
 }
 
-export type SkillOrigin = SkillsShOrigin | LibraryForkOrigin;
+export type SkillOrigin = SkillsShOrigin | LibraryCopyOrigin;
 
 export function getSkillOrigin(metadata: Record<string, unknown> | undefined | null): SkillOrigin | null {
   if (!metadata || typeof metadata !== 'object') return null;
@@ -44,12 +44,12 @@ export function getSkillOrigin(metadata: Record<string, unknown> | undefined | n
     };
   }
   if (
-    candidate.type === 'library-fork' &&
+    candidate.type === 'library-copy' &&
     typeof candidate.sourceSkillId === 'string' &&
     typeof candidate.sourceSkillName === 'string'
   ) {
     return {
-      type: 'library-fork',
+      type: 'library-copy',
       sourceSkillId: candidate.sourceSkillId,
       sourceSkillName: candidate.sourceSkillName,
       sourceAuthorId: typeof candidate.sourceAuthorId === 'string' ? candidate.sourceAuthorId : undefined,
@@ -65,8 +65,8 @@ export function formatSkillOriginLabel(origin: SkillOrigin): string {
   switch (origin.type) {
     case 'skills-sh':
       return `skills.sh · ${origin.owner}/${origin.repo}`;
-    case 'library-fork':
-      return `Forked from "${origin.sourceSkillName}"`;
+    case 'library-copy':
+      return `Copied from "${origin.sourceSkillName}"`;
     default:
       return 'imported';
   }
@@ -79,7 +79,7 @@ export function getSkillOriginUrl(origin: SkillOrigin): string | null {
   switch (origin.type) {
     case 'skills-sh':
       return `https://skills.sh/${origin.owner}/${origin.repo}/${origin.skillName}`;
-    case 'library-fork':
+    case 'library-copy':
       return null;
     default:
       return null;

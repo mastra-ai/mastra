@@ -23,9 +23,9 @@ import {
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { ForkSkillDialog } from '@/domains/agents/components/agent-cms-pages/fork-skill-dialog';
+import { CopySkillDialog } from '@/domains/agents/components/agent-cms-pages/copy-skill-dialog';
 import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
-import { useForkSkill } from '@/domains/agents/hooks/use-fork-skill';
+import { useCopySkill } from '@/domains/agents/hooks/use-copy-skill';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -37,7 +37,7 @@ export default function AgentBuilderLibraryPage() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('agents');
   const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
-  const [forkSource, setForkSource] = useState<StoredSkillResponse | null>(null);
+  const [copySource, setCopySource] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
   const { canUseFavorites } = useBuilderAgentAccess();
   const { data: currentUser } = useCurrentUser();
@@ -54,12 +54,12 @@ export default function AgentBuilderLibraryPage() {
     error: skillsError,
   } = useStoredSkills(skillListParams, { enabled: tab === 'skills' && features.skills });
 
-  // Fetch the user's existing skills only when needed (i.e. they have fork-write capability),
-  // so we can suggest a non-colliding fork name and detect collisions before submit.
+  // Fetch the user's existing skills only when needed (i.e. they have copy-write capability),
+  // so we can suggest a non-colliding copy name and detect collisions before submit.
   const { data: ownSkillsData } = useStoredSkills(undefined, { enabled: canWriteSkills });
   const ownSkillNames = useMemo(() => (ownSkillsData?.skills ?? []).map(s => s.name), [ownSkillsData]);
 
-  const forkSkill = useForkSkill();
+  const copySkill = useCopySkill();
 
   const agents = agentsData?.agents ?? [];
   const skills = skillsData?.skills ?? [];
@@ -181,29 +181,29 @@ export default function AgentBuilderLibraryPage() {
           skill={selectedSkill}
           currentUserId={currentUser?.id}
           isAdmin={canWriteSkills}
-          onFork={
+          onCopy={
             canWriteSkills
               ? skill => {
-                  setForkSource(skill);
+                  setCopySource(skill);
                 }
               : undefined
           }
         />
       )}
 
-      {forkSource && (
-        <ForkSkillDialog
-          open={!!forkSource}
+      {copySource && (
+        <CopySkillDialog
+          open={!!copySource}
           onOpenChange={open => {
-            if (!open && !forkSkill.isPending) setForkSource(null);
+            if (!open && !copySkill.isPending) setCopySource(null);
           }}
-          sourceName={forkSource.name}
+          sourceName={copySource.name}
           existingNames={ownSkillNames}
-          isPending={forkSkill.isPending}
+          isPending={copySkill.isPending}
           onConfirm={async name => {
             try {
-              await forkSkill.mutateAsync({ source: forkSource, name });
-              setForkSource(null);
+              await copySkill.mutateAsync({ source: copySource, name });
+              setCopySource(null);
               setSelectedSkill(null);
             } catch (err) {
               if (err instanceof Error && err.message.toLowerCase().includes('already exists')) {

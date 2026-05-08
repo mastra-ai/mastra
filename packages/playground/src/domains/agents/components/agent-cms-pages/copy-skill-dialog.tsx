@@ -1,42 +1,42 @@
 import { AlertDialog, Input } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 
-export interface ForkSkillDialogProps {
+export interface CopySkillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The original skill being forked. Used to suggest a default name. */
+  /** The original skill being copied. Used to suggest a default name. */
   sourceName: string;
   /** Names of the user's existing skills, to detect collisions before submit. */
   existingNames: string[];
-  /** Whether a fork mutation is currently pending. */
+  /** Whether a copy mutation is currently pending. */
   isPending?: boolean;
   /** Called with the chosen name when the user confirms. */
   onConfirm: (name: string) => void;
 }
 
-function suggestForkName(sourceName: string, existingNames: string[]): string {
-  const base = `${sourceName}-fork`;
+function suggestCopyName(sourceName: string, existingNames: string[]): string {
+  const base = `${sourceName}-copy`;
   if (!existingNames.includes(base)) return base;
   for (let i = 2; i < 100; i++) {
-    const candidate = `${sourceName}-fork-${i}`;
+    const candidate = `${sourceName}-copy-${i}`;
     if (!existingNames.includes(candidate)) return candidate;
   }
   return base;
 }
 
-export function ForkSkillDialog({
+export function CopySkillDialog({
   open,
   onOpenChange,
   sourceName,
   existingNames,
   isPending,
   onConfirm,
-}: ForkSkillDialogProps) {
+}: CopySkillDialogProps) {
   const [name, setName] = useState('');
 
   // Re-seed the suggested name whenever the dialog opens for a different source.
   useEffect(() => {
-    if (open) setName(suggestForkName(sourceName, existingNames));
+    if (open) setName(suggestCopyName(sourceName, existingNames));
   }, [open, sourceName, existingNames]);
 
   const trimmed = name.trim();
@@ -47,22 +47,22 @@ export function ForkSkillDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Content>
         <AlertDialog.Header>
-          <AlertDialog.Title>Fork "{sourceName}"</AlertDialog.Title>
+          <AlertDialog.Title>Copy "{sourceName}"</AlertDialog.Title>
           <AlertDialog.Description>
             Creates a private copy in your skills that you can edit. The original stays untouched.
           </AlertDialog.Description>
         </AlertDialog.Header>
         <div className="px-6 py-2">
-          <label className="block text-ui-sm text-neutral4 mb-1.5" htmlFor="fork-skill-name">
+          <label className="block text-ui-sm text-neutral4 mb-1.5" htmlFor="copy-skill-name">
             New skill name
           </label>
           <Input
-            id="fork-skill-name"
+            id="copy-skill-name"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="my-skill-fork"
+            placeholder="my-skill-copy"
             autoFocus
-            data-testid="fork-skill-name-input"
+            data-testid="copy-skill-name-input"
           />
           {collides && (
             <div className="mt-1.5 text-ui-xs text-red-400">You already have a skill named "{trimmed}".</div>
@@ -79,9 +79,9 @@ export function ForkSkillDialog({
               }
               onConfirm(trimmed);
             }}
-            data-testid="fork-skill-confirm"
+            data-testid="copy-skill-confirm"
           >
-            {isPending ? 'Forking...' : 'Fork skill'}
+            {isPending ? 'Copying...' : 'Copy skill'}
           </AlertDialog.Action>
         </AlertDialog.Footer>
       </AlertDialog.Content>
