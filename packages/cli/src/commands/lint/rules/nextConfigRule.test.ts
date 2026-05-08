@@ -67,4 +67,15 @@ describe('nextConfigRule', () => {
     await expect(nextConfigRule.run(createContext(rootDir))).resolves.toBe(true);
     expect(Reflect.has(globalThis, exploitMarker)).toBe(false);
   });
+
+  test('does not parse next.config.js when serverExternalPackages is absent', async () => {
+    const rootDir = writeNextConfig(`
+      const nextConfig = {
+        poweredByHeader: false,
+      };
+      syntax error;
+    `);
+
+    await expect(nextConfigRule.run(createContext(rootDir))).resolves.toBe(false);
+  });
 });
