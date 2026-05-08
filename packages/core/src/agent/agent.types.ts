@@ -632,7 +632,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   _skipBgTaskWait?: boolean;
 
-  /** @internal Signals that should be echoed to the stream but are already present in the initial messages. */
+  /**
+   * @internal
+   * Signal inputs that are already present in the initial message list and still
+   * need to be echoed as data parts to stream subscribers. Public callers should
+   * pass the signal as `agent.stream(signal, options)` instead of setting this.
+   */
   _initialSignalEchoes?: CreatedAgentSignal[];
 } & Partial<ObservabilityContext>;
 

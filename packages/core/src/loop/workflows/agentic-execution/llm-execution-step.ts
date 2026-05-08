@@ -30,6 +30,7 @@ import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
+  StreamChunkType,
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
@@ -77,7 +78,7 @@ function getRequestInputProcessors({
 
 type ProcessOutputStreamResult = {
   collectedChunks: CollectedChunk[];
-  interruptedSignals: CreatedAgentSignal[];
+  interjectedSignals: CreatedAgentSignal[];
 };
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
@@ -89,7 +90,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig<OUTPUT>;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   responseFromModel: {
     warnings: any;
     request: any;
@@ -130,7 +131,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
   _internal,
 }: {
   error: TripWire;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   runId: string;
   model: MastraLanguageModel;
   messageList: MessageList;
@@ -381,15 +382,15 @@ async function processOutputStream<OUTPUT = undefined>({
 
     // Drain signals only at stream boundaries so follow-ups do not split visible assistant text
     // or separate a tool call from its result.
-    if (['text-end', 'reasoning-end', 'source', 'tool-result', 'finish'].includes(chunk.type)) {
-      const interruptedSignals = drainPendingSignals?.(runId) ?? [];
-      if (interruptedSignals.length > 0) {
-        return { collectedChunks, interruptedSignals };
+    if (['text-end', 'reasoning-end', 'tool-result', 'finish'].includes(chunk.type)) {
+      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interjectedSignals.length > 0) {
+        return { collectedChunks, interjectedSignals };
       }
     }
   }
 
-  return { collectedChunks, interruptedSignals: [] };
+  return { collectedChunks, interjectedSignals: [] };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -548,7 +549,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
           for (const initialSignal of initialSignalEchoes) {
-            safeEnqueue(controller, initialSignal.toDataPart() as any);
+            safeEnqueue(controller, initialSignal.toDataPart());
           }
 
           const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
@@ -556,8 +557,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             currentMessageId = _internal?.generateId?.() ?? generateId();
           }
           for (const pendingSignal of pendingSignals) {
-            messageList.add(pendingSignal.toLLMMessage(), 'input');
-            safeEnqueue(controller, pendingSignal.toDataPart() as any);
+            messageList.add(pendingSignal, 'input');
+            safeEnqueue(controller, pendingSignal.toDataPart());
           }
 
           const currentStep: {
@@ -580,6 +581,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             modelSettings,
             structuredOutput,
             workspace,
+          };
+          const rotateResponseMessageId = () => {
+            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentStep.messageId = currentMessageId;
+            return currentMessageId;
           };
 
           const inputStepProcessors = [
@@ -618,11 +624,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,
-                rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
-                  currentStep.messageId = currentMessageId;
-                  return currentMessageId;
-                },
+                rotateResponseMessageId,
                 tools,
                 toolChoice,
                 activeTools: activeTools as string[] | undefined,
@@ -1003,7 +1005,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            const { collectedChunks, interruptedSignals } = await processOutputStream({
+            const { collectedChunks, interjectedSignals } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
@@ -1037,13 +1039,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageList.add(msg, 'response');
             }
 
-            if (interruptedSignals.length > 0) {
-              currentMessageId = _internal?.generateId?.() ?? generateId();
-              currentStep.messageId = currentMessageId;
-              outputStream.messageId = currentMessageId;
-              for (const signal of interruptedSignals) {
-                messageList.add(signal.toLLMMessage(), 'input');
-                safeEnqueue(controller, signal.toDataPart() as any);
+            if (interjectedSignals.length > 0) {
+              outputStream.messageId = rotateResponseMessageId();
+              for (const signal of interjectedSignals) {
+                messageList.add(signal, 'input');
+                safeEnqueue(controller, signal.toDataPart());
               }
               runState.setState({
                 stepResult: {

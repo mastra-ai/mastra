@@ -53,6 +53,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  /** Signal inputs already stored in the initial message list that still need stream data-part echoes. */
   initialSignalEchoes?: CreatedAgentSignal[];
 }
 

@@ -57,7 +57,7 @@ function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UI
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
       type,
-      contents: getTextContent(message),
+      contents: 'contents' in signal ? signal.contents : getTextContent(message),
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
       ...(Object.keys(metadata).length ? { metadata } : {}),
     },

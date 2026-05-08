@@ -98,7 +98,7 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { createSignal, isAgentSignalInput } from './signals';
+import { isCreatedAgentSignal } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { AgentThreadStreamRuntime } from './thread-stream-runtime';
@@ -127,8 +127,6 @@ import type {
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
-
-type AgentStreamInput = MessageListInput | AgentSignal;
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -5356,6 +5354,15 @@ export class Agent<
       llm,
     };
 
+    const initialSignalEchoes =
+      methodType === 'stream'
+        ? (Array.isArray(options.messages) ? options.messages : [options.messages]).filter(isCreatedAgentSignal)
+        : [];
+    const initialSignalEchoesForRun =
+      initialSignalEchoes.length > 0
+        ? [...initialSignalEchoes, ...(options._initialSignalEchoes ?? [])]
+        : options._initialSignalEchoes;
+
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
@@ -5386,7 +5393,7 @@ export class Agent<
           }),
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: this.#getThreadStreamRuntime().drainPendingSignals.bind(this.#getThreadStreamRuntime()),
-      initialSignalEchoes: options._initialSignalEchoes,
+      initialSignalEchoes: initialSignalEchoesForRun,
     });
 
     const run = await executionWorkflow.createRun();
@@ -5955,26 +5962,26 @@ export class Agent<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
-    messages: AgentStreamInput,
+    messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<T> & {
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async stream<OUTPUT extends {}>(
-    messages: AgentStreamInput,
+    messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async stream(
-    messages: AgentStreamInput,
+    messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
-  async stream(messages: AgentStreamInput): Promise<MastraModelOutput<TOutput>>;
+  async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async stream<OUTPUT = TOutput>(
-    messages: AgentStreamInput,
+    messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
@@ -6043,8 +6050,6 @@ export class Agent<
         entityId: this.id,
       }) ?? randomUUID();
     const preparedOptions = this.#getThreadStreamRuntime().prepareRunOptions(mergedOptions);
-    const initialSignal = isAgentSignalInput(messages) ? createSignal(messages) : undefined;
-    const streamMessages = initialSignal ? initialSignal.toLLMMessage() : messages;
 
     const executeOptions = {
       ...preparedOptions,
@@ -6056,10 +6061,7 @@ export class Agent<
             schema: toStandardSchema(mergedOptions.structuredOutput.schema),
           }
         : undefined,
-      messages: streamMessages,
-      _initialSignalEchoes: initialSignal
-        ? [initialSignal, ...(preparedOptions._initialSignalEchoes ?? [])]
-        : preparedOptions._initialSignalEchoes,
+      messages,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,

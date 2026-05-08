@@ -16,6 +16,14 @@ import type {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
+function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
+  return {
+    ...((memory && typeof memory === 'object' ? memory : {}) as Record<string, unknown>),
+    resource: (memory as { resource?: string } | undefined)?.resource ?? resourceId,
+    thread: (memory as { thread?: string } | undefined)?.thread ?? threadId,
+  };
+}
+
 type AgentThreadRunRecord<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
   output: MastraModelOutput<OUTPUT>;
@@ -171,12 +179,15 @@ export class AgentThreadStreamRuntime {
       this.#pendingSignalsByThread.delete(key);
     }
 
-    const output = (await (previousRun.agent.stream as any)(signal, {
-      ...previousRun.streamOptions,
+    const output = await previousRun.agent.stream(signal, {
+      ...(previousRun.streamOptions as any),
       runId: randomUUID(),
-      memory:
-        previousRun.streamOptions.memory ?? ({ resource: previousRun.resourceId, thread: previousRun.threadId } as any),
-    })) as MastraModelOutput<any>;
+      memory: withThreadMemory(
+        previousRun.streamOptions.memory,
+        previousRun.resourceId ?? '',
+        previousRun.threadId ?? '',
+      ),
+    });
 
     if (queue.length > 0) {
       const nextRecord = this.#threadRunsById.get(output.runId);
@@ -374,17 +385,19 @@ export class AgentThreadStreamRuntime {
       this.#activeThreadRunIds.set(key, runId);
       this.#threadKeysByRunId.set(runId, key);
     }
-    void (agent.stream as any)(signal, {
-      ...target.ifIdle.streamOptions,
-      runId,
-      memory: target.ifIdle.streamOptions.memory ?? ({ resource: resourceId, thread: threadId } as any),
-    }).catch(() => {
-      this.#threadKeysByRunId.delete(runId);
-      this.#cleanupPreparedRun(runId);
-      if (this.#activeThreadRunIds.get(key) === runId) {
-        this.#activeThreadRunIds.delete(key);
-      }
-    });
+    void agent
+      .stream(signal, {
+        ...(target.ifIdle.streamOptions as any),
+        runId,
+        memory: withThreadMemory(target.ifIdle.streamOptions.memory, resourceId, threadId),
+      })
+      .catch(() => {
+        this.#threadKeysByRunId.delete(runId);
+        this.#cleanupPreparedRun(runId);
+        if (this.#activeThreadRunIds.get(key) === runId) {
+          this.#activeThreadRunIds.delete(key);
+        }
+      });
 
     return { accepted: true, runId, signal };
   }

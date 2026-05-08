@@ -35,6 +35,7 @@ import type {
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   ModelManagerModelConfig,
+  StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
@@ -74,6 +75,8 @@ export type StreamInternal = {
   // continuation from the outside — the inner loop shouldn't also wait.
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  // Signal inputs already stored in the initial message list that still need
+  // stream data-part echoes before the first model step.
   initialSignalEchoes?: CreatedAgentSignal[];
 };
 
@@ -197,7 +200,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   outputWriter: OutputWriter;
 } & LoopRun<Tools, OUTPUT>;
 

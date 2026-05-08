@@ -1,11 +1,11 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 
-import type { MessageListInput } from './message-list';
+import type { BaseMessageListInput } from './message-list';
 import type { MastraDBMessage } from './message-list/state/types';
 
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
-export type AgentSignalContents = MessageListInput;
+export type AgentSignalContents = BaseMessageListInput;
 
 type AgentSignalInputBase = {
   id?: string;
@@ -39,10 +39,11 @@ export type AgentSignalDataPart = {
 };
 
 export type CreatedAgentSignal = AgentSignalInput & {
+  __isCreatedSignal: true;
   id: string;
   createdAt: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
-  toLLMMessage: () => MessageListInput;
+  toLLMMessage: () => BaseMessageListInput;
   toDataPart: () => AgentSignalDataPart;
 };
 
@@ -116,7 +117,7 @@ function signalContentsToText(contents: AgentSignalContents): string {
   return '';
 }
 
-function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>): MessageListInput {
+function signalToLLMMessage(signal: Pick<AgentSignalInput, 'type' | 'contents' | 'attributes'>): BaseMessageListInput {
   if (signal.type === 'user-message') {
     return signal.contents;
   }
@@ -157,7 +158,6 @@ function signalToDBMessage(
     type: signal.type,
     content: {
       format: 2,
-      content: signalContentsToText(signal.contents),
       parts: [{ type: 'text', text: signalContentsToText(signal.contents) }],
       metadata: {
         signal: {
@@ -173,8 +173,11 @@ function signalToDBMessage(
   };
 }
 
-export function isAgentSignalInput(input: unknown): input is AgentSignalInput {
-  return !!input && typeof input === 'object' && 'type' in input && 'contents' in input;
+export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSignal {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+
+  const candidate = input as Partial<CreatedAgentSignal>;
+  return candidate.__isCreatedSignal === true;
 }
 
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
@@ -182,13 +185,14 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
 
   return {
     ...signal,
+    __isCreatedSignal: true as const,
     toDBMessage: options => signalToDBMessage(signal, options),
     toLLMMessage: () => signalToLLMMessage(signal),
     toDataPart: () => signalToDataPart(signal),
   };
 }
 
-export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): MessageListInput {
+export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): BaseMessageListInput {
   return createSignal(signal).toLLMMessage();
 }
 

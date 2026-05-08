@@ -70,7 +70,7 @@ function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMes
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
       type: getSignalType(message) ?? 'signal',
-      contents,
+      contents: 'contents' in signal ? signal.contents : contents,
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
       ...(Object.keys(metadata).length ? { metadata } : {}),
     },
