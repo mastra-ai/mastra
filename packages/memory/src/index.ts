@@ -616,7 +616,7 @@ ${workingMemory}`;
       let indexName: Promise<string>;
 
       // Group messages by threadId to minimize database calls
-      const messagesByThread = new Map<string, (MastraMessageV1 | MastraMessageV2)[]>();
+      const messagesByThread = new Map<string, MastraDBMessage[]>();
       updatedMessages.forEach(message => {
         if (message.threadId) {
           if (!messagesByThread.has(message.threadId)) {
@@ -636,8 +636,10 @@ ${workingMemory}`;
               threadMetadataMap.set(threadId, thread.metadata);
             }
           } catch (error) {
-            // Thread might not exist yet, continue without metadata
-            this.logger.warn(`Could not fetch metadata for thread ${threadId}:`, error);
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(
+              `Could not fetch metadata for thread ${threadId} while saving semantic recall embeddings: ${message}`,
+            );
           }
         }),
       );
