@@ -61,7 +61,7 @@ smoke-test create Mastra project and smoke test studio
 - Alternatively, scaffold a minimal project with `create-mastra` (see `.claude/skills/smoke-test/SKILL.md`) which does not require API keys at startup.
 
 ### Testing
-- Unit tests for core (`pnpm test:core`) run ~8000 tests; ~126 tests fail without `OPENAI_API_KEY` (these are e2e tests requiring real API calls).
+- Core tests (`pnpm test:core`): ~8000 tests. With `OPENAI_API_KEY` set, 421/429 files pass (7860/8045 tests). Without the key, ~126 additional tests fail. The remaining ~7 failing files are flaky e2e tests or require Docker services.
 - Server tests (`pnpm test:server`) pass fully without API keys (1217 tests).
 - Integration tests for stores require Docker and per-package docker-compose files.
 - MCP tests (`pnpm test:mcp`) have a known self-import resolution issue in the test harness.
