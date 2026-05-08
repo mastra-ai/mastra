@@ -86,9 +86,9 @@ Subagent depth is computed from the chain of `parentSessionId` records, not from
 
 The harness ships two session types and one shared interface.
 
-- **`Session`** (in-process) — `mastra.getHarness('coding').session(...)`. Full surface: messaging, queue, abort, workspace handles, interval handlers, in-memory state, custom tool registration on per-turn overrides, function-valued callbacks. Method calls are synchronous JS calls into the same process.
-- **`RemoteSession`** (remote SDK) — `mastraClient.getHarness('coding').session(...)`. A **strict subset** of `Session` exposed over HTTP/SSE. Anything that does not cross the wire (raw workspace handles, function-valued `addTools`, interval handlers, cross-session subscriptions, non-JSON state writes) is omitted from the type entirely, so misuse is a compile-time error rather than a runtime surprise. See §13.5 for the exact list.
-- **`RemoteSafeSession`** (shared interface) — the typed contract that both `Session` and `RemoteSession` satisfy. It captures exactly the methods that round-trip cleanly: `message`, `queue`, `abort`, `useSkill`, `subscribe`, `getDisplayState`, `listMessages`, the approval / question / plan response methods, `getState` (reads), JSON-only `setState` writes, `setGoal` and friends, `uploadAttachment` / `deleteAttachment`, and the readonly identity fields (`id`, `threadId`, `resourceId`, …).
+- **`Session`** (in-process) — `mastra.getHarness('coding').session(...)`. Full surface: messaging, queue, abort, workspace handles, interval handlers, in-memory state, custom tool registration on per-turn overrides, function-valued callbacks. Most method calls are synchronous JS calls into the same process; reads that the in-process harness can serve from memory (`getState`, `getDisplayState`) are sync.
+- **`RemoteSession`** (remote SDK) — `mastraClient.getHarness('coding').session(...)`. A **strict subset** of `Session` exposed over HTTP/SSE. Anything that does not cross the wire (raw workspace handles, function-valued `addTools`, interval handlers, cross-session subscriptions, the functional form of `setState`) is omitted from the type entirely, so misuse is a compile-time error rather than a runtime surprise. See §13.5 for the exact list. Reads served from memory in-process (`getState`, `getDisplayState`) become async over the wire, since the SDK has to fetch them.
+- **`RemoteSafeSession`** (shared interface) — the typed contract that both `Session` and `RemoteSession` satisfy. It captures exactly the methods that round-trip cleanly: `message`, `queue`, `abort`, `useSkill`, `subscribe`, `getDisplayState`, `listMessages`, the approval / question / plan response methods, `getState` (reads), the object-form `setState` (JSON patch), `setGoal` and friends, `uploadAttachment` / `deleteAttachment`, and the readonly identity fields (`id`, `threadId`, `resourceId`, …). To stay portable across both shapes, `RemoteSafeSession` widens the memory-served reads to async — `getState()` returns `Promise<Readonly<TState>>`, `getDisplayState()` returns `Promise<DisplayState>`. In-process callers either `await` the promise or, if they need the cheaper sync read, narrow to `Session` explicitly.
 
 Code that needs to run in both environments should be authored against `RemoteSafeSession`, not `Session`. Code that only ever runs in-process (a TUI host, a server-side workflow, a built-in tool) is free to use the full `Session` surface.
 
@@ -273,9 +273,15 @@ class Session<TState = Record<string, unknown>> {
   readonly createdAt: number;
   readonly lastActivityAt: number;
 
-  // State
+  // State.
+  // In-process, `getState()` is a sync memory read served from the live
+  // session under the lease. The remote variant (`RemoteSession`) exposes
+  // the same name but returns `Promise<Readonly<TState>>`; portable code
+  // using `RemoteSafeSession` should await it. See §2.6 and §13.5.
+  // `setState` has two forms; the functional form is local-only.
   getState(): Readonly<TState>;
   setState(updates: Partial<TState>): Promise<void>;
+  setState(updater: (prev: Readonly<TState>) => TState): Promise<void>;
 
   // Mode
   getCurrentModeId(): string;
@@ -2720,6 +2726,8 @@ When the harness is registered on a `Mastra` instance served by Mastra Server, t
 | `PATCH` | `/harness/:name/sessions/:sessionId/mode` | Switch mode |
 | `PATCH` | `/harness/:name/sessions/:sessionId/model` | Switch model |
 | `PATCH` | `/harness/:name/sessions/:sessionId/permissions` | Set policy / grant / revoke |
+| `GET` | `/harness/:name/sessions/:sessionId/state` | Read the current `TState` snapshot. Returns the full state object. Cheaper than `GET /sessions/:sessionId` when a caller only needs `state`. |
+| `PATCH` | `/harness/:name/sessions/:sessionId/state` | Apply a JSON patch to `state` — the object form of `setState`. Body is the partial state object. Server validates JSON-serialisability (rejects with `400 harness.state_serialization` otherwise), shallow-merges under the session lease, persists as a durable transition (§5.7), and emits a `state_changed` event before the response returns. The functional form of `setState` does not have a wire route — closures cannot be sent across the boundary; remote callers must compute the patch locally and PATCH the result. Body must be a JSON object (top-level array / scalar rejected with `400 harness.validation`). |
 | `GET` | `/harness/:name/threads` | List threads for the authenticated resource |
 | `POST` | `/harness/:name/threads` | Create a thread |
 | `GET` | `/harness/:name/threads/:threadId/messages` | List messages for a thread |
@@ -2877,7 +2885,7 @@ await session.queue({ content: 'Refactor auth' });
 - POSTs/PATCHes to the corresponding route and returns the deserialized result, or
 - (for `subscribe`) opens an SSE connection to `/events`, dispatches events to the listener, and returns an unsubscribe function.
 
-Methods listed in §13.5 (raw `getWorkspace`, function-valued `addTools`, `onInterval`, cross-session subscriptions, non-JSON `setState`) are absent from the `RemoteSession` type. Reaching for them on a remote session fails to type-check.
+Methods listed in §13.5 (raw `getWorkspace`, function-valued `addTools`, `onInterval`, cross-session subscriptions, the functional form of `setState`) are absent from the `RemoteSession` type. Reaching for them on a remote session fails to type-check.
 
 **Reconnection** is automatic. If the SSE stream drops, the client reconnects with `Last-Event-ID` and replays events newer than the last seen ID. If the supplied ID is from a previous epoch (server restart or session eviction) or older than the live buffer, the server returns `412 Precondition Failed`; the client transparently re-fetches state via `GET /sessions/:sessionId` and resumes from the new tail. See §10.5 for the full contract.
 
@@ -2909,10 +2917,14 @@ async function tarball(session: Session) {
 - **Function-valued `addTools` per-turn override.** Tool implementations are closures, and closures don't serialize. Tools must be registered on the server-side `HarnessConfig`. `addTools` is already absent from `QueueOptions` everywhere (§4.4) — durable queued items can't represent a tool surface that storage can't reproduce. On `MessageOptions` and `UseSkillOptions` it's allowed in-process but omitted from the remote types, so reaching for it on a `RemoteSession` is a compile-time error. Per-turn `model`, `mode`, and `yolo` overrides still cross the wire.
 - **Cross-session `harness.subscribe(...)` without a `sessionId` filter.** Subscribing to *every* session's events on a multi-tenant server would leak across tenants. Per-session `session.subscribe(...)` is exposed and rides the SSE route from §13.3.
 - **Interval handlers** (`harness.onInterval`). Server-side concern; clients can't register code to run on the server.
-- **`session.setState` with non-JSON values.** `getState` and `setState` are both on `RemoteSession`, but only the JSON-serialisable subset of `TState` round-trips through the dedicated state route. Functions, class instances, and circular references reject at the boundary with `HarnessStateSerializationError` (§5.7) — same contract as the in-process flush.
+- **The functional form of `setState`** (`setState(prev => next)`). The updater is a closure executed against live state under the session lease, and closures cannot be sent across the wire. The object form (`setState(patch)`) is on `RemoteSession` and rides the dedicated `PATCH /sessions/:sessionId/state` route (§13.2). Remote callers that need read-modify-write must `await session.getState()`, compute the next value locally, and PATCH the resulting patch. Note this is not atomic across concurrent remote writers — if that matters, fall back to `setState(prev => next)` in-process or model the field as something the server already serialises (a queued item, a goal, a permission grant) instead.
+
+- **Non-JSON values inside `state`.** Functions, class instances, circular references, `Map`, `Set`, and `Date` do not round-trip. Same constraint as the in-process flush: violations reject with `HarnessStateSerializationError` (§5.7). Recommended: keep `state` to plain JSON shapes and put richer values behind ID references in workspace files, attachments, or your own datastore.
 - **Direct `HarnessStorage` access.** The remote SDK never exposes the storage interface; durable state is reached only through `Session` methods.
 
 `RemoteSafeSession` is the interface name. Clients targeting both deployment shapes should declare their dependencies as `RemoteSafeSession`, not `Session`, to keep the local/remote distinction enforced at the type system.
+
+**Asymmetric read shapes.** A handful of memory-served reads are sync on the in-process `Session` and async on `RemoteSession` — `getState`, `getDisplayState`. `RemoteSafeSession` widens these to async (`Promise<...>`) so portable code can be written once. In-process callers that prefer the cheaper sync read should narrow their parameter type to `Session` explicitly; portable code awaits.
 
 ### 13.6 Lifecycle and deployment
 
