@@ -1,5 +1,4 @@
 import type { StandardSchemaV1 } from '@standard-schema/spec';
-import { isEmpty } from 'radash';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
@@ -70,8 +69,12 @@ export async function validateStepInput({
         { issues: validatedInput.issues },
       );
     } else {
-      const isEmptyData = isEmpty(validatedInput.data);
-      inputData = isEmptyData ? prevOutput : validatedInput.data;
+      const isEmptyObject =
+        validatedInput.data !== null &&
+        typeof validatedInput.data === 'object' &&
+        !Array.isArray(validatedInput.data) &&
+        Object.keys(validatedInput.data as Record<string, unknown>).length === 0;
+      inputData = isEmptyObject ? prevOutput : validatedInput.data;
     }
   }
 

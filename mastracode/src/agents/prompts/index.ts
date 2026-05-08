@@ -17,6 +17,13 @@ import { modelSpecificPrompts } from './model.js';
 import { planModePrompt } from './plan.js';
 import { buildToolGuidance } from './tool-guidance.js';
 
+function formatTaskPromptValue(value: string): string {
+  return value
+    .replace(/\s+/g, ' ')
+    .replace(/[<>{}]/g, char => ({ '<': '&lt;', '>': '&gt;', '{': '&#123;', '}': '&#125;' })[char] ?? char)
+    .trim();
+}
+
 // Extended prompt context that includes runtime information
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
@@ -75,11 +82,12 @@ export function buildFullPrompt(ctx: PromptContext): string {
 
   // Inject current task state so agent doesn't lose track after OM truncation
   let taskSection = '';
-  const tasks = ctx.state?.tasks as { content: string; status: string; activeForm: string }[] | undefined;
+  const tasks = ctx.state?.tasks as { id?: string; content: string; status: string; activeForm: string }[] | undefined;
   if (tasks && tasks.length > 0) {
     const lines = tasks.map(t => {
       const icon = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '▸' : '○';
-      return `  ${icon} [${t.status}] ${t.content}`;
+      const id = t.id ? ` {id: ${formatTaskPromptValue(t.id)}}` : '';
+      return `  ${icon} [${t.status}]${id} ${formatTaskPromptValue(t.content)}`;
     });
     taskSection = `\n<current-task-list>\n${lines.join('\n')}\n</current-task-list>\n`;
   }

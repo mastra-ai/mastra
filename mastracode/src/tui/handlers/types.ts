@@ -3,7 +3,7 @@
  * Keeps handlers decoupled from the MastraTUI class.
  */
 import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessMessage, TaskItem } from '@mastra/core/harness';
+import type { HarnessMessage, TaskItemSnapshot } from '@mastra/core/harness';
 
 import type { NotificationReason } from '../notify.js';
 import type { TUIState } from '../state.js';
@@ -24,7 +24,7 @@ export interface EventHandlerContext {
   startGoal: (objective: string, cancelMessage?: string) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
   renderExistingMessages: () => Promise<void>;
-  renderCompletedTasksInline: (tasks: TaskItem[], insertIndex?: number, collapsed?: boolean) => void;
-  renderClearedTasksInline: (clearedTasks: TaskItem[], insertIndex?: number) => void;
+  renderCompletedTasksInline: (tasks: TaskItemSnapshot[], insertIndex?: number, collapsed?: boolean) => void;
+  renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   refreshModelAuthStatus: () => Promise<void>;
 }

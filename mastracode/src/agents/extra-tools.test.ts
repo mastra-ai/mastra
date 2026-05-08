@@ -1,12 +1,19 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
 
-import { getToolCategory } from '../../permissions.js';
-import { MC_TOOLS } from '../../tool-names.js';
-import { buildToolGuidance } from '../prompts/tool-guidance.js';
-import { createDynamicTools } from '../tools.js';
+vi.mock('../tools/index.js', () => ({
+  createWebSearchTool: () => ({ description: 'web search' }),
+  createWebExtractTool: () => ({ description: 'web extract' }),
+  hasTavilyKey: () => false,
+  requestSandboxAccessTool: { description: 'request sandbox access' },
+}));
+
+import { getToolCategory } from '../permissions.js';
+import { MC_TOOLS } from '../tool-names.js';
+import { buildToolGuidance } from './prompts/tool-guidance.js';
+import { createDynamicTools } from './tools.js';
 
 // Minimal mock of HarnessRequestContext shape that createDynamicTools reads
 function makeRequestContext(
@@ -153,6 +160,8 @@ describe('getToolCategory – extra tools', () => {
   it('should return null for always-allowed tools', () => {
     expect(getToolCategory('ask_user')).toBeNull();
     expect(getToolCategory('task_write')).toBeNull();
+    expect(getToolCategory('task_update')).toBeNull();
+    expect(getToolCategory('task_complete')).toBeNull();
     expect(getToolCategory('task_check')).toBeNull();
   });
 });
@@ -226,14 +235,13 @@ describe('createDynamicTools – denied tool filtering', () => {
 
 describe('createDynamicTools – disabledTools filtering', () => {
   it('should omit disabled built-in tools', () => {
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, [
-      'request_sandbox_access',
-      'execute_command',
-    ]);
+    const unfilteredTools = createDynamicTools()({ requestContext: makeRequestContext() });
+    expect(unfilteredTools).toHaveProperty('request_access');
+
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, ['request_access']);
 
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
-    expect(tools).not.toHaveProperty('request_sandbox_access');
-    expect(tools).not.toHaveProperty('execute_command');
+    expect(tools).not.toHaveProperty('request_access');
     // web_search is provided by the Anthropic model mock and should survive filtering
     expect(tools).toHaveProperty('web_search');
   });
@@ -281,6 +289,8 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
+    expect(guidance).toContain('**task_update**');
+    expect(guidance).toContain('**task_complete**');
     expect(guidance).toContain('**subagent**');
   });
 });
