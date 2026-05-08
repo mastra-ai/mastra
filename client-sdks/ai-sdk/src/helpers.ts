@@ -100,8 +100,7 @@ function getTransformedToolPayload(
   // the newest @mastra/core helper export at module load time.
   const mastraMetadata = (metadata as { mastra?: Record<string, any> } | undefined)?.mastra;
   const state =
-    mastraMetadata?.toolPayloadTransform?.[target]?.[phase] ??
-    mastraMetadata?.toolPayloadProjection?.[target]?.[phase];
+    mastraMetadata?.toolPayloadTransform?.[target]?.[phase] ?? mastraMetadata?.toolPayloadProjection?.[target]?.[phase];
   return normalizeToolPayloadState(state);
 }
 
@@ -233,7 +232,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
-        input: hasTransformedToolPayload(displayInputTransform) ? displayInputTransform.transformed : chunk.payload.args,
+        input: hasTransformedToolPayload(displayInputTransform)
+          ? displayInputTransform.transformed
+          : chunk.payload.args,
       };
     case 'tool-call-approval':
       return {
@@ -328,7 +329,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
     case 'tool-result':
       return {
         type: 'tool-result',
-        input: hasTransformedToolPayload(displayInputTransform) ? displayInputTransform.transformed : chunk.payload.args,
+        input: hasTransformedToolPayload(displayInputTransform)
+          ? displayInputTransform.transformed
+          : chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
@@ -340,8 +343,12 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
     case 'tool-error':
       return {
         type: 'tool-error',
-        error: hasTransformedToolPayload(displayErrorTransform) ? displayErrorTransform.transformed : chunk.payload.error,
-        input: hasTransformedToolPayload(displayInputTransform) ? displayInputTransform.transformed : chunk.payload.args,
+        error: hasTransformedToolPayload(displayErrorTransform)
+          ? displayErrorTransform.transformed
+          : chunk.payload.error,
+        input: hasTransformedToolPayload(displayInputTransform)
+          ? displayInputTransform.transformed
+          : chunk.payload.args,
         toolCallId: chunk.payload.toolCallId,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,

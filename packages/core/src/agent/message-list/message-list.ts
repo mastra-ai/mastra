@@ -664,7 +664,9 @@ export class MessageList {
     ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
     /* @deprecated use list.getPersisted.input.aiV4.core() */
     core: () =>
-      aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false })),
+      aiV4UIMessagesToAIV4CoreMessages(
+        this.toAIV4UIMessages(this.inputPersisted.db(), { transformToolPayloads: false }),
+      ),
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.inputPersisted.db()),
       core: (): CoreMessageV4[] =>

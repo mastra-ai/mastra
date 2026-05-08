@@ -252,7 +252,11 @@ export class AIV4Adapter {
                     part =>
                       part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolInvocation.toolCallId,
                   )?.providerMetadata;
-                  return transformV4ToolInvocationForDisplay(toolInvocation, partProviderMetadata, transformToolPayloads);
+                  return transformV4ToolInvocationForDisplay(
+                    toolInvocation,
+                    partProviderMetadata,
+                    transformToolPayloads,
+                  );
                 })
             : undefined,
       };
