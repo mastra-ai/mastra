@@ -848,6 +848,7 @@ export class Agent<
         },
       },
     });
+    workflow.__setLogger(this.logger);
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
