@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { RequestContext } from '@mastra/core/di';
 import type { DurableAgentTestContext, WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { createTextStreamModel, createErrorModel } from '../mock-models';
 import { MockRegistry } from '../mock-registry';
@@ -1324,9 +1325,9 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
       const { workflow, getReceivedContext, resetMocks } = registry!['callback-requestcontext-workflow']!;
       resetMocks?.();
 
-      // Pass requestContext as a Map since RequestContext extends Map
-      const requestContext = new Map([['customKey', 'customValue']]);
-      await execute(workflow, {}, { requestContext: requestContext as any });
+      const requestContext = new RequestContext();
+      requestContext.set('customKey', 'customValue');
+      await execute(workflow, {}, { requestContext });
 
       const receivedContext = getReceivedContext();
       expect(receivedContext).toBeDefined();
@@ -1337,8 +1338,9 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
       const { workflow, getReceivedContext, resetMocks } = registry!['callback-requestcontext-error-workflow']!;
       resetMocks?.();
 
-      const requestContext = new Map([['errorKey', 'errorValue']]);
-      await execute(workflow, {}, { requestContext: requestContext as any });
+      const requestContext = new RequestContext();
+      requestContext.set('errorKey', 'errorValue');
+      await execute(workflow, {}, { requestContext });
 
       const receivedContext = getReceivedContext();
       expect(receivedContext).toBeDefined();

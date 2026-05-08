@@ -213,6 +213,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepIndex = (inputData as any).stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
+            // Apply request-side context to MODEL_INFERENCE spans the tracker creates.
+            // setInferenceContext is optional on the interface; older trackers
+            // without the method gracefully no-op.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: currentModelSettings as Record<string, unknown> | undefined,
+              availableTools: currentTools ? Object.keys(currentTools) : undefined,
+              toolChoice: currentToolChoice,
+              responseFormat: execOptions.structuredOutput ? 'json_schema' : undefined,
+            });
+
             // Build structured output for AI SDK if configured
             const structuredOutputConfig = execOptions.structuredOutput;
             const structuredOutput =
