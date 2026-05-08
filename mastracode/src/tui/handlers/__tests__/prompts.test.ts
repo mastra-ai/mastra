@@ -59,7 +59,7 @@ describe('handleAskQuestion goal mode', () => {
 });
 
 describe('handlePlanApproval goal mode', () => {
-  it('approves the plan and starts a goal with a begin-executing preamble', async () => {
+  it('approves the plan and starts the goal lifecycle with no extra reminder', async () => {
     const state = {
       harness: {
         setState: vi.fn().mockResolvedValue(undefined),
@@ -93,12 +93,13 @@ describe('handlePlanApproval goal mode', () => {
       planId: 'plan-1',
       response: { action: 'approved' },
     });
-    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', {
-      preamble: '<system-reminder>The user has approved the plan, begin executing.</system-reminder>',
-    });
-    // The startGoal flow owns sending the begin-executing preamble alongside
-    // the goal reminder, so the handler should not double-fire fireMessage or
-    // addUserMessage like the normal approve path does.
+    // Plan approval enters goal mode the same way `/goal <text>` does. The
+    // goal reminder itself is the trigger message — the goal judge is what
+    // keeps the agent working after its first response — so the handler must
+    // NOT also fire the normal "begin executing" reminder, which would render
+    // as a broken combined system-reminder block on reload.
+    expect(ctx.startGoal).toHaveBeenCalledTimes(1);
+    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
   });

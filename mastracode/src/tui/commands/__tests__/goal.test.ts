@@ -38,7 +38,7 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 import { DEFAULT_MAX_TURNS } from '../../goal-manager.js';
-import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand } from '../goal.js';
+import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
 describe('createGoalReminderMessage', () => {
   it('creates a canonical goal system reminder for chat history', () => {
@@ -147,6 +147,65 @@ describe('handleGoalCommand', () => {
     expect(sendMessage).toHaveBeenCalledWith({
       content: '<system-reminder type="goal">finish the task</system-reminder>',
     });
+  });
+
+  it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
+    // Regression: plan approval "Use as /goal" must enter the same goal
+    // lifecycle as `/goal <text>` and send only the goal reminder. Sending an
+    // extra "begin executing" reminder alongside it would render as a broken
+    // combined system-reminder block on history reload (the legacy renderer
+    // expects a single whole-message reminder).
+    const objective = '# Ship it\n\n1. Build\n2. Test';
+    const goal = {
+      id: 'goal-1',
+      objective,
+      status: 'active' as const,
+      turnsUsed: 0,
+      maxTurns: 50,
+      judgeModelId: 'openai/gpt-5.5',
+    };
+    const goalManager = {
+      setGoal: vi.fn(() => goal),
+      persistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn(),
+      isActive: vi.fn(() => true),
+    };
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const ctx = {
+      state: {
+        pendingNewThread: false,
+        goalManager,
+        harness: {
+          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          sendMessage,
+        },
+      },
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
+
+    // Goal lifecycle is entered before the trigger message is sent so the
+    // judge runs after the agent's first response.
+    expect(goalManager.setGoal).toHaveBeenCalledWith(objective, 'openai/gpt-5.5', 50);
+    expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(
+      sendMessage.mock.invocationCallOrder[0],
+    );
+    expect(goalManager.isActive()).toBe(true);
+
+    // The trigger message is exactly one canonical goal reminder — no
+    // preamble, no concatenated reminders. The trailing $ in the assertion
+    // mirrors the legacy whole-message reminder regex used at render time.
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith({
+      content: '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
+    });
+    const sentContent = sendMessage.mock.calls[0][0].content as string;
+    expect(sentContent).toMatch(/^<system-reminder type="goal">[\s\S]*<\/system-reminder>$/);
+    expect(sentContent).not.toMatch(/begin executing/);
+    expect(sentContent.match(/<system-reminder/g)).toHaveLength(1);
   });
 
   it('updates the current goal when judge defaults change', async () => {

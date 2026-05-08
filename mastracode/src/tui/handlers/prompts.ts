@@ -276,13 +276,13 @@ export async function handlePlanApproval(
         onGoal: async () => {
           state.activeInlinePlanApproval = undefined;
           await approvePlan(ctx, planId, title, plan);
-          // Mirror the normal "Approve" flow: also tell the agent to begin
-          // executing. Without this preamble the agent sees only the goal
-          // reminder and stops after switching to build mode (e.g. "ready to
-          // go, let me know when I should start").
-          await ctx.startGoal(formatPlanGoalObjective(title, plan), 'Goal cancelled.', {
-            preamble: '<system-reminder>The user has approved the plan, begin executing.</system-reminder>',
-          });
+          // Enter the goal lifecycle the same way `/goal <text>` does. The goal
+          // reminder is the trigger message; the goal judge is what keeps the
+          // agent working after its first response, so we deliberately do NOT
+          // also send the normal "begin executing" plan-approved reminder
+          // (which would render as a broken combined system-reminder block on
+          // reload and could wake the agent without goal mode active).
+          await ctx.startGoal(formatPlanGoalObjective(title, plan), 'Goal cancelled.');
           resolve();
         },
         onReject: async (feedback?: string) => {
