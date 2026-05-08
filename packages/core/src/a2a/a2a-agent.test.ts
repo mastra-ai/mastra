@@ -1,0 +1,552 @@
+import type { AgentCard, Message, Task } from '@a2a-js/sdk';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { A2AAgent } from './a2a-agent';
+
+const baseCard: AgentCard = {
+  name: 'Remote Agent',
+  description: 'A remote agent',
+  url: 'https://remote.example.com/a2a/remote',
+  version: '1.0',
+  protocolVersion: '0.3.0',
+  skills: [],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
+  capabilities: {
+    streaming: true,
+    pushNotifications: false,
+    stateTransitionHistory: false,
+    extensions: [],
+  },
+  security: [],
+  securitySchemes: {},
+  additionalInterfaces: [],
+  supportsAuthenticatedExtendedCard: false,
+};
+
+function jsonRpcResult(result: unknown) {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: '1',
+      result,
+    }),
+    {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+      },
+    },
+  );
+}
+
+function createTask(overrides: Partial<Task> = {}): Task {
+  return {
+    kind: 'task',
+    id: 'task-1',
+    contextId: 'ctx-1',
+    status: {
+      state: 'working',
+      timestamp: new Date().toISOString(),
+    },
+    history: [],
+    artifacts: [],
+    ...overrides,
+  } as Task;
+}
+
+function createMessage(text: string): Message {
+  return {
+    kind: 'message',
+    role: 'agent',
+    messageId: 'message-1',
+    parts: [{ kind: 'text', text }],
+  } as Message;
+}
+
+function createFetchMock(
+  responses: Array<Response | ((input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>)>,
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const next = responses.shift();
+    if (!next) {
+      throw new Error('Unexpected fetch call');
+    }
+
+    if (typeof next === 'function') {
+      return await next(input, init);
+    }
+
+    return next;
+  });
+
+  return fetchMock;
+}
+
+function createSseResponse(events: unknown[]) {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const event of events) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ result: event })}\n\n`));
+        }
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      },
+    }),
+    {
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+      },
+    },
+  );
+}
+
+function createDelayedSseResponse(
+  chunks: Array<{ delayMs: number; event: unknown }>,
+  { finalDone = true }: { finalDone?: boolean } = {},
+) {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        void (async () => {
+          for (const chunk of chunks) {
+            await new Promise(resolve => setTimeout(resolve, chunk.delayMs));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ result: chunk.event })}\n\n`));
+          }
+
+          if (finalDone) {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          }
+
+          controller.close();
+        })();
+      },
+    }),
+    {
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+      },
+    },
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('A2AAgent', () => {
+  it('caches the fetched agent card in memory', async () => {
+    const fetchMock = createFetchMock([new Response(JSON.stringify(baseCard), { status: 200 })]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const first = await agent.getAgentCard();
+    const second = await agent.getAgentCard();
+
+    expect(first).toEqual(baseCard);
+    expect(second).toEqual(baseCard);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://remote.example.com/.well-known/agent-card.json',
+      expect.any(Object),
+    );
+  });
+
+  it('uses an explicit agent-card URL as-is', async () => {
+    const fetchMock = createFetchMock([new Response(JSON.stringify(baseCard), { status: 200 })]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com/.well-known/concierge/agent-card.json',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await agent.getAgentCard();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://remote.example.com/.well-known/concierge/agent-card.json',
+      expect.any(Object),
+    );
+  });
+
+  it('optionally verifies the fetched agent card during bootstrap', async () => {
+    const verify = vi.fn();
+    const fetchMock = createFetchMock([new Response(JSON.stringify(baseCard), { status: 200 })]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+      verifyAgentCard: { verify },
+    });
+
+    await agent.getAgentCard();
+
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledWith(
+      baseCard,
+      expect.objectContaining({ cardUrl: 'https://remote.example.com/.well-known/agent-card.json' }),
+    );
+  });
+
+  it('waits for a non-stream task to complete in generate()', async () => {
+    const workingTask = createTask();
+    const completedTask = createTask({
+      status: {
+        state: 'completed',
+        timestamp: new Date().toISOString(),
+      },
+      artifacts: [
+        {
+          artifactId: 'response:text',
+          name: 'response.txt',
+          parts: [{ kind: 'text', text: 'Remote task complete' }],
+        },
+      ],
+    });
+
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      jsonRpcResult(workingTask),
+      jsonRpcResult(completedTask),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+      backoffMs: 0,
+      maxBackoffMs: 0,
+    });
+
+    const output = await agent.generate('Do the thing');
+
+    expect(output.text).toBe('Remote task complete');
+    expect(output.task?.status.state).toBe('completed');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses message/send for generate even when remote streaming is supported', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      (input, init) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.method).toBe('message/send');
+        return jsonRpcResult(createMessage('Generate path response'));
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.generate('Use the generate path');
+
+    expect(output.text).toBe('Generate path response');
+    expect(output.message?.kind).toBe('message');
+  });
+
+  it('uses cached run state in resumeGenerate() and sends a follow-up message with context/reference task ids', async () => {
+    const inputRequiredTask = createTask({
+      id: 'task-input',
+      contextId: 'ctx-input',
+      status: {
+        state: 'input-required',
+        timestamp: new Date().toISOString(),
+        message: {
+          kind: 'message',
+          role: 'agent',
+          messageId: 'm-input',
+          parts: [{ kind: 'text', text: 'Please provide more info' }],
+        } as Message,
+      },
+    });
+
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      jsonRpcResult(inputRequiredTask),
+      (input, init) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.method).toBe('message/send');
+        expect(body.params.message.contextId).toBe('ctx-input');
+        expect(body.params.message.referenceTaskIds).toEqual(['task-input']);
+        expect(body.params.message.parts[0].text).toContain('user follow-up');
+        return jsonRpcResult(createMessage('Follow-up complete'));
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+      backoffMs: 0,
+      maxBackoffMs: 0,
+    });
+
+    const initial = await agent.generate('Initial task', { runId: 'run-1' });
+    expect(initial.resumePayload).toMatchObject({
+      taskId: 'task-input',
+      contextId: 'ctx-input',
+      waitingForInput: true,
+    });
+
+    const resumed = await agent.resumeGenerate({ note: 'user follow-up' }, { runId: 'run-1' });
+    expect(resumed.text).toBe('Follow-up complete');
+    expect(resumed.message?.kind).toBe('message');
+  });
+
+  it('falls back to generate() when remote streaming is unsupported', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      jsonRpcResult(createMessage('Buffered remote response')),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const stream = await agent.stream('Buffered request', { runId: 'stream-run-1' });
+    const events = [];
+    for await (const event of stream.fullStream) {
+      events.push(event);
+    }
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('message');
+    expect(await stream.text).toBe('Buffered remote response');
+    expect((await stream.getResult()).text).toBe('Buffered remote response');
+  });
+
+  it('consumes remote message/stream events when streaming is supported', async () => {
+    const streamTask = createTask();
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createSseResponse([
+        streamTask,
+        {
+          kind: 'artifact-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          lastChunk: true,
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Hello from stream' }],
+          },
+        },
+        {
+          kind: 'status-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          final: true,
+          status: {
+            state: 'completed',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ]),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const stream = await agent.stream('Hello stream', { runId: 'stream-run-2' });
+    const events = [];
+    for await (const event of stream.fullStream) {
+      events.push(event);
+    }
+
+    expect(events.map(event => event.type)).toEqual(['task', 'artifact-update', 'status-update']);
+    expect(await stream.text).toBe('Hello from stream');
+    expect((await stream.task)?.status.state).toBe('completed');
+  });
+
+  it('returns a live stream result before the remote SSE completes', async () => {
+    const streamTask = createTask();
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createDelayedSseResponse(
+        [
+          { delayMs: 25, event: streamTask },
+          {
+            delayMs: 25,
+            event: {
+              kind: 'artifact-update',
+              taskId: 'task-1',
+              contextId: 'ctx-1',
+              lastChunk: true,
+              artifact: {
+                artifactId: 'response:text',
+                name: 'response.txt',
+                parts: [{ kind: 'text', text: 'Hello later' }],
+              },
+            },
+          },
+        ],
+        { finalDone: true },
+      ),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const startedAt = Date.now();
+    const stream = await agent.stream('Live stream please', { runId: 'stream-run-live' });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(elapsedMs).toBeLessThan(40);
+
+    const events = [];
+    for await (const event of stream.fullStream) {
+      events.push(event.type);
+    }
+
+    expect(events).toEqual(['task', 'artifact-update']);
+    expect(await stream.text).toBe('Hello later');
+  });
+
+  it('concatenates streamed artifact text chunks without inserting newlines', async () => {
+    const streamTask = createTask();
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createSseResponse([
+        streamTask,
+        {
+          kind: 'artifact-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          lastChunk: false,
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Hello' }],
+          },
+        },
+        {
+          kind: 'artifact-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          lastChunk: true,
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: ' world' }],
+          },
+        },
+      ]),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const stream = await agent.stream('Chunked stream', { runId: 'stream-run-chunked' });
+
+    expect(await stream.text).toBe('Hello world');
+  });
+
+  it('does not mix task progress status text into the final streamed text', async () => {
+    const streamTask = createTask({
+      status: {
+        state: 'working',
+        timestamp: new Date().toISOString(),
+        message: createMessage('Generating response...'),
+      },
+    });
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createSseResponse([
+        streamTask,
+        {
+          kind: 'artifact-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          lastChunk: true,
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Final answer' }],
+          },
+        },
+      ]),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const stream = await agent.stream('Progressy stream', { runId: 'stream-run-progress' });
+
+    expect(await stream.text).toBe('Final answer');
+  });
+
+  it('uses tasks/resubscribe when resuming a non-terminal remote stream', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createSseResponse([createTask({ status: { state: 'working', timestamp: new Date().toISOString() } })]),
+      (input, init) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.method).toBe('tasks/resubscribe');
+        expect(body.params.id).toBe('task-1');
+
+        return createSseResponse([
+          {
+            kind: 'artifact-update',
+            taskId: 'task-1',
+            contextId: 'ctx-1',
+            lastChunk: true,
+            artifact: {
+              artifactId: 'response:text',
+              name: 'response.txt',
+              parts: [{ kind: 'text', text: 'Resubscribed text' }],
+            },
+          },
+          {
+            kind: 'status-update',
+            taskId: 'task-1',
+            contextId: 'ctx-1',
+            final: true,
+            status: {
+              state: 'completed',
+              timestamp: new Date().toISOString(),
+            },
+          },
+        ]);
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const initial = await agent.stream('Start remote work', { runId: 'stream-run-3' });
+    expect(await initial.suspendPayload).toMatchObject({
+      taskId: 'task-1',
+      waitingForInput: false,
+    });
+
+    const resumed = await agent.resumeStream(undefined, { runId: 'stream-run-3' });
+    expect(await resumed.text).toBe('Resubscribed text');
+    expect((await resumed.task)?.status.state).toBe('completed');
+  });
+});

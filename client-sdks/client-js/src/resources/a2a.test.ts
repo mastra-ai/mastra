@@ -8,7 +8,7 @@ import type {
   SendMessageResponse,
   Task,
   TaskPushNotificationConfig,
-} from '@mastra/core/a2a';
+} from '@mastra/core/a2a/client';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { MastraClientError } from '../types';
 import { A2A } from './a2a';

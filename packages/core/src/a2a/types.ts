@@ -1,4 +1,11 @@
-import type { JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type {
+  AgentCard,
+  JSONRPCMessage,
+  Message,
+  Task,
+  TaskArtifactUpdateEvent,
+  TaskStatusUpdateEvent,
+} from '@a2a-js/sdk';
 
 /**
  * Represents a JSON-RPC error object.
@@ -141,3 +148,73 @@ export type KnownErrorCode =
   | typeof ErrorCodeExtendedAgentCardNotConfigured
   | typeof ErrorCodeExtensionSupportRequired
   | typeof ErrorCodeVersionNotSupported;
+
+export type RequestCredentialsMode = 'omit' | 'same-origin' | 'include';
+
+export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+
+export interface A2AAgentCardVerificationContext {
+  cardUrl: string;
+  fetchedAt: Date;
+}
+
+export interface A2AAgentVerificationOptions {
+  verify: (card: AgentCard, context: A2AAgentCardVerificationContext) => Promise<void> | void;
+}
+
+export interface A2AAgentOptions {
+  url: string;
+  headers?: Record<string, string>;
+  retries?: number;
+  backoffMs?: number;
+  maxBackoffMs?: number;
+  credentials?: RequestCredentialsMode;
+  fetch?: typeof fetch;
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
+  verifyAgentCard?: A2AAgentVerificationOptions;
+}
+
+export interface A2AAgentRunState {
+  runId: string;
+  contextId?: string;
+  taskId?: string;
+  executionUrl: string;
+  cardUrl: string;
+  streamingSupported: boolean;
+  waitingForInput: boolean;
+  lastTask?: Task;
+}
+
+export interface A2AAgentResumePayload {
+  taskId?: string;
+  contextId?: string;
+  executionUrl: string;
+  cardUrl: string;
+  waitingForInput: boolean;
+  task?: Task;
+}
+
+export interface A2AAgentGenerateResult {
+  runId: string;
+  text: string;
+  task?: Task;
+  message?: Message;
+  resumePayload?: A2AAgentResumePayload;
+  resumeSchema?: string;
+}
+
+export interface A2AAgentStreamEvent {
+  type: 'message' | 'task' | 'artifact-update' | 'status-update';
+  data: A2AStreamEventData;
+}
+
+export interface A2AAgentStreamResult {
+  runId: string;
+  fullStream: AsyncIterable<A2AAgentStreamEvent>;
+  text: Promise<string>;
+  task: Promise<Task | undefined>;
+  suspendPayload: Promise<A2AAgentResumePayload | undefined>;
+  resumeSchema: Promise<string | undefined>;
+  getResult(): Promise<A2AAgentGenerateResult>;
+}
