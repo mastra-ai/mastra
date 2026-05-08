@@ -95,6 +95,12 @@ export type StreamTransportRef = {
  *    them from the UI.
  *
  * `'ui'` (UI-only chunks that don't reach the LLM) is reserved for a future change.
+ *
+ * **This is a UI presentation flag, not a redaction or privacy boundary.**
+ * Chunks marked `visibility: 'llm'` are still persisted to memory and still
+ * replayed to the agent loop on subsequent runs — `'llm'` only suppresses
+ * them from the user-facing stream and UI-facing retrieval helpers. Do not
+ * use it for sensitive data handling.
  */
 export type ChunkVisibility = 'all' | 'llm';
 

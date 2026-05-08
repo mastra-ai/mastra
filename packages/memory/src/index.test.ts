@@ -2118,6 +2118,231 @@ describe('Memory', () => {
     });
   });
 
+  describe('recall visibility filter — pagination semantics', () => {
+    let memory: Memory;
+    const resourceId = 'resource-visibility-pagination';
+    const threadId = 'thread-visibility-pagination';
+
+    /**
+     * Builds a thread with `total` messages where every message at an index in
+     * `hiddenIndices` is fully `visibility: 'llm'` and therefore hidden from
+     * `visibility: 'ui'` callers. Returns the visible-message ids in
+     * chronological order so the tests can match expected page slices.
+     */
+    async function seedThread(total: number, hiddenIndices: number[]): Promise<string[]> {
+      const visibleIds: string[] = [];
+      const messages: MastraDBMessage[] = [];
+      for (let i = 0; i < total; i++) {
+        const hidden = hiddenIndices.includes(i);
+        const id = `msg-${i.toString().padStart(2, '0')}`;
+        if (!hidden) visibleIds.push(id);
+        messages.push({
+          id,
+          threadId,
+          resourceId,
+          role: 'assistant',
+          createdAt: new Date(`2024-01-01T10:${i.toString().padStart(2, '0')}:00Z`),
+          content: {
+            format: 2,
+            parts: hidden
+              ? [{ type: 'text', text: `hidden-${i}`, visibility: 'llm' }]
+              : [{ type: 'text', text: `visible-${i}` }],
+            content: hidden ? `hidden-${i}` : `visible-${i}`,
+          },
+        });
+      }
+      await memory.saveMessages({ messages });
+      return visibleIds;
+    }
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Visibility Pagination Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('returns a full page of visible messages even when the queried slice is dominated by llm-only messages', async () => {
+      // 12 messages total, first 8 are llm-only (would otherwise dominate
+      // the most-recent paged slice if we paged-then-filtered). Default LIST
+      // semantics: page 0 = most recent N visible, returned chronologically.
+      const visible = await seedThread(12, [0, 1, 2, 3, 4, 5, 6, 7]);
+      // visible chronological: ['msg-08', 'msg-09', 'msg-10', 'msg-11']
+
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 4,
+        page: 0,
+        visibility: 'ui',
+      });
+
+      expect(result.messages.map(m => m.id)).toEqual(visible);
+      expect(result.total).toBe(visible.length);
+      expect(result.hasMore).toBe(false);
+      expect(result.perPage).toBe(4);
+      expect(result.page).toBe(0);
+    });
+
+    it('paginates across visible messages: page 0 = most recent N visible, page 1 = next N', async () => {
+      // 10 messages total, no hidden ones — sanity check that pagination
+      // semantics with visibility:'ui' match the unfiltered case.
+      const visible = await seedThread(10, []);
+
+      const page0 = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 4,
+        page: 0,
+        visibility: 'ui',
+      });
+      // Page 0 = most recent 4: msg-06..msg-09 in chronological order.
+      expect(page0.messages.map(m => m.id)).toEqual(visible.slice(6, 10));
+      expect(page0.total).toBe(10);
+      expect(page0.hasMore).toBe(true);
+
+      const page1 = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 4,
+        page: 1,
+        visibility: 'ui',
+      });
+      // Page 1 = next 4 older: msg-02..msg-05.
+      expect(page1.messages.map(m => m.id)).toEqual(visible.slice(2, 6));
+      expect(page1.total).toBe(10);
+      expect(page1.hasMore).toBe(true);
+
+      const page2 = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 4,
+        page: 2,
+        visibility: 'ui',
+      });
+      // Page 2 = remaining 2: msg-00..msg-01.
+      expect(page2.messages.map(m => m.id)).toEqual(visible.slice(0, 2));
+      expect(page2.total).toBe(10);
+      expect(page2.hasMore).toBe(false);
+    });
+
+    it('total / hasMore describe the visible result set when paginating with visibility: "ui"', async () => {
+      // 8 messages total, alternating hidden / visible. Total visible = 4.
+      const visible = await seedThread(8, [0, 2, 4, 6]);
+      // visible chronological: ['msg-01', 'msg-03', 'msg-05', 'msg-07']
+      expect(visible.length).toBe(4);
+
+      // perPage:3 against 4 visible should give: page 0 = last 3 visible,
+      // page 1 = remaining 1 visible.
+      const page0 = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 3,
+        page: 0,
+        visibility: 'ui',
+      });
+      expect(page0.total).toBe(4);
+      expect(page0.hasMore).toBe(true);
+      expect(page0.messages.map(m => m.id)).toEqual(visible.slice(1, 4));
+
+      const page1 = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 3,
+        page: 1,
+        visibility: 'ui',
+      });
+      expect(page1.total).toBe(4);
+      expect(page1.hasMore).toBe(false);
+      expect(page1.messages.map(m => m.id)).toEqual(visible.slice(0, 1));
+
+      // Comparison: without visibility filter, total reflects the raw set.
+      const unfiltered = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: 3,
+        page: 0,
+      });
+      expect(unfiltered.total).toBe(8);
+    });
+
+    it('does not leak hidden tool calls through legacy content.content / content.toolInvocations', async () => {
+      // One assistant message with both a hidden tool call and a visible
+      // text reply. The hidden tool's id and result must not survive in
+      // the legacy aggregated fields.
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-leakage',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            createdAt: new Date('2024-01-01T11:00:00Z'),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  visibility: 'llm',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-hidden',
+                    toolName: 'skills',
+                    args: { query: 'sensitive' },
+                    result: 'top-secret',
+                  },
+                },
+                { type: 'text', text: 'hidden-thoughts', visibility: 'llm' },
+                { type: 'text', text: 'visible answer' },
+              ],
+              content: 'hidden-thoughts\nvisible answer',
+              toolInvocations: [
+                {
+                  state: 'result',
+                  toolCallId: 'call-hidden',
+                  toolName: 'skills',
+                  args: { query: 'sensitive' },
+                  result: 'top-secret',
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const result = await memory.recall({ threadId, resourceId, visibility: 'ui' });
+      expect(result.messages).toHaveLength(1);
+      const msg = result.messages[0]!;
+
+      // The hidden tool-invocation part is gone.
+      expect(msg.content.parts).toHaveLength(1);
+      expect(msg.content.parts?.[0]).toMatchObject({ type: 'text', text: 'visible answer' });
+
+      // Legacy aggregated `content.content` is recomputed from visible text
+      // parts only — no leakage of `'hidden-thoughts'`.
+      expect(msg.content.content).toBe('visible answer');
+      expect(msg.content.content).not.toContain('hidden-thoughts');
+      expect(msg.content.content).not.toContain('top-secret');
+
+      // Legacy `content.toolInvocations` is filtered to only the visible
+      // tool-invocation parts (none in this case).
+      expect(msg.content.toolInvocations).toEqual([]);
+
+      // Sanity-check the in-process recall path still sees the hidden parts
+      // — `'llm'` is a UI-presentation flag, not a redaction boundary.
+      const unfiltered = await memory.recall({ threadId, resourceId });
+      const unfilteredMsg = unfiltered.messages[0]!;
+      expect(unfilteredMsg.content.parts).toHaveLength(3);
+      expect(unfilteredMsg.content.toolInvocations?.[0]?.toolCallId).toBe('call-hidden');
+    });
+  });
+
   describe('lastMessages: false (disable conversation history)', () => {
     let memory: Memory;
     const resourceId = 'test-resource';

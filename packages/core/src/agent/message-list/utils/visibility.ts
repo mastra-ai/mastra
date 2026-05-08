@@ -29,6 +29,17 @@ export function isVisiblePart(
  *
  * Messages whose `content` is a plain string have no parts to filter, so they
  * are returned unchanged.
+ *
+ * Legacy aggregated fields are kept consistent with the surviving parts:
+ * `content.content` (the legacy text aggregate) is recomputed from the visible
+ * `text` parts, and `content.toolInvocations` is filtered to only include
+ * invocations whose corresponding `tool-invocation` part survived. This
+ * prevents llm-only content from leaking through legacy fields when the
+ * filtered messages are rendered.
+ *
+ * **This is a UI presentation filter, not a redaction or privacy boundary.**
+ * Hidden parts are still persisted in storage and still returned to the agent
+ * loop / model on subsequent recalls — only the UI slice is filtered.
  */
 export function filterMessagesByVisibility(
   messages: MastraDBMessage[],

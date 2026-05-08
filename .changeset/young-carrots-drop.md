@@ -17,6 +17,10 @@ The default memory HTTP endpoints (`GET /memory/threads/:threadId/messages`, the
 
 The flag is optional and defaults to `'all'` — existing processors and chunks behave exactly as before. The new `filterMessagesByVisibility` / `isVisiblePart` helpers are also exported from `@mastra/core/agent` for custom endpoints that need the same behavior.
 
+When `memory.recall({ visibility: 'ui', perPage, page })` is called with explicit numeric pagination and no semantic recall, the visibility filter is applied before slicing, so `total` and `hasMore` describe the visible result set and pages stay full until the last page. With semantic recall (`vectorSearchString`) or `perPage: false`, the filter is applied post-fetch and `total` / `hasMore` describe the raw fetched set.
+
+**This is a UI presentation flag, not a redaction or privacy boundary.** Parts marked `visibility: 'llm'` are still persisted in storage and still returned to the agent loop / model on subsequent recalls — `'llm'` only suppresses them from the user-facing stream and UI-facing retrieval helpers. Do not use it for sensitive data handling.
+
 ```ts
 // Hide a tool-call from the UI without breaking tool execution or memory.
 class HideSkillsToolProcessor implements Processor {

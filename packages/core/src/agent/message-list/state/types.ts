@@ -39,6 +39,13 @@ export type MastraProviderMetadata = AIV5Type.ProviderMetadata;
  *
  * Mirrors `ChunkVisibility` from the stream layer; processors that mark a
  * chunk with `visibility: 'llm'` produce parts with this same flag.
+ *
+ * **This is a UI presentation flag, not a redaction or privacy boundary.**
+ * Parts marked `visibility: 'llm'` are still persisted in storage and still
+ * returned to the agent loop / model on subsequent recalls — `'llm'` only
+ * suppresses them from UI-facing retrieval (`memory.recall({ visibility: 'ui' })`,
+ * the HTTP message-list endpoints, `filterMessagesByVisibility`). Do not use
+ * it for sensitive data handling.
  */
 export type MastraPartVisibility = 'all' | 'llm';
 

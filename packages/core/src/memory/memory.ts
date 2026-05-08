@@ -475,14 +475,27 @@ https://mastra.ai/en/docs/memory/overview`,
       vectorSearchString?: string;
       includeSystemReminders?: boolean;
       /**
-       * Filter parts by visibility before returning.
-       * - `'all'` (default): returns every part — used by the agent loop and any
-       *   in-process consumer that needs the LLM's full context.
+       * Filter parts by visibility tier before returning.
+       *
+       * - `'all'` (default): returns every part — used by the agent loop and
+       *   any in-process consumer that needs the LLM's full context.
        * - `'ui'`: returns only parts whose visibility is not `'llm'` — i.e.
        *   anything intended to be visible to the user. Used by UI-facing
        *   endpoints (HTTP message lists, search) so processors can flag chunks
        *   `visibility: 'llm'` and have them automatically hidden from the UI
        *   while still being persisted and replayed to the model.
+       *
+       * **This is a UI presentation flag, not a redaction or privacy
+       * boundary.** Parts marked `visibility: 'llm'` are still persisted in
+       * storage and still returned to the agent loop / model on the next
+       * recall — the `'ui'` tier only suppresses them from the message slice
+       * we hand back to the UI. Do not use it for sensitive data handling.
+       *
+       * Pagination semantics with `visibility: 'ui'` are implementation-
+       * defined per `MastraMemory` subclass. The default `Memory`
+       * implementation filters before slicing for explicit numeric pagination
+       * without semantic recall, so `total` / `hasMore` describe the visible
+       * result set in that path.
        */
       visibility?: 'all' | 'ui';
       observabilityContext?: Partial<ObservabilityContext>;
