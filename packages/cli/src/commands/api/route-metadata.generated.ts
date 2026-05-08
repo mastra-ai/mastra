@@ -168,6 +168,26 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/signals": {
+    "method": "POST",
+    "path": "/agents/:agentId/signals",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "runId",
+      "signal",
+      "streamOptions",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
