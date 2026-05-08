@@ -382,7 +382,14 @@ class Session<TState = Record<string, unknown>> {
     opts?: { windowMs?: number },
   ): () => void;
 
-  // Question / plan / tool resolution
+  // Question / plan / tool resolution. Each `respond...` method consumes
+  // the corresponding pending shape on `SessionRecord` (§5.1) — clears
+  // the field, emits the matching display-state event, and resumes the
+  // underlying Mastra workflow with the appropriate payload:
+  //   respondToToolApproval   → consumes pendingApproval,    resumes with { approved, reason? }
+  //   respondToToolSuspension → consumes pendingSuspension,  resumes with opaque resumeData
+  //   respondToQuestion       → consumes pendingQuestion,    resumes with { answer }
+  //   respondToPlanApproval   → consumes pendingPlan,        resumes with { approved, reason? }
   respondToToolApproval(opts: ToolApprovalResponse): void;
   respondToToolSuspension(opts: ToolSuspensionResponse): Promise<void>;
   registerQuestion(opts: RegisterQuestionOptions): void;
@@ -893,6 +900,7 @@ interface SessionRecord {
   // `HarnessQueueFullError` before touching storage.
   pendingQueue: QueuedItem[];
   pendingApproval?: PendingApproval;
+  pendingSuspension?: PendingToolSuspension;
   pendingQuestion?: PendingQuestion;
   pendingPlan?: PendingPlanApproval;
 
@@ -989,23 +997,43 @@ interface SessionGrants {
   tools: string[];
 }
 
-// All three "pending" shapes correlate a Mastra agent suspension with
+// All four "pending" shapes correlate a Mastra agent suspension with
 // session-scoped UX. The actual paused execution state lives in the workflow
 // snapshot under `MastraStorage.workflows`, keyed by `runId`. The harness only
 // stores enough to rebuild the UX and resume:
 //
 //   await agent.resumeStream(resumeData, { runId });
 //
+// The shapes are deliberately distinct because the resume payloads are
+// distinct: an approval gate carries `{ approved, reason? }`; a tool
+// suspension carries opaque `resumeData` that flows back into the paused
+// tool's continuation; a question carries the user's answer; a plan
+// approval carries `{ approved, reason? }` and may flip the session's mode.
 // `source` distinguishes whether the suspension came from the parent session's
 // own turn or from a subagent — drives state-isolation rules in §8.
 
 interface PendingApproval {
-  kind: 'tool-approval';
+  kind: 'tool-approval';            // gate: model wants to call a tool, user decides yes/no
   runId: string;
   toolCallId: string;
   toolName: string;
   toolCategory?: string;            // enables "approve category" UX
   input: unknown;                   // serialised tool input
+  source: 'parent' | 'subagent';
+  subagentToolCallId?: string;
+  requestedAt: number;
+}
+
+interface PendingToolSuspension {
+  kind: 'tool-suspension';          // mid-execution: tool ran, called suspend(data), waiting for external resume
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  // The tool's serialised `suspend(...)` payload — what the tool author
+  // chose to expose to the resumer (e.g. `{ webhookUrl, expectedSignature }`).
+  // Opaque to the harness; rendered by the UI / handed to the external
+  // system that produces the resume payload.
+  suspendData: unknown;
   source: 'parent' | 'subagent';
   subagentToolCallId?: string;
   requestedAt: number;
@@ -1222,7 +1250,7 @@ Persistence is what makes sessions resumable across server restarts and storage 
 
 **Flush points.** Writes to storage happen in two flavours:
 
-- **Synchronous (durable transitions).** Queue append, approval / question / plan registration, mode or model switch, attachment upload, `closeSession`. The originating call only resolves once the write is committed. If the write fails, the call rejects with `HarnessStorageError` and the in-memory mutation is rolled back so the live `Session` and the persisted record stay in agreement.
+- **Synchronous (durable transitions).** Queue append, approval / suspension / question / plan registration, mode or model switch, attachment upload, `closeSession`. The originating call only resolves once the write is committed. If the write fails, the call rejects with `HarnessStorageError` and the in-memory mutation is rolled back so the live `Session` and the persisted record stay in agreement.
 - **Debounced (non-critical).** Token usage, `lastActivityAt`, display-state snapshots, periodic OM bookkeeping. Coalesced on the `sessions.flushDebounceMs` window. Failures are logged and retried with exponential backoff. After `sessions.maxFlushFailures` consecutive failures (default `5`), the session emits an `error` event and starts rejecting durable operations with `HarnessStorageError` until storage recovers — input is *not* silently buffered in memory.
 
 **Rehydration failures.**
@@ -1230,7 +1258,7 @@ Persistence is what makes sessions resumable across server restarts and storage 
 - *Forward-compatible schema drift.* Unknown fields on a stored `SessionRecord` are preserved as-is and rewritten on the next flush. New optional fields added by a later harness version don't break older records.
 - *Backward-incompatible schema.* If a required field is missing or malformed, `harness.session(...)` throws `HarnessSessionCorruptError` with `reason: 'schema_incompatible'`. The record is left in storage; callers decide whether to repair or `harness.deleteSession({ sessionId, force: true })`.
 - *Corrupted JSON.* Throws `HarnessSessionCorruptError` with `reason: 'parse_failed'`.
-- *Pending suspension with a missing workflow snapshot.* The session hydrates successfully, the `pendingApproval` / `pendingQuestion` / `pendingPlan` field is dropped, and an `error` event fires explaining that the suspended turn could not be resumed. The queue continues from the next item. Rationale: replicating the agent layer's `AGENT_RESUME_NO_SNAPSHOT_FOUND` at hydration time would brick the session for a recoverable mismatch (e.g. a snapshot TTL'd out, a workflow store rebuilt).
+- *Pending interrupt with a missing workflow snapshot.* The session hydrates successfully, the corresponding `pendingApproval` / `pendingSuspension` / `pendingQuestion` / `pendingPlan` field is dropped, and an `error` event fires explaining that the suspended turn could not be resumed. The queue continues from the next item. Rationale: replicating the agent layer's `AGENT_RESUME_NO_SNAPSHOT_FOUND` at hydration time would brick the session for a recoverable mismatch (e.g. a snapshot TTL'd out, a workflow store rebuilt).
 
 **Crash mid-turn.** What a freshly hydrated session looks like depends on where the crash hit and which primitive originated the input:
 
@@ -1240,9 +1268,10 @@ Persistence is what makes sessions resumable across server restarts and storage 
 | `message(...)` accepted, run started, no suspension | Agent-layer durability: the signal is recorded in the agent's thread log. On hydration, the harness re-attaches via `agent.subscribeToThread(...)`. If the run completed before crash, the assistant turn is in the thread log. If it didn't, the model output is lost — but the user-side input survives in the thread log so they can ask again. |
 | `queue(...)` enqueued but not yet drained | Durable. Item still on `pendingQueue`. On the next `harness.session(...)` and once the thread is idle, the head is drained (signalled) as a fresh standalone turn. |
 | `queue(...)` drained and signalled, run mid-flight | At-least-once. The item is removed from `pendingQueue` *after* the turn completes. If the crash hit before completion, the item re-runs on hydration. Tools that are not idempotent should guard themselves; `QueuedItem.id` is exposed for de-duping. |
-| Suspended on tool approval | `pendingApproval` is rehydrated. The workflow snapshot in `MastraStorage.workflows` survives the crash (it's owned by the agent layer, not the harness). The user responds; harness calls `agent.resumeStream(resumeData, { runId })`. |
-| Suspended on tool execution (`suspend(data)`) | Same as above — `pendingApproval` is replaced by the equivalent suspension record, resume is the same call. |
-| `ask_user` or `submit_plan` outstanding | Same as above. The pending UX item rehydrates; responding resumes the underlying agent turn. |
+| Suspended on tool approval | `pendingApproval` is rehydrated. The workflow snapshot in `MastraStorage.workflows` survives the crash (it's owned by the agent layer, not the harness). The user responds via `respondToToolApproval(...)`; harness calls `agent.resumeStream({ approved, reason }, { runId })`. |
+| Suspended on tool execution (`suspend(data)`) | `pendingSuspension` is rehydrated — the *separate* persisted shape (§5.1), not a relabelled `pendingApproval`. The workflow snapshot survives. The external resumer (webhook handler, operator, …) calls `respondToToolSuspension({ toolCallId, resumeData })`; harness calls `agent.resumeStream(resumeData, { runId })`. The `resumeData` payload is opaque to the harness and flows straight back into the paused tool's continuation. |
+| `ask_user` outstanding | `pendingQuestion` is rehydrated. Responding via `respondToQuestion(...)` resumes the underlying agent turn. |
+| `submit_plan` outstanding | `pendingPlan` is rehydrated. Responding via `respondToPlanApproval(...)` resumes and (if approved) flips the session's mode. |
 | Mid-flush (storage transaction) | The transaction either committed or it didn't. At-least-once for queue items applies as above. |
 
 **Durability boundary.** The harness owns durability for `queue` items pre-acceptance. The agent layer owns durability for everything signal-driven post-acceptance (every `message(...)` and every drained `queue(...)`). The boundary is the `signal.accepted` resolution from `agent.sendSignal(...)`.
@@ -1259,7 +1288,7 @@ Persistence is what makes sessions resumable across server restarts and storage 
 
 ### 5.8 Write-concurrency contract
 
-Every persisted `SessionRecord` has at most **one owner** at a time. The owner is the Harness instance that holds the live `Session` object. All durable writes to that record — queue append, pending approval / question / plan registration, mode / model switch, `setState`, lifecycle transitions, debounced flushes — go through the owner. Storage adapters never see concurrent writers for the same `sessionId` under normal operation.
+Every persisted `SessionRecord` has at most **one owner** at a time. The owner is the Harness instance that holds the live `Session` object. All durable writes to that record — queue append, pending approval / suspension / question / plan registration, mode / model switch, `setState`, lifecycle transitions, debounced flushes — go through the owner. Storage adapters never see concurrent writers for the same `sessionId` under normal operation.
 
 This makes "the live `Session` instance is the runtime authority" (§5.4) an enforceable invariant rather than a convention.
 
@@ -1789,11 +1818,13 @@ type SubagentEvent =
 //
 // When `source: 'parent'`, both subagent fields are absent.
 type SuspensionEvent =
-  | ({ type: 'tool_approval_required'; runId: string; toolCallId: string; toolName: string; toolCategory?: string; input: unknown }
+  | ({ type: 'tool_approval_required';  runId: string; toolCallId: string; toolName: string; toolCategory?: string; input: unknown }
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }))
-  | ({ type: 'question_pending';       runId: string; toolCallId: string; question: string; options?: string[]; selectionMode?: 'single' | 'multi' }
+  | ({ type: 'tool_suspension_required'; runId: string; toolCallId: string; toolName: string; suspendData: unknown }
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }))
-  | ({ type: 'plan_approval_required'; runId: string; toolCallId: string; title: string; plan: string }
+  | ({ type: 'question_pending';        runId: string; toolCallId: string; question: string; options?: string[]; selectionMode?: 'single' | 'multi' }
+      & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }))
+  | ({ type: 'plan_approval_required';  runId: string; toolCallId: string; title: string; plan: string }
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }));
 
 // Attachments (session-scoped)
@@ -1827,7 +1858,7 @@ Tools call `requestContext.get('harness').emitEvent(event)` to surface tool-leve
 - **Type must use a dotted prefix.** `myorg.tool.progress`, `acme.scan.matched`, etc. The leading segment should identify the publisher; the trailing segments are the publisher's choice.
 - **The harness does not validate the payload.** Anything beyond `type` is passed through to subscribers verbatim.
 - **The harness fills in the base fields** (`id`, `sessionId`, `timestamp`). Tools must not set those themselves.
-- **Built-in types are reserved.** Emitting any of `agent_*`, `text_delta`, `tool_*`, `subagent_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `token_usage_changed`, `tool_approval_required`, `question_pending`, `plan_approval_required`, `attachment_*`, `storage_error`, `goal_*`, or `error` from a tool is a contract violation. The harness does not strip them — it just ends up duplicating the harness's own emission and corrupting subscriber state.
+- **Built-in types are reserved.** Emitting any of `agent_*`, `text_delta`, `tool_*`, `subagent_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `token_usage_changed`, `tool_approval_required`, `tool_suspension_required`, `question_pending`, `plan_approval_required`, `attachment_*`, `storage_error`, `goal_*`, or `error` from a tool is a contract violation. The harness does not strip them — it just ends up duplicating the harness's own emission and corrupting subscriber state.
 
 Custom events go through the same base-field, ordering, and replay rules as built-in events. Subscribers should narrow by `type` and tolerate unknown types (forward-compatibility).
 
@@ -1868,11 +1899,11 @@ Subagent events are emitted on the **parent** session's subscriber, not the suba
 - `parentId` — the parent's tool-call ID *one level up* in the chain. `undefined` for a top-level subagent (parent is the user turn, not another subagent). Used to reconstruct the tree when subagents nest.
 - `depth` — `1` for a top-level subagent, `2` for a subagent of a subagent, capped at `subagents.maxDepth` (§8).
 
-**Suspension events from inside a subagent.** Generic events emitted from a subagent's RequestContext (custom events, `tool_approval_required`, `question_pending`, `plan_approval_required`) are not translated to `subagent_*` types — that would lose the underlying type information. They surface on the **parent** session's subscriber with:
+**Suspension events from inside a subagent.** Generic events emitted from a subagent's RequestContext (custom events, `tool_approval_required`, `tool_suspension_required`, `question_pending`, `plan_approval_required`) are not translated to `subagent_*` types — that would lose the underlying type information. They surface on the **parent** session's subscriber with:
 
 - `source: 'subagent'`
 - `subagentToolCallId: <parent-side tool-call>` — the same handle as `toolCallId` on the corresponding `subagent_start`. Used by the UI to associate the prompt with the right subagent card.
-- `subagentSessionId: <child session ID>` — the session that actually owns the pending item. **The client MUST post the response to this session's inbox**, not the parent's. The pending approval / question / plan record lives on the child session's `SessionRecord`; the parent session has no record of it and does not know how to resume it.
+- `subagentSessionId: <child session ID>` — the session that actually owns the pending item. **The client MUST post the response to this session's inbox**, not the parent's. The pending approval / suspension / question / plan record lives on the child session's `SessionRecord`; the parent session has no record of it and does not know how to resume it.
 
 The wire-protocol contract (§13.2) is therefore: for any subagent-attributed pending item, `POST /sessions/<subagentSessionId>/inbox/<toolCallId>`. Posting to `/sessions/<parentSessionId>/inbox/<toolCallId>` returns `404 inbox.item_not_found` — there is no parent-side proxy or dual-write. This keeps the `inbox` resource flat (one-session-one-inbox) and makes durability simple (response writes affect exactly one record).
 
@@ -2578,7 +2609,7 @@ if (display.pendingPlan) {
 | Layer | Persisted | Transient |
 |---|---|---|
 | Agent workflow snapshot | `MastraStorage.workflows[runId]` | — |
-| UX prompt state | `SessionRecord.pendingApproval / pendingQuestion / pendingPlan / pendingSuspension` | — |
+| UX prompt state | `SessionRecord.pendingApproval / pendingSuspension / pendingQuestion / pendingPlan` | — |
 | Queue (typed-ahead) | `SessionRecord.pendingQueue` | — |
 | Subscriber callbacks | — | rebuilt on `session.subscribe(...)` after rehydration |
 | `AbortController`, in-flight promises | — | discarded on dehydration |
@@ -2732,7 +2763,7 @@ When the harness is registered on a `Mastra` instance served by Mastra Server, t
 | `POST` | `/harness/:name/sessions/:sessionId/queue` | Enqueue an item for sequential delivery (`queue` — busy-independent). Returns `{ queuedItemId }`. Item runs as a fresh standalone turn once the thread is idle. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session_closed`, `503 harness.storage`, or `429 harness.queue_full` (when `sessions.maxQueueDepth` would be exceeded — body carries `currentDepth` and `maxQueueDepth`). |
 | `POST` | `/harness/:name/sessions/:sessionId/skills/:skillName` | Invoke a skill (`useSkill`). May respond `409 Conflict`. |
 | `GET` | `/harness/:name/sessions/:sessionId/events` | Subscribe to session events (SSE). |
-| `POST` | `/harness/:name/sessions/:sessionId/inbox/:itemId` | Respond to a pending approval / question / plan |
+| `POST` | `/harness/:name/sessions/:sessionId/inbox/:itemId` | Respond to a pending approval / suspension / question / plan. Body discriminates on `kind`: `'tool-approval'` carries `{ approved, reason? }`, `'tool-suspension'` carries `{ resumeData }`, `'question'` carries `{ answer }`, `'plan-approval'` carries `{ approved, reason? }`. |
 | `PATCH` | `/harness/:name/sessions/:sessionId/mode` | Switch mode |
 | `PATCH` | `/harness/:name/sessions/:sessionId/model` | Switch model |
 | `PATCH` | `/harness/:name/sessions/:sessionId/permissions` | Set policy / grant / revoke |
