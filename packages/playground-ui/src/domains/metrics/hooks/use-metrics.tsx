@@ -1,6 +1,11 @@
+/* eslint-disable react-refresh/only-export-components */
 import { format } from 'date-fns';
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
+
+import { buildMetricsDimensionalFilter } from '../metrics-filters';
+import type { MetricsDimensionalFilter } from '../metrics-filters';
+import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 const DATE_PRESETS = [
   { label: 'Last 24 hours', value: '24h' },
@@ -22,18 +27,39 @@ export function isValidPreset(value: string | null | undefined): value is DatePr
 
 export type DateRange = { from?: Date; to?: Date };
 
-export const MetricsContext = createContext<{
+/** Internal — all state is derived from the URL-backed props the owner passes.
+ *  There is intentionally no local mirror; keeping a mirror caused URL ↔ state
+ *  feedback loops that re-rendered the entire metrics tree on every keystroke.
+ */
+type MetricsContextValue = {
   datePreset: DatePreset;
   setDatePreset: (v: DatePreset) => void;
   customRange: DateRange | undefined;
   setCustomRange: (v: DateRange | undefined) => void;
   dateRangeLabel: string;
-}>({
+  filterTokens: PropertyFilterToken[];
+  setFilterTokens: (tokens: PropertyFilterToken[]) => void;
+  dimensionalFilter: MetricsDimensionalFilter;
+  /** Stable JSON representation of `dimensionalFilter`, safe for query keys. */
+  dimensionalFilterKey: string;
+  /** Base path drilldown links should target for the Traces page. */
+  tracesBasePath: string | undefined;
+  /** Base path drilldown links should target for the Logs page. */
+  logsBasePath: string | undefined;
+};
+
+export const MetricsContext = createContext<MetricsContextValue>({
   datePreset: '24h',
   setDatePreset: () => {},
   customRange: undefined,
   setCustomRange: () => {},
   dateRangeLabel: 'Last 24 hours',
+  filterTokens: [],
+  setFilterTokens: () => {},
+  dimensionalFilter: {},
+  dimensionalFilterKey: '{}',
+  tracesBasePath: undefined,
+  logsBasePath: undefined,
 });
 
 export function useMetrics() {
@@ -53,44 +79,84 @@ function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefine
   return 'Custom range';
 }
 
+/**
+ * URL-driven metrics provider.
+ *
+ * The owner (page) is expected to:
+ *   - pass the current `preset` / `filterTokens` derived from `useSearchParams`
+ *   - pass `onPresetChange` / `onFilterTokensChange` that update the URL
+ *
+ * The provider never stores its own copies — changes round-trip through the URL
+ * exactly once, which keeps re-renders bounded no matter how much data is on
+ * screen.
+ */
 export function MetricsProvider({
   children,
-  initialPreset,
+  preset,
+  filterTokens,
   onPresetChange,
+  onFilterTokensChange,
+  customRange,
+  onCustomRangeChange,
+  tracesBasePath,
+  logsBasePath,
 }: {
   children: ReactNode;
-  initialPreset?: DatePreset;
-  onPresetChange?: (preset: DatePreset) => void;
+  preset: DatePreset;
+  filterTokens: PropertyFilterToken[];
+  onPresetChange: (preset: DatePreset) => void;
+  onFilterTokensChange: (tokens: PropertyFilterToken[]) => void;
+  customRange?: DateRange;
+  onCustomRangeChange?: (range: DateRange | undefined) => void;
+  /** Base path for drilldown links to the Traces page. Defaults to `/observability` when omitted. */
+  tracesBasePath?: string;
+  /** Base path for drilldown links to the Logs page. Defaults to `/logs` when omitted. */
+  logsBasePath?: string;
 }) {
-  const [datePreset, setDatePresetState] = useState<DatePreset>(initialPreset ?? '24h');
-  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
-  const dateRangeLabel = getDateRangeLabel(datePreset, customRange);
+  // Stable key for memo dependencies — the parent may re-create the tokens
+  // array on every render (e.g. from `useMemo(... , [searchParams])`), but the
+  // *content* usually doesn't change.
+  const filterTokensKey = useMemo(() => JSON.stringify(filterTokens), [filterTokens]);
 
-  useEffect(() => {
-    if (initialPreset && initialPreset !== datePreset) {
-      setDatePresetState(initialPreset);
-    }
-  }, [initialPreset]);
+  // Intentional: re-pin only when the serialized content changes, not on every
+  // parent render that allocates a new array.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableFilterTokens = useMemo(() => filterTokens, [filterTokensKey]);
 
-  const setDatePreset = useCallback(
-    (v: DatePreset) => {
-      setDatePresetState(v);
-      onPresetChange?.(v);
-    },
-    [onPresetChange],
+  const dimensionalFilter = useMemo(() => buildMetricsDimensionalFilter(stableFilterTokens), [stableFilterTokens]);
+
+  const dimensionalFilterKey = useMemo(() => JSON.stringify(dimensionalFilter), [dimensionalFilter]);
+
+  const dateRangeLabel = getDateRangeLabel(preset, customRange);
+
+  const value = useMemo<MetricsContextValue>(
+    () => ({
+      datePreset: preset,
+      setDatePreset: onPresetChange,
+      customRange,
+      setCustomRange: onCustomRangeChange ?? (() => {}),
+      dateRangeLabel,
+      filterTokens: stableFilterTokens,
+      setFilterTokens: onFilterTokensChange,
+      dimensionalFilter,
+      dimensionalFilterKey,
+      tracesBasePath,
+      logsBasePath,
+    }),
+    [
+      preset,
+      onPresetChange,
+      customRange,
+      onCustomRangeChange,
+      dateRangeLabel,
+      stableFilterTokens,
+      onFilterTokensChange,
+      dimensionalFilter,
+      dimensionalFilterKey,
+      tracesBasePath,
+      logsBasePath,
+    ],
   );
 
-  return (
-    <MetricsContext.Provider
-      value={{
-        datePreset,
-        setDatePreset,
-        customRange,
-        setCustomRange,
-        dateRangeLabel,
-      }}
-    >
-      {children}
-    </MetricsContext.Provider>
-  );
+  return <MetricsContext.Provider value={value}>{children}</MetricsContext.Provider>;
 }

@@ -83,7 +83,7 @@ export function ScheduleTriggersList({
         const driftMs = t.actualFireAt - t.scheduledFireAt;
         const driftValue = formatDriftValue(driftMs);
         const startedTooltip = `Scheduled ${formatScheduleTimestamp(t.scheduledFireAt)} — published ${formatScheduleTimestamp(t.actualFireAt)} (drift ${driftValue})`;
-        const isPublishFailure = t.status === 'failed';
+        const isPublishFailure = t.outcome === 'failed';
         const errorMessage = isPublishFailure ? t.error : t.run?.error;
         const absDrift = Math.abs(driftMs);
         const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;

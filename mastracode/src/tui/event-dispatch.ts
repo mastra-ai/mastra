@@ -142,6 +142,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
+        // Load goal state from thread metadata
+        state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
       }
       break;
     }
@@ -150,6 +152,15 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      // If /goal started without an existing thread, save that pending goal to the
+      // newly-created thread. Otherwise load the thread's own goal metadata so goals
+      // do not bleed into unrelated new threads.
+      const shouldPersistPendingGoal = state.goalManager?.consumePersistOnNextThreadCreate() ?? false;
+      if (shouldPersistPendingGoal) {
+        state.goalManager?.saveToThread(state).catch(() => {});
+      } else {
+        state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
+      }
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {

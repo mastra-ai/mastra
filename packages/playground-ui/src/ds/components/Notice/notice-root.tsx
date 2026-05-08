@@ -44,15 +44,19 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
     return (
       <div
         className={cn(
-          'relative @container flex items-start gap-2 rounded-2xl border p-3 [&>svg]:size-4',
+          'relative @container rounded-2xl border p-3 text-ui-md leading-ui-md',
           'animate-in fade-in-0 slide-in-from-top-2 duration-200',
           classes,
           className,
         )}
       >
-        <span className="mt-0.5 shrink-0 [&>svg]:size-4">{resolvedIcon}</span>
-        {children && <div className="flex-1 text-ui-md leading-ui-md">{children}</div>}
-        {action && <div className="self-start ml-auto">{action}</div>}
+        <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:gap-2">
+          <div className="flex flex-1 items-start gap-2 [&>svg]:size-4">
+            <span className="flex h-[1lh] shrink-0 items-center [&>svg]:size-4">{resolvedIcon}</span>
+            {children && <div className="flex-1">{children}</div>}
+          </div>
+          {action && <div className="@md:-my-1 [&>button]:w-full @md:[&>button]:w-auto">{action}</div>}
+        </div>
       </div>
     );
   }
