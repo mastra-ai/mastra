@@ -22,7 +22,8 @@ Set environment variables and use zero-config:
 
 ```bash
 # Required - endpoint must end in /v1/traces
-PHOENIX_ENDPOINT=http://localhost:6006/v1/traces
+# Matches Arize Phoenix's documented convention. PHOENIX_ENDPOINT is also accepted as a fallback.
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
 
 # Optional - for authenticated Phoenix instances
 PHOENIX_API_KEY=your-api-key
