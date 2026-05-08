@@ -570,7 +570,7 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(3); // Not called again
       });
 
-      it('should emit drop telemetry when create retries are exhausted', async () => {
+      it('should emit drop events when create retries are exhausted', async () => {
         const emitDropEvent = vi.fn();
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',
@@ -599,7 +599,7 @@ describe('DefaultExporter', () => {
         expect(emitDropEvent.mock.calls[0][0].timestamp).toBeInstanceOf(Date);
       });
 
-      it('should emit drop telemetry when span update retries are exhausted', async () => {
+      it('should emit drop events when span update retries are exhausted', async () => {
         const emitDropEvent = vi.fn();
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',
@@ -627,7 +627,7 @@ describe('DefaultExporter', () => {
         );
       });
 
-      it('should emit drop telemetry when deferred updates exhaust retries', async () => {
+      it('should emit drop events when deferred updates exhaust retries', async () => {
         const emitDropEvent = vi.fn();
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',
@@ -1276,7 +1276,7 @@ describe('DefaultExporter', () => {
         await exporter.shutdown();
       });
 
-      it('should emit drop telemetry for unsupported log storage and later skipped log batches', async () => {
+      it('should emit drop events for unsupported log storage and later skipped log batches', async () => {
         const emitDropEvent = vi.fn();
         const notImplementedError = new MastraError({
           id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_LOGS_NOT_IMPLEMENTED',
@@ -1320,7 +1320,7 @@ describe('DefaultExporter', () => {
         expect(emitDropEvent.mock.calls[1][0]).not.toHaveProperty('error');
       });
 
-      it('should emit drop telemetry for unsupported tracing updates', async () => {
+      it('should emit drop events for unsupported tracing updates', async () => {
         const emitDropEvent = vi.fn();
         const notImplementedError = new MastraError({
           id: 'OBSERVABILITY_STORAGE_BATCH_UPDATE_SPANS_NOT_IMPLEMENTED',

@@ -167,7 +167,7 @@ export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | '
 /** Reason an observability event was dropped by the exporter pipeline. */
 export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted';
 
-/** Sanitized error details for observability drop telemetry. */
+/** Sanitized error details for observability drop events. */
 export interface ObservabilityDropError {
   id?: string;
   domain?: string;
@@ -175,7 +175,7 @@ export interface ObservabilityDropError {
 }
 
 /**
- * Structured telemetry emitted when the exporter pipeline drops observability events.
+ * Structured event emitted when the exporter pipeline drops observability events.
  */
 export interface ObservabilityDropEvent {
   type: 'drop';
@@ -561,7 +561,7 @@ export interface ObservabilityEvents {
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
 
-  /** Handle structured telemetry for dropped observability events */
+  /** Handle structured events for dropped observability events */
   onDroppedEvent?(event: ObservabilityDropEvent): void | Promise<void>;
 
   /** Export tracing events */

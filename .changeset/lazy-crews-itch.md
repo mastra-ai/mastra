@@ -2,4 +2,4 @@
 '@mastra/observability': minor
 ---
 
-Added dropped event telemetry for `DefaultExporter` so unsupported storage and retry exhaustion can be reported to custom exporters and bridges.
+`DefaultExporter` now notifies custom exporters and connected integrations when it cannot persist observability events, such as unsupported storage or retries being exceeded.

@@ -174,7 +174,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
-   * Emit exporter pipeline drop telemetry to exporters and the bridge.
+   * Emit exporter pipeline drop events to exporters and the bridge.
    *
    * Drop events describe exporter health, not user observability data, so they
    * are intentionally not delivered to generic event-bus subscribers.

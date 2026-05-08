@@ -84,7 +84,7 @@ export function routeToHandler(
 }
 
 /**
- * Route exporter pipeline drop telemetry to a handler.
+ * Route exporter pipeline drop events to a handler.
  *
  * Drop events are meta-events for alerting and health reporting, so they use a
  * dedicated hook instead of the normal observability signal router.

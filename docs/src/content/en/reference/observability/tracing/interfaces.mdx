@@ -150,7 +150,7 @@ interface ObservabilityExporter {
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>
 
-  /** Handle exporter pipeline drop telemetry */
+  /** Handle exporter pipeline droppedEvent */
   onDroppedEvent?(event: ObservabilityDropEvent): void | Promise<void>
 
   /** Export tracing events */
@@ -190,7 +190,7 @@ callbacks, see [CloudExporter](/reference/observability/tracing/exporters/cloud-
 
 ### `ObservabilityDropEvent`
 
-Structured telemetry emitted when the exporter pipeline drops observability events.
+Structured event emitted when the exporter pipeline drops observability events.
 
 ```typescript
 type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback'
