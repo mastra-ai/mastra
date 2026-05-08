@@ -197,17 +197,22 @@ describe('FGA Middleware - checkRouteFGA', () => {
 
 describe('EE license validation', () => {
   let originalNodeEnv: string | undefined;
+  let originalMastraDev: string | undefined;
   let originalLicense: string | undefined;
 
   beforeEach(() => {
     originalNodeEnv = process.env['NODE_ENV'];
+    originalMastraDev = process.env['MASTRA_DEV'];
     originalLicense = process.env['MASTRA_EE_LICENSE'];
+    delete process.env['MASTRA_DEV'];
     vi.resetModules();
   });
 
   afterEach(() => {
     if (originalNodeEnv !== undefined) process.env['NODE_ENV'] = originalNodeEnv;
     else delete process.env['NODE_ENV'];
+    if (originalMastraDev !== undefined) process.env['MASTRA_DEV'] = originalMastraDev;
+    else delete process.env['MASTRA_DEV'];
     if (originalLicense !== undefined) process.env['MASTRA_EE_LICENSE'] = originalLicense;
     else delete process.env['MASTRA_EE_LICENSE'];
     vi.resetModules();
