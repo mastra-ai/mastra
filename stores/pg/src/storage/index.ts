@@ -26,6 +26,8 @@ import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
+import { ObservabilityStoragePostgresVNext } from './domains/observability/v-next';
+import type { VNextPostgresObservabilityConfig } from './domains/observability/v-next';
 import { PromptBlocksPG } from './domains/prompt-blocks';
 import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
@@ -91,6 +93,7 @@ export {
   MCPServersPG,
   MemoryPG,
   ObservabilityPG,
+  ObservabilityStoragePostgresVNext,
   PromptBlocksPG,
   ScorerDefinitionsPG,
   ScoresPG,
@@ -100,6 +103,7 @@ export {
   WorkflowsPG,
   WorkspacesPG,
 };
+export type { VNextPostgresObservabilityConfig };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
@@ -275,5 +279,63 @@ export class PostgresStore extends MastraCompositeStore {
     if (this.#ownsPool) {
       await this.#pool.end();
     }
+  }
+}
+
+/**
+ * Postgres storage adapter that uses the v-next observability domain.
+ *
+ * Equivalent to constructing a `PostgresStore` and overriding the
+ * `observability` domain with `ObservabilityStoragePostgresVNext`. Use this
+ * in new projects to opt into the v-next observability schema (per-signal
+ * partitioned tables, optional TimescaleDB) without wiring the composite
+ * manually.
+ *
+ * IMPORTANT: this adapter is intended for **low-volume production** workloads
+ * only. For high-volume agent workloads, use the ClickHouse adapter — Postgres
+ * (with or without TimescaleDB) cannot keep up past roughly 1,500 calls/sec
+ * sustained on a single primary.
+ *
+ * For best results, point this at a **dedicated** Postgres instance (not your
+ * primary application database) and compose it with your existing
+ * `MastraCompositeStore` so your other domains (memory, workflows, scores)
+ * stay on their preferred backend.
+ *
+ * @example
+ * ```typescript
+ * import { Mastra } from '@mastra/core';
+ * import { PostgresStoreVNext } from '@mastra/pg';
+ *
+ * export const mastra = new Mastra({
+ *   storage: new PostgresStoreVNext({
+ *     id: 'pg-observability',
+ *     connectionString: process.env.OBSERVABILITY_PG_URL!,
+ *   }),
+ * });
+ * ```
+ */
+export class PostgresStoreVNext extends PostgresStore {
+  constructor(
+    config: PostgresStoreConfig & {
+      partitioning?: VNextPostgresObservabilityConfig['partitioning'];
+      discovery?: VNextPostgresObservabilityConfig['discovery'];
+    },
+  ) {
+    super(config);
+    this.name = 'PostgresStoreVNext';
+
+    const observability = new ObservabilityStoragePostgresVNext({
+      client: this.db,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+      partitioning: config.partitioning,
+      discovery: config.discovery,
+    });
+
+    this.stores = {
+      ...this.stores,
+      observability,
+    };
   }
 }
