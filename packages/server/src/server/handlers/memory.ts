@@ -1241,10 +1241,15 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           include,
           filter,
           includeSystemReminders,
+          // UI-facing endpoint: ask `recall` to drop parts marked
+          // `visibility: 'llm'`. The agent loop calls `recall` without this
+          // arg (default `'all'`) so the model still sees the full context.
+          // Older `@mastra/core` peer-floor versions ignore unknown args, so
+          // the inline `filterMessagesByVisibility` below acts as a
+          // belt-and-suspenders fallback until the recall option is part of
+          // the published peer-floor.
+          visibility: 'ui',
         });
-        // UI-facing endpoint: drop parts marked `visibility: 'llm'` so chat
-        // surfaces don't render hidden processor output. The agent loop
-        // calls `memory.recall` directly and is unaffected.
         return { ...result, messages: filterMessagesByVisibility(result.messages) };
       }
 
@@ -2031,9 +2036,11 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         perPage: threadConfig.lastMessages,
         threadConfig: config,
         vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
+        // UI-facing search surface — mirror what the chat UI would render.
+        visibility: 'ui',
       });
-      // Drop parts marked `visibility: 'llm'` from search results so the
-      // user-facing search surface mirrors what the chat UI would render.
+      // Inline filter as a fallback for older `@mastra/core` peer-floor
+      // versions that don't honor the recall-side `visibility` arg.
       const visibleMessages = filterMessagesByVisibility(result.messages);
       const accessibleMessages = accessibleThreadIds
         ? visibleMessages.filter((message: MastraDBMessage) =>
@@ -2066,10 +2073,12 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         const msgThreadId = msg.threadId || searchThreadId;
         const thread = threadMap.get(msgThreadId);
 
-        // Get thread messages for context. Apply the same UI-facing
-        // visibility filter so hidden parts don't sneak into context
-        // snippets shown around a search hit.
-        const threadMessages = filterMessagesByVisibility((await memory.recall({ threadId: msgThreadId })).messages);
+        // Get thread messages for context. Pass `visibility: 'ui'` so the
+        // recall-side filter strips hidden parts; keep the inline filter as
+        // a fallback for older `@mastra/core` peer-floor versions.
+        const threadMessages = filterMessagesByVisibility(
+          (await memory.recall({ threadId: msgThreadId, visibility: 'ui' })).messages,
+        );
         const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
         const searchResult: SearchResult = {

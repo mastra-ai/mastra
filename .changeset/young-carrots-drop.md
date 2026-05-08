@@ -1,13 +1,19 @@
 ---
 '@mastra/core': minor
+'@mastra/memory': minor
 '@mastra/server': minor
 ---
 
-Added a `visibility: 'all' | 'llm'` flag to chunks and message parts so processors can hide content from user-facing streams and the default UI memory responses while keeping it available to the agent loop and persisted memory.
+Added a `visibility: 'all' | 'llm'` flag to chunks and message parts so processors can hide content from user-facing streams and UI memory responses while keeping it available to the agent loop and persisted memory.
 
 A processor's `processOutputStream` can now return a chunk with `visibility: 'llm'` instead of returning `null`. The chunk continues through the pipeline so tools still execute and the in-memory message list still sees it, but it is filtered out of `fullStream`/`textStream`/`objectStream` (and any other user-facing readers built from them). The flag is propagated onto the resulting `MastraMessagePart` so it survives into the storage layer.
 
-The default memory HTTP endpoints (`GET /memory/threads/:threadId/messages`, the `/memory/network/...` aliases, and `GET /memory/search`) automatically strip parts marked `visibility: 'llm'` from their responses, so a UI chat surface loading initial messages or running search will not render hidden processor output. In-process callers (`memory.recall()`, the agent loop's initial-message fetch, semantic recall, etc.) are unchanged and continue to see all parts so the LLM keeps full context.
+`memory.recall()` and `agent.getMemoryMessages()` accept a new `visibility` option:
+
+- `visibility: 'all'` (default) returns every part — used by the agent loop and any in-process consumer that needs the LLM's full context.
+- `visibility: 'ui'` returns only parts whose visibility is not `'llm'` — i.e. anything intended to be visible to the user.
+
+The default memory HTTP endpoints (`GET /memory/threads/:threadId/messages`, the `/memory/network/...` aliases, and `GET /memory/search`) call `memory.recall({ visibility: 'ui' })` so a UI chat surface loading initial messages or running search will not render hidden processor output. The agent loop's `getMemoryMessages` calls `recall` without a `visibility` arg, so it continues to see every part.
 
 The flag is optional and defaults to `'all'` — existing processors and chunks behave exactly as before. The new `filterMessagesByVisibility` / `isVisiblePart` helpers are also exported from `@mastra/core/agent` for custom endpoints that need the same behavior.
 
@@ -24,7 +30,6 @@ class HideSkillsToolProcessor implements Processor {
   }
 }
 
-// In a custom memory endpoint, strip llm-only parts before serving the UI.
-import { filterMessagesByVisibility } from '@mastra/core/agent';
-const uiMessages = filterMessagesByVisibility(await memory.getMessages());
+// Fetch the UI view of a thread directly from memory.
+const { messages } = await memory.recall({ threadId, visibility: 'ui' });
 ```

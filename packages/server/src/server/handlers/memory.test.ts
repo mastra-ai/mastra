@@ -1320,6 +1320,9 @@ describe('Memory Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
+      // The UI-facing route asks `recall()` for the UI tier so hidden parts
+      // are stripped server-side. `includeSystemReminders` is forwarded as
+      // undefined when the caller doesn't set it.
       expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
@@ -1328,6 +1331,8 @@ describe('Memory Handlers', () => {
         orderBy: undefined,
         include: undefined,
         filter: undefined,
+        includeSystemReminders: undefined,
+        visibility: 'ui',
       });
     });
 
@@ -1714,8 +1719,10 @@ describe('Memory Handlers', () => {
       // filtered parts so callers reading that field don't see hidden text.
       expect(result.messages[1]?.content.content).toBe('shown to user');
 
-      // Internal mock recall should have been called with the same args —
-      // i.e. no visibility filter is pushed down to memory.recall().
+      // The UI-facing route asks `memory.recall` for the UI tier so the
+      // filtering happens server-side in core. The handler still applies a
+      // belt-and-suspenders inline filter on the response so older
+      // `@mastra/core` peer-floor versions stay safe.
       expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
@@ -1724,15 +1731,19 @@ describe('Memory Handlers', () => {
         orderBy: undefined,
         include: undefined,
         filter: undefined,
+        includeSystemReminders: undefined,
+        visibility: 'ui',
       });
     });
 
-    it('should NOT push the visibility filter down to memory.recall (agent-loop path)', async () => {
-      // The agent loop calls `memory.recall()` directly (see
-      // packages/core/src/agent/agent.ts `getMemoryMessages`), bypassing
-      // the HTTP handler. The contract this test enforces is that the
-      // handler does not mutate or wrap the recall arguments — so when the
-      // agent loop later calls recall, it gets back an unfiltered result.
+    it('should ask memory.recall for the UI tier so hidden parts are stripped server-side', async () => {
+      // The UI-facing handler delegates the visibility filter to
+      // `memory.recall({ visibility: 'ui' })` so a single core
+      // implementation owns the filtering rules. The agent loop calls
+      // `recall` without a `visibility` arg (see
+      // packages/core/src/agent/agent.ts `getMemoryMessages`), which
+      // defaults to `'all'` and returns the unfiltered messages the model
+      // needs.
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -1762,18 +1773,13 @@ describe('Memory Handlers', () => {
         filter: undefined,
       });
 
-      // recall is invoked with no visibility-related arguments — the filter
-      // is layered on top of the response, never pushed into the recall
-      // call itself, so the agent loop's own recall() is unchanged.
-      expect(recallSpy).toHaveBeenCalledWith({
-        threadId: 'test-thread',
-        resourceId: 'test-resource',
-        perPage: 10,
-        page: 0,
-        orderBy: undefined,
-        include: undefined,
-        filter: undefined,
-      });
+      expect(recallSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          visibility: 'ui',
+        }),
+      );
     });
 
     it('should also strip hidden tool calls from legacy content.toolInvocations', async () => {

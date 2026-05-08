@@ -474,6 +474,17 @@ https://mastra.ai/en/docs/memory/overview`,
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
       includeSystemReminders?: boolean;
+      /**
+       * Filter parts by visibility before returning.
+       * - `'all'` (default): returns every part — used by the agent loop and any
+       *   in-process consumer that needs the LLM's full context.
+       * - `'ui'`: returns only parts whose visibility is not `'llm'` — i.e.
+       *   anything intended to be visible to the user. Used by UI-facing
+       *   endpoints (HTTP message lists, search) so processors can flag chunks
+       *   `visibility: 'llm'` and have them automatically hidden from the UI
+       *   while still being persisted and replayed to the model.
+       */
+      visibility?: 'all' | 'ui';
       observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{

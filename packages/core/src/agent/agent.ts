@@ -3118,12 +3118,21 @@ export class Agent<
     vectorMessageSearch,
     memoryConfig,
     requestContext,
+    visibility,
   }: {
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
+    /**
+     * Visibility tier for the returned messages. Defaults to `'all'` (no
+     * filtering), which is what the agent loop wants — the model needs to see
+     * every part regardless of UI visibility flags. UI-facing callers that go
+     * through this path can pass `'ui'` to drop parts marked
+     * `visibility: 'llm'`.
+     */
+    visibility?: 'all' | 'ui';
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
     if (!memory) {
@@ -3145,6 +3154,10 @@ export class Agent<
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
+      // Only forward visibility when explicitly requested so the agent loop's
+      // implicit calls (no `visibility` arg) keep the unfiltered LLM-context
+      // behavior.
+      ...(visibility ? { visibility } : {}),
     });
   }
 

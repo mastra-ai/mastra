@@ -2,7 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, filterMessagesByVisibility } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
@@ -349,6 +349,17 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       includeSystemReminders?: boolean;
       threadId: string;
+      /**
+       * Filter parts by visibility before returning.
+       * - `'all'` (default): returns every part — used by the agent loop and any
+       *   in-process consumer that needs the LLM's full context.
+       * - `'ui'`: returns only parts whose visibility is not `'llm'` — i.e.
+       *   anything intended to be visible to the user. Used by UI-facing
+       *   endpoints (HTTP message lists, search) so processors can flag chunks
+       *   `visibility: 'llm'` and have them automatically hidden from the UI
+       *   while still being persisted and replayed to the model.
+       */
+      visibility?: 'all' | 'ui';
       observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
@@ -369,6 +380,7 @@ export class Memory extends MastraMemory {
       vectorSearchString,
       includeSystemReminders,
       filter,
+      visibility,
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
@@ -534,7 +546,19 @@ export class Memory extends MastraMemory {
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
-      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+      let messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+
+      // `visibility: 'ui'` strips parts marked `visibility: 'llm'` so UI-facing
+      // callers (HTTP handlers, frontend chat history) don't surface
+      // processor-hidden content. Default (`'all'` or unset) leaves messages
+      // untouched so the agent loop and in-process consumers still see the
+      // model's full context.
+      if (visibility === 'ui') {
+        // `filterMessagesByVisibility` defaults to the UI-tier view, which is
+        // what we want: keep parts whose visibility is undefined or `'all'`,
+        // drop those marked `'llm'`-only.
+        messages = filterMessagesByVisibility(messages);
+      }
 
       const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };

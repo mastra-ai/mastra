@@ -1965,6 +1965,90 @@ describe('Memory', () => {
     });
   });
 
+  describe('recall visibility filter', () => {
+    let memory: Memory;
+    const resourceId = 'resource-visibility';
+    const threadId = 'thread-visibility';
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Visibility Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // One assistant message with mixed parts: a hidden part flagged
+      // `visibility: 'llm'` (e.g. a skills-tool call the processor wants to
+      // keep in the agent loop but hide from the UI) followed by a
+      // user-facing reply.
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-mixed',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'hidden chain-of-thought', visibility: 'llm' },
+              { type: 'text', text: 'visible answer' },
+            ],
+            content: 'hidden chain-of-thought\nvisible answer',
+          },
+        },
+        {
+          id: 'msg-llm-only',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'whole-message hidden', visibility: 'llm' }],
+            content: 'whole-message hidden',
+          },
+        },
+      ];
+      await memory.saveMessages({ messages });
+    });
+
+    it('returns every part by default so the agent loop keeps full LLM context', async () => {
+      const result = await memory.recall({ threadId, resourceId });
+      expect(result.messages.map(m => m.id)).toEqual(['msg-mixed', 'msg-llm-only']);
+      const mixed = result.messages.find(m => m.id === 'msg-mixed');
+      expect(mixed?.content.parts).toHaveLength(2);
+    });
+
+    it('treats visibility: "all" the same as the default (unfiltered)', async () => {
+      const result = await memory.recall({ threadId, resourceId, visibility: 'all' });
+      expect(result.messages.map(m => m.id)).toEqual(['msg-mixed', 'msg-llm-only']);
+      const mixed = result.messages.find(m => m.id === 'msg-mixed');
+      expect(mixed?.content.parts).toHaveLength(2);
+    });
+
+    it('strips parts marked visibility:"llm" when called with visibility: "ui"', async () => {
+      const result = await memory.recall({ threadId, resourceId, visibility: 'ui' });
+      // The wholly-hidden message is dropped; the mixed message keeps only
+      // the visible part.
+      expect(result.messages.map(m => m.id)).toEqual(['msg-mixed']);
+      expect(result.messages[0]?.content.parts).toHaveLength(1);
+      expect(result.messages[0]?.content.parts?.[0]).toMatchObject({
+        type: 'text',
+        text: 'visible answer',
+      });
+      // Legacy aggregated `content.content` is recomputed from the visible
+      // parts so callers still reading that field don't see hidden text.
+      expect(result.messages[0]?.content.content).toBe('visible answer');
+    });
+  });
+
   describe('lastMessages: false (disable conversation history)', () => {
     let memory: Memory;
     const resourceId = 'test-resource';
