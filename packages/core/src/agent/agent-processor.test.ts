@@ -1,8 +1,9 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../logger';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
@@ -2567,6 +2568,43 @@ describe('v1 model - output processors', () => {
 });
 
 describe('Workflow as Processor', () => {
+  it('should use the agent logger for internal combined processor workflows', async () => {
+    const failingProcessor: Processor = {
+      id: 'failing-processor',
+      processInput: async () => {
+        throw new Error('processor failed');
+      },
+    };
+
+    const agent = new Agent({
+      id: 'logger-propagation-test-agent',
+      name: 'Logger Propagation Test Agent',
+      instructions: 'You are a helpful assistant.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'should not get here' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+      inputProcessors: [failingProcessor],
+    });
+
+    const logger = {
+      ...noopLogger,
+      debug: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+    agent.__setLogger(logger);
+
+    await expect(agent.generate('trigger failure')).rejects.toThrow('Input processor error');
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('processor:failing-processor'));
+    expect(logger.trackException).toHaveBeenCalled();
+  });
+
   describe('input processor workflow', () => {
     it('should execute a workflow as an input processor', async () => {
       let workflowExecuted = false;
