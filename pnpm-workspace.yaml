@@ -35,6 +35,11 @@ catalog:
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
 
+packageExtensions:
+  '@codemirror/lang-jinja@*':
+    dependencies:
+      '@codemirror/view': ^6.0.0
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
