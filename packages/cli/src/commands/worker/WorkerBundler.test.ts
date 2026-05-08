@@ -70,35 +70,9 @@ describe('WorkerBundler', () => {
 
     it('honors a user-supplied outputDir leaf', async () => {
       const { WorkerBundler } = await import('./WorkerBundler');
-      const bundler = new WorkerBundler({ outputDir: 'worker' });
+      const bundler = new WorkerBundler({ outputDir: '.' });
 
-      expect((bundler as unknown as { outputDir: string }).outputDir).toBe('worker');
-    });
-  });
-
-  describe('prepare', () => {
-    it('wipes the parent outputDirectory by default (matches server build behavior)', async () => {
-      // @ts-expect-error — module is mocked at the top of this file.
-      const fsExtra = (await import('fs-extra/esm')) as { emptyDir: ReturnType<typeof vi.fn> };
-      const { WorkerBundler } = await import('./WorkerBundler');
-      const bundler = new WorkerBundler();
-
-      await bundler.prepare('/some/parent');
-
-      expect(fsExtra.emptyDir).toHaveBeenCalledWith('/some/parent');
-    });
-
-    it('with scopedPrepare, only wipes its own leaf folder so siblings survive', async () => {
-      // @ts-expect-error — module is mocked at the top of this file.
-      const fsExtra = (await import('fs-extra/esm')) as { emptyDir: ReturnType<typeof vi.fn> };
-      const { WorkerBundler } = await import('./WorkerBundler');
-      const bundler = new WorkerBundler({ outputDir: 'worker', scopedPrepare: true });
-
-      await bundler.prepare('/some/parent');
-
-      const calls = fsExtra.emptyDir.mock.calls.map(c => c[0]);
-      expect(calls).not.toContain('/some/parent');
-      expect(calls).toEqual(expect.arrayContaining([expect.stringContaining('worker')]));
+      expect((bundler as unknown as { outputDir: string }).outputDir).toBe('.');
     });
   });
 });

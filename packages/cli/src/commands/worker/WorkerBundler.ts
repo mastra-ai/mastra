@@ -1,36 +1,14 @@
-import { join } from 'node:path';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import { emptyDir, ensureDir } from 'fs-extra/esm';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class WorkerBundler extends Bundler {
-  #scopedPrepare: boolean;
-
-  constructor({ outputDir, scopedPrepare = false }: { outputDir?: string; scopedPrepare?: boolean } = {}) {
+  constructor({ outputDir }: { outputDir?: string } = {}) {
     super('Worker');
     this.platform = process.versions?.bun ? 'neutral' : 'node';
     if (outputDir) {
       this.outputDir = outputDir;
     }
-    // When the caller is targeting a custom path that lives *next to* other
-    // build artifacts (e.g. the server bundle), the default `prepare` behavior
-    // — which empties the entire `outputDirectory` parent — would clobber
-    // those siblings. With `scopedPrepare` we wipe only this bundler's own
-    // leaf folder.
-    this.#scopedPrepare = scopedPrepare;
-  }
-
-  async prepare(outputDirectory: string): Promise<void> {
-    if (!this.#scopedPrepare) {
-      return super.prepare(outputDirectory);
-    }
-    const bundleDir = join(outputDirectory, this.outputDir);
-    const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
-    await emptyDir(bundleDir);
-    await emptyDir(analyzeDir);
-    await ensureDir(bundleDir);
-    await ensureDir(analyzeDir);
   }
 
   getEnvFiles(): Promise<string[]> {

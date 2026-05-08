@@ -1,4 +1,4 @@
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { FileService } from '../../services/service.file';
 import { createLogger } from '../../utils/logger';
 import { WorkerBundler } from './WorkerBundler';
@@ -20,42 +20,49 @@ export async function buildWorker({
   const mastraDir: string = dir ? (isAbsolute(dir) ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const logger = createLogger(debug ?? false);
 
-  // Default target: `.mastra/output/index.mjs` (matches `mastra build`'s
-  // server bundle path; running both back-to-back will overwrite). Caller can
-  // pass `--output-dir <path>` to redirect the worker bundle anywhere — at
-  // which point we scope `prepare` to that leaf so adjacent artifacts are not
-  // wiped.
-  let bundleParent: string;
-  let bundleLeaf: string;
-  let scopedPrepare: boolean;
+  // Two layouts.
+  //
+  // Default (no --output-dir):
+  //   outputDirectory = <root>/.mastra
+  //   outputDir       = 'output'
+  //   → bundle at <root>/.mastra/output/index.mjs
+  //   → analyze dir at <root>/.mastra/.build
+  //   prepare() wipes <root>/.mastra (matches `mastra build`).
+  //
+  // Custom (--output-dir <path>):
+  //   outputDirectory = <full resolved path>
+  //   outputDir       = '.'
+  //   → bundle at <path>/index.mjs
+  //   → analyze dir at <path>/.build
+  //   prepare() wipes <path> only — adjacent artifacts (including
+  //   .mastra/output/) are left alone.
+  let outputDirectory: string;
+  let bundlerOutputDir: string;
 
   if (outputDir) {
-    const fullPath = isAbsolute(outputDir) ? resolve(outputDir) : resolve(rootDir, outputDir);
-    bundleParent = dirname(fullPath);
-    bundleLeaf = basename(fullPath);
-    scopedPrepare = true;
+    outputDirectory = isAbsolute(outputDir) ? resolve(outputDir) : resolve(rootDir, outputDir);
+    bundlerOutputDir = '.';
   } else {
-    bundleParent = join(rootDir, '.mastra');
-    bundleLeaf = 'output';
-    scopedPrepare = false;
+    outputDirectory = join(rootDir, '.mastra');
+    bundlerOutputDir = 'output';
   }
 
   try {
     const fs = new FileService();
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
-    const bundler = new WorkerBundler({ outputDir: bundleLeaf, scopedPrepare });
+    const bundler = new WorkerBundler({ outputDir: bundlerOutputDir });
     bundler.__setLogger(logger);
 
     const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ? tools.split(',') : []);
 
-    await bundler.prepare(bundleParent);
-    await bundler.bundle(mastraEntryFile, bundleParent, {
+    await bundler.prepare(outputDirectory);
+    await bundler.bundle(mastraEntryFile, outputDirectory, {
       toolsPaths: discoveredTools,
       projectRoot: rootDir,
     });
 
-    const builtPath = join(bundleParent, bundleLeaf, 'index.mjs');
+    const builtPath = join(outputDirectory, bundlerOutputDir, 'index.mjs');
     logger.info('Worker build complete.');
     logger.info(`Run with: mastra worker start [name]${outputDir ? ` --dir ${outputDir}` : ''}`);
     logger.info(`  or:     node ${builtPath}`);
