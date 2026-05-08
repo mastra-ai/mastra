@@ -231,7 +231,10 @@ export class Agent<
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> extends MastraBase {
+>
+  extends MastraBase
+  implements SubAgent<TOutput, TRequestContext>
+{
   public id: TAgentId;
   public name: string;
   public source?: DefinitionSource;

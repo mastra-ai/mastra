@@ -313,7 +313,7 @@ export interface DelegationConfig {
  * `Agent` already satisfies this interface. Implement this to create lighter-weight
  * subagents without the full Agent class.
  */
-export interface SubAgent {
+export interface SubAgent<TOutput = unknown, TRequestContext extends Record<string, any> | unknown = unknown> {
   /** Unique identifier for this subagent */
   readonly id: string;
 
@@ -331,13 +331,13 @@ export interface SubAgent {
   /** Returns default execution options, if configured. */
   getDefaultOptions?(opts: {
     requestContext?: RequestContext;
-  }): AgentExecutionOptions | Promise<AgentExecutionOptions> | undefined;
+  }): AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> | undefined;
 
   /** Whether this subagent has its own memory configured */
   hasOwnMemory(): boolean;
 
   /** Inject parent memory into this subagent when it does not have its own */
-  __setMemory(memory: DynamicArgument<MastraMemory>): void;
+  __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>): void;
 
   /** Returns the memory instance, if configured */
   getMemory(opts: { requestContext?: RequestContext }): Promise<MastraMemory | undefined>;
