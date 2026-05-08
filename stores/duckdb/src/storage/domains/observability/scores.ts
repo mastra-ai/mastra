@@ -11,6 +11,7 @@ import type {
   GetScoreTimeSeriesResponse,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   AggregationInterval,
   AggregationType,
 } from '@mastra/core/storage';
@@ -366,6 +367,13 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
   };
+}
+
+export async function getScoreById(db: DuckDBConnection, scoreId: string): Promise<ScoreRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(`SELECT * FROM score_events WHERE scoreId = ? LIMIT 1`, [
+    scoreId,
+  ]);
+  return rows[0] ? (rowToScoreRecord(rows[0]) as ScoreRecord) : null;
 }
 
 export async function getScoreAggregate(

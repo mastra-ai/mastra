@@ -10,9 +10,10 @@ export function ButtonsGroup({ children, className, spacing = 'default' }: Butto
   return (
     <div
       className={cn(
-        `flex gap-2 items-center `,
+        `flex gap-2 items-center`,
         {
-          'gap-[2px] [&>*:not(:last-child)]:rounded-r-none [&>*:not(:first-child)]:rounded-l-none': spacing === 'close',
+          'gap-0 [&>*:not(:last-child)]:rounded-r-none [&>*:not(:first-child)]:rounded-l-none [&>*:not(:first-child)]:-ml-px':
+            spacing === 'close',
         },
         className,
       )}

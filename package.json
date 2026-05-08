@@ -89,7 +89,7 @@
     "prettier:format": "prettier --write . --log-level warn",
     "prettier:format:check": "prettier --check .",
     "list-changed-files": "(git diff --name-only --diff-filter=ACMR $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo 'main')...HEAD && git diff --name-only --diff-filter=ACMR && git diff --cached --name-only --diff-filter=ACMR) | sort -u",
-    "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' || true",
+    "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' | while IFS= read -r file; do [ -L \"$file\" ] || printf '%s\\n' \"$file\"; done || true",
     "prettier:changed": "pnpm --silent list-prettier-files | xargs prettier --write --log-level warn",
     "typecheck": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
     "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
@@ -118,13 +118,14 @@
       "js-yaml": "^3.14.2",
       "glob@<=10.5.0": "10.5.0",
       "body-parser@<=2.2.1": "2.2.2",
-      "inngest": "^3.50.0",
+      "inngest": "^4.2.2",
       "fast-xml-parser@<5.5.7": "^5.7.1",
       "langsmith@<0.5.19": "^0.5.19",
       "lodash@<=4.17.23": "^4.18.0",
       "prismjs@<1.30.0": "^1.30.0",
       "serialize-javascript@<7.0.5": "^7.0.5",
-      "@tootallnate/once@<3.0.1": "^3.0.1"
+      "@tootallnate/once@<3.0.1": "^3.0.1",
+      "@codemirror/lang-jinja": "^6.0.1"
     },
     "patchedDependencies": {
       "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",

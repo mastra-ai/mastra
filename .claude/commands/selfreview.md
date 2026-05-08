@@ -1,0 +1,1 @@
+../../.mastracode/commands/selfreview.md

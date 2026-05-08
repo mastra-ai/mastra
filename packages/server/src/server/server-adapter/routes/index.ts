@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
+import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
@@ -22,6 +23,7 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
 import { RESPONSES_ROUTES } from './responses';
+import { SCHEDULES_ROUTES } from './schedules';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { StoredAgentRoutes } from './stored-agents';
@@ -133,10 +135,25 @@ export type ServerRoute<
    * Uses the format: `resource:action` or `resource:action:resourceId`
    *
    * @example
-   * requiresPermission: 'agents:read'
-   * requiresPermission: 'workflows:execute'
+   * requiresPermission: MastraFGAPermissions.AGENTS_READ
+   * requiresPermission: MastraFGAPermissions.WORKFLOWS_EXECUTE
    */
-  requiresPermission?: string;
+  requiresPermission?: MastraFGAPermissionInput;
+  /**
+   * FGA authorization config for this route (EE feature).
+   * If set, the user must have the specified permission on the resource.
+   *
+   * @example
+   * fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_EXECUTE }
+   */
+  fga?: {
+    resourceType: string;
+    resourceIdParam?: string;
+    resourceId?:
+      | string
+      | ((params: Record<string, unknown>, context: { requestContext?: RequestContext }) => string | undefined);
+    permission?: MastraFGAPermissionInput;
+  };
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;
@@ -171,6 +188,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
+  ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
 ];
 

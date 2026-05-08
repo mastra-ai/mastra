@@ -133,6 +133,63 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
     isOptional: true,
   },
   {
+    name: 'schedule',
+    type: 'WorkflowScheduleConfig | WorkflowScheduleConfig[]',
+    description:
+      'Optional cron schedule for the workflow. Accepts a single config or an array of configs to fire on multiple cadences. Setting this auto-promotes the workflow to the evented execution engine. See the scheduled workflows guide for usage.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'WorkflowScheduleConfig',
+        parameters: [
+          {
+            name: 'id',
+            type: 'string',
+            description:
+              'Stable identifier for the schedule. Required when passing an array of schedules. Defaults to the workflow id when passing a single schedule object.',
+            isOptional: true,
+          },
+          {
+            name: 'cron',
+            type: 'string',
+            description: 'A 5-, 6-, or 7-part cron expression. Validated at workflow construction time.',
+          },
+          {
+            name: 'timezone',
+            type: 'string',
+            description:
+              'IANA timezone, for example "America/New_York". Defaults to the host\'s local timezone. Set this explicitly in production so fire times do not depend on server locale.',
+            isOptional: true,
+          },
+          {
+            name: 'inputData',
+            type: 'TInput',
+            description: "Payload passed as the workflow's input on every fire.",
+            isOptional: true,
+          },
+          {
+            name: 'initialState',
+            type: 'TState',
+            description: 'Initial state for the run.',
+            isOptional: true,
+          },
+          {
+            name: 'requestContext',
+            type: 'Record<string, unknown>',
+            description: 'Request context attached to the run.',
+            isOptional: true,
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            description: 'Arbitrary metadata persisted alongside the schedule row.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'options',
     type: 'WorkflowOptions',
     description: 'Optional options for the workflow',
