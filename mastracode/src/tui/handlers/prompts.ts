@@ -3,6 +3,7 @@
  * ask_question, sandbox_access_request, plan_approval_required.
  */
 import { savePlanToDisk } from '../../utils/plans.js';
+import { createGoalReminderXml } from '../commands/goal.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -276,13 +277,16 @@ export async function handlePlanApproval(
         onGoal: async () => {
           state.activeInlinePlanApproval = undefined;
           await approvePlan(ctx, planId, title, plan);
-          // Enter the goal lifecycle the same way `/goal <text>` does. The goal
-          // reminder is the trigger message; the goal judge is what keeps the
-          // agent working after its first response, so we deliberately do NOT
-          // also send the normal "begin executing" plan-approved reminder
-          // (which would render as a broken combined system-reminder block on
-          // reload and could wake the agent without goal mode active).
-          await ctx.startGoal(formatPlanGoalObjective(title, plan), 'Goal cancelled.');
+
+          const objective = formatPlanGoalObjective(title, plan);
+          await ctx.startGoal(objective, 'Goal cancelled.', { trigger: 'none' });
+
+          // Match the normal approval path: inject the trigger through the TUI
+          // instead of harness follow-up queueing, while goal state is already active.
+          setTimeout(() => {
+            ctx.fireMessage(createGoalReminderXml(objective));
+          }, 50);
+
           resolve();
         },
         onReject: async (feedback?: string) => {
