@@ -187,10 +187,10 @@ The DefaultExporter includes robust error handling for production use:
 
 `DefaultExporter` emits structured drop events when it cannot persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
 
-Drop events use two reasons:
+There are two drop reasons:
 
 - `unsupported-storage`: The storage provider does not implement the signal type.
-- `retry-exhausted`: The exporter retried a batch until `maxRetries` and then dropped it.
+- `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 
