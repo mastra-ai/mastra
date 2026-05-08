@@ -86,7 +86,8 @@ describe('Agent signals', () => {
       type: 'user-message',
       contents: 'Signal contents',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
-      metadata: { source: 'test' },
+      attributes: { priority: 'high' },
+      metadata: { source: 'test', signal: { userProvided: true } },
     });
 
     expect(signal.toLLMMessage()).toBe('Signal contents');
@@ -97,14 +98,27 @@ describe('Agent signals', () => {
         type: 'user-message',
         contents: 'Signal contents',
         createdAt: '2026-01-01T00:00:00.000Z',
-        metadata: { source: 'test' },
+        attributes: { priority: 'high' },
+        metadata: { source: 'test', signal: { userProvided: true } },
       },
     });
 
     const dbMessage = signal.toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
     expect(dbMessage.role).toBe('signal');
+    expect(dbMessage.content.metadata).toEqual({
+      signal: {
+        id: 'signal-1',
+        type: 'user-message',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        contents: 'Signal contents',
+        attributes: { priority: 'high' },
+        metadata: { source: 'test', signal: { userProvided: true } },
+      },
+    });
     expect(signalToMastraDBMessage(signal).role).toBe('signal');
     expect(mastraDBMessageToSignal(dbMessage).contents).toBe('Signal contents');
+    expect(mastraDBMessageToSignal(dbMessage).attributes).toEqual({ priority: 'high' });
+    expect(mastraDBMessageToSignal(dbMessage).metadata).toEqual({ source: 'test', signal: { userProvided: true } });
     expect(dataPartToSignal(signalToDataPartFormat(signal)).contents).toBe('Signal contents');
 
     const reminderSignal = createSignal({

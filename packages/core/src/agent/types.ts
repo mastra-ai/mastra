@@ -84,7 +84,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
-      ifIdle?: { streamOptions: AgentExecutionOptions<OUTPUT> };
+      ifIdle?: never;
     }
   | {
       runId?: string;

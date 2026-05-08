@@ -1619,11 +1619,24 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       const agentSignal = signal as AgentSignalInput;
 
       if (runId) {
+        if (streamOptions) {
+          if (!effectiveResourceId || !effectiveThreadId) {
+            throw new HTTPException(400, {
+              message: 'resourceId and threadId are required when streamOptions are provided',
+            });
+          }
+          return agent.sendSignal(agentSignal, {
+            runId,
+            resourceId: effectiveResourceId,
+            threadId: effectiveThreadId,
+            ...ifIdleWithContext,
+          });
+        }
+
         return agent.sendSignal(agentSignal, {
           runId,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
-          ...ifIdleWithContext,
         });
       }
 

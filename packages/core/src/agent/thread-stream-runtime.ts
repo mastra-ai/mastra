@@ -338,7 +338,7 @@ export class AgentThreadStreamRuntime {
 
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
-    if (!threadId) {
+    if (!resourceId || !threadId) {
       throw new Error('No active agent run found for signal target');
     }
     if (!target.ifIdle) {
@@ -358,6 +358,7 @@ export class AgentThreadStreamRuntime {
       _initialSignalEchoes: [signal],
     }).catch(() => {
       this.#threadKeysByRunId.delete(runId);
+      this.#cleanupPreparedRun(runId);
       if (this.#activeThreadRunIds.get(key) === runId) {
         this.#activeThreadRunIds.delete(key);
       }

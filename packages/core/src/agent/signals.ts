@@ -160,14 +160,13 @@ function signalToDBMessage(
       content: signalContentsToText(signal.contents),
       parts: [{ type: 'text', text: signalContentsToText(signal.contents) }],
       metadata: {
-        ...(signal.attributes ?? {}),
-        ...(signal.metadata ?? {}),
         signal: {
           id: signal.id,
           type: signal.type,
           createdAt: signal.createdAt.toISOString(),
           contents: signal.contents,
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
+          ...(signal.metadata ? { metadata: signal.metadata } : {}),
         },
       },
     },
@@ -223,7 +222,10 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       !Array.isArray(signalMetadata.attributes)
         ? (signalMetadata.attributes as AgentSignalInput['attributes'])
         : undefined,
-    metadata: message.content.metadata,
+    metadata:
+      signalMetadata?.metadata && typeof signalMetadata.metadata === 'object' && !Array.isArray(signalMetadata.metadata)
+        ? (signalMetadata.metadata as AgentSignalInput['metadata'])
+        : undefined,
   };
 
   return createSignal(

@@ -56,10 +56,14 @@ function getSignalType(message: MastraDBMessage): string | undefined {
 }
 
 function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
-  const metadata = { ...(message.content.metadata ?? {}) };
   const signal =
-    metadata.signal && typeof metadata.signal === 'object' ? (metadata.signal as Record<string, unknown>) : {};
-  delete metadata.signal;
+    message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
+      ? (message.content.metadata.signal as Record<string, unknown>)
+      : {};
+  const metadata =
+    signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
+      ? (signal.metadata as Record<string, unknown>)
+      : {};
 
   return {
     type: `data-${getSignalType(message) ?? 'signal'}`,

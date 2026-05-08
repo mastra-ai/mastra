@@ -42,10 +42,14 @@ function getTextContent(message: MastraDBMessage): string {
 }
 
 function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
-  const metadata = { ...(message.content.metadata ?? {}) };
   const signal =
-    metadata.signal && typeof metadata.signal === 'object' ? (metadata.signal as Record<string, unknown>) : {};
-  delete metadata.signal;
+    message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
+      ? (message.content.metadata.signal as Record<string, unknown>)
+      : {};
+  const metadata =
+    signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
+      ? (signal.metadata as Record<string, unknown>)
+      : {};
 
   const type = getSignalType(message) ?? 'signal';
   return {
