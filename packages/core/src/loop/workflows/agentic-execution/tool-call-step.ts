@@ -364,18 +364,63 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
         const isResumeToolCall = !!resumeDataFromArgs;
+        const isAgentTool = inputData.toolName?.startsWith('agent-');
+        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
+        const getStoredResumeMetadata = (toolName: string) => {
+          const messages = [...messageList.get.all.db()].reverse();
+          for (const message of messages) {
+            const metadata =
+              typeof message.content.metadata === 'object' && message.content.metadata !== null
+                ? (message.content.metadata as Record<string, any>)
+                : undefined;
+            if (metadata?.pendingToolApprovals?.[toolName]) {
+              return { type: 'approval' as const, runId: metadata.pendingToolApprovals[toolName].runId };
+            }
+            if (metadata?.suspendedTools?.[toolName]) {
+              return { type: 'suspension' as const, runId: metadata.suspendedTools[toolName].runId };
+            }
+
+            const foundPart = message.content.parts?.find(
+              part =>
+                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                (part.data as any).toolName === toolName &&
+                !(part.data as any).resumed,
+            );
+            if (foundPart?.type === 'data-tool-call-approval') {
+              return { type: 'approval' as const, runId: (foundPart.data as any).runId };
+            }
+            if (foundPart?.type === 'data-tool-call-suspended') {
+              return { type: 'suspension' as const, runId: (foundPart.data as any).runId };
+            }
+          }
+          return undefined;
+        };
+        const storedResumeMetadata = resumeData ? getStoredResumeMetadata(inputData.toolName) : undefined;
+        const hasApprovalResumeShape =
+          resumeData &&
+          typeof resumeData === 'object' &&
+          'approved' in resumeData &&
+          typeof resumeData.approved === 'boolean';
+        const isDelegatedApprovalResume =
+          hasApprovalResumeShape &&
+          (isAgentTool || isWorkflowTool) &&
+          storedResumeMetadata?.type === 'approval' &&
+          storedResumeMetadata.runId &&
+          storedResumeMetadata.runId !== runId;
+        const isApprovalResumeData =
+          hasApprovalResumeShape && storedResumeMetadata?.type !== 'suspension' && !isDelegatedApprovalResume;
 
         // Check if approval is required
         // requireApproval can be:
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
-        if (resumeData && typeof resumeData === 'object' && 'approved' in resumeData && resumeData.approved === false) {
+        if (isApprovalResumeData && resumeData.approved === false) {
           await removeToolMetadata(inputData.toolName, 'approval');
 
           return {
-            result: 'Tool call was not approved by the user',
             ...inputData,
+            result: 'Tool call was not approved by the user',
           };
         }
 
@@ -444,14 +489,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeLabel: inputData.toolCallId,
               },
             );
-          } else {
+          } else if (isApprovalResumeData) {
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata(inputData.toolName, 'approval');
 
-            if (!resumeData.approved) {
+            if (resumeData.approved === false) {
               return {
-                result: 'Tool call was not approved by the user',
                 ...inputData,
+                result: 'Tool call was not approved by the user',
               };
             }
           }
@@ -460,12 +505,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //this is to avoid passing resume data to the tool if it's not needed
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
-        const isAgentTool = inputData.toolName?.startsWith('agent-');
-        const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
-        const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
-            ? undefined
-            : resumeData;
+        const shouldStripApprovalResumeData =
+          toolRequiresApproval &&
+          isApprovalResumeData &&
+          !isDelegatedApprovalResume &&
+          Object.keys(resumeData).length === 1 &&
+          'approved' in resumeData;
+        const resumeDataToPassToToolOptions = shouldStripApprovalResumeData ? undefined : resumeData;
 
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
@@ -646,7 +692,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        if (!toolRequiresApproval && isResumeToolCall) {
+        if (resumeData && (isResumeToolCall || isAgentTool || isWorkflowTool)) {
+          await removeToolMetadata(inputData.toolName, 'approval');
           await removeToolMetadata(inputData.toolName, 'suspension');
         }
 

@@ -375,6 +375,235 @@ describe('createToolCallStep tool approval workflow', () => {
     expectNoToolExecution();
   });
 
+  it('should clear delegated agent approval metadata when resuming workflow approval data', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'agent-subAgent': {
+              toolCallId: 'agent-call-id',
+              toolName: 'agent-subAgent',
+              args: { prompt: 'lookup' },
+              type: 'approval',
+              runId: 'suspended-agent-run-id',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    const flushMessages = vi.fn();
+    const agentTool = {
+      execute: vi.fn().mockResolvedValue({ text: 'declined' }),
+      requireApproval: false,
+    };
+    const step = createToolCallStep({
+      tools: { 'agent-subAgent': agentTool },
+      messageList: {
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [] },
+          all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+
+    const inputData = {
+      toolCallId: 'agent-call-id',
+      toolName: 'agent-subAgent',
+      args: { prompt: 'lookup' },
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        requestContext,
+        resumeData: { approved: false },
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'agent-call-id',
+          name: 'agent-subAgent',
+          runId: 'test-run-id',
+        }),
+      }),
+    );
+
+    expect(agentTool.execute).toHaveBeenCalledWith(
+      {
+        prompt: 'lookup',
+        resourceId: undefined,
+        suspendedToolRunId: 'suspended-agent-run-id',
+        threadId: 'thread-id',
+      },
+      expect.objectContaining({
+        resumeData: { approved: false },
+      }),
+    );
+    expect(assistantMessage.content.metadata.pendingToolApprovals).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(result).toEqual({
+      result: { text: 'declined' },
+      ...inputData,
+    });
+  });
+
+  it('should not pass local agent approval resume data to the delegated tool wrapper', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'agent-subAgent': {
+              toolCallId: 'agent-call-id',
+              toolName: 'agent-subAgent',
+              args: { prompt: 'lookup' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    const flushMessages = vi.fn();
+    const agentTool = {
+      execute: vi.fn().mockResolvedValue({ text: 'approved' }),
+      requireApproval: false,
+    };
+    const step = createToolCallStep({
+      tools: { 'agent-subAgent': agentTool },
+      messageList: {
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [] },
+          all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+    const requestContext = new RequestContext();
+    requestContext.set('__mastra_requireToolApproval', true);
+
+    await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'agent-call-id',
+          toolName: 'agent-subAgent',
+          args: { prompt: 'lookup' },
+        },
+        requestContext,
+        resumeData: { approved: true },
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'agent-call-id',
+          name: 'agent-subAgent',
+          runId: 'test-run-id',
+        }),
+      }),
+    );
+
+    const [, toolOptions] = agentTool.execute.mock.calls[0]!;
+    expect(toolOptions.resumeData).toBeUndefined();
+    expect(assistantMessage.content.metadata.pendingToolApprovals).toBeUndefined();
+  });
+
+  it('should clear delegated agent suspension metadata when resume data contains approved', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          suspendedTools: {
+            'agent-subAgent': {
+              toolCallId: 'agent-call-id',
+              toolName: 'agent-subAgent',
+              args: { prompt: 'lookup' },
+              type: 'suspension',
+              runId: 'suspended-agent-run-id',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    const flushMessages = vi.fn();
+    const agentTool = {
+      execute: vi.fn().mockResolvedValue({ text: 'resumed' }),
+      requireApproval: true,
+    };
+    const step = createToolCallStep({
+      tools: { 'agent-subAgent': agentTool },
+      messageList: {
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [] },
+          all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-id',
+      },
+    } as any);
+
+    const inputData = {
+      toolCallId: 'agent-call-id',
+      toolName: 'agent-subAgent',
+      args: { prompt: 'lookup', resumeData: { approved: false } },
+    };
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'agent-call-id',
+          name: 'agent-subAgent',
+          runId: 'test-run-id',
+        }),
+      }),
+    );
+
+    expect(agentTool.execute).toHaveBeenCalledWith(
+      {
+        prompt: 'lookup',
+        resourceId: undefined,
+        suspendedToolRunId: 'suspended-agent-run-id',
+        threadId: 'thread-id',
+      },
+      expect.objectContaining({
+        resumeData: { approved: false },
+      }),
+    );
+    expect(assistantMessage.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(result).toEqual({
+      result: { text: 'resumed' },
+      ...inputData,
+    });
+  });
+
   it('should return inputData as-is for provider-executed tools (no client execution)', async () => {
     // Provider-executed tools are handled by the stream path (tool-call + tool-result chunks
     // in llm-execution-step), so tool-call-step just passes through inputData unchanged.

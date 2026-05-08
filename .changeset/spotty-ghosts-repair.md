@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed tool approval callbacks so they add to existing approval requirements.
+Make dynamic tool approval callbacks additive with static approval requirements, so `needsApprovalFn` can require approval without overriding existing `requireApproval` settings. Also preserves declined approval results when a suspended sub-agent tool call is resumed through a supervisor agent.
