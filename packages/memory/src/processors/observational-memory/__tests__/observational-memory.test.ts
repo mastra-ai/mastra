@@ -197,9 +197,28 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
       reflection: { observationTokens: 1 },
     });
 
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- User prefers read-only observational context',
+      tokenCount: 8,
+      lastObservedAt: new Date('2025-01-01T08:30:00Z'),
+    });
+
     const baseMemoryProvider = createMemoryProvider(om);
     const memoryProvider: MemoryContextProvider = {
-      getContext: vi.fn(baseMemoryProvider.getContext),
+      getContext: vi.fn(async opts => {
+        const ctx = await baseMemoryProvider.getContext(opts);
+        return {
+          ...ctx,
+          systemMessage: `${ctx.systemMessage}\n\nWORKING_MEMORY_SYSTEM_INSTRUCTION:\nCall updateWorkingMemory.`,
+        };
+      }),
       persistMessages: vi.fn(baseMemoryProvider.persistMessages),
     };
 
@@ -238,6 +257,19 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     expect(memoryProvider.getContext).toHaveBeenCalledTimes(1);
     expect(memoryProvider.getContext).toHaveBeenCalledWith({ threadId, resourceId });
     expect(messageList.get.all.db().map(m => m.id)).toContain('stored-user-1');
+    expect(messageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect(
+      messageList
+        .getSystemMessages('observational-memory')
+        .map(m => m.content)
+        .join('\n'),
+    ).toContain('User prefers read-only observational context');
+    expect(
+      messageList
+        .getSystemMessages('observational-memory')
+        .map(m => m.content)
+        .join('\n'),
+    ).not.toContain('updateWorkingMemory');
 
     expect(state.__omTurn).toBeUndefined();
     expect(beginTurnSpy).not.toHaveBeenCalled();
@@ -246,6 +278,78 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     expect(persistSpy).not.toHaveBeenCalled();
     expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
     expect(emitProgressSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not add observational continuation for non-observation system context', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'read-only-working-memory-thread';
+    const resourceId = 'read-only-working-memory-resource';
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 1 },
+    });
+    const memoryProvider: MemoryContextProvider = {
+      getContext: vi.fn(async () => ({
+        systemMessage: 'Working memory context only',
+        messages: [
+          {
+            ...createTestMessage('Stored working-memory read-only context', 'user', 'stored-user-1'),
+            threadId,
+            resourceId,
+          },
+        ],
+        hasObservations: false,
+        omRecord: null,
+        continuationMessage: undefined,
+        otherThreadsContext: undefined,
+      })),
+      persistMessages: vi.fn(async () => {}),
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+      memoryConfig: { readOnly: true },
+    });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(messageList.get.all.db().map(m => m.id)).toContain('stored-user-1');
+    expect(messageList.get.all.db().map(m => m.id)).not.toContain('om-continuation');
+    expect(messageList.getSystemMessages('observational-memory')).toEqual([]);
+    expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
   });
 });
 
