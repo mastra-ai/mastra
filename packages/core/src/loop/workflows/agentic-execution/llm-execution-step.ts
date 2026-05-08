@@ -15,7 +15,8 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
-import { executeWithContextSync } from '../../../observability/utils';
+import type { ModelInferenceContext } from '../../../observability';
+import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -868,6 +869,28 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           if (isSupportedLanguageModel(currentStep.model)) {
+            // Apply request-side context to MODEL_INFERENCE using the post-processor
+            // tool set + per-step settings, then open the inference span. Doing this
+            // immediately before execute() ensures the span's startTime excludes
+            // input processor / prepareStep / processLLMRequest work, and that
+            // availableTools / toolChoice reflect any per-step mutations.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: {
+                ...currentStep.modelSettings,
+                ...modelConfig.modelSettings,
+              } as Record<string, unknown> | undefined,
+              providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions) as
+                | Record<string, unknown>
+                | undefined,
+              availableTools: getStepAvailableToolNames(
+                currentStep.tools as Record<string, unknown> | undefined,
+                currentStep.activeTools as readonly string[] | undefined,
+              ),
+              toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
+              responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
+            });
+            modelSpanTracker?.startInference?.();
+
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
               fn: () =>

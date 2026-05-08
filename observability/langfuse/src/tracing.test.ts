@@ -448,7 +448,7 @@ describe('LangfuseExporter', () => {
     });
   });
 
-  describe('addScoreToTrace', () => {
+  describe('addScoreToTrace (deprecated)', () => {
     it('calls LangfuseClient score.create with correct payload', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
 
@@ -501,6 +501,62 @@ describe('LangfuseExporter', () => {
           scorerName: 'test',
         }),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('onScoreEvent', () => {
+    const baseScore = {
+      scoreId: 'score-xyz',
+      timestamp: new Date('2026-01-01T00:00:00Z'),
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      scorerId: 'accuracy',
+      scorerName: 'Accuracy Scorer',
+      scoreSource: 'live',
+      score: 0.95,
+      reason: 'Good response',
+      metadata: { sessionId: 'session-1' },
+    };
+
+    it('forwards a ScoreEvent to LangfuseClient.score.create', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({ type: 'score', score: { ...baseScore } } as any);
+
+      expect(mockScoreCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'score-xyz',
+          traceId: 'trace-1',
+          observationId: 'span-1',
+          name: 'Accuracy Scorer',
+          value: 0.95,
+          comment: 'Good response',
+          metadata: { sessionId: 'session-1' },
+          dataType: 'NUMERIC',
+        }),
+      );
+    });
+
+    it('falls back to scorerId when scorerName is missing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { ...baseScore, scorerName: undefined },
+      } as any);
+
+      expect(mockScoreCreate).toHaveBeenCalledWith(expect.objectContaining({ name: 'accuracy' }));
+    });
+
+    it('omits the call when traceId is missing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { ...baseScore, traceId: undefined },
+      } as any);
+
+      expect(mockScoreCreate).not.toHaveBeenCalled();
     });
   });
 

@@ -259,6 +259,304 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
   });
 });
 
+describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+  });
+
+  it('should use the suspended step payload when resuming a step with stale previous output', async () => {
+    const workflowId = 'resume-payload-repro';
+    const runId = randomUUID();
+    const resumedStep = {
+      id: 'needs-approval',
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ resumed: z.boolean(), receivedId: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData }: { inputData: { id: string }; resumeData?: { approved: boolean } }) => {
+        return { resumed: resumeData?.approved ?? false, receivedId: inputData.id };
+      },
+    };
+    const producerStep = {
+      id: 'producer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({ stale: true }),
+    };
+    const stepResults = {
+      producer: {
+        status: 'success',
+        output: { stale: true },
+        payload: {},
+      },
+      'needs-approval': {
+        status: 'suspended',
+        payload: { id: 'from-suspended-snapshot' },
+        suspendPayload: { reason: 'manual-review' },
+        suspendedAt: Date.now(),
+      },
+    } as Record<string, StepResult<any, any, any, any>>;
+
+    const result = await engine.executeEntry({
+      workflowId,
+      runId,
+      entry: { type: 'step', step: resumedStep },
+      prevStep: { type: 'step', step: producerStep },
+      serializedStepGraph: [],
+      stepResults,
+      resume: {
+        steps: ['needs-approval'],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [],
+      },
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [1],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.result).toMatchObject({
+      status: 'success',
+      output: { resumed: true, receivedId: 'from-suspended-snapshot' },
+    });
+  });
+
+  it('should use a null suspended step payload when resuming a step with stale previous output', async () => {
+    const workflowId = 'resume-null-payload-repro';
+    const runId = randomUUID();
+    const resumedStep = {
+      id: 'needs-approval',
+      inputSchema: z.null(),
+      outputSchema: z.object({ resumed: z.boolean(), receivedNull: z.boolean() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData }: { inputData: null; resumeData?: { approved: boolean } }) => {
+        return { resumed: resumeData?.approved ?? false, receivedNull: inputData === null };
+      },
+    };
+    const producerStep = {
+      id: 'producer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({ stale: true }),
+    };
+    const stepResults = {
+      producer: {
+        status: 'success',
+        output: { stale: true },
+        payload: {},
+      },
+      'needs-approval': {
+        status: 'suspended',
+        payload: null,
+        suspendPayload: { reason: 'manual-review' },
+        suspendedAt: Date.now(),
+      },
+    } as Record<string, StepResult<any, any, any, any>>;
+
+    const result = await engine.executeEntry({
+      workflowId,
+      runId,
+      entry: { type: 'step', step: resumedStep },
+      prevStep: { type: 'step', step: producerStep },
+      serializedStepGraph: [],
+      stepResults,
+      resume: {
+        steps: ['needs-approval'],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [],
+      },
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [1],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.result).toMatchObject({
+      status: 'success',
+      output: { resumed: true, receivedNull: true },
+    });
+  });
+
+  it('should use the suspended foreach payload when resuming with stale previous output', async () => {
+    const workflowId = 'resume-foreach-payload-repro';
+    const runId = randomUUID();
+    const foreachStep = {
+      id: 'process-item',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData }: { inputData: number }) => inputData + 1,
+    };
+    const producerStep = {
+      id: 'producer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({ stale: true }),
+    };
+    const stepResults = {
+      producer: {
+        status: 'success',
+        output: { stale: true },
+        payload: {},
+      },
+      'process-item': {
+        status: 'suspended',
+        payload: [10, 20],
+        suspendPayload: {
+          __workflow_meta: {
+            foreachIndex: 0,
+            foreachOutput: [{ status: 'suspended', suspendPayload: {}, suspendedAt: Date.now() }],
+            resumeLabels: {},
+          },
+        },
+        suspendedAt: Date.now(),
+      },
+    } as Record<string, StepResult<any, any, any, any>>;
+
+    const result = await engine.executeEntry({
+      workflowId,
+      runId,
+      entry: { type: 'foreach', step: foreachStep, opts: { concurrency: 1 } },
+      prevStep: { type: 'step', step: producerStep },
+      serializedStepGraph: [],
+      stepResults,
+      resume: {
+        steps: ['process-item'],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [],
+        forEachIndex: 0,
+      },
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [1],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.result).toMatchObject({
+      status: 'success',
+      output: [11, 21],
+    });
+  });
+});
+
+describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+  });
+
+  it('should use a null suspended loop payload when resuming with stale previous output', async () => {
+    const workflowId = 'resume-loop-null-payload-repro';
+    const runId = randomUUID();
+    const step = {
+      id: 'loop-step',
+      inputSchema: z.null(),
+      outputSchema: z.object({ receivedNull: z.boolean() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData }: { inputData: null }) => ({ receivedNull: inputData === null }),
+    };
+    const stepResults = {
+      'loop-step': {
+        status: 'suspended',
+        payload: null,
+        suspendPayload: { reason: 'manual-review' },
+        suspendedAt: Date.now(),
+      },
+    } as Record<string, StepResult<any, any, any, any>>;
+
+    const result = await engine.executeLoop({
+      workflowId,
+      runId,
+      entry: {
+        type: 'loop',
+        step,
+        condition: async () => true,
+        loopType: 'dountil',
+      },
+      prevStep: { type: 'step', step } as any,
+      prevOutput: { stale: true },
+      stepResults,
+      resume: {
+        steps: ['loop-step'],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [],
+      },
+      serializedStepGraph: [],
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      output: { receivedNull: true },
+    });
+  });
+});
+
 describe('DefaultExecutionEngine.executeLoop cancellation', () => {
   let engine: DefaultExecutionEngine;
   let pubsub: PubSub;

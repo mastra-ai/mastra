@@ -27,6 +27,17 @@ import { TracingEventType } from '@mastra/core/observability';
  */
 export type ObservabilityHandler = ObservabilityEvents & { name: string };
 
+type LegacyScoreHandler = ObservabilityHandler & {
+  addScoreToTrace?: (args: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }) => void | Promise<void>;
+};
+
 /**
  * Route a single event to the appropriate method on a handler.
  *
@@ -69,6 +80,23 @@ export function routeToHandler(
       case 'score':
         if (handler.onScoreEvent) {
           return catchAsyncResult(handler.onScoreEvent(event as ScoreEvent), handler.name, 'score', logger);
+        }
+        if ((handler as LegacyScoreHandler).addScoreToTrace) {
+          const score = (event as ScoreEvent).score;
+          if (!score.traceId) break;
+          return catchAsyncResult(
+            (handler as LegacyScoreHandler).addScoreToTrace!({
+              traceId: score.traceId,
+              ...(score.spanId ? { spanId: score.spanId } : {}),
+              score: score.score,
+              ...(score.reason ? { reason: score.reason } : {}),
+              scorerName: score.scorerName ?? score.scorerId,
+              ...(score.metadata ? { metadata: score.metadata as Record<string, any> } : {}),
+            }),
+            handler.name,
+            'score',
+            logger,
+          );
         }
         break;
 
