@@ -150,6 +150,9 @@ interface ObservabilityExporter {
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>
 
+  /** Handle exporter pipeline droppedEvent */
+  onDroppedEvent?(event: ObservabilityDropEvent): void | Promise<void>
+
   /** Export tracing events */
   exportTracingEvent(event: TracingEvent): Promise<void>
 
@@ -184,6 +187,33 @@ wraps `ExportedLog` in `log`, `MetricEvent` wraps `ExportedMetric` in
 `metric`, `ScoreEvent` wraps `ExportedScore` in `score`, and `FeedbackEvent`
 wraps `ExportedFeedback` in `feedback`. For Cloud exporter behavior for these
 callbacks, see [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter).
+
+### `ObservabilityDropEvent`
+
+Structured event emitted when the exporter pipeline drops observability events.
+
+```typescript
+type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback'
+
+type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted'
+
+interface ObservabilityDropEvent {
+  type: 'drop'
+  signal: ObservabilityDropSignal
+  reason: ObservabilityDropReason
+  count: number
+  timestamp: Date
+  exporterName: string
+  storageName?: string
+  error?: {
+    id?: string
+    domain?: string
+    message: string
+  }
+}
+```
+
+Use `onDroppedEvent` on a custom exporter or bridge to forward these events to external metrics or alerting systems.
 
 ### `SpanOutputProcessor`
 

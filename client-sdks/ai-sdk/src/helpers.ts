@@ -385,7 +385,7 @@ function normalizeV6Usage(usage: any): AISDKLanguageModelUsageV6 {
     inputTokenDetails: {
       noCacheTokens: usage?.inputTokens,
       cacheReadTokens: usage?.cachedInputTokens,
-      cacheWriteTokens: undefined,
+      cacheWriteTokens: usage?.cacheCreationInputTokens,
     },
     outputTokens: usage?.outputTokens,
     outputTokenDetails: {
