@@ -103,6 +103,26 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       await p2;
     });
 
+    it('leaves ask_user choices for the user while a goal is active', async () => {
+      const answerQuestion = vi.fn();
+      state.goalManager = {
+        getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5' })),
+        answerQuestion,
+      } as any;
+
+      const prompt = handleAskQuestion(ctx, 'q1', 'Choose a review action?', [
+        { label: 'Request changes', description: 'Submit a blocking review.' },
+        { label: 'Skip', description: 'Move to the next PR.' },
+      ]);
+
+      expect(state.activeInlineQuestion).toBeDefined();
+      expect(answerQuestion).not.toHaveBeenCalled();
+      expect(state.harness.respondToQuestion).not.toHaveBeenCalled();
+
+      state.activeInlineQuestion!.handleInput('\r');
+      await prompt;
+    });
+
     it('should allow answering all parallel questions sequentially', async () => {
       const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
 

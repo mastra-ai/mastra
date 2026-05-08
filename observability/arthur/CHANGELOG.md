@@ -1,5 +1,12 @@
 # @mastra/arthur
 
+## 0.2.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/otel-exporter@1.0.23-alpha.0
+
 ## 0.2.9
 
 ### Patch Changes
