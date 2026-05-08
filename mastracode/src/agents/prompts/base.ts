@@ -176,7 +176,11 @@ function formatNestedGitTrees(trees: PromptContext['nestedGitTrees']): string {
 // Directory and branch names can technically contain control characters or
 // backticks. Strip them before splicing into the system prompt so a crafted
 // nested repo name can't inject extra prompt lines or break out of the inline
-// code formatting.
+// code formatting. Escape backslashes first so a literal `\` in the input
+// can't pair with a following backtick to round-trip through the formatting.
 function escapePromptText(value: string): string {
-  return value.replace(/[\r\n\t\v\f\u0000-\u001f\u007f]/g, ' ').replace(/`/g, '\\`');
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/[\r\n\t\v\f\u0000-\u001f\u007f]/g, ' ')
+    .replace(/`/g, '\\`');
 }
