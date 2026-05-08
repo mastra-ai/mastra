@@ -157,7 +157,6 @@ function findNextConfigObject(program: t.Program): t.ObjectExpression | null {
 }
 
 function parseNextConfig(nextConfigContent: string): NextConfig | null {
-  // Avoid parsing large or complex config files when the relevant option is absent.
   if (!nextConfigContent.includes('serverExternalPackages')) {
     return {};
   }
