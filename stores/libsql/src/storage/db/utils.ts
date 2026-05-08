@@ -15,7 +15,11 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
  * @returns JSON string representation, with non-serializable values removed
  */
 export const safeStringify = (value: unknown): string => {
-  const seen = new WeakSet<object>();
+  // Track ancestors on the current recursion path to detect true circular references.
+  // Using a per-call stack (rather than a global WeakSet) avoids incorrectly
+  // dropping shared but non-circular references that appear in multiple branches
+  // of the same object graph.
+  const ancestors = new Set<object>();
 
   const sanitize = (val: unknown): unknown => {
     if (val === null || val === undefined) return val;
@@ -24,9 +28,9 @@ export const safeStringify = (value: unknown): string => {
     if (typeof val === 'bigint') return val.toString();
     if (typeof val !== 'object') return val;
 
-    // Circular reference check
-    if (seen.has(val)) return undefined;
-    seen.add(val);
+    // Circular reference check: only drop if this object is an ancestor on the
+    // current path. Shared sibling references must still be serialized.
+    if (ancestors.has(val)) return undefined;
 
     // Check for RPC proxy (throws on property access including toJSON)
     try {
@@ -41,20 +45,25 @@ export const safeStringify = (value: unknown): string => {
       return sanitize((val as { toJSON: () => unknown }).toJSON());
     }
 
-    // Recursively sanitize arrays
-    if (Array.isArray(val)) {
-      return val.map(item => sanitize(item));
-    }
-
-    // Recursively sanitize objects
-    const result: Record<string, unknown> = {};
-    for (const key of Object.keys(val)) {
-      const sanitized = sanitize((val as Record<string, unknown>)[key]);
-      if (sanitized !== undefined) {
-        result[key] = sanitized;
+    ancestors.add(val);
+    try {
+      // Recursively sanitize arrays
+      if (Array.isArray(val)) {
+        return val.map(item => sanitize(item));
       }
+
+      // Recursively sanitize objects
+      const result: Record<string, unknown> = {};
+      for (const key of Object.keys(val)) {
+        const sanitized = sanitize((val as Record<string, unknown>)[key]);
+        if (sanitized !== undefined) {
+          result[key] = sanitized;
+        }
+      }
+      return result;
+    } finally {
+      ancestors.delete(val);
     }
-    return result;
   };
 
   return JSON.stringify(sanitize(value)) ?? 'null';

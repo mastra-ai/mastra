@@ -20,6 +20,10 @@ import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 
 import type { SlashCommandContext } from './types.js';
 
+export interface StartGoalOptions {
+  trigger?: 'send' | 'none';
+}
+
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state } = ctx;
   const goalManager = state.goalManager;
@@ -123,12 +127,13 @@ export async function startGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
+  options: StartGoalOptions = {},
 ): Promise<void> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
+  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns, options);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -210,6 +215,7 @@ async function startGoal(
   objective: string,
   judgeModelId: string,
   maxTurns: number,
+  options: StartGoalOptions = {},
 ): Promise<void> {
   const { state } = ctx;
   const goalManager = state.goalManager;
@@ -228,8 +234,12 @@ async function startGoal(
 
   ctx.addUserMessage(createGoalReminderMessage(goal.id, objective, goal.maxTurns, judgeModelId));
 
+  if (options.trigger === 'none') {
+    return;
+  }
+
   try {
-    await state.harness.sendMessage({ content: toSystemReminderXml('goal', objective) });
+    await state.harness.sendMessage({ content: createGoalReminderXml(objective) });
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
@@ -259,8 +269,8 @@ export function createGoalReminderMessage(
   } as unknown as HarnessMessage;
 }
 
-function toSystemReminderXml(type: string, message: string): string {
-  return `<system-reminder type="${type}">${escapeXml(message)}</system-reminder>`;
+export function createGoalReminderXml(message: string): string {
+  return `<system-reminder type="goal">${escapeXml(message)}</system-reminder>`;
 }
 
 function escapeXml(value: string): string {

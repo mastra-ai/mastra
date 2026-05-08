@@ -1,14 +1,11 @@
+import type { TaskItemSnapshot } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { dispatchEvent } from '../event-dispatch.js';
-import type { EventHandlerContext } from '../handlers/types.js';
-import type { TUIState } from '../state.js';
+import { dispatchEvent } from './event-dispatch.js';
+import type { EventHandlerContext } from './handlers/types.js';
+import type { TUIState } from './state.js';
 
-/**
- * Minimal mock harness for testing thread lifecycle events.
- * Tracks setState calls to verify per-thread state is cleared.
- */
-function createMockHarness(initialState: Record<string, unknown> = {}) {
+function createMockHarness(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
   let state = { ...initialState };
   return {
     state,
@@ -21,7 +18,7 @@ function createMockHarness(initialState: Record<string, unknown> = {}) {
     getDisplayState: () => ({
       isRunning: false,
       tasks: [],
-      previousTasks: [],
+      previousTasks,
       omProgress: { status: 'idle', pendingTokens: 0 },
       modifiedFiles: new Map(),
     }),
@@ -35,7 +32,9 @@ function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIS
       updateTasks: vi.fn(),
       getTasks: () => [],
     },
-    taskWriteInsertIndex: 5,
+    allToolComponents: [],
+    chatContainer: { children: [] },
+    taskToolInsertIndex: 5,
     ui: { requestRender: vi.fn() },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
@@ -60,7 +59,7 @@ function createMockEctx(): EventHandlerContext {
   } as unknown as EventHandlerContext;
 }
 
-describe('thread lifecycle clears per-thread harness state', () => {
+describe('dispatchEvent thread lifecycle', () => {
   let harness: ReturnType<typeof createMockHarness>;
   let state: TUIState;
   let ectx: EventHandlerContext;
@@ -138,24 +137,24 @@ describe('thread lifecycle clears per-thread harness state', () => {
     expect(goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: { status: 'done' } });
   });
 
-  it('resets taskWriteInsertIndex on thread_changed', async () => {
+  it('resets taskToolInsertIndex on thread_changed', async () => {
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
       state,
     );
 
-    expect(state.taskWriteInsertIndex).toBe(-1);
+    expect(state.taskToolInsertIndex).toBe(-1);
   });
 
-  it('resets taskWriteInsertIndex on thread_created', async () => {
+  it('resets taskToolInsertIndex on thread_created', async () => {
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
       state,
     );
 
-    expect(state.taskWriteInsertIndex).toBe(-1);
+    expect(state.taskToolInsertIndex).toBe(-1);
   });
 
   it('clears taskProgress UI component on thread_changed', async () => {
@@ -185,8 +184,30 @@ describe('thread lifecycle clears per-thread harness state', () => {
       state,
     );
 
-    // setState should only be called with per-thread fields, not resource-level settings
     const setStateCall = harness.setState.mock.calls[0]![0];
     expect(setStateCall).not.toHaveProperty('currentModelId');
+  });
+});
+
+describe('dispatchEvent task updates', () => {
+  it('uses recorded task insertion index when rendering completed tasks', async () => {
+    const tasks = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Completing task 1' }];
+    const state = createMockTUIState(createMockHarness());
+    const ectx = createMockEctx();
+
+    await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
+
+    expect(ectx.renderCompletedTasksInline).toHaveBeenCalledWith(tasks, 5, true);
+    expect(state.taskToolInsertIndex).toBe(-1);
+  });
+
+  it('does not render a duplicate completed task list for repeated all-completed updates', async () => {
+    const tasks = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Completing task 1' }];
+    const state = createMockTUIState(createMockHarness({}, tasks));
+    const ectx = createMockEctx();
+
+    await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
+
+    expect(ectx.renderCompletedTasksInline).not.toHaveBeenCalled();
   });
 });
