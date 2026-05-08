@@ -167,6 +167,16 @@ function formatCommonBinaries(binaries: PromptContext['commonBinaries']): string
 function formatNestedGitTrees(trees: PromptContext['nestedGitTrees']): string {
   if (!trees?.length) return '';
 
-  const lines = trees.map(tree => `  - ${tree.relativePath} (${tree.description})`).join('\n');
+  const lines = trees
+    .map(tree => `  - ${escapePromptText(tree.relativePath)} (${escapePromptText(tree.description)})`)
+    .join('\n');
   return `\nNested git trees inside the project (each is its own sandbox — call \`request_access\` before touching):\n${lines}`;
+}
+
+// Directory and branch names can technically contain control characters or
+// backticks. Strip them before splicing into the system prompt so a crafted
+// nested repo name can't inject extra prompt lines or break out of the inline
+// code formatting.
+function escapePromptText(value: string): string {
+  return value.replace(/[\r\n\t\v\f\u0000-\u001f\u007f]/g, ' ').replace(/`/g, '\\`');
 }
