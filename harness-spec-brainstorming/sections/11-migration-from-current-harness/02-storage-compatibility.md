@@ -1,0 +1,3 @@
+### 11.2 Storage compatibility
+
+Threads written by the legacy `Harness` are readable by the v1 `Harness`. The thread-record schema is the persistence contract; it is not coupled to either runtime class. Runtime-state fields that legacy stored in thread metadata (`currentModeId`, `currentModelId`) are still read by the v1 `Harness` as bootstrap defaults when opening a session for an existing thread, but are no longer written back from runtime state — they are managed on `Session` going forward and persisted via `session.switchMode` / `session.switchModel` (which still update the metadata for legacy readers on the next read).
