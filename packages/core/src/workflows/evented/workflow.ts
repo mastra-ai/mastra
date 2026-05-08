@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent';
-import type { MastraDBMessage } from '../../agent';
+import { Agent, type MastraDBMessage } from '../../agent';
+import type { AgentMemoryOption } from '../../agent/types';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
 import type { MessageInput } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -56,6 +56,7 @@ import type {
   StepMetadata,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { mergeWorkflowAgentMemory } from '../workflow-agent-memory';
 import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -510,6 +511,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     execute: async ({
       inputData,
       runId,
+      workflowId,
+      resourceId: workflowRunResourceId,
       mastra,
       [PUBSUB_SYMBOL]: pubsub,
       [STREAM_FORMAT_SYMBOL]: streamFormat,
@@ -520,6 +523,13 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       ...obsFields
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
+      const workflowMemory = mergeWorkflowAgentMemory((agentOptions as { memory?: AgentMemoryOption }).memory, {
+        workflowId,
+        runId,
+        stepId: params.id,
+        agentId: params.id,
+        workflowResourceId: workflowRunResourceId,
+      });
       const logger = mastra?.getLogger();
       const toolData = {
         name: params.name,
@@ -551,6 +561,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
+          memory: workflowMemory,
           ...observabilityContext,
           requestContext,
           onFinish: result => {
@@ -570,6 +581,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
         const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
+          memory: workflowMemory,
           ...observabilityContext,
           requestContext,
           onFinish: result => {

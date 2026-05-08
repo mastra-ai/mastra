@@ -15,7 +15,7 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useMemory, useThreads, useAgentThreadListPrefs } from '@/domains/memory/hooks';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
@@ -36,11 +36,18 @@ function Agent() {
 
   const hasMemory = Boolean(memory?.result);
 
+  const { showWorkflowInvocationThreads, setShowWorkflowInvocationThreads } = useAgentThreadListPrefs();
+
   const {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
+  } = useThreads({
+    agentId: agentId!,
+    isMemoryEnabled: hasMemory,
+    resourceId: agentId!,
+    includeWorkflowInvocationThreads: showWorkflowInvocationThreads,
+  });
 
   useEffect(() => {
     if (threadId) return;
@@ -146,6 +153,8 @@ function Agent() {
                               threadId={actualThreadId!}
                               threads={threads || []}
                               isLoading={isThreadsLoading}
+                              showWorkflowInvocationThreads={showWorkflowInvocationThreads}
+                              onShowWorkflowInvocationThreadsChange={setShowWorkflowInvocationThreads}
                             />
                           )
                         }

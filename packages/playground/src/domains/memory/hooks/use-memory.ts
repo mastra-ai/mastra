@@ -1,4 +1,6 @@
 import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
+import type { StorageThreadType } from '@mastra/core/memory';
+import { WORKFLOW_AGENT_INVOCATION_SCOPE } from '@mastra/core/workflows';
 import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,6 +8,11 @@ import { useState, useEffect } from 'react';
 import { useMergedRequestContext } from '@/domains/request-context';
 
 import type { MemorySearchParams } from '@/types/memory';
+
+function isWorkflowAgentInvocationThread(thread: StorageThreadType): boolean {
+  const scope = (thread.metadata as Record<string, unknown> | undefined)?.scope;
+  return scope === WORKFLOW_AGENT_INVOCATION_SCOPE;
+}
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
@@ -55,20 +62,27 @@ export const useThreads = ({
   resourceId,
   agentId,
   isMemoryEnabled,
+  /** When false (default), hide threads created by workflow `createStep(agent)` so they only appear under workflow runs unless the user opts in. */
+  includeWorkflowInvocationThreads = false,
 }: {
   resourceId: string;
   agentId: string;
   isMemoryEnabled: boolean;
+  includeWorkflowInvocationThreads?: boolean;
 }) => {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
 
   return useQuery({
-    queryKey: ['memory', 'threads', resourceId, agentId, requestContext],
+    queryKey: ['memory', 'threads', resourceId, agentId, includeWorkflowInvocationThreads, requestContext],
     queryFn: async () => {
       if (!isMemoryEnabled) return null;
       const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
-      return result.threads;
+      let threads = result.threads;
+      if (!includeWorkflowInvocationThreads) {
+        threads = threads.filter(t => !isWorkflowAgentInvocationThread(t));
+      }
+      return threads;
     },
     enabled: Boolean(isMemoryEnabled),
     staleTime: 0,
@@ -91,7 +105,7 @@ export const useDeleteThread = () => {
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId] });
       }
       toast.success('Chat deleted successfully');
     },
@@ -132,7 +146,7 @@ export const useCloneThread = () => {
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId] });
       }
       toast.success('Thread cloned successfully');
     },

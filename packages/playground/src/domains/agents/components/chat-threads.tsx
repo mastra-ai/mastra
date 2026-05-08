@@ -7,8 +7,9 @@ import {
   ThreadLink,
   ThreadList,
   Threads,
-  Txt,
+  Checkbox,
   Icon,
+  Txt,
 } from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -22,9 +23,21 @@ export interface ChatThreadsProps {
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  /** Agent sidebar: include workflow `createStep(agent)` threads in this list (persisted per browser). */
+  showWorkflowInvocationThreads?: boolean;
+  onShowWorkflowInvocationThreadsChange?: (value: boolean) => void;
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  isLoading,
+  threadId,
+  onDelete,
+  resourceId,
+  resourceType,
+  showWorkflowInvocationThreads,
+  onShowWorkflowInvocationThreadsChange,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
@@ -38,6 +51,11 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
 
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+
+  const showWorkflowToggle =
+    resourceType === 'agent' &&
+    typeof showWorkflowInvocationThreads === 'boolean' &&
+    typeof onShowWorkflowInvocationThreadsChange === 'function';
 
   return (
     <div className="overflow-y-auto h-full w-full">
@@ -53,6 +71,22 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
               </span>
             </ThreadLink>
           </ThreadItem>
+
+          {showWorkflowToggle ? (
+            <ThreadItem>
+              <label className="flex items-start gap-3 px-5 py-2 cursor-pointer select-none">
+                <Checkbox
+                  checked={showWorkflowInvocationThreads}
+                  onCheckedChange={v => onShowWorkflowInvocationThreadsChange?.(v === true)}
+                  id="workflow-threads-in-sidebar"
+                  className="mt-0.5"
+                />
+                <Txt as="span" variant="ui-sm" className="text-neutral5 leading-snug">
+                  Show chats from workflow runs
+                </Txt>
+              </label>
+            </ThreadItem>
+          ) : null}
 
           {threads.length === 0 && (
             <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">

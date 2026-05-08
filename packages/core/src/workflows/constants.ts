@@ -16,3 +16,6 @@ export const STREAM_FORMAT_SYMBOL = Symbol('stream_format');
 // a single execution context - it's never serialized to storage or passed between
 // distributed engine instances.
 export const NESTED_WORKFLOW_RESULT_SYMBOL = Symbol('nested_workflow_result');
+
+/** Thread metadata `scope` value for conversations created by `createStep(agent)` workflow steps. */
+export const WORKFLOW_AGENT_INVOCATION_SCOPE = 'workflow-agent-invocation';

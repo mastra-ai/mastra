@@ -93,6 +93,7 @@ import type {
   WorkflowRunStartOptions,
 } from './types';
 import { cleanStepResult, createTimeTravelExecutionParams } from './utils';
+import { mergeWorkflowAgentMemory } from './workflow-agent-memory';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -448,6 +449,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     execute: async ({
       inputData,
       runId,
+      workflowId,
+      resourceId: workflowRunResourceId,
       [PUBSUB_SYMBOL]: pubsub,
       [STREAM_FORMAT_SYMBOL]: streamFormat,
       requestContext,
@@ -457,6 +460,13 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       ...rest
     }) => {
       const observabilityContext = resolveObservabilityContext(rest);
+      const workflowMemory = mergeWorkflowAgentMemory(agentOptions.memory, {
+        workflowId,
+        runId,
+        stepId: params.id,
+        agentId: params.id,
+        workflowResourceId: workflowRunResourceId,
+      });
       let streamPromise = {} as {
         promise: Promise<string>;
         resolve: (value: string) => void;
@@ -481,6 +491,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       if ((await params.getModel()).specificationVersion === 'v1') {
         const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...agentOptions,
+          memory: workflowMemory,
           requestContext,
           ...observabilityContext,
           onFinish: result => {
@@ -499,6 +510,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...agentOptions,
+          memory: workflowMemory,
           requestContext,
           ...observabilityContext,
           onFinish: result => {

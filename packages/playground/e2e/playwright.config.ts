@@ -7,9 +7,12 @@ const webservers: PlaywrightTestConfig['webServer'] = [
   {
     // UI tests use route interception for auth mocking - no server auth needed
     // Server-side permission tests are in server-adapters/hono
-    command: `pnpm -C ./kitchen-sink dev`,
+    // mastra dev serves Studio from packages/cli/dist/studio (copied from @internal/playground at CLI build time).
+    command: `bash -lc 'cd ../../.. && pnpm build:cli && pnpm --dir packages/playground/e2e/kitchen-sink dev'`,
     url: `http://localhost:4111`,
-    timeout: 120_000,
+    timeout: 600_000,
+    /** Avoid failing when another mastra dev instance already owns :4111 (local/dev agents). */
+    reuseExistingServer: !process.env.CI,
   },
 ];
 

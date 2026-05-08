@@ -12,7 +12,7 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useMemory, useThreads, useAgentThreadListPrefs } from '@/domains/memory/hooks';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
@@ -31,10 +31,13 @@ function AgentSession() {
 
   const hasMemory = Boolean(memory?.result);
 
+  const { showWorkflowInvocationThreads } = useAgentThreadListPrefs();
+
   const { refetch: refreshThreads } = useThreads({
     resourceId: agentId!,
     agentId: agentId!,
     isMemoryEnabled: hasMemory,
+    includeWorkflowInvocationThreads: showWorkflowInvocationThreads,
   });
 
   useEffect(() => {

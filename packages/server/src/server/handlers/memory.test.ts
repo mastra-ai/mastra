@@ -472,6 +472,54 @@ describe('Memory Handlers', () => {
       });
     });
 
+    it('workflow-run transcript query omits resource filter when metadata scopes by workflowRunId + workflow-agent-invocation', async () => {
+      await mockMemory.saveThread({
+        thread: createThread({
+          id: 'wf-thread-1',
+          resourceId: 'weather-agent',
+          metadata: {
+            workflowRunId: '8774a333-1111-2222-3333-444455556666',
+            scope: 'workflow-agent-invocation',
+            mastraAgentId: 'weather-agent',
+          },
+        }),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      const spy = vi.spyOn(mockMemory, 'listThreads');
+      const ctx = createTestContextWithReservedKeys({ mastra, resourceId: 'studio-default-resource' });
+
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...ctx,
+        resourceId: 'studio-default-resource',
+        agentId: 'test-agent',
+        metadata: {
+          workflowRunId: '8774a333-1111-2222-3333-444455556666',
+          scope: 'workflow-agent-invocation',
+        },
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(result.threads).toHaveLength(1);
+      expect(result.threads[0]?.id).toBe('wf-thread-1');
+      expect(spy).toHaveBeenCalledWith({
+        filter: {
+          metadata: {
+            workflowRunId: '8774a333-1111-2222-3333-444455556666',
+            scope: 'workflow-agent-invocation',
+          },
+        },
+        page: 0,
+        perPage: 10,
+        orderBy: undefined,
+      });
+    });
+
     it('should handle edge cases with no threads', async () => {
       // Don't create any threads - test empty result
       const mastra = new Mastra({

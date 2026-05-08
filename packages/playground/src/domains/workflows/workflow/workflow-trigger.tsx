@@ -21,6 +21,7 @@ import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
+import { WorkflowRunAgentConversationsPanel } from '../components/workflow-run-agent-conversations-panel';
 import { WorkflowStepsStatus } from './workflow-steps-status';
 import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
 import type { ResumeStepParams } from './workflow-suspended-steps';
@@ -93,7 +94,8 @@ export function WorkflowTrigger({
 }: WorkflowTriggerProps) {
   const requestContext = useMergedRequestContext();
 
-  const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
+  const { result, setResult, payload, setPayload, setRunId: setContextRunId, runId: contextRunId } =
+    useContext(WorkflowRunContext);
   const { canExecute } = usePermissions();
 
   // Check if user can execute workflows
@@ -105,6 +107,8 @@ export function WorkflowTrigger({
   const streamResultToUse = result ?? streamResult;
   const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
+  /** Prefer local run id from execution; fall back to route param or provider state (keeps panel in sync after navigation). */
+  const activeRunId = innerRunId || paramsRunId || contextRunId;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -230,6 +234,14 @@ export function WorkflowTrigger({
         {hasWorkflowActivePaths && (
           <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
         )}
+
+        {activeRunId ? (
+          <WorkflowRunAgentConversationsPanel
+            workflowId={workflowId}
+            runId={activeRunId}
+            runStatus={streamResultToUse?.status ?? result?.status}
+          />
+        ) : null}
       </div>
 
       {result && !isObjectEmpty(result) && (

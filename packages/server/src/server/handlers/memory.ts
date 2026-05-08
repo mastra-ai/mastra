@@ -62,6 +62,9 @@ import {
 } from './gateway-memory-client';
 import { validateBody, getEffectiveResourceId, getEffectiveThreadId, enforceThreadAccess } from './utils';
 
+/** Sync with WORKFLOW_AGENT_INVOCATION_SCOPE in @mastra/core/workflows/constants */
+const WORKFLOW_AGENT_INVOCATION_SCOPE_VALUE = 'workflow-agent-invocation';
+
 interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
@@ -811,6 +814,19 @@ export const LIST_THREADS_ROUTE = createRoute({
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
+      /**
+       * Workflow `createStep(agent)` transcripts are tagged with metadata (`workflowRunId`, `scope`) but often use a
+       * thread `resourceId` derived from merged agent memory (e.g. agent id). Studio simultaneously scopes list calls
+       * to `MASTRA_RESOURCE_ID_KEY`. AND-ing those excludes every match — the panel shows zero conversations. For this
+       * narrow query, rely on metadata (especially `workflowRunId`) instead of resource scoping.
+       */
+      const isWorkflowAgentInvocationThreadQuery =
+        Boolean(metadata) &&
+        typeof metadata!.workflowRunId === 'string' &&
+        metadata!.scope === WORKFLOW_AGENT_INVOCATION_SCOPE_VALUE;
+
+      const resourceIdForThreadFilter = isWorkflowAgentInvocationThreadQuery ? undefined : effectiveResourceId;
+
       // Gateway proxy: list threads from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
@@ -865,10 +881,10 @@ export const LIST_THREADS_ROUTE = createRoute({
 
       // Build filter object dynamically based on provided parameters
       const filter: { resourceId?: string; metadata?: Record<string, unknown> } | undefined =
-        effectiveResourceId || metadata ? {} : undefined;
+        resourceIdForThreadFilter || metadata ? {} : undefined;
 
-      if (effectiveResourceId) {
-        filter!.resourceId = effectiveResourceId;
+      if (resourceIdForThreadFilter) {
+        filter!.resourceId = resourceIdForThreadFilter;
       }
       if (metadata) {
         filter!.metadata = metadata;

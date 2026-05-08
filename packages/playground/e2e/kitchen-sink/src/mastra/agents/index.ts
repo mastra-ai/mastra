@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { RequestContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
 
@@ -7,6 +8,7 @@ import { z } from 'zod';
 import { fixtures } from '../../../fixtures';
 import type { Fixtures } from '../../../types';
 import { createMockOmModel } from '../mock-om-model';
+import { KITCHEN_SINK_LIVE_MODEL, shouldUseLiveOpenAiWeather } from '../live-openai';
 import { storage } from '../storage';
 import { weatherInfo, simpleMcpTool } from '../tools';
 import { lessComplexWorkflow } from '../workflows/complex-workflow';
@@ -175,8 +177,85 @@ export const subAgent = new Agent({
   id: 'sub-agent',
   name: 'Sub Agent',
   instructions: `You are a helpful sub agent that provides accurate weather information.`,
-  model: 'google/gemini-2.5-pro',
+  model: process.env.OPENAI_API_KEY?.trim() ? KITCHEN_SINK_LIVE_MODEL : 'google/gemini-2.5-pro',
 });
+
+/** Shared mock/live LLM wiring for {@link weatherAgent} and workflow-demo variant agents (kitchen-sink). */
+const kitchenSinkWeatherAgentModel = ({ requestContext }: { requestContext: RequestContext }) => {
+  const fixture = requestContext.get('fixture') as Fixtures;
+
+  if (shouldUseLiveOpenAiWeather(fixture)) {
+    return KITCHEN_SINK_LIVE_MODEL;
+  }
+
+  const fixtureData = fixtures[fixture];
+
+  // Default response for API tests that don't set a fixture
+  const defaultResponse = {
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    content: [{ type: 'text' as const, text: 'Mock response' }],
+    warnings: [],
+  };
+
+  return new aiTest.MockLanguageModelV2({
+    doGenerate: async () => {
+      if (!fixtureData || fixtureData.length === 0) {
+        return defaultResponse;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chunk = fixtureData[count] as Array<any>;
+
+      count++;
+      if (count >= fixtureData.length) {
+        count = 0;
+      }
+
+      // Extract text from fixture chunks
+
+      const textChunks = chunk.filter((item: any) => item.type === 'text-delta').map((item: any) => item.delta);
+      const text = textChunks.join('');
+
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text,
+          },
+        ],
+        warnings: [],
+      };
+    },
+    doStream: async () => {
+      if (!fixtureData || fixtureData.length === 0) {
+        return {
+          stream: createDelayedStream([{ type: 'text-delta', delta: 'Mock response' }, { type: 'finish' }], 0),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chunk = fixtureData[count] as Array<any>;
+
+      count++;
+      if (count >= fixtureData.length) {
+        count = 0;
+      }
+
+      return {
+        stream: createDelayedStream(chunk, 20),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+};
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -191,81 +270,50 @@ export const weatherAgent = new Agent({
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
 `,
-  model: ({ requestContext }) => {
-    const fixture = requestContext.get('fixture') as Fixtures;
-
-    console.log({ fixture });
-    const fixtureData = fixtures[fixture];
-
-    // Default response for API tests that don't set a fixture
-    const defaultResponse = {
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop' as const,
-      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-      content: [{ type: 'text' as const, text: 'Mock response' }],
-      warnings: [],
-    };
-
-    return new aiTest.MockLanguageModelV2({
-      doGenerate: async () => {
-        if (!fixtureData || fixtureData.length === 0) {
-          return defaultResponse;
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = fixtureData[count] as Array<any>;
-
-        count++;
-        if (count >= fixtureData.length) {
-          count = 0;
-        }
-
-        // Extract text from fixture chunks
-
-        const textChunks = chunk.filter((item: any) => item.type === 'text-delta').map((item: any) => item.delta);
-        const text = textChunks.join('');
-
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [
-            {
-              type: 'text',
-              text,
-            },
-          ],
-          warnings: [],
-        };
-      },
-      doStream: async () => {
-        if (!fixtureData || fixtureData.length === 0) {
-          return {
-            stream: createDelayedStream([{ type: 'text-delta', delta: 'Mock response' }, { type: 'finish' }], 0),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = fixtureData[count] as Array<any>;
-
-        count++;
-        if (count >= fixtureData.length) {
-          count = 0;
-        }
-
-        return {
-          stream: createDelayedStream(chunk, 20),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      },
-    });
-  },
+  model: kitchenSinkWeatherAgentModel,
   tools: { weatherInfo, simpleMcpTool },
   agents: { subAgent },
-  workflows: { lessComplexWorkflow },
+  workflows: {
+    /** Exposed in Studio as an agent tool / workflow stream tests — unrelated to `workflow-agent-demo`. */
+    lessComplexWorkflow,
+  },
+  memory,
+});
+
+/**
+ * Embedded in `workflow-agent-demo` **foreach** — runs once per iteration so each pass creates real agent / memory traffic (same workflow-scoped thread id across passes).
+ */
+export const workflowAgentDemoForeachAgent = new Agent({
+  id: 'workflow-agent-demo-foreach',
+  name: 'Workflow Demo — Foreach pass',
+  instructions: `You answer one short weather-related step for this prompt only (one or two sentences). Use tools if the user asks for a specific place.`,
+  model: kitchenSinkWeatherAgentModel,
+  tools: { weatherInfo, simpleMcpTool },
+  memory,
+});
+
+/**
+ * `workflow-agent-demo` branch arm — short prompts (< 120 chars after refinement).
+ * Distinct id so Studio lists a workflow-scoped transcript per run.
+ */
+export const workflowAgentDemoBranchBrief = new Agent({
+  id: 'workflow-agent-demo-brief',
+  name: 'Workflow Demo — Brief',
+  instructions: `You give a concise weather-style answer (2–3 sentences). Use tools when the user asks for a specific location's conditions.`,
+  model: kitchenSinkWeatherAgentModel,
+  tools: { weatherInfo, simpleMcpTool },
+  memory,
+});
+
+/**
+ * `workflow-agent-demo` branch arm — longer prompts or default fallback.
+ */
+export const workflowAgentDemoBranchVerbose = new Agent({
+  id: 'workflow-agent-demo-verbose',
+  name: 'Workflow Demo — Verbose',
+  instructions: `You give a fuller weather-style answer with brief context. Use tools when the user asks for a specific location's conditions.`,
+  model: kitchenSinkWeatherAgentModel,
+  tools: { weatherInfo, simpleMcpTool },
   memory,
 });
 
