@@ -190,9 +190,7 @@ describe('handleGoalCommand', () => {
     // judge runs after the agent's first response.
     expect(goalManager.setGoal).toHaveBeenCalledWith(objective, 'openai/gpt-5.5', 50);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(
-      sendMessage.mock.invocationCallOrder[0],
-    );
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendMessage.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
 
     // The trigger message is exactly one canonical goal reminder — no
