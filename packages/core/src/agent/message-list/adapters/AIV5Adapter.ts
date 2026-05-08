@@ -58,6 +58,12 @@ function getToolName(type: string | { type: string }): string {
   return sanitizeToolName(type);
 }
 
+/**
+ * Merge a Mastra-tracked `createdAt` timestamp into an AIV5 ProviderMetadata
+ * object under the `mastra` namespace, preserving any existing fields. Used
+ * when round-tripping parts back to AIV5 so the original part timestamp
+ * survives the conversion.
+ */
 function mergeMastraCreatedAt(metadata: AIV5Type.ProviderMetadata | undefined, createdAt?: number) {
   if (createdAt == null) {
     return metadata;
@@ -72,6 +78,11 @@ function mergeMastraCreatedAt(metadata: AIV5Type.ProviderMetadata | undefined, c
   } satisfies AIV5Type.ProviderMetadata;
 }
 
+/**
+ * Read the Mastra-tracked `createdAt` timestamp (if any) out of an AIV5
+ * ProviderMetadata object. Returns `undefined` when the field is absent or
+ * not numeric so callers can fall back to defaults safely.
+ */
 function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): number | undefined {
   const value = providerMetadata?.mastra;
   if (!value || typeof value !== 'object') {
@@ -82,10 +93,23 @@ function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): numbe
   return typeof createdAt === 'number' ? createdAt : undefined;
 }
 
+/**
+ * Context passed into AIV5Adapter conversion methods so they can resolve
+ * cross-message state without reaching into the MessageList instance directly.
+ */
 export interface AIV5AdapterContext {
   memoryInfo: { threadId?: string; resourceId?: string } | null;
   newMessageId?(): string;
   generateCreatedAt?(messageSource: MessageSource, start?: unknown): Date;
+  /**
+   * Messages already added to the list before the one currently being
+   * converted. Used by `fromModelMessage` to recover tool-call arguments
+   * for stand-alone `tool-result` parts (e.g. those emitted by
+   * `agent.resumeStream(...)` after an HITL suspend). When omitted, the
+   * adapter falls back to `args: {}` for unmatched tool-results — which
+   * is the legacy behaviour and the cause of #16017.
+   */
+  previousMessages?: readonly MastraDBMessage[];
 }
 
 /**
@@ -632,9 +656,72 @@ export class AIV5Adapter {
   }
 
   /**
-   * Direct conversion from AIV5 ModelMessage to MastraDBMessage
+   * Look up the args of a previously-issued tool-call by `toolCallId`,
+   * scanning the supplied messages from newest to oldest so the most recent
+   * call wins.
+   *
+   * Inspects both `content.parts` and `content.toolInvocations` so legacy /
+   * restored DB messages — which sometimes carry the call only in the flat
+   * `toolInvocations` array — are still recoverable. Used by
+   * `fromModelMessage` to recover args for stand-alone `tool-result` parts
+   * (the `agent.resumeStream(...)` shape from #16017). Returns `undefined`
+   * when no matching prior call is found, in which case callers should fall
+   * back to `args: {}`.
    */
-  static fromModelMessage(modelMsg: AIV5Type.ModelMessage, _messageSource?: MessageSource): MastraDBMessage {
+  private static findPriorToolCallArgs(
+    toolCallId: string,
+    previousMessages: readonly MastraDBMessage[] | undefined,
+  ): { args: Record<string, unknown>; toolName?: string } | undefined {
+    if (!previousMessages?.length) return undefined;
+
+    for (let i = previousMessages.length - 1; i >= 0; i--) {
+      const msg = previousMessages[i];
+
+      for (const part of msg?.content?.parts ?? []) {
+        if (
+          part.type === 'tool-invocation' &&
+          'toolInvocation' in part &&
+          part.toolInvocation?.toolCallId === toolCallId &&
+          part.toolInvocation.args &&
+          typeof part.toolInvocation.args === 'object'
+        ) {
+          return {
+            args: part.toolInvocation.args as Record<string, unknown>,
+            toolName: part.toolInvocation.toolName,
+          };
+        }
+      }
+
+      // Fallback: legacy / restored messages may only have args on the flat
+      // toolInvocations array (no matching part). Don't lose them.
+      for (const ti of msg?.content?.toolInvocations ?? []) {
+        if (ti.toolCallId === toolCallId && ti.args && typeof ti.args === 'object' && !Array.isArray(ti.args)) {
+          return {
+            args: ti.args as Record<string, unknown>,
+            toolName: ti.toolName,
+          };
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Direct conversion from AIV5 ModelMessage to MastraDBMessage.
+   *
+   * When the message contains a `tool-result` whose matching `tool-call`
+   * lives in an earlier message (the canonical `agent.resumeStream(...)`
+   * shape after an HITL suspend), supply `context.previousMessages` so the
+   * adapter can recover the original args instead of fabricating `args: {}`
+   * — see #16017. Without that context the legacy `args: {}` fallback is
+   * preserved for backwards compatibility.
+   */
+  static fromModelMessage(
+    modelMsg: AIV5Type.ModelMessage,
+    _messageSource?: MessageSource,
+    context?: Pick<AIV5AdapterContext, 'previousMessages'>,
+  ): MastraDBMessage {
     const content = Array.isArray(modelMsg.content)
       ? modelMsg.content
       : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
@@ -696,6 +783,14 @@ export class AIV5Adapter {
               : toolResultPart.output;
         };
 
+        // Recover args from a previously-persisted tool-call when this
+        // tool-result arrives stand-alone (the agent.resumeStream(...) shape
+        // from #16017). Falls back to {} when no prior call is found, which
+        // matches the legacy behaviour for callers that don't supply context.
+        const recovered = matchingCall
+          ? undefined
+          : AIV5Adapter.findPriorToolCallArgs(toolResultPart.toolCallId, context?.previousMessages);
+
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
@@ -703,7 +798,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: recovered?.args ?? {},
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -721,7 +816,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: recovered?.args ?? {},
               state: 'call',
             },
           };

@@ -108,7 +108,10 @@ export function inputToMastraDBMessage(
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {
-    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
+    // Pass previousMessages so a stand-alone tool-result can recover the
+    // original tool-call args from an earlier message instead of
+    // fabricating `args: {}` — see #16017.
+    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource, { previousMessages: context.dbMessages });
     // Only use the original createdAt from input message metadata, not the generated one from the static method
     // This fixes issue #10683 where messages without createdAt would get shuffled
     const rawCreatedAt =

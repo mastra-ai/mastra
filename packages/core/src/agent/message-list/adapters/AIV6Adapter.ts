@@ -298,12 +298,15 @@ export class AIV6Adapter {
       part => part.type !== 'tool-approval-request' && part.type !== 'tool-approval-response',
     );
 
+    // Forward previousMessages so the V5 adapter can recover args for
+    // stand-alone tool-results emitted by agent.resumeStream(...) — see #16017.
     const baseDb = AIV5Adapter.fromModelMessage(
       {
         ...modelMsg,
         content: compatibleContent as unknown as AIV5Type.ModelMessage['content'],
       } as AIV5Type.ModelMessage,
       _messageSource,
+      { previousMessages: context.dbMessages },
     );
 
     const parts = [...baseDb.content.parts];
