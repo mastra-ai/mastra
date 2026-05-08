@@ -31,6 +31,8 @@ export function generateSignalId(): string {
  * `availableTools` attribute on MODEL_INFERENCE spans so observers see the
  * post-processor tool set, which can differ per-step from the AGENT_RUN view.
  *
+ * `activeTools` is treated by presence, not truthiness: an explicit empty
+ * array means "no tools enabled for this step" and is honored as such.
  * Returns `[]` (not `undefined`) when `tools` is provided but empty, so a
  * tool-less agent still reports a definitive empty list to observers.
  */
@@ -38,7 +40,7 @@ export function getStepAvailableToolNames(
   tools?: Record<string, unknown> | undefined,
   activeTools?: readonly string[] | undefined,
 ): string[] | undefined {
-  if (activeTools && activeTools.length > 0) {
+  if (activeTools !== undefined) {
     return [...activeTools];
   }
   if (tools) {

@@ -27,8 +27,8 @@ describe('getStepAvailableToolNames', () => {
     expect(getStepAvailableToolNames({ a: {}, b: {} })).toEqual(['a', 'b']);
   });
 
-  it('falls back to tool keys when activeTools is empty', () => {
-    expect(getStepAvailableToolNames({ a: {} }, [])).toEqual(['a']);
+  it('honors explicit empty activeTools as "no tools enabled" instead of falling back to tool keys', () => {
+    expect(getStepAvailableToolNames({ a: {}, b: {} }, [])).toEqual([]);
   });
 
   it('returns [] (not undefined) for tool-less agents so observers see a definitive empty set', () => {

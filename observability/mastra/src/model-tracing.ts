@@ -562,6 +562,22 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Safety-net invoked from chunk handlers: auto-create MODEL_STEP and
+   * MODEL_INFERENCE if a chunk arrives before the loop has explicitly opened
+   * them, so chunks parent under MODEL_INFERENCE rather than falling through
+   * to MODEL_STEP. Idempotent — each public start* method is itself a no-op
+   * when its span is already live.
+   */
+  #ensureStepAndInference(): void {
+    if (!this.#currentStepSpan) {
+      this.startStep();
+    }
+    if (!this.#currentInferenceSpan) {
+      this.startInference();
+    }
+  }
+
+  /**
    * Create a new chunk span (for multi-part chunks like text-start/delta/end)
    */
   #startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
@@ -569,14 +585,7 @@ export class ModelSpanTracker {
     // (handles transitions like text-delta → tool-call without text-end)
     this.#endChunkSpan();
 
-    // Auto-create step + inference if we see a chunk before step-start so chunks
-    // parent under MODEL_INFERENCE rather than falling through to MODEL_STEP.
-    if (!this.#currentStepSpan) {
-      this.startStep();
-    }
-    if (!this.#currentInferenceSpan) {
-      this.startInference();
-    }
+    this.#ensureStepAndInference();
 
     this.#currentChunkSpan = this.#chunkParent()?.createChildSpan({
       name: `chunk: '${chunkType}'`,
@@ -625,14 +634,7 @@ export class ModelSpanTracker {
     output: any,
     options?: { attributes?: Record<string, any>; metadata?: Record<string, any> },
   ) {
-    // Auto-create step + inference if we see a chunk before step-start so chunks
-    // parent under MODEL_INFERENCE rather than falling through to MODEL_STEP.
-    if (!this.#currentStepSpan) {
-      this.startStep();
-    }
-    if (!this.#currentInferenceSpan) {
-      this.startInference();
-    }
+    this.#ensureStepAndInference();
 
     const span = this.#chunkParent()?.createEventSpan({
       name: `chunk: '${chunkType}'`,
@@ -782,14 +784,7 @@ export class ModelSpanTracker {
     if (chunk.type !== 'tool-call-approval') return;
     const payload = chunk.payload;
 
-    // Auto-create step + inference if we see a chunk before step-start so chunks
-    // parent under MODEL_INFERENCE rather than falling through to MODEL_STEP.
-    if (!this.#currentStepSpan) {
-      this.startStep();
-    }
-    if (!this.#currentInferenceSpan) {
-      this.startInference();
-    }
+    this.#ensureStepAndInference();
 
     // Create an event span for the approval request
     // Using createEventSpan since approvals are point-in-time events (not time ranges)

@@ -295,12 +295,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Apply post-processor request-side context to MODEL_INFERENCE then
             // open the inference span immediately before the model call so its
             // startTime excludes any input processor work and availableTools /
-            // toolChoice reflect per-step mutations.
+            // toolChoice reflect per-step mutations. responseFormat tracks the
+            // actual structuredOutput payload sent to execute() — which is
+            // undefined when structuringModelConfig routes through a separate
+            // structuring step instead of asking the model for json_schema.
             modelSpanTracker?.setInferenceContext?.({
               parameters: currentModelSettings as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(currentTools as Record<string, unknown> | undefined),
               toolChoice: currentToolChoice,
-              responseFormat: execOptions.structuredOutput ? 'json_schema' : undefined,
+              responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
             modelSpanTracker?.startInference?.();
 
