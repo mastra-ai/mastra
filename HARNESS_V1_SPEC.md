@@ -2204,7 +2204,7 @@ session.permissions.revokeTool({ toolName: 'workspace_execute_command' });
 // Set a category-level policy.
 session.permissions.setPolicy({
   category: 'destructive',
-  policy: 'always_ask',
+  policy: 'ask',
 });
 
 // Inspect what's currently granted.
