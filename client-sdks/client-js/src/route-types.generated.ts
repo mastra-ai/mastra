@@ -8871,7 +8871,7 @@ export type PostWorkflowsEvents_Body = {
     type: string;
     data: unknown;
     runId: string;
-    createdAt: any;
+    createdAt: string;
     index?: number | undefined;
     deliveryAttempt?: number | undefined;
     [x: string]: unknown;
