@@ -59,10 +59,11 @@ await agent.stream(prompt, {
 });
 ```
 
-The processor hooks into `processLLMRequest` (lookup; short-circuits on hit) and `processLLMResponse` (write on completion). The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. _after_ memory loading and earlier input processors have run — so cached entries don't leak context across users. Each step in an agentic tool loop is independently cached. By default, the cache scope falls back to `MASTRA_RESOURCE_ID_KEY` from the request context for automatic per-user isolation. Cache writes happen after the response completes, and failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.
+The cache key is derived from the resolved prompt Mastra is about to send to the model — i.e. _after_ memory loading and earlier input processors have run — so cached entries are tenant-isolated and don't leak context across users with shared prompts but different memory state. Each step in an agentic tool loop is independently cached. By default, the cache scope falls back to `MASTRA_RESOURCE_ID_KEY` from the request context for automatic per-user isolation. Failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.
 
 Also adds:
 
 - `MastraCache` interface and `InMemoryServerCache` (in `@mastra/core/cache`) for plugging in custom backends.
 - `createMastraCacheFromServerCache` adapter that turns any `MastraServerCache` (e.g. `RedisCache` from `@mastra/redis`) into a `MastraCache`.
-- New paired processor hooks `processLLMRequest` and `processLLMResponse`. `ProcessLLMRequestResult` may now return `{ response }` to short-circuit the LLM call with a cached payload.
+- `MastraServerCache.set()` now accepts an optional `ttlMs` argument so implementations can override the configured default TTL on a per-entry basis. `InMemoryServerCache` and `RedisCache` (in `@mastra/redis`) both honor this.
+- New paired processor hooks `processLLMRequest` and `processLLMResponse`. `ProcessLLMRequestResult` may return `{ response }` to short-circuit the LLM call with a cached payload.

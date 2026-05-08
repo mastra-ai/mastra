@@ -2,10 +2,12 @@
 '@mastra/redis': patch
 ---
 
-**Per-key TTL support for the cache**
+**Per-key TTL support in `RedisCache`**
 
-`MastraServerCache.set()` now accepts an optional `ttlMs` argument that overrides the cache's default TTL for a single entry. This unblocks features like agent response caching that need different expirations per entry without bypassing the cache abstraction.
+`RedisCache.set()` now accepts an optional `ttlMs` argument that overrides the configured default TTL for a single entry. Sub-second values are rounded up to one second (Redis `EXPIRE` granularity); a non-positive value persists the entry without expiry.
 
 ```ts
+const cache = new RedisCache({ url: 'redis://...' });
 await cache.set('weather:nyc', payload, 60_000); // expires in 60s
+await cache.set('manifest', payload, 0); // persists indefinitely
 ```

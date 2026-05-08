@@ -34,6 +34,18 @@ function createRecordingModel(modelId: string, responseText: string) {
   });
 }
 
+async function waitForSets(cache: { sets: number }, expected: number) {
+  // Cache writes happen asynchronously after the LLM call returns, so poll
+  // instead of using fixed sleeps that can race on slow CI workers.
+  const deadline = Date.now() + 1_000;
+  while (cache.sets < expected) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for ${expected} cache writes (saw ${cache.sets})`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+}
+
 function createMemoryCache(): MastraCache & {
   store: Map<string, unknown>;
   sets: number;
@@ -110,8 +122,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(first.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
 
-      // Wait for background cache write to settle.
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
 
       const second = await agent.generate('Hello');
@@ -122,9 +133,9 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
     it('different prompts produce different cache entries', async () => {
       await agent.generate('Hello');
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       await agent.generate('Goodbye');
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 2);
 
       expect(cache.store.size).toBe(2);
       expect(model.doGenerateCalls).toHaveLength(2);
@@ -146,6 +157,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       });
 
       await expect(failingAgent.generate('please')).rejects.toThrow();
+      // Failed runs should never write; give the (non-existent) write a chance to happen and assert it didn't.
       await new Promise(resolve => setTimeout(resolve, 10));
       expect(cache.sets).toBe(0);
     });
@@ -153,7 +165,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
     it('writes the configured TTL on cache writes', async () => {
       const ttlAgent = createAgent({ cache, ttl: 999, agentId: 'ttl-agent' });
       await ttlAgent.agent.generate('Hi');
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       expect(cache.ttls).toEqual([999]);
     });
   });
@@ -161,14 +173,14 @@ describe('ResponseCache processor (integration via Agent)', () => {
   describe('per-call overrides via RequestContext', () => {
     it('ResponseCache.context() bust forces a fresh LLM call but still updates the cache', async () => {
       await agent.generate('Hello');
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       expect(model.doGenerateCalls).toHaveLength(1);
       expect(cache.sets).toBe(1);
 
       await agent.generate('Hello', {
         requestContext: ResponseCache.context({ bust: true }),
       });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 2);
       expect(model.doGenerateCalls).toHaveLength(2);
       expect(cache.sets).toBe(2);
     });
@@ -179,7 +191,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       ResponseCache.applyContext(ctx, { key: 'shared-key' });
 
       await agent.generate('first prompt', { requestContext: ctx });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
 
       const ctx2 = new RequestContext();
       ResponseCache.applyContext(ctx2, { key: 'shared-key' });
@@ -193,7 +205,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       await agent.generate('first prompt', {
         requestContext: ResponseCache.context({ key: 'manual-shared-key' }),
       });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
 
       const second = await agent.generate('totally different prompt', {
         requestContext: ResponseCache.context({ key: 'manual-shared-key' }),
@@ -213,7 +225,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       await agent.generate('first', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       const second = await agent.generate('second different prompt', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
@@ -235,7 +247,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
     it('falls back to default key derivation when key function throws', async () => {
       await agent.generate('Hello');
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
       const generateCallsBefore = model.doGenerateCalls.length;
 
@@ -260,7 +272,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       await agent.generate('first', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
       const second = await agent.generate('second', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
@@ -276,7 +288,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       await scopedAgent.agent.generate('Hello', {
         requestContext: ResponseCache.context({ scope: 'tenant-a' }),
       });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
 
       // Different scope = different key, so the second call still hits the model.
       await scopedAgent.agent.generate('Hello', {
@@ -295,7 +307,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       const ctxA = new RequestContext();
       ctxA.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
       await scopedAgent.agent.generate('shared prompt', { requestContext: ctxA });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
 
       // Different resource id -> different scope -> different cache key.
       const ctxB = new RequestContext();
@@ -313,7 +325,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       const ctxA = new RequestContext();
       ctxA.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
       await noScopeAgent.agent.generate('shared prompt', { requestContext: ctxA });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await waitForSets(cache, 1);
 
       // scope: null on the constructor opts out of all scoping, so the second
       // call hits the cache regardless of the resource id in context.
@@ -333,8 +345,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(firstText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
 
-      // Wait for background cache write to settle.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
 
       const secondStream = await agent.stream('Stream me');
@@ -352,7 +363,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
     it('preserves finishReason and usage on cache hit', async () => {
       const first = await agent.stream('test');
       await first.text;
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitForSets(cache, 1);
 
       const second = await agent.stream('test');
       const finishReason = await second.finishReason;
