@@ -344,6 +344,48 @@ describe('ObservabilityBus', () => {
       expect(onDroppedEvent).toHaveBeenCalledTimes(1);
       expect(resolved).toBe(true);
     });
+
+    it('should await drop handlers emitted during exporter flush', async () => {
+      const event = createDropEvent();
+      let emitted = false;
+      let dropHandled = false;
+      let flushedAfterDrop = false;
+
+      const emittingExporter = createMockExporter({
+        name: 'emitting-exporter',
+        flush: vi.fn(async () => {
+          if (!emitted) {
+            emitted = true;
+            bus.emitDropEvent(event);
+          }
+        }),
+      });
+      const alertExporter = createMockExporter({
+        name: 'alert-exporter',
+        onDroppedEvent: vi.fn(
+          () =>
+            new Promise<void>(resolve => {
+              setTimeout(() => {
+                dropHandled = true;
+                resolve();
+              }, 0);
+            }),
+        ),
+        flush: vi.fn(async () => {
+          if (dropHandled) {
+            flushedAfterDrop = true;
+          }
+        }),
+      });
+      bus.registerExporter(emittingExporter);
+      bus.registerExporter(alertExporter);
+
+      await bus.flush();
+
+      expect(alertExporter.onDroppedEvent).toHaveBeenCalledWith(event);
+      expect(dropHandled).toBe(true);
+      expect(flushedAfterDrop).toBe(true);
+    });
   });
 
   describe('selective signal support', () => {
