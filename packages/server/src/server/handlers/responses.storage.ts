@@ -280,10 +280,12 @@ export async function findConversationThreadAcrossAgents({
  * persisted DB messages but still need a durable response-turn record.
  */
 function createSyntheticResponseMessage({
+  createdAt,
   responseId,
   text,
   threadContext,
 }: {
+  createdAt?: Date;
   responseId: string;
   text: string;
   threadContext: ThreadExecutionContext;
@@ -292,7 +294,7 @@ function createSyntheticResponseMessage({
     id: responseId,
     role: 'assistant',
     type: 'text',
-    createdAt: new Date(),
+    createdAt: createdAt ?? new Date(),
     threadId: threadContext.threadId,
     resourceId: threadContext.resourceId,
     content: {
@@ -325,7 +327,9 @@ function hasToolInvocationPart(message: MastraDBMessage): boolean {
 function getMessageText(message: MastraDBMessage): string {
   return (
     message.content?.parts
-      ?.flatMap(part => (isPlainObject(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : []))
+      ?.flatMap(part =>
+        isPlainObject(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [],
+      )
       .join('') ?? ''
   );
 }
@@ -339,7 +343,10 @@ function normalizeFallbackComparisonText(text: string): string {
 }
 
 function matchesFallbackText(messageText: string, fallbackText: string): boolean {
-  return messageText === fallbackText || normalizeFallbackComparisonText(messageText) === normalizeFallbackComparisonText(fallbackText);
+  return (
+    messageText === fallbackText ||
+    normalizeFallbackComparisonText(messageText) === normalizeFallbackComparisonText(fallbackText)
+  );
 }
 
 function hasMatchingAssistantText(
@@ -349,7 +356,10 @@ function hasMatchingAssistantText(
   const fallbackText = getOutputMessageText(item);
 
   return messages.some(
-    message => message.role === 'assistant' && hasTextPart(message) && matchesFallbackText(getMessageText(message), fallbackText),
+    message =>
+      message.role === 'assistant' &&
+      hasTextPart(message) &&
+      matchesFallbackText(getMessageText(message), fallbackText),
   );
 }
 
@@ -610,7 +620,11 @@ function getMissingFallbackOutputItems({
   });
 }
 
-function getFallbackOutputIdForMessage(message: MastraDBMessage, responseId: string): string | null {
+function getFallbackOutputIdForMessage(
+  message: MastraDBMessage,
+  responseId: string,
+  fallbackOutputIds: Set<string>,
+): string | null {
   for (const toolInvocation of getToolInvocationParts(message)) {
     const toolCallId = typeof toolInvocation.toolCallId === 'string' ? toolInvocation.toolCallId : null;
     if (!toolCallId) {
@@ -627,7 +641,7 @@ function getFallbackOutputIdForMessage(message: MastraDBMessage, responseId: str
   }
 
   if (message.role === 'assistant' && hasTextPart(message)) {
-    return responseId;
+    return fallbackOutputIds.has(message.id) ? message.id : responseId;
   }
 
   return null;
@@ -647,12 +661,15 @@ function sortMessagesByFallbackOutputOrder({
   }
 
   const outputOrder = new Map(fallbackOutputItems.map((item, index) => [item.id, index]));
+  const fallbackOutputIds = new Set(outputOrder.keys());
 
   return messages
     .map((message, index) => ({
       index,
       message,
-      outputIndex: outputOrder.get(getFallbackOutputIdForMessage(message, responseId) ?? '') ?? Number.MAX_SAFE_INTEGER,
+      outputIndex:
+        outputOrder.get(getFallbackOutputIdForMessage(message, responseId, fallbackOutputIds) ?? '') ??
+        Number.MAX_SAFE_INTEGER,
     }))
     .sort((left, right) => left.outputIndex - right.outputIndex || left.index - right.index)
     .map(({ message }) => message);
@@ -683,7 +700,23 @@ export async function resolveResponseTurnMessagesForStorage({
 
   if (responseMessages.length === 0) {
     if (fallbackOutputItems?.length) {
-      return createSyntheticMessagesFromOutputItems({ outputItems: fallbackOutputItems, responseId, threadContext });
+      const syntheticMessages = createSyntheticMessagesFromOutputItems({
+        outputItems: fallbackOutputItems,
+        responseId,
+        threadContext,
+      });
+
+      return text && !syntheticMessages.some(message => message.role === 'assistant' && hasTextPart(message))
+        ? [
+            ...syntheticMessages,
+            createSyntheticResponseMessage({
+              createdAt: new Date(new Date(syntheticMessages.at(-1)?.createdAt ?? Date.now()).getTime() + 1),
+              responseId,
+              text,
+              threadContext,
+            }),
+          ]
+        : syntheticMessages;
     }
 
     return [createSyntheticResponseMessage({ responseId, text, threadContext })];
@@ -710,8 +743,9 @@ export async function resolveResponseTurnMessagesForStorage({
       .filter(Boolean),
   );
   const baseMessages = fallbackMessageTexts.size
-    ? responseMessages
-        .map(message => replaceAssistantTextWithFallback({ fallbackMessageTexts, message, textOnlyFallbackMessageTexts }))
+    ? responseMessages.map(message =>
+        replaceAssistantTextWithFallback({ fallbackMessageTexts, message, textOnlyFallbackMessageTexts }),
+      )
     : responseMessages;
   const syntheticFallbackMessages = createSyntheticMessagesFromOutputItems({
     contextOutputItems: fallbackOutputItems ?? [],
@@ -796,13 +830,17 @@ export async function persistResponseTurnRecord({
   const storedMessageIndex = responseAnchorIndex >= 0 ? responseAnchorIndex : normalizedMessages.length - 1;
 
   const droppedSupersededMessageIds = normalizedMessages.flatMap((message, index) =>
-    index !== storedMessageIndex && isEmptyAssistantMessage(message) && messages[index]?.id ? [messages[index]!.id] : [],
+    index !== storedMessageIndex && isEmptyAssistantMessage(message) && messages[index]?.id
+      ? [messages[index]!.id]
+      : [],
   );
   const staleMessageIds =
     responseAnchorIndex >= 0 && messages[responseAnchorIndex]?.id && messages[responseAnchorIndex]?.id !== responseId
       ? [messages[responseAnchorIndex]!.id]
       : [];
-  const messagesToSave = normalizedMessages.filter((message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message));
+  const messagesToSave = normalizedMessages.filter(
+    (message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message),
+  );
 
   const storedMessage = writeResponseTurnRecordMetadata(lastAssistantMessage, {
     ...metadata,
@@ -815,7 +853,9 @@ export async function persistResponseTurnRecord({
     normalizedMessages[normalizedMessages.length - 1] = storedMessage;
   }
 
-  const savedMessages = normalizedMessages.filter((message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message));
+  const savedMessages = normalizedMessages.filter(
+    (message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message),
+  );
 
   await memoryStore.saveMessages({ messages: savedMessages });
 

@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { createResponseBodySchema } from '../schemas/responses';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
+import { mapMastraMessagesToResponseOutputItems } from './responses.adapter';
+import { resolveResponseTurnMessagesForStorage } from './responses.storage';
 import { createTestServerContext } from './test-utils';
 
 function createGenerateResult({
@@ -1312,9 +1314,9 @@ describe('Responses Handlers', () => {
 
   it('falls back to streamLegacy for AI SDK v4 agents', async () => {
     mockAgentSpecVersion(agent, 'v1');
-    const streamLegacySpy = vi.spyOn(agent, 'streamLegacy').mockResolvedValue(
-      createLegacyStreamResult({ text: 'Hello world' }),
-    );
+    const streamLegacySpy = vi
+      .spyOn(agent, 'streamLegacy')
+      .mockResolvedValue(createLegacyStreamResult({ text: 'Hello world' }));
     const streamSpy = vi.spyOn(agent, 'stream');
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
@@ -2431,6 +2433,104 @@ describe('Responses Handlers', () => {
         content: [{ text: 'The lookup is done.' }],
       },
     ]);
+  });
+
+  it('stores final text when fallback output only contains tool items', async () => {
+    const resolvedMessages = await resolveResponseTurnMessagesForStorage({
+      result: {
+        response: Promise.resolve({ id: 'model-response', dbMessages: [] }),
+      } as any,
+      responseId: 'resp_tool_only_fallback',
+      text: 'The lookup is done.',
+      threadContext: {
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      },
+      fallbackOutputItems: [
+        {
+          id: 'call_tool_only_fallback',
+          type: 'function_call',
+          call_id: 'call_tool_only_fallback',
+          name: 'weather',
+          arguments: JSON.stringify({ city: 'Lagos' }),
+          status: 'completed',
+        },
+        {
+          id: 'call_tool_only_fallback:output',
+          type: 'function_call_output',
+          call_id: 'call_tool_only_fallback',
+          output: JSON.stringify({ weather: 'sunny' }),
+        },
+      ],
+    });
+
+    expect(resolvedMessages.map(message => message.id)).toEqual([
+      'resp_tool_only_fallback:tool-call:call_tool_only_fallback',
+      'resp_tool_only_fallback:tool-result:call_tool_only_fallback',
+      'resp_tool_only_fallback',
+    ]);
+    expect(resolvedMessages.at(-1)?.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'The lookup is done.' }),
+    ]);
+    expect(resolvedMessages[0]!.createdAt.getTime()).toBeLessThan(resolvedMessages[1]!.createdAt.getTime());
+    expect(resolvedMessages[1]!.createdAt.getTime()).toBeLessThan(resolvedMessages[2]!.createdAt.getTime());
+  });
+
+  it('orders multiple assistant text messages by fallback output item ids', async () => {
+    const fallbackOutputItems = [
+      {
+        id: 'assistant-first',
+        type: 'message' as const,
+        role: 'assistant' as const,
+        status: 'completed' as const,
+        content: [{ type: 'output_text' as const, text: 'First.', annotations: [], logprobs: [] }],
+      },
+      {
+        id: 'assistant-second',
+        type: 'message' as const,
+        role: 'assistant' as const,
+        status: 'completed' as const,
+        content: [{ type: 'output_text' as const, text: 'Second.', annotations: [], logprobs: [] }],
+      },
+    ];
+    const resolvedMessages = await resolveResponseTurnMessagesForStorage({
+      result: {
+        response: Promise.resolve({
+          id: 'model-response',
+          dbMessages: [
+            createDbMessage({
+              id: 'assistant-second',
+              role: 'assistant',
+              createdAt: new Date('2026-03-23T10:59:00.000Z'),
+              parts: [{ type: 'text', text: 'Second.' }],
+            }),
+            createDbMessage({
+              id: 'assistant-first',
+              role: 'assistant',
+              createdAt: new Date('2026-03-23T10:58:00.000Z'),
+              parts: [{ type: 'text', text: 'First.' }],
+            }),
+          ],
+        }),
+      } as any,
+      responseId: 'resp_multi_text_fallback',
+      text: 'Second.',
+      threadContext: {
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+      },
+      fallbackOutputItems,
+    });
+    const responseOutput = mapMastraMessagesToResponseOutputItems({
+      fallbackOutputItems,
+      fallbackText: 'Second.',
+      messages: resolvedMessages,
+      outputMessageId: 'resp_multi_text_fallback',
+      status: 'completed',
+    });
+
+    expect(resolvedMessages.map(message => message.id)).toEqual(['assistant-first', 'assistant-second']);
+    expect(responseOutput.map(item => item.id)).toEqual(['assistant-first', 'assistant-second']);
   });
 
   it('preserves malformed streamed tool arguments in fallback storage', async () => {

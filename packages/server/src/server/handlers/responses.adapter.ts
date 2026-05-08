@@ -385,6 +385,10 @@ function mergeFallbackOutputItems({
   ];
 }
 
+function getOutputMessageText(item: Extract<ResponseOutputItem, { type: 'message' }>): string {
+  return item.content.map(part => part.text).join('');
+}
+
 /**
  * Maps the stored Mastra messages for one response turn back into OpenAI-style
  * `response.output` items, preserving tool/message ordering from the thread.
@@ -421,6 +425,39 @@ export function mapMastraMessagesToResponseOutputItems({
   const toolResultCallIds = collectToolResultCallIds(messages);
   const emittedCallIds = new Set<string>();
   const emittedResultCallIds = new Set<string>();
+  const fallbackMessageItems = fallbackOutputItems.filter(
+    (item): item is Extract<ResponseOutputItem, { type: 'message' }> => item.type === 'message',
+  );
+  const emittedFallbackMessageIds = new Set<string>();
+
+  const getOutputMessageId = ({
+    message,
+    text,
+    useOutputMessageId,
+  }: {
+    message: MastraDBMessage;
+    text: string;
+    useOutputMessageId: boolean;
+  }) => {
+    const directFallbackItem = fallbackMessageItems.find(item => item.id === message.id);
+    if (directFallbackItem) {
+      emittedFallbackMessageIds.add(directFallbackItem.id);
+      return directFallbackItem.id;
+    }
+
+    if (useOutputMessageId) {
+      const matchingFallbackItem = fallbackMessageItems.find(
+        item =>
+          item.id !== outputMessageId && !emittedFallbackMessageIds.has(item.id) && getOutputMessageText(item) === text,
+      );
+      if (matchingFallbackItem) {
+        emittedFallbackMessageIds.add(matchingFallbackItem.id);
+        return matchingFallbackItem.id;
+      }
+    }
+
+    return useOutputMessageId ? outputMessageId : message.id;
+  };
 
   for (const [messageIndex, message] of messages.entries()) {
     output.push(
@@ -434,9 +471,10 @@ export function mapMastraMessagesToResponseOutputItems({
 
     const text = getMessageText(message);
     if (getMessageRole(message) === 'assistant' && text) {
+      const useOutputMessageId = messageIndex === outputMessageIndex;
       output.push(
         createOutputMessage({
-          messageId: messageIndex === outputMessageIndex ? outputMessageId : message.id,
+          messageId: getOutputMessageId({ message, text, useOutputMessageId }),
           status,
           text,
         }),
