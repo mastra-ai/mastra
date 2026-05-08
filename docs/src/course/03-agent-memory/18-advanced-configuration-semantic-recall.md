@@ -53,13 +53,21 @@ The following example demonstrates metadata filters for common use cases:
 
 ```typescript
 // Filter by project
-filter: { projectId: { $eq: 'my-project' } }
+const options = {
+  semanticRecall: { filter: { projectId: { $eq: 'my-project' } } },
+}
 
 // Filter by multiple categories
-filter: { category: { $in: ['work', 'research'] } }
+const options = {
+  semanticRecall: { filter: { category: { $in: ['work', 'research'] } } },
+}
 
 // Filter by project and priority
-filter: {
-  $and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
+const options = {
+  semanticRecall: {
+    filter: {
+      $and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
+    },
+  },
 }
 ```
