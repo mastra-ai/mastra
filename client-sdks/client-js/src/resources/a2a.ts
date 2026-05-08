@@ -25,10 +25,24 @@ import type {
 import type { ClientOptions } from '../types';
 import { MastraClientError as MastraClientErrorClass } from '../types';
 import { processA2AStream } from '../utils/process-a2a-stream';
+import { verifyAgentCardSignatureIfPresent } from '../utils/verify-agent-card-signature';
+import type {
+  AgentCardSignatureKeyProviderInput,
+  AgentCardVerificationKey,
+  VerifyAgentCardSignatureOptions,
+} from '../utils/verify-agent-card-signature';
 import { BaseResource } from './base';
 
 export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 export type SendMessageResult = Message | Task;
+export type { AgentCardSignatureKeyProviderInput, AgentCardVerificationKey, VerifyAgentCardSignatureOptions };
+
+/**
+ * @experimental Agent Card verification may evolve as A2A JS signing support settles.
+ */
+export type GetAgentCardOptions = {
+  verifySignature?: VerifyAgentCardSignatureOptions;
+};
 
 function createA2AJsonRpcError(response: JSONRPCErrorResponse): Error {
   const error = response.error;
@@ -91,17 +105,24 @@ export class A2A extends BaseResource {
 
   /**
    * Get the agent card with metadata about the agent.
+   * @param options - Optional Agent Card verification settings
    * @returns Promise containing the agent card information
    */
-  async getAgentCard(): Promise<AgentCard> {
-    return this.request(`/.well-known/${this.agentId}/agent-card.json`);
+  async getAgentCard(options?: GetAgentCardOptions): Promise<AgentCard> {
+    const agentCard = await this.request<AgentCard>(`/.well-known/${this.agentId}/agent-card.json`);
+
+    if (!options?.verifySignature) {
+      return agentCard;
+    }
+
+    return verifyAgentCardSignatureIfPresent(agentCard, options.verifySignature);
   }
 
   /**
    * @deprecated Use getAgentCard() instead.
    */
-  async getCard(): Promise<AgentCard> {
-    return this.getAgentCard();
+  async getCard(options?: GetAgentCardOptions): Promise<AgentCard> {
+    return this.getAgentCard(options);
   }
 
   /**

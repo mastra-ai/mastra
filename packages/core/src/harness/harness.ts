@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -650,6 +652,11 @@ export class Harness<TState = {}> {
 
   getResourceId(): string {
     return this.resourceId;
+  }
+
+  async getResolvedMemory(): Promise<MastraMemory | null> {
+    if (!this.config.memory) return null;
+    return this.resolveMemory();
   }
 
   setResourceId({ resourceId }: { resourceId: string }): void {
@@ -1524,6 +1531,45 @@ export class Harness<TState = {}> {
     return this.listMessagesForThread({ threadId: this.currentThreadId, limit: options?.limit });
   }
 
+  async saveSystemReminderMessage({
+    message,
+    reminderType,
+    role = 'user',
+    metadata,
+  }: {
+    message: string;
+    reminderType: string;
+    role?: 'user' | 'assistant' | 'system';
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessMessage | null> {
+    if (!this.currentThreadId || !this.config.storage) return null;
+
+    const memoryStorage = await this.getMemoryStorage();
+    const dbMessage = {
+      id: randomUUID(),
+      role,
+      threadId: this.currentThreadId,
+      resourceId: this.resourceId,
+      createdAt: new Date(),
+      content: {
+        format: 2 as const,
+        parts: [],
+        content: '',
+        metadata: {
+          systemReminder: {
+            type: reminderType,
+            message,
+            ...metadata,
+          },
+        },
+      },
+    };
+
+    const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
+    const saved = result.messages[0] ?? dbMessage;
+    return this.convertToHarnessMessage(saved);
+  }
+
   async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.config.storage) return [];
 
@@ -1623,6 +1669,14 @@ export class Harness<TState = {}> {
         timestamp:
           'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
             ? systemReminder.timestamp
+            : undefined,
+        goalMaxTurns:
+          'goalMaxTurns' in systemReminder && typeof systemReminder.goalMaxTurns === 'number'
+            ? systemReminder.goalMaxTurns
+            : undefined,
+        judgeModelId:
+          'judgeModelId' in systemReminder && typeof systemReminder.judgeModelId === 'string'
+            ? systemReminder.judgeModelId
             : undefined,
       });
 

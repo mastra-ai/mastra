@@ -1,6 +1,6 @@
 import type { ListBranchesArgs, ListBranchesResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
@@ -98,7 +98,6 @@ export const useTraces = ({ filters, listMode = 'traces' }: TracesFilters) => {
     initialPageParam: 0,
     getNextPageParam: getTracesNextPageParam,
     select: selectUniqueTraces,
-    placeholderData: keepPreviousData,
     retry: false,
     // Disable polling on 403 to prevent flickering
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 10000),

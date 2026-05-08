@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
 import { getInputPreview } from '../utils/span-utils';
@@ -28,7 +28,8 @@ export type TracesListViewTrace = {
   threadId?: string | null;
 };
 
-const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) auto auto';
+// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
+const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -119,6 +120,24 @@ export function TracesListView({
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
   });
+
+  // Reset scroll to top whenever a fresh query resolves (filter / date range change).
+  // `isLoading` only flips on initial fetches — `fetchNextPage` keeps it `false`, so this
+  // effect doesn't fire during pagination.
+  //
+  // Why the manual scroll event: when the skeleton-vs-list branch swaps in the new scroll
+  // container, it mounts at `scrollTop = 0`. The virtualizer rebinds its listener but
+  // doesn't re-read `scrollTop`, so it keeps the stale `scrollOffset` from the previous
+  // element. `scrollToOffset(0)` no-ops because the new element is already at 0 (no scroll
+  // event fires). Dispatching a synthetic `scroll` forces the virtualizer's handler to
+  // read the fresh `scrollTop` and recompute `virtualItems` with `paddingTop = 0`.
+  const wasLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading) {
+      scrollRef.current?.dispatchEvent(new Event('scroll'));
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;

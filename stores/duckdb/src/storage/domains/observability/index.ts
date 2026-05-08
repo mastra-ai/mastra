@@ -145,13 +145,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       });
     }
 
-    for (const ddl of ALL_DDL) {
-      await this.db.execute(ddl);
-    }
-
-    for (const migration of ALL_MIGRATIONS) {
-      await this.db.execute(migration);
-    }
+    await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
   }
 
   /**

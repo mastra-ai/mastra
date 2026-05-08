@@ -248,7 +248,7 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+   * import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
@@ -256,12 +256,16 @@ export interface Config<
    *       default: {
    *         serviceName: 'mastra',
    *         exporters: [new DefaultExporter(), new CloudExporter()],
-   *         spanOutputProcessors: [new SensitiveDataFilter()],
    *       },
    *     },
    *   })
    * })
    * ```
+   *
+   * `Observability` auto-applies a `SensitiveDataFilter` span output processor
+   * to every configured instance. Set `sensitiveDataFilter: false` on the
+   * registry config to opt out, or pass a `SensitiveDataFilterOptions` object
+   * to customize it.
    */
   observability?: ObservabilityEntrypoint;
 

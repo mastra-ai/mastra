@@ -74,6 +74,11 @@ export const mastra = new Mastra({
             clearTasks.push(datasetsStore.dangerouslyClearAll());
           }
 
+          const mcpClientsStore = await storage.getStore('mcpClients');
+          if (mcpClientsStore) {
+            clearTasks.push(mcpClientsStore.dangerouslyClearAll());
+          }
+
           // Reset schedule pause state + drop trigger history between tests.
           // Schedules are declarative config registered at boot, so we
           // snapshot the current rows, clear, then re-create them with a

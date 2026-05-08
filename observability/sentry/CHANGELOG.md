@@ -1,5 +1,13 @@
 # @mastra/sentry
 
+## 1.0.23-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`00ef282`](https://github.com/mastra-ai/mastra/commit/00ef2826034d006b984b3f19cd33ba0bba14d6c6)]:
+  - @mastra/observability@1.12.0-alpha.0
+  - @mastra/otel-exporter@1.0.23-alpha.0
+
 ## 1.0.22
 
 ### Patch Changes
