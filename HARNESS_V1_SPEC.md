@@ -622,6 +622,14 @@ class HarnessSessionNotFoundError extends Error {
   readonly sessionId: string;
 }
 
+// Thrown by `session.useSkill(name, ...)` when `name` matches neither a
+// code-registered skill (`HarnessConfig.skills`) nor a workspace-discovered
+// skill. See §4.6 for the resolution rules.
+class HarnessSkillNotFoundError extends Error {
+  readonly skillName: string;
+  readonly searchedSources: Array<'code-registered' | 'workspace'>;
+}
+
 // The four cancellation sources tools and callers may observe. v1 has no
 // `session.abort()` surface (see §3); the run loop's abort signal comes
 // from the agent layer, the harness lifecycle, or the parent run.
@@ -2702,10 +2710,10 @@ When the harness is registered on a `Mastra` instance served by Mastra Server, t
 | `POST` | `/harness/:name/sessions` | Resolve (find-or-create) a session |
 | `GET` | `/harness/:name/sessions/:sessionId` | Get session summary + current state snapshot |
 | `DELETE` | `/harness/:name/sessions/:sessionId` | Close (terminate) a session |
-| `POST` | `/harness/:name/sessions/:sessionId/messages` | Send a message (`message` — busy-independent, signal-driven). Body `{ content, files?, ...overrides }`. Returns `{ runId, signalId }`. Final result observed via the SSE event stream. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session.closed`, `503 harness.storage`, or `409 harness.override_conflict` (when `model`/`mode`/`addTools` are set on a signal draining into an active run — body carries `activeRunId` and `conflictingFields`). |
+| `POST` | `/harness/:name/sessions/:sessionId/messages` | Send a message (`message` — busy-independent, signal-driven). Body `{ content, files?, ...overrides }`. Returns `{ runId, signalId }`. Final result observed via the SSE event stream. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session_closed`, `503 harness.storage`, or `409 harness.override_conflict` (when `model`/`mode`/`addTools` are set on a signal draining into an active run — body carries `activeRunId` and `conflictingFields`). |
 | `POST` | `/harness/:name/sessions/:sessionId/messages?sync=true` | Sync send with typed output (`message({ sync: true, output })`). Returns the typed result body. May respond `409 Conflict` with a `HarnessBusyError` payload. |
 | `POST` | `/harness/:name/sessions/:sessionId/messages?stream=true` | Stream a turn (SSE, `message({ stream: true })`). The response body is an SSE stream of the answering turn's chunks. |
-| `POST` | `/harness/:name/sessions/:sessionId/queue` | Enqueue an item for sequential delivery (`queue` — busy-independent). Returns `{ queuedItemId }`. Item runs as a fresh standalone turn once the thread is idle. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session.closed`, `503 harness.storage`, or `429 harness.queue_full` (when `sessions.maxQueueDepth` would be exceeded — body carries `currentDepth` and `maxQueueDepth`). |
+| `POST` | `/harness/:name/sessions/:sessionId/queue` | Enqueue an item for sequential delivery (`queue` — busy-independent). Returns `{ queuedItemId }`. Item runs as a fresh standalone turn once the thread is idle. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session_closed`, `503 harness.storage`, or `429 harness.queue_full` (when `sessions.maxQueueDepth` would be exceeded — body carries `currentDepth` and `maxQueueDepth`). |
 | `POST` | `/harness/:name/sessions/:sessionId/skills/:skillName` | Invoke a skill (`useSkill`). May respond `409 Conflict`. |
 | `GET` | `/harness/:name/sessions/:sessionId/events` | Subscribe to session events (SSE). |
 | `POST` | `/harness/:name/sessions/:sessionId/inbox/:itemId` | Respond to a pending approval / question / plan |
@@ -2774,16 +2782,77 @@ In any `412` case the client is expected to refetch state via `GET /sessions/:se
 
 **Error envelope:**
 
+The envelope is a discriminated union on `code`. Each `code` corresponds one-to-one with a typed error class in §4.5; the SDK rehydrates the response into an instance of that class with the `details` fields populated. The set of codes is **stable** — adding a new code is a wire-protocol change.
+
 ```ts
-interface HarnessErrorResponse {
-  code: 'harness.busy' | 'harness.session_not_found' | 'harness.session_closed'
-      | 'harness.permission_denied' | 'harness.bad_request' | 'harness.internal';
-  message: string;
-  details?: Record<string, unknown>;
+interface HarnessErrorResponseBase {
+  message: string;                 // Human-readable. Not part of any contract;
+                                   // SDK callers should branch on `code`, not `message`.
+  retryable?: boolean;             // Optional advisory. Servers may set this for
+                                   // transient failures (e.g. storage outages); SDKs
+                                   // may use it to drive automatic retry/backoff.
 }
+
+type HarnessErrorResponse = HarnessErrorResponseBase & (
+  // ── Admission failures (4xx) ────────────────────────────────────────────
+  | { code: 'harness.busy';                    // → HarnessBusyError (only on `message({ sync: true })`,
+                                               //   `message({ stream: true })`, and `useSkill(...)`)
+      details: { sessionId: string;
+                 reason: 'in_flight' | 'pending_approval' | 'pending_question' | 'pending_plan' } }
+  | { code: 'harness.queue_full';              // → HarnessQueueFullError
+      details: { sessionId: string; maxQueueDepth: number; currentDepth: number } }
+  | { code: 'harness.validation';              // → HarnessValidationError
+      details: { field: string; reason: string } }
+  | { code: 'harness.override_conflict';       // → HarnessOverrideConflictError
+      details: { sessionId: string; activeRunId: string;
+                 conflictingFields: Array<'model' | 'mode' | 'addTools'> } }
+  | { code: 'harness.subagent_depth_exceeded'; // → HarnessSubagentDepthExceededError
+      details: { maxDepth: number; attemptedDepth: number } }
+  | { code: 'harness.skill_not_found';         // → HarnessSkillNotFoundError
+      details: { skillName: string;
+                 searchedSources: Array<'code-registered' | 'workspace'> } }
+
+  // ── Session lifecycle (4xx) ─────────────────────────────────────────────
+  | { code: 'harness.session_not_found';       // → HarnessSessionNotFoundError
+      details: { sessionId: string } }
+  | { code: 'harness.session_closed';          // → HarnessSessionClosedError
+      details: { sessionId: string } }
+  | { code: 'harness.session_locked';          // → HarnessSessionLockedError
+      details: { sessionId: string; currentOwnerId: string; expiresAt: number } }
+  | { code: 'harness.aborted';                 // → HarnessAbortedError
+      details: { sessionId: string;
+                 reason: 'agent_aborted' | 'parent_aborted' | 'session_closed' | 'process_restart';
+                 parentSessionId?: string } }
+
+  // ── Workspace (4xx) ─────────────────────────────────────────────────────
+  | { code: 'harness.workspace_provider_mismatch'; // → HarnessWorkspaceProviderMismatchError
+      details: { sessionId: string; storedProviderId: string; configuredProviderId: string } }
+  | { code: 'harness.workspace_lost';          // → HarnessWorkspaceLostError
+      details: { sessionId: string; providerId: string; reason: 'restart' | 'eviction' } }
+
+  // ── Persistence (5xx, retryable) ────────────────────────────────────────
+  | { code: 'harness.storage';                 // → HarnessStorageError
+      details: { sessionId: string; operation: 'flush' | 'load' | 'attachment' } }
+  | { code: 'harness.session_corrupt';         // → HarnessSessionCorruptError
+      details: { sessionId: string; reason: 'parse_failed' | 'schema_incompatible' } }
+  | { code: 'harness.state_serialization';     // → HarnessStateSerializationError
+      details: { sessionId: string; path: string } }
+
+  // ── Server-layer (no typed class; SDK throws a generic Error) ───────────
+  | { code: 'harness.permission_denied';       // Auth/tenancy boundary, set by the server middleware.
+      details?: { sessionId?: string; resourceId?: string } }
+  | { code: 'harness.bad_request';             // Malformed HTTP request (bad JSON, missing route param).
+                                               // Distinct from `harness.validation`, which is harness-layer
+                                               // admission for well-formed requests.
+      details?: Record<string, unknown> }
+  | { code: 'harness.internal';                // Catch-all for unhandled server exceptions.
+      details?: { traceId?: string } }
+);
 ```
 
-The SDK rehydrates `code` values into the corresponding typed error classes (`HarnessBusyError`, `HarnessSessionNotFoundError`, etc.).
+The `details` field on a response is fully typed by the discriminated `code`; SDK rehydration is a switch on `code` that constructs the matching `Harness*Error` subclass with the corresponding fields. The set of codes deliberately mirrors the typed class hierarchy in §4.5 — adding a new typed error class therefore requires adding a new code to this union.
+
+**Local-only errors not represented on the wire.** `HarnessConfigError` (§4.5) is intentionally not wire-representable. It is a startup-time failure: a misconfigured workspace provider, missing required field, or unresumable provider declared without a fallback prevents `harness.init()` from succeeding, and therefore prevents the Mastra Server from accepting requests at all. By the time a client could issue an HTTP call, this class of error has already aborted server boot. There is no other typed error in §4.5 that is intentionally local-only.
 
 ### 13.4 Client SDK
 
