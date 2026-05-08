@@ -856,7 +856,9 @@ describe('toUIMessage', () => {
         {
           id: 'assistant-before-signal',
           role: 'assistant',
-          parts: [{ type: 'text', text: 'Before signal', state: 'streaming', textId: 'text-1' } as MastraExtendedTextPart],
+          parts: [
+            { type: 'text', text: 'Before signal', state: 'streaming', textId: 'text-1' } as MastraExtendedTextPart,
+          ],
           metadata: baseMetadata,
         },
         {

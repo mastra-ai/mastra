@@ -205,6 +205,13 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
               onCompositionEnd={() => {
                 isComposingRef.current = false;
               }}
+              onKeyDownCapture={e => {
+                if (isStreaming && e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  composerRuntime.send();
+                }
+              }}
               onKeyDown={e => {
                 // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
                 // while an IME composition session is active (e.g. Chinese pinyin).

@@ -356,12 +356,20 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       };
 
       if (!lastMessage || lastMessage.role !== 'assistant') {
-        return appendAssistantMessage(result, { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] }, metadata);
+        return appendAssistantMessage(
+          result,
+          { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] },
+          metadata,
+        );
       }
 
       // If the last message is a completion/isTaskComplete result message, start a new assistant message
       if (lastMessage.metadata?.completionResult) {
-        return appendAssistantMessage(result, { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] }, metadata);
+        return appendAssistantMessage(
+          result,
+          { id: `start-${chunk.runId}-${Date.now()}`, parts: [newTextPart] },
+          metadata,
+        );
       }
 
       const parts = [...lastMessage.parts];
@@ -405,7 +413,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           textId: textId,
           providerMetadata: chunk.payload.providerMetadata,
         };
-        return appendAssistantMessage(result, { id: `text-${chunk.runId}-${Date.now()}`, parts: [newTextPart] }, metadata);
+        return appendAssistantMessage(
+          result,
+          { id: `text-${chunk.runId}-${Date.now()}`, parts: [newTextPart] },
+          metadata,
+        );
       }
 
       const parts = [...lastMessage.parts];
