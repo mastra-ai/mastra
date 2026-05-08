@@ -1069,6 +1069,33 @@ describe('Agent Routes Authorization', () => {
       ).toBe(true);
     });
 
+    it('should validate Mastra DB message shaped user-message signal contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: {
+            type: 'user-message',
+            contents: [
+              {
+                id: 'stored-message-1',
+                role: 'user',
+                createdAt: '2026-05-08T00:00:00.000Z',
+                threadId: 'thread-a',
+                resourceId: 'user-a',
+                content: {
+                  format: 2,
+                  content: 'stored hello',
+                  parts: [{ type: 'text', text: 'stored hello' }],
+                  metadata: { source: 'memory' },
+                },
+              },
+            ],
+          },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
     it('should reject malformed user-message content parts', () => {
       expect(
         sendAgentSignalBodySchema.safeParse({

@@ -5,7 +5,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import { createSignal, signalToMessage } from './signals';
+import { createSignal } from './signals';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentSignal,
@@ -171,7 +171,7 @@ export class AgentThreadStreamRuntime {
       this.#pendingSignalsByThread.delete(key);
     }
 
-    const output = (await (previousRun.agent.stream as any)(signalToMessage(signal), {
+    const output = (await (previousRun.agent.stream as any)(signal, {
       ...previousRun.streamOptions,
       runId: randomUUID(),
       memory:
@@ -290,6 +290,18 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  /**
+   * Routes a signal to an agent thread.
+   *
+   * Signals can land in three places:
+   * - an active same-agent run, where they are queued for the execution loop to drain;
+   * - a reserved thread run that has not registered its stream record yet;
+   * - a new idle-started run, when the caller opts into `ifIdle`.
+   *
+   * Cross-agent active runs are intentionally not interrupted here. They either finish first
+   * through `waitForCrossAgentThreadRun()` on the stream path, or this method falls through to
+   * the idle-start path when the caller provided a resource/thread target and `ifIdle` options.
+   */
   sendSignal<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     signalInput: AgentSignal,
@@ -308,9 +320,14 @@ export class AgentThreadStreamRuntime {
         this.#activeThreadRunIds.delete(key);
         activeRecord = undefined;
       }
+
+      // Prefer the active same-agent run for thread-targeted signals. This is the normal
+      // follow-up path used by clients that know the thread/resource but not the run id.
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
+        // A run can be reserved before its stream record is registered. Keep the reserved
+        // id so early follow-ups still attach to the run that is starting.
         runId = activeRunId;
       }
     }
@@ -320,6 +337,8 @@ export class AgentThreadStreamRuntime {
       if (activeRecord?.output.status === 'running') {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
+          // Same-agent active run: queue the signal for in-loop draining so it becomes
+          // the next model input instead of waiting for the run to finish.
           const queue = this.#pendingSignalsByThread.get(key) ?? [];
           queue.push(signal);
           this.#pendingSignalsByThread.set(key, queue);
@@ -329,6 +348,8 @@ export class AgentThreadStreamRuntime {
       }
 
       if (key && this.#activeThreadRunIds.get(key) === runId) {
+        // Reserved run without a record yet: queue by thread key until registerRun()
+        // attaches the stream record and the execution loop can drain it.
         const queue = this.#pendingSignalsByThread.get(key) ?? [];
         queue.push(signal);
         this.#pendingSignalsByThread.set(key, queue);
@@ -348,14 +369,15 @@ export class AgentThreadStreamRuntime {
     runId = randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
     if (!this.#activeThreadRunIds.has(key)) {
+      // No active same-agent run accepted the signal. Reserve the thread before starting
+      // the idle stream so concurrent callers do not launch duplicate runs.
       this.#activeThreadRunIds.set(key, runId);
       this.#threadKeysByRunId.set(runId, key);
     }
-    void (agent.stream as any)(signalToMessage(signal), {
+    void (agent.stream as any)(signal, {
       ...target.ifIdle.streamOptions,
       runId,
       memory: target.ifIdle.streamOptions.memory ?? ({ resource: resourceId, thread: threadId } as any),
-      _initialSignalEchoes: [signal],
     }).catch(() => {
       this.#threadKeysByRunId.delete(runId);
       this.#cleanupPreparedRun(runId);

@@ -173,6 +173,10 @@ function signalToDBMessage(
   };
 }
 
+export function isAgentSignalInput(input: unknown): input is AgentSignalInput {
+  return !!input && typeof input === 'object' && 'type' in input && 'contents' in input;
+}
+
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   const signal = normalizeSignal(input);
 

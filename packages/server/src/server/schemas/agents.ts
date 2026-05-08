@@ -91,7 +91,31 @@ const uiMessageSchema = z.object({
   createdAt: z.union([z.string(), z.date()]).optional(),
 });
 
-const messageInputSchema = z.union([modelMessageSchema, uiMessageSchema]);
+const mastraDBMessagePartSchema = z.object({ type: z.string() }).passthrough();
+const mastraDBMessageContentSchema = z
+  .object({
+    format: z.literal(2),
+    parts: z.array(mastraDBMessagePartSchema),
+    content: messageContentSchema.optional(),
+    experimental_attachments: z.array(jsonRecordSchema).optional(),
+    toolInvocations: z.array(jsonRecordSchema).optional(),
+    reasoning: z.string().optional(),
+    annotations: z.array(jsonValueSchema).optional(),
+    metadata: jsonRecordSchema.optional(),
+    providerMetadata: jsonRecordSchema.optional(),
+  })
+  .passthrough();
+const mastraDBMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(['system', 'user', 'assistant', 'signal']),
+  createdAt: z.union([z.string(), z.date()]),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  type: z.string().optional(),
+  content: mastraDBMessageContentSchema,
+});
+
+const messageInputSchema = z.union([modelMessageSchema, uiMessageSchema, mastraDBMessageSchema]);
 const messageListInputSchema = z.union([
   z.string(),
   z.array(z.string()),

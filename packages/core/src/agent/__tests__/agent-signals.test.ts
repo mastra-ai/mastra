@@ -467,6 +467,7 @@ describe('Agent signals', () => {
       memory: { thread: 'interleaved-reasoning-thread', resource: 'interleaved-reasoning-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    await waitForCondition(() => !!releaseReasoningChunk);
 
     const signalResult = agent.sendSignal(
       { type: 'user-message', contents: 'Stop reasoning and answer this' },
@@ -475,8 +476,9 @@ describe('Agent signals', () => {
     expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
 
     releaseReasoningChunk?.();
-    await waitForCondition(() => callCount === 2);
+    await waitForCondition(() => !!finishFirstCall);
     finishFirstCall?.();
+    await waitForCondition(() => callCount === 2);
 
     const run = await runPromise;
     expect(run.value.text).toContain('signal response');

@@ -379,7 +379,9 @@ async function processOutputStream<OUTPUT = undefined>({
       break;
     }
 
-    if (['text-delta', 'reasoning-delta', 'reasoning-end', 'source', 'tool-result'].includes(chunk.type)) {
+    // Drain signals only at stream boundaries so follow-ups do not split visible assistant text
+    // or separate a tool call from its result.
+    if (['text-end', 'reasoning-end', 'source', 'tool-result', 'finish'].includes(chunk.type)) {
       const interruptedSignals = drainPendingSignals?.(runId) ?? [];
       if (interruptedSignals.length > 0) {
         return { collectedChunks, interruptedSignals };
