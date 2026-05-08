@@ -12,6 +12,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
   AnyExportedSpan,
+  ObservabilityDropEvent,
 } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ObservabilityBus } from './observability-bus';
@@ -98,6 +99,19 @@ function createFeedbackEvent(): FeedbackEvent {
       feedbackType: 'thumbs',
       value: 1,
     },
+  };
+}
+
+function createDropEvent(): ObservabilityDropEvent {
+  return {
+    type: 'drop',
+    signal: 'log',
+    reason: 'unsupported-storage',
+    count: 2,
+    timestamp: new Date(),
+    exporterName: 'mastra-default-observability-exporter',
+    storageName: 'MockStorage',
+    error: { message: 'Unsupported logs' },
   };
 }
 
@@ -287,6 +301,140 @@ describe('ObservabilityBus', () => {
       bus.registerExporter(exporter);
 
       bus.emit(createFeedbackEvent());
+    });
+  });
+
+  describe('drop event routing', () => {
+    it('should route drop events to exporters and bridge', () => {
+      const exporterDrop = vi.fn();
+      const bridgeDrop = vi.fn();
+      bus.registerExporter(createMockExporter({ onDroppedEvent: exporterDrop }));
+      bus.registerBridge(createMockBridge({ onDroppedEvent: bridgeDrop }));
+
+      const event = createDropEvent();
+      bus.emitDropEvent(event);
+
+      expect(exporterDrop).toHaveBeenCalledWith(event);
+      expect(bridgeDrop).toHaveBeenCalledWith(event);
+    });
+
+    it('should skip handlers without onDroppedEvent', () => {
+      bus.registerExporter(createMockExporter());
+      bus.registerBridge(createMockBridge());
+
+      expect(() => bus.emitDropEvent(createDropEvent())).not.toThrow();
+    });
+
+    it('should await async drop handlers during flush', async () => {
+      let resolved = false;
+      const onDroppedEvent = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            setTimeout(() => {
+              resolved = true;
+              resolve();
+            }, 0);
+          }),
+      );
+      bus.registerExporter(createMockExporter({ onDroppedEvent }));
+
+      bus.emitDropEvent(createDropEvent());
+      await bus.flush();
+
+      expect(onDroppedEvent).toHaveBeenCalledTimes(1);
+      expect(resolved).toBe(true);
+    });
+
+    it('should await drop handlers emitted during exporter flush', async () => {
+      const event = createDropEvent();
+      let emitted = false;
+      let dropHandled = false;
+      let flushedAfterDrop = false;
+
+      const emittingExporter = createMockExporter({
+        name: 'emitting-exporter',
+        flush: vi.fn(async () => {
+          if (!emitted) {
+            emitted = true;
+            bus.emitDropEvent(event);
+          }
+        }),
+      });
+      const alertExporter = createMockExporter({
+        name: 'alert-exporter',
+        onDroppedEvent: vi.fn(
+          () =>
+            new Promise<void>(resolve => {
+              setTimeout(() => {
+                dropHandled = true;
+                resolve();
+              }, 0);
+            }),
+        ),
+        flush: vi.fn(async () => {
+          if (dropHandled) {
+            flushedAfterDrop = true;
+          }
+        }),
+      });
+      bus.registerExporter(emittingExporter);
+      bus.registerExporter(alertExporter);
+
+      await bus.flush();
+
+      expect(alertExporter.onDroppedEvent).toHaveBeenCalledWith(event);
+      expect(dropHandled).toBe(true);
+      expect(flushedAfterDrop).toBe(true);
+    });
+
+    it('should drain drop handlers emitted during concurrent exporter flushes', async () => {
+      const event = createDropEvent();
+      let flushCalls = 0;
+      let releaseSecondFlush!: () => void;
+      const secondFlushReady = new Promise<void>(resolve => {
+        releaseSecondFlush = resolve;
+      });
+      let emitted = false;
+      let dropBuffered = false;
+      let flushedAfterDrop = false;
+
+      const emittingExporter = createMockExporter({
+        name: 'emitting-exporter',
+        flush: vi.fn(async () => {
+          flushCalls++;
+          if (flushCalls === 1) {
+            return;
+          }
+
+          await secondFlushReady;
+          if (!emitted) {
+            emitted = true;
+            bus.emitDropEvent(event);
+          }
+        }),
+      });
+      const alertExporter = createMockExporter({
+        name: 'alert-exporter',
+        onDroppedEvent: vi.fn(() => {
+          dropBuffered = true;
+        }),
+        flush: vi.fn(async () => {
+          if (dropBuffered) {
+            flushedAfterDrop = true;
+          }
+        }),
+      });
+      bus.registerExporter(emittingExporter);
+      bus.registerExporter(alertExporter);
+
+      const firstFlush = bus.flush();
+      const secondFlush = bus.flush();
+      await Promise.resolve();
+      releaseSecondFlush();
+      await Promise.all([firstFlush, secondFlush]);
+
+      expect(alertExporter.onDroppedEvent).toHaveBeenCalledWith(event);
+      expect(flushedAfterDrop).toBe(true);
     });
   });
 

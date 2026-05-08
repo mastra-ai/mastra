@@ -136,24 +136,90 @@ Each vector store page below includes installation instructions, configuration p
 
 ## Recall configuration
 
-The three main parameters that control semantic recall behavior are:
+The following options control semantic recall behavior:
 
-1. **topK**: How many semantically similar messages to retrieve
-1. **messageRange**: How much surrounding context to include with each match
-1. **scope**: Whether to search within the current thread or across all threads owned by a resource (the default is resource scope).
+1. **topK**: The number of similar messages to retrieve
+1. **messageRange**: The surrounding messages to include with each match
+1. **scope**: Whether to search the current thread or all threads for a resource
+1. **filter**: Metadata criteria that restrict search results
 
-```typescript {5-7}
+```typescript {5-9}
 const agent = new Agent({
   memory: new Memory({
     options: {
       semanticRecall: {
-        topK: 3, // Retrieve 3 most similar messages
+        topK: 3, // Retrieve 3 similar messages
         messageRange: 2, // Include 2 messages before and after each match
-        scope: 'resource', // Search across all threads for this user (default setting if omitted)
+        scope: 'resource', // Search all threads for this resource
+        filter: { projectId: { $eq: 'project-a' } },
       },
     },
   }),
 })
+```
+
+:::note
+
+`scope: 'resource'` is supported by the LibSQL, PostgreSQL, and Upstash storage adapters.
+
+:::
+
+### Metadata filtering
+
+The `filter` option restricts semantic recall results to messages with matching thread metadata.
+
+```typescript {5-10}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        scope: 'resource',
+        filter: {
+          projectId: { $eq: 'project-a' },
+          category: { $in: ['work', 'personal'] },
+        },
+      },
+    },
+  }),
+})
+```
+
+Filters match metadata stored on message embeddings when messages are saved. If thread metadata changes later, existing embeddings keep their previous metadata until those messages are saved or indexed again.
+
+Supported filter operators:
+
+- `$and`: Logical AND
+- `$eq`: Equal to
+- `$gt`: Greater than
+- `$gte`: Greater than or equal
+- `$in`: In array
+- `$lt`: Less than
+- `$lte`: Less than or equal
+- `$ne`: Not equal to
+- `$nin`: Not in array
+- `$or`: Logical OR
+
+The following example demonstrates metadata filters for common use cases:
+
+```typescript
+// Filter by project
+const options = {
+  semanticRecall: { filter: { projectId: { $eq: 'my-project' } } },
+}
+
+// Filter by multiple categories
+const options = {
+  semanticRecall: { filter: { category: { $in: ['work', 'research'] } } },
+}
+
+// Filter by project and priority
+const options = {
+  semanticRecall: {
+    filter: {
+      $and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
+    },
+  },
+}
 ```
 
 ## Embedder configuration
