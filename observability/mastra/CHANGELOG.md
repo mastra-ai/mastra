@@ -1,5 +1,24 @@
 # @mastra/observability
 
+## 1.12.0-alpha.1
+
+### Minor Changes
+
+- `DefaultExporter` now notifies custom exporters and connected integrations when it cannot persist observability events, such as unsupported storage or retries being exceeded. ([#16111](https://github.com/mastra-ai/mastra/pull/16111))
+
+- Added new `MODEL_INFERENCE` span type under `MODEL_STEP`, covering only the model provider call. Use it to measure model latency separately from input/output processors and tool executions. ([#16267](https://github.com/mastra-ai/mastra/pull/16267))
+
+### Patch Changes
+
+- Fixed cost estimation for OpenRouter models. The **Model Usage & Cost** panel now shows costs for OpenRouter `vendor/model` ids (e.g. `openai/gpt-5-mini-2025-08-07`, `xiaomi/mimo-v2-pro-20260318`) that previously rendered an empty cost column. ([#16206](https://github.com/mastra-ai/mastra/pull/16206))
+
+- Score events now include scorer names and target entity types. ([#16185](https://github.com/mastra-ai/mastra/pull/16185))
+
+- Fixed `MODEL_INFERENCE` span timing so it measures pure model latency. ([#16357](https://github.com/mastra-ai/mastra/pull/16357))
+
+- Updated dependencies [[`6742347`](https://github.com/mastra-ai/mastra/commit/6742347d71955d7639adc9ddf6ff8282de7ee3ba), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`62666c3`](https://github.com/mastra-ai/mastra/commit/62666c367eaeac3941ead454b1d38810cc855721), [`4af2160`](https://github.com/mastra-ai/mastra/commit/4af2160322f4718cac421930cce85641e9512389), [`136c959`](https://github.com/mastra-ai/mastra/commit/136c9592fb0eeb0cd212f28629d8a29b7557a2fc), [`4df7cc7`](https://github.com/mastra-ai/mastra/commit/4df7cc79342fd065fe7fdeef93c094db14b12bcd), [`aca3121`](https://github.com/mastra-ai/mastra/commit/aca31211233dac25459f140ea4fcfb3a5af64c18), [`9cdf38e`](https://github.com/mastra-ai/mastra/commit/9cdf38e58506e1109c8b38f97cd7770978a4218e), [`990851e`](https://github.com/mastra-ai/mastra/commit/990851edcb0e30be5c2c18b6532f1a876cc2d335), [`6068a6c`](https://github.com/mastra-ai/mastra/commit/6068a6c42950fad3ebfc92346417896ba60803d2), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`e2a079c`](https://github.com/mastra-ai/mastra/commit/e2a079cc3755b1895f7bd5dc36e9be81b11c7c22), [`534a456`](https://github.com/mastra-ai/mastra/commit/534a456a25e4df1e5407e7e632f4cb3b1fa14f9d), [`36bae07`](https://github.com/mastra-ai/mastra/commit/36bae07c0e70b1b3006f2fd20830e8883dcbd066)]:
+  - @mastra/core@1.33.0-alpha.7
+
 ## 1.12.0-alpha.0
 
 ### Minor Changes

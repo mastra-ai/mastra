@@ -84,6 +84,8 @@ export enum SpanType {
   RAG_ACTION = 'rag_action',
   /** Graph operations (build / traverse) - not RAG-specific */
   GRAPH_ACTION = 'graph_action',
+  /** Inline data mapping between pipeline stages (e.g. a tool's `toModelOutput` transform) */
+  MAPPING = 'mapping',
 }
 
 export { EntityType };
@@ -340,6 +342,17 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   toolDescription?: string;
   /** Whether tool execution was successful */
   success?: boolean;
+}
+
+/**
+ * Mapping attributes — for inline data transforms between pipeline stages
+ * (e.g. a tool's `toModelOutput` reshaping the tool result before the model sees it).
+ */
+export interface MappingAttributes extends AIBaseAttributes {
+  /** Identifier of the mapping (e.g. `toModelOutput`) so UIs can group related mappings */
+  mappingType?: string;
+  /** Associated tool call id when the mapping operates on a tool result */
+  toolCallId?: string;
 }
 
 /**
@@ -647,6 +660,7 @@ export interface SpanTypeMap {
   [SpanType.RAG_VECTOR_OPERATION]: RagVectorOperationAttributes;
   [SpanType.RAG_ACTION]: RagActionAttributes;
   [SpanType.GRAPH_ACTION]: GraphActionAttributes;
+  [SpanType.MAPPING]: MappingAttributes;
 }
 
 /**
@@ -916,9 +930,18 @@ export interface IModelSpanTracker {
   updateStep?(payload?: StepStartPayload): void;
 
   /**
+   * Open the MODEL_INFERENCE span for the current step. Call this immediately
+   * before invoking the model so the span's startTime excludes input processor
+   * work (and `setInferenceContext` reflects the post-processor tool set).
+   * Falls back to auto-creation on first chunk if the caller forgets.
+   */
+  startInference?(payload?: StepStartPayload): void;
+
+  /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
    * (parameters, providerOptions, availableTools, toolChoice, responseFormat).
-   * Call once after creating the tracker; later calls overwrite.
+   * Call after input processors have finalised the tool set, just before
+   * `startInference()`; the next inference span snapshots this context.
    */
   setInferenceContext?(context: ModelInferenceContext): void;
 

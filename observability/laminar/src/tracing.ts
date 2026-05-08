@@ -9,6 +9,7 @@ import type {
   AnyExportedSpan,
   InitExporterOptions,
   ModelGenerationAttributes,
+  ScoreEvent,
   TracingEvent,
   UsageStats,
 } from '@mastra/core/observability';
@@ -357,25 +358,20 @@ export class LaminarExporter extends BaseExporter {
     this.isSetup = true;
   }
 
-  async _addScoreToTrace({
-    traceId,
-    spanId,
-    score,
-    reason,
-    scorerName,
-    metadata,
-  }: {
+  private async submitScore(args: {
     traceId: string;
     spanId?: string;
+    name: string;
     score: number;
     reason?: string;
-    scorerName: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }): Promise<void> {
     if (!this.config) return;
 
+    const { traceId, spanId, name, score, reason, metadata } = args;
+
     const payload: Record<string, unknown> = {
-      name: scorerName,
+      name,
       score,
       source: 'Code',
       metadata: { ...(metadata ?? {}), ...(reason ? { reason } : {}) },
@@ -387,16 +383,20 @@ export class LaminarExporter extends BaseExporter {
       payload.traceId = otelTraceIdToUUID(traceId);
     }
 
-    try {
-      const scoreHeaders: Record<string, string> = {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        'content-type': 'application/json',
-      };
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.config.apiKey}`,
+      'content-type': 'application/json',
+    };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.timeoutMillis);
+
+    try {
       const response = await fetch(`${stripTrailingSlash(this.config.baseUrl)}/v1/evaluators/score`, {
         method: 'POST',
-        headers: scoreHeaders,
+        headers,
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -405,17 +405,58 @@ export class LaminarExporter extends BaseExporter {
           statusText: response.statusText,
           traceId,
           spanId,
-          scorerName,
+          name,
         });
       }
     } catch (error) {
+      const isAbort = error instanceof Error && error.name === 'AbortError';
       this.logger.error('[LaminarExporter] Error attaching score to trace/span', {
         error,
+        timedOut: isAbort,
+        timeoutMillis: this.config.timeoutMillis,
         traceId,
         spanId,
-        scorerName,
+        name,
       });
+    } finally {
+      clearTimeout(timer);
     }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    const { score } = event;
+    if (!score.traceId) return;
+    await this.submitScore({
+      traceId: score.traceId,
+      spanId: score.spanId,
+      name: score.scorerName ?? score.scorerId,
+      score: score.score,
+      reason: score.reason,
+      metadata: score.metadata,
+    });
+  }
+
+  /**
+   * @deprecated Use the observability score event pipeline (`mastra.observability.addScore`)
+   * instead. Preserved for backwards compatibility; forwards to the same Laminar score endpoint
+   * as `onScoreEvent`.
+   */
+  async _addScoreToTrace(args: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    await this.submitScore({
+      traceId: args.traceId,
+      spanId: args.spanId,
+      name: args.scorerName,
+      score: args.score,
+      reason: args.reason,
+      metadata: args.metadata,
+    });
   }
 
   /**

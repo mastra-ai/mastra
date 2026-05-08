@@ -19,7 +19,7 @@ import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import { MASTRA_IS_STUDIO_KEY, WORKSPACE_TOOLS, isReservedRequestContextKey, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
@@ -85,6 +85,23 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
   const merged = mergeVersionOverrides(existing, versions);
   if (merged) {
     ctx.set(MASTRA_VERSIONS_KEY, merged);
+  }
+}
+
+function getIsStudioFromContext(requestContext: RequestContext): boolean {
+  return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
+}
+
+function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyRequestContext: unknown): void {
+  if (!bodyRequestContext || typeof bodyRequestContext !== 'object') {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(bodyRequestContext)) {
+    if (isReservedRequestContextKey(key)) continue;
+    if (serverRequestContext.get(key) === undefined) {
+      serverRequestContext.set(key, value);
+    }
   }
 }
 
@@ -818,28 +835,27 @@ async function formatAgent({
     }
   }
 
-  let proxyRequestContext = requestContext;
-  if (isStudio) {
-    proxyRequestContext = new Proxy(requestContext, {
-      get(target, prop) {
-        if (prop === 'get') {
-          return function (key: string) {
-            const value = target.get(key);
-            return value ?? `<${key}>`;
-          };
-        }
-        return Reflect.get(target, prop);
-      },
-    });
-  }
+  const instructionsRequestContext = isStudio
+    ? new Proxy(requestContext, {
+        get(target, prop) {
+          if (prop === 'get') {
+            return function (key: string) {
+              const value = target.get(key);
+              return value ?? `<${key}>`;
+            };
+          }
+          return Reflect.get(target, prop);
+        },
+      })
+    : requestContext;
 
-  const instructions = await agent.getInstructions({ requestContext: proxyRequestContext });
+  const instructions = await agent.getInstructions({ requestContext: instructionsRequestContext });
   const llm = await agent.getLLM({ requestContext });
   const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({
-    requestContext: proxyRequestContext,
+    requestContext,
   });
-  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext: proxyRequestContext });
-  const defaultOptions = await agent.getDefaultOptions({ requestContext: proxyRequestContext });
+  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
+  const defaultOptions = await agent.getDefaultOptions({ requestContext });
 
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
@@ -852,7 +868,7 @@ async function formatAgent({
     },
   }));
 
-  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext: proxyRequestContext });
+  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
 
   // Get and serialize only user-configured processors (excludes memory-derived processors)
   // This ensures the UI only shows processors explicitly configured by the user
@@ -869,14 +885,14 @@ async function formatAgent({
   }
 
   // Extract skills, workspace tools, and workspaceId from agent's workspace
-  const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
-  const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+  const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
   const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(mastra.getLogger(), agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
   try {
-    const workspace = await agent.getWorkspace({ requestContext: proxyRequestContext });
+    const workspace = await agent.getWorkspace({ requestContext });
     workspaceId = workspace?.id;
   } catch {
     // Agent doesn't have a workspace or can't access it
@@ -1067,7 +1083,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
-      const isStudio = false; // TODO: Get from context if needed
+      const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({
         mastra,
         agent,
@@ -1162,16 +1178,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         requestContext: serverRequestContext,
       });
 
-      // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (serverRequestContext.get(key) === undefined) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      // Merge body's requestContext values into the server's RequestContext instance.
+      // Reserved keys stay server-controlled.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
@@ -1490,16 +1499,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
       });
 
-      // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (serverRequestContext.get(key) === undefined) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      // Merge body's requestContext values into the server's RequestContext instance.
+      // Reserved keys stay server-controlled.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
@@ -1591,16 +1593,9 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
       });
 
-      // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (serverRequestContext.get(key) === undefined) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      // Merge body's requestContext values into the server's RequestContext instance.
+      // Reserved keys stay server-controlled.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1906,13 +1901,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ),
       });
 
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (serverRequestContext.get(key) === undefined) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       stashVersionOverrides(serverRequestContext, versions);
 

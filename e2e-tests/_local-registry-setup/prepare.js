@@ -127,7 +127,7 @@ function stripWorkspaceTrustPolicy(monorepoDir) {
 /**
  *
  * @param {string} monorepoDir
- * @param {typeof import('globby').globby} glob
+ * @param {typeof import('tinyglobby').glob} glob
  * @param {string} tag
  * @returns
  */

@@ -553,9 +553,15 @@ export class Memory extends MastraMemory {
     }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.getThreadById({ threadId });
+    return memoryStore.getThreadById({ threadId, resourceId });
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {

@@ -15,7 +15,8 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { createObservabilityContext, SpanType } from '../../../observability';
-import { executeWithContextSync } from '../../../observability/utils';
+import type { ModelInferenceContext } from '../../../observability';
+import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -33,6 +34,11 @@ import type {
   StreamTransportRef,
 } from '../../../stream/types';
 import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
+import {
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
@@ -91,7 +97,124 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
+  toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
 };
+
+async function addToolPayloadTransformToChunk<OUTPUT>(
+  chunk: ChunkType<OUTPUT>,
+  {
+    tools,
+    policy,
+    logger,
+  }: {
+    tools?: ToolSet;
+    policy?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
+    logger?: IMastraLogger;
+  },
+): Promise<ChunkType<OUTPUT>> {
+  const payload = 'payload' in chunk ? chunk.payload : undefined;
+  if (!payload || typeof payload !== 'object') {
+    return chunk;
+  }
+
+  const toolName = (payload as { toolName?: unknown }).toolName;
+  const toolCallId = (payload as { toolCallId?: unknown }).toolCallId;
+  if (typeof toolName !== 'string' || typeof toolCallId !== 'string') {
+    return chunk;
+  }
+
+  const tool =
+    tools?.[toolName] ||
+    findProviderToolByName(tools, toolName) ||
+    Object.values(tools || {}).find((candidate: any) => `id` in candidate && candidate.id === toolName);
+  const source = {
+    policy,
+    toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
+  };
+  let transform;
+
+  if (chunk.type === 'tool-call') {
+    transform = await transformToolPayloadForTargets(
+      {
+        phase: 'input-available',
+        toolName,
+        toolCallId,
+        input: (payload as { args?: unknown }).args,
+        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+      },
+      source,
+      logger,
+    );
+  } else if (chunk.type === 'tool-call-delta') {
+    transform = await transformToolPayloadForTargets(
+      {
+        phase: 'input-delta',
+        toolName,
+        toolCallId,
+        inputTextDelta: (payload as { argsTextDelta?: string }).argsTextDelta,
+        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+      },
+      source,
+      logger,
+    );
+  } else if (chunk.type === 'tool-result') {
+    chunk = withToolPayloadTransformMetadata(
+      chunk,
+      await transformToolPayloadForTargets(
+        {
+          phase: 'input-available',
+          toolName,
+          toolCallId,
+          input: (payload as { args?: unknown }).args,
+          providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+        },
+        source,
+        logger,
+      ),
+    );
+    transform = await transformToolPayloadForTargets(
+      {
+        phase: 'output-available',
+        toolName,
+        toolCallId,
+        input: (payload as { args?: unknown }).args,
+        output: (payload as { result?: unknown }).result,
+        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+      },
+      source,
+      logger,
+    );
+  } else if (chunk.type === 'tool-error') {
+    chunk = withToolPayloadTransformMetadata(
+      chunk,
+      await transformToolPayloadForTargets(
+        {
+          phase: 'input-available',
+          toolName,
+          toolCallId,
+          input: (payload as { args?: unknown }).args,
+          providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+        },
+        source,
+        logger,
+      ),
+    );
+    transform = await transformToolPayloadForTargets(
+      {
+        phase: 'error',
+        toolName,
+        toolCallId,
+        input: (payload as { args?: unknown }).args,
+        error: (payload as { error?: unknown }).error,
+        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+      },
+      source,
+      logger,
+    );
+  }
+
+  return withToolPayloadTransformMetadata(chunk, transform);
+}
 
 function buildResponseModelMetadata(
   runState: AgenticRunState,
@@ -185,11 +308,12 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
+  toolPayloadTransform,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<CollectedChunk[]> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
 
-  for await (const chunk of outputStream._getBaseStream()) {
+  for await (let chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
     // so we must check the signal on each iteration to avoid accumulating the full
@@ -215,8 +339,18 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
+    chunk = await addToolPayloadTransformToChunk(chunk, {
+      tools,
+      policy: toolPayloadTransform,
+      logger,
+    });
+
     // Collect every chunk for post-stream message building
-    collectedChunks.push({ type: chunk.type, payload: chunk.payload });
+    collectedChunks.push({
+      type: chunk.type,
+      payload: 'payload' in chunk ? chunk.payload : undefined,
+      metadata: chunk.metadata,
+    });
 
     switch (chunk.type) {
       case 'response-metadata':
@@ -334,7 +468,7 @@ async function processOutputStream<OUTPUT = undefined>({
               args: chunk.payload.args,
               result: chunk.payload.result,
             },
-            providerMetadata: chunk.payload.providerMetadata,
+            providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
@@ -868,6 +1002,28 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           if (isSupportedLanguageModel(currentStep.model)) {
+            // Apply request-side context to MODEL_INFERENCE using the post-processor
+            // tool set + per-step settings, then open the inference span. Doing this
+            // immediately before execute() ensures the span's startTime excludes
+            // input processor / prepareStep / processLLMRequest work, and that
+            // availableTools / toolChoice reflect any per-step mutations.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: {
+                ...currentStep.modelSettings,
+                ...modelConfig.modelSettings,
+              } as Record<string, unknown> | undefined,
+              providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions) as
+                | Record<string, unknown>
+                | undefined,
+              availableTools: getStepAvailableToolNames(
+                currentStep.tools as Record<string, unknown> | undefined,
+                currentStep.activeTools as readonly string[] | undefined,
+              ),
+              toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
+              responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
+            });
+            modelSpanTracker?.startInference?.();
+
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
               fn: () =>
@@ -987,6 +1143,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger,
               transportRef: _internal?.transportRef,
               transportResolver,
+              toolPayloadTransform: _internal?.toolPayloadTransform,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
