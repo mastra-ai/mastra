@@ -42,8 +42,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "ignore": "^7.0.5",
-    "semver": "^7.7.4",
-    "swpm": "^2.6.0"
+    "semver": "^7.7.4"
   },
   "devDependencies": {
     "@internal/ai-sdk-v5": "workspace:*",
