@@ -69,8 +69,12 @@ export async function validateStepInput({
         { issues: validatedInput.issues },
       );
     } else {
-      const isEmptyData = Object.keys(validatedInput.data).length === 0;
-      inputData = isEmptyData ? prevOutput : validatedInput.data;
+      const isEmptyObject =
+        validatedInput.data !== null &&
+        typeof validatedInput.data === 'object' &&
+        !Array.isArray(validatedInput.data) &&
+        Object.keys(validatedInput.data as Record<string, unknown>).length === 0;
+      inputData = isEmptyObject ? prevOutput : validatedInput.data;
     }
   }
 
