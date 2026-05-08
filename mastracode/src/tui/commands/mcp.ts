@@ -1,5 +1,6 @@
 import { McpSelectorComponent } from '../components/mcp-selector.js';
 import { showInfo } from '../display.js';
+import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleMcpCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -88,11 +89,7 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
     },
   });
 
-  ctx.state.ui.showOverlay(selector, {
-    width: '80%',
-    maxHeight: '70%',
-    anchor: 'center',
-  });
+  showModalOverlay(ctx.state.ui, selector, { widthPercent: 0.8, maxHeight: '70%' });
   selector.focused = true;
 }
 

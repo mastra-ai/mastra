@@ -27,3 +27,4 @@ packages/playground/e2e/**/*.aria.yml
 **/test-results/**
 packages/codemod/src/test/__fixtures__/**/*.ts
 packages/mcp-docs-server/.docs/**
+packages/cli/src/commands/api/route-metadata.generated.ts

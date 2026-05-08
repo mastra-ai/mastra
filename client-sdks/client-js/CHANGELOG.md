@@ -1,5 +1,95 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.6
+
+### Minor Changes
+
+- Fix `orderBy` shape mismatch for paginated list methods. ([#16323](https://github.com/mastra-ai/mastra/pull/16323))
+
+  The server expects `orderBy` as a structured object (`{ field, direction }`),
+  but several SDK methods were sending `orderBy` and `sortDirection` as flat
+  strings, which caused server-side schema validation to fail.
+
+  Affected methods:
+  - `MastraClient.listMemoryThreads`
+  - `Agent.listVersions`
+  - `StoredAgent.listVersions`
+  - `StoredPromptBlock.listVersions`
+  - `StoredScorer.listVersions`
+
+  Before:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: 'createdAt', sortDirection: 'DESC' });
+  ```
+
+  After:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: { field: 'createdAt', direction: 'DESC' } });
+  ```
+
+  The flat `sortDirection` parameter has been removed from the affected param
+  types in favor of the nested `orderBy.direction` field.
+
+### Patch Changes
+
+- Updated dependencies [[`b560d6f`](https://github.com/mastra-ai/mastra/commit/b560d6f88b9b904b15c10f75c949eb145bc27684), [`36b3bbf`](https://github.com/mastra-ai/mastra/commit/36b3bbf5a8d59f7e23d47e29340e76c681b4929c), [`b275631`](https://github.com/mastra-ai/mastra/commit/b275631dc10541a482b2e2d4a3e3cfa843bd5fa1)]:
+  - @mastra/core@1.33.0-alpha.6
+
+## 1.18.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962)]:
+  - @mastra/core@1.33.0-alpha.5
+
+## 1.18.0-alpha.4
+
+### Minor Changes
+
+- Added experimental A2A Agent Card signature verification to `getAgentCard`. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const card = await a2a.getAgentCard({
+    verifySignature: {
+      algorithms: ['ES256'],
+      keyProvider: async ({ kid, jku }) => {
+        return fetchTrustedPublicJwk({ kid, jku });
+      },
+    },
+  });
+  ```
+
+  When verification is configured, `client-js` now verifies signed Agent Cards when the server includes `signatures`. Unsigned cards are still returned unchanged.
+
+  This also adds the new exported types `GetAgentCardOptions`, `VerifyAgentCardSignatureOptions`, `AgentCardVerificationKey`, and `AgentCardSignatureKeyProviderInput`.
+
+- Add `agent.resumeStreamUntilIdle()` to resume a suspended agent stream and keep the SSE connection open through the follow-up turn. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+### Patch Changes
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a)]:
+  - @mastra/core@1.33.0-alpha.4
+
+## 1.17.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
+## 1.17.2-alpha.2
+
+### Patch Changes
+
+- Regenerate route types to include `TRAJECTORY` and `STEP` entityType variants on the score response (follow-up to #16249). ([#16288](https://github.com/mastra-ai/mastra/pull/16288))
+
+- Updated dependencies [[`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529)]:
+  - @mastra/core@1.33.0-alpha.2
+
 ## 1.17.2-alpha.1
 
 ### Patch Changes
