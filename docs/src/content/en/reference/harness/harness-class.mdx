@@ -669,8 +669,6 @@ const awaitingInput = await harness.waitForAwaitingInputReady({
 })
 ```
 
-Returns: `Promise<HarnessAwaitingInput | null>`
-
 #### `getAwaitingInput({ id })`
 
 Return metadata for a pending awaiting-input id.
@@ -683,8 +681,6 @@ if (awaitingInput?.kind === 'tool_suspension' && awaitingInput.durable) {
 }
 ```
 
-Returns: `Promise<HarnessAwaitingInput | null>`
-
 #### `resumeAwaitingInput({ id, resumeData, requestContext? })`
 
 Resume a pending awaiting-input id. Tool approval and tool suspension states can be resumed from a new `Harness` instance when the state is backed by storage.
@@ -695,8 +691,6 @@ const result = await harness.resumeAwaitingInput({
   resumeData: { approved: true },
 })
 ```
-
-Returns: `Promise<HarnessResumeAwaitingInputResult>`
 
 ### Questions and plans
 
