@@ -5794,7 +5794,7 @@ describe('Locking Behavior', () => {
     expect(updatedRecord!.isReflecting).toBe(false);
   });
 
-  it('should force reflection when activateAfterIdle has expired even below threshold', async () => {
+  it('should not force reflection when activateAfterIdle has expired below threshold', async () => {
     vi.useFakeTimers();
 
     try {
@@ -5865,7 +5865,7 @@ describe('Locking Behavior', () => {
         threadId: 'thread-ttl',
       });
 
-      expect(reflectorCalled).toBe(true);
+      expect(reflectorCalled).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -5985,7 +5985,7 @@ describe('Locking Behavior', () => {
       }
     });
 
-    it('should proceed with TTL activation when unreflected tail is at least the buffered reflection size', async () => {
+    it('should not activate buffered reflection on TTL before the threshold', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
@@ -6038,14 +6038,11 @@ describe('Locking Behavior', () => {
         });
 
         const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
-        expect(afterRecord.bufferedReflection).toBeFalsy();
-        expect(afterRecord.activeObservations).toContain('Condensed reflection');
-        expect(afterRecord.activeObservations).toContain('Tail observation line 1');
-        expect(afterRecord.activeObservations).not.toContain('Reflected line 1');
-        expect(getReflectorCalled()).toBe(false); // activation path, not sync reflection
+        expect(afterRecord.bufferedReflection).toBe(reflection);
+        expect(afterRecord.activeObservations).toBe(activeObservations);
+        expect(getReflectorCalled()).toBe(false);
         const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
-        expect(activationMarkers).toHaveLength(1);
-        expect(activationMarkers[0]?.data?.triggeredBy).toBe('ttl');
+        expect(activationMarkers).toHaveLength(0);
       } finally {
         vi.useRealTimers();
       }
@@ -6116,7 +6113,7 @@ describe('Locking Behavior', () => {
       expect(activationMarkers).toHaveLength(0);
     });
 
-    it('should proceed with provider-change activation when unreflected tail is at least the buffered reflection size', async () => {
+    it('should not activate buffered reflection on provider change before the threshold', async () => {
       const { MessageList } = await import('@mastra/core/agent');
 
       const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
@@ -6179,13 +6176,11 @@ describe('Locking Behavior', () => {
       });
 
       const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
-      expect(afterRecord.bufferedReflection).toBeFalsy();
-      expect(afterRecord.activeObservations).toContain('Condensed reflection');
-      expect(afterRecord.activeObservations).toContain('Tail observation line 1');
+      expect(afterRecord.bufferedReflection).toBe(reflection);
+      expect(afterRecord.activeObservations).toBe(activeObservations);
       expect(getReflectorCalled()).toBe(false);
       const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
-      expect(activationMarkers).toHaveLength(1);
-      expect(activationMarkers[0]?.data?.triggeredBy).toBe('provider_change');
+      expect(activationMarkers).toHaveLength(0);
     });
 
     it('should suppress TTL activation when combined reflection + tail is below the size floor even if tail is larger than buffered reflection', async () => {
@@ -6252,7 +6247,7 @@ describe('Locking Behavior', () => {
       }
     });
 
-    it('should proceed with TTL activation when combined reflection + tail clears the size floor', async () => {
+    it('should not activate buffered reflection on TTL when combined reflection + tail clears the old size floor', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
@@ -6302,13 +6297,11 @@ describe('Locking Behavior', () => {
         });
 
         const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
-        expect(afterRecord.bufferedReflection).toBeFalsy();
-        expect(afterRecord.activeObservations).toContain('Condensed reflection');
-        expect(afterRecord.activeObservations).toContain('Tail observation line 1');
+        expect(afterRecord.bufferedReflection).toBe(reflection);
+        expect(afterRecord.activeObservations).toBe(activeObservations);
         expect(getReflectorCalled()).toBe(false);
         const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
-        expect(activationMarkers).toHaveLength(1);
-        expect(activationMarkers[0]?.data?.triggeredBy).toBe('ttl');
+        expect(activationMarkers).toHaveLength(0);
       } finally {
         vi.useRealTimers();
       }

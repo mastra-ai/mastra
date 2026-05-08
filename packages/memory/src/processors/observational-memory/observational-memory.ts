@@ -509,8 +509,9 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
-      activateOnProviderChange: config.activateOnProviderChange ?? false,
+      // Early activation is only applied to observations; reflections wait for their token threshold.
+      activateAfterIdle: undefined,
+      activateOnProviderChange: false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
