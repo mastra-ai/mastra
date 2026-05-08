@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MockStore } from '../storage/mock';
 import { Mastra } from './index';
 
 const ORIGINAL_ENV = process.env.MASTRA_WORKERS;
@@ -21,6 +22,7 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     process.env.MASTRA_WORKERS = 'scheduler,backgroundTasks';
 
     const mastra = new Mastra({
+      storage: new MockStore(),
       backgroundTasks: { enabled: true },
       logger: false,
     });
@@ -44,6 +46,7 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
 
   it('starts all workers when MASTRA_WORKERS is unset', async () => {
     const mastra = new Mastra({
+      storage: new MockStore(),
       backgroundTasks: { enabled: true },
       logger: false,
     });

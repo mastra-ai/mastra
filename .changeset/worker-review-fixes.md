@@ -113,3 +113,20 @@ await mastra.handleWorkflowEvent({
 });
 ```
 
+CI follow-ups:
+
+- `Mastra` only auto-registers `SchedulerWorker` when storage is configured.
+  Without storage the worker would crash on startup (`deps.storage.getStore`
+  on undefined); the scheduler now silently no-ops in that case, matching the
+  pre-worker scheduler behavior.
+- `SchedulerWorker.init` defensively logs and returns when called without
+  storage instead of throwing a TypeError.
+- `RECEIVE_WORKFLOW_EVENT_ROUTE` (`POST /workflows/events`) `createdAt` is
+  now a plain `z.string()` on the wire and the handler converts it to a
+  `Date` (validating "Invalid Date" -> 400). The previous
+  `union(...).transform().refine()` schema couldn't be exercised by the
+  shared adapter test suite because the generator didn't unwrap Zod 4's
+  `ZodPipe`.
+- `_test-utils/route-test-utils` recognizes Zod 4's `number_format` check
+  (used for `int()` / `safeint()`), and `generateContextualValue` now
+  produces a valid ISO timestamp for `createdAt` / `updatedAt` fields.

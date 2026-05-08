@@ -28,6 +28,11 @@ export class SchedulerWorker extends MastraWorker {
   async init(deps: WorkerDeps): Promise<void> {
     await super.init(deps);
 
+    if (!deps.storage) {
+      deps.logger.warn('SchedulerWorker: no storage configured, scheduler will not run');
+      return;
+    }
+
     const schedulesStore = await deps.storage.getStore('schedules');
     if (!schedulesStore) {
       deps.logger.warn('SchedulerWorker: no schedules store available, scheduler will not run');

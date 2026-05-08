@@ -1296,15 +1296,14 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
 // Wire shape of an Event delivered through a push-mode broker. Validates the
 // fields `WorkflowEventProcessor` depends on; broker envelopes routinely carry
 // extra metadata that isn't part of `Event` itself, so we passthrough the rest.
+// `createdAt` is an ISO timestamp on the wire — the handler converts it to a
+// `Date` before forwarding to `Mastra.handleWorkflowEvent`.
 const workflowEventSchema = z.object({
   id: z.string(),
   type: z.string(),
   data: z.unknown(),
   runId: z.string(),
-  createdAt: z
-    .union([z.string(), z.date()])
-    .transform(v => (v instanceof Date ? v : new Date(v)))
-    .refine(d => !Number.isNaN(d.getTime()), { message: 'Invalid createdAt' }),
+  createdAt: z.string(),
   index: z.number().optional(),
   deliveryAttempt: z.number().optional(),
 });
@@ -1352,7 +1351,14 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: (async ({ mastra, event }: ReceiveWorkflowEventHandlerArgs) => {
     try {
-      return await mastra.handleWorkflowEvent(event);
+      // The wire schema carries `createdAt` as a string; coerce to Date here
+      // before handing off to the in-process pipeline, which expects an `Event`.
+      const rawCreatedAt = (event as unknown as { createdAt: unknown }).createdAt;
+      const createdAt = rawCreatedAt instanceof Date ? rawCreatedAt : new Date(rawCreatedAt as string);
+      if (Number.isNaN(createdAt.getTime())) {
+        throw new HTTPException(400, { message: 'Invalid createdAt' });
+      }
+      return await mastra.handleWorkflowEvent({ ...event, createdAt });
     } catch (error) {
       return handleError(error, 'Error receiving workflow event');
     }
