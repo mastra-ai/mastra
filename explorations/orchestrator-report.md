@@ -109,7 +109,7 @@ Decouple **workflow orchestration** (deciding what step runs next) from **step e
 
 ## How It Works Today
 
-```
+```text
 Client → Mastra Server → WorkflowEventProcessor (in-process) → StepExecutor (in-process)
                               ↕
                      PubSub (EventEmitter or GCP)
@@ -117,7 +117,7 @@ Client → Mastra Server → WorkflowEventProcessor (in-process) → StepExecuto
 
 The `WorkflowEventProcessor` (~3000 lines) is a state machine that lives inside the server process. It subscribes to the `workflows` pubsub topic and processes a loop of events:
 
-```
+```text
 workflow.start → workflow.step.run → workflow.step.end → workflow.step.run → ... → workflow.end
 ```
 
@@ -132,7 +132,7 @@ The Orchestrator proposal splits #3 out: the Orchestrator keeps the decision-mak
 
 ## Proposed Architecture
 
-```
+```text
                                                          ┌─────────────────┐
   ┌───────────┐                                          │  Orchestrator   │
   │ Scheduler │──── triggers ────┐                  ┌───▶│   (Worker)      │───┐
@@ -194,7 +194,7 @@ In the new model, the Mastra Server exposes this as an HTTP endpoint. The Server
 ### The key difference, concretely
 
 **Today (WEP in-process):**
-```
+```text
 WEP receives workflow.step.run event
   → calls stepExecutor.execute(step, context) directly
   → gets StepResult back synchronously
@@ -202,7 +202,7 @@ WEP receives workflow.step.run event
 ```
 
 **Proposed (Orchestrator + Server):**
-```
+```text
 Orchestrator receives workflow.step.run event (from its own decision logic)
   → sends HTTP POST to Server with step identity + context
   → Server looks up step definition, runs StepExecutor.execute()
@@ -226,7 +226,7 @@ The WEP today is tightly coupled: the process that decides "run step X next" is 
 
 ### Happy Path: Start → Execute Steps → Complete
 
-```
+```text
 1. Client calls eventedWorkflow.start() on Mastra Server
 2. Server publishes { type: 'workflow.start', runId, data: { inputData } } to PubSub
 3. Server returns stream handle (runId) to client immediately
@@ -258,7 +258,7 @@ The WEP today is tightly coupled: the process that decides "run step X next" is 
 
 ### Suspend and Resume
 
-```
+```text
 1-6. Same as happy path (start, first steps execute)
 
 7. Server runs step that calls suspend(payload)
@@ -287,7 +287,7 @@ The WEP today is tightly coupled: the process that decides "run step X next" is 
 
 ### Nested Workflows
 
-```
+```text
 1-6. Parent workflow starts, steps execute
 
 7. Orchestrator encounters a step that IS a nested workflow
@@ -304,7 +304,7 @@ The WEP today is tightly coupled: the process that decides "run step X next" is 
 
 ### Streaming Across Machines
 
-```
+```text
                     Client                Server              PubSub            Orchestrator
                       │                     │                   │                    │
                       │──start workflow────▶│                   │                    │
@@ -378,7 +378,7 @@ The Server's `CachingPubSub` + `createReplayStream()` handles late-joining obser
 
 The Server needs a new endpoint that the Orchestrator calls:
 
-```
+```text
 POST /workflows/:workflowId/runs/:runId/steps/execute
 ```
 
@@ -574,7 +574,7 @@ All share the same dependency pattern (PubSub + Storage + start/stop lifecycle) 
 
 The unified `MastraWorker` merges these into a single composable abstraction with two independent axes:
 
-```
+```text
                          Step Execution
                     in-process       remote (HTTP)
          ┌──────────────────────┬────────────────────┐
@@ -614,7 +614,7 @@ Temporal's architecture informed this design. Key takeaways:
 
 ### Mode 1: In-Process (today's default, zero config)
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                          Single Process                                │
 │                                                                        │
@@ -638,7 +638,7 @@ Temporal's architecture informed this design. Key takeaways:
 
 ### Mode 2: Standalone Worker (distributed, pull)
 
-```
+```text
 ┌────────────────────────────┐         ┌─────────────────────────────────┐
 │  Mastra Server             │         │  MastraWorker (standalone)      │
 │  (worker: false)           │         │                                 │
@@ -668,7 +668,7 @@ Temporal's architecture informed this design. Key takeaways:
 
 ### Mode 3: Serverless Hook (push)
 
-```
+```text
 ┌────────────────────────────┐
 │  Mastra Server             │
 │  (worker: false)           │
@@ -691,7 +691,7 @@ Temporal's architecture informed this design. Key takeaways:
 
 ### Mode 4: Specialized Workers
 
-```
+```text
 ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
 │  Worker A        │    │  Worker B        │    │  Worker C        │
 │  orchestration   │    │  scheduler only  │    │  backgroundTasks │
@@ -720,7 +720,7 @@ Temporal's architecture informed this design. Key takeaways:
 
 ## Layered Design
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │  Layer 4: MastraWorker                                   │
 │  Composes subsystems + transport + strategy              │
@@ -987,7 +987,7 @@ Wraps the extracted decision-making logic from WorkflowEventProcessor.
 - In Hook mode: maps are loaded from storage at start of each invocation
 
 **Event routing:**
-```
+```text
 event.type starts with 'workflow.' → OrchestrationSubsystem.processEvent()
 ```
 
@@ -1016,7 +1016,7 @@ Wraps the existing `BackgroundTaskManager`.
 - Recovers stale tasks on startup
 
 **Event routing:**
-```
+```text
 event.type starts with 'background-task.' → BackgroundTaskSubsystem.processEvent()
 ```
 
@@ -1026,7 +1026,7 @@ event.type starts with 'background-task.' → BackgroundTaskSubsystem.processEve
 
 Since Hook is stateless between invocations, each call follows a strict protocol:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  Hook invocation lifecycle                                   │
 │                                                              │
@@ -1034,8 +1034,8 @@ Since Hook is stateless between invocations, each call follows a strict protocol
 │              (snapshot, step results, parent-child,           │
 │               cancellation flags, join counters)              │
 │                                                              │
-│  2. CHECK   — verify run not cancelled                      │
-│              (if cancelled, ack and exit)                     │
+│  2. CHECK   — verify run not canceled                       │
+│              (if canceled, ack and exit)                      │
 │                                                              │
 │  3. DECIDE  — run orchestration logic                       │
 │              (same code as Worker mode)                       │
@@ -1081,9 +1081,9 @@ if (completed === target) {
 
 No in-memory AbortController between invocations:
 
-1. Cancel request sets `cancelled: true` flag in storage for the runId
+1. Cancel request sets `canceled: true` flag in storage for the runId
 2. Each Hook invocation checks the flag in the LOAD phase
-3. If cancelled → ack event, do nothing
+3. If canceled → ack event, do nothing
 4. In-flight HTTP calls to server are bounded by timeout (step is wasted work, but bounded)
 
 ---
@@ -1092,7 +1092,7 @@ No in-memory AbortController between invocations:
 
 ### New Endpoint
 
-```
+```text
 POST /workflows/:workflowId/runs/:runId/steps/execute
 Authorization: Bearer <worker-api-key>
 Content-Type: application/json
@@ -1335,7 +1335,7 @@ export const mastra = new Mastra({
 
 ## File Structure
 
-```
+```text
 packages/core/src/worker/
 ├── index.ts                      # Public exports: MastraWorker, types, strategies
 ├── worker.ts                     # MastraWorker class implementation
@@ -1388,7 +1388,7 @@ packages/core/src/worker/
 
 **Worker mode solution:** PubSub ordering keys ensure all events for a runId go to the same worker. That worker has the AbortController in memory. `workflow.cancel` event arrives at the same worker → abort works as today.
 
-**Hook mode solution:** Storage flag. Each invocation checks `run.cancelled` in LOAD phase. If cancelled, ack and exit immediately.
+**Hook mode solution:** Storage flag. Each invocation checks `run.canceled` in LOAD phase. If canceled, ack and exit immediately.
 
 **Cross-worker cancellation (edge case):** If ordering key changes worker assignment during rebalancing, the new worker loads cancellation state from storage on the next event for that run.
 

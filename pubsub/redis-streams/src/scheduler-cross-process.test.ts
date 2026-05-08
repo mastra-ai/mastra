@@ -101,13 +101,24 @@ describe('cross-process scheduler', () => {
     if (!schedulesStore) throw new Error('schedules store not available');
 
     const scheduleId = `xp-schedule-${Date.now()}`;
+    // Per-test marker discriminator: assertions count occurrences of
+    // `scheduled-step-ran name=${scheduleName}` on the shared server
+    // stdout. Without a unique name a second test run on the same
+    // server (or a retry) would inherit prior matches and pass without
+    // the *current* schedule actually firing.
+    const scheduleName = scheduleId;
+    const scheduledMarker = `scheduled-step-ran name=${scheduleName}`;
+    // Capture baselines *before* createSchedule so a fast scheduler
+    // tick can't sneak a fire in between baseline and waitFor.
+    const baselineScheduledRuns = countMarker(server, scheduledMarker);
+    const baselineStepHits = countMarker(server, 'step-execute-hit');
     const now = Date.now();
     await (schedulesStore as any).createSchedule({
       id: scheduleId,
       target: {
         type: 'workflow',
         workflowId: 'cross-process-scheduled',
-        inputData: { name: 'scheduled' },
+        inputData: { name: scheduleName },
       },
       // Every-second cron just so the scheduler has a valid pattern; we
       // pre-arm nextFireAt to fire immediately.
@@ -123,10 +134,10 @@ describe('cross-process scheduler', () => {
     // `scheduled-step-ran` marker is logged on server stdout). The
     // chain server -> redis -> worker -> server is still proven because
     // /steps/execute is only called by the standalone orchestrator.
-    await waitFor(async () => countMarker(server, 'scheduled-step-ran') > 0, 20_000);
+    await waitFor(async () => countMarker(server, scheduledMarker) > baselineScheduledRuns, 20_000);
 
-    expect(countMarker(server, 'scheduled-step-ran')).toBeGreaterThan(0);
-    expect(countMarker(server, 'step-execute-hit')).toBeGreaterThan(0);
+    expect(countMarker(server, scheduledMarker)).toBeGreaterThan(baselineScheduledRuns);
+    expect(countMarker(server, 'step-execute-hit')).toBeGreaterThan(baselineStepHits);
 
     // Mark the schedule paused so we don't keep firing every second
     // through the rest of the suite.
