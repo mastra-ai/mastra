@@ -108,6 +108,143 @@ export const agent = new Agent({
 })
 ```
 
+## Thread signals
+
+Use Agent signals to send additional context into a memory thread. Signals are useful when a user adds follow-up context while an agent is already streaming, or when another process needs to add structured context to the thread.
+
+A `user-message` signal represents user input. When the target thread is running, Mastra queues the signal and drains it at a stream boundary so the agent can respond to the new input. When the thread is idle, `ifIdle.streamOptions` can start the next stream with the signal as the input.
+
+```typescript title="src/mastra/signals.ts"
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+void (async () => {
+  for await (const chunk of subscription.stream) {
+    console.log(chunk)
+  }
+})()
+
+await agent.sendSignal(
+  { type: 'user-message', contents: 'Use the latest customer note too.' },
+  {
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+    ifIdle: {
+      streamOptions: {
+        memory: {
+          resource: 'user-123',
+          thread: 'thread-abc',
+        },
+      },
+    },
+  },
+)
+```
+
+Use a custom signal type for contextual messages that should reach the model as XML-wrapped context instead of normal user input:
+
+```typescript
+await agent.sendSignal(
+  {
+    type: 'system-reminder',
+    contents: 'Continue from the previous tool result.',
+    attributes: { reminderType: 'tool-result' },
+  },
+  { resourceId: 'user-123', threadId: 'thread-abc' },
+)
+```
+
+### `sendSignal(signal, options)`
+
+Sends a signal to an active run or memory thread.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "{ type: 'user-message'; contents: MessageListInput } | { type: string; contents: string }",
+    description:
+      '`user-message` signals are treated as user input. Other signal types are converted to XML context before the next model call.',
+  },
+  {
+    name: 'options.runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Run ID to target directly. Use this when you already know the active run ID.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted signals.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
+  },
+  {
+    name: 'options.ifIdle',
+    type: '{ streamOptions: AgentExecutionOptions }',
+    isOptional: true,
+    description:
+      'Starts a stream when the target thread is idle. Only available when `resourceId` and `threadId` are provided.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, runId: string }`.
+
+### `subscribeToThread(options)`
+
+Subscribes to raw stream chunks for a memory thread. Use this before calling `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread.',
+  },
+  {
+    name: 'options.threadId',
+    type: 'string',
+    description: 'Thread ID to subscribe to.',
+  },
+]}
+/>
+
+Returns an `AgentThreadSubscription` object with these members:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'stream',
+    type: 'AsyncIterable<AgentChunkType>',
+    description: 'Raw agent stream chunks for the subscribed thread.',
+  },
+  {
+    name: 'activeRunId',
+    type: '() => string | null',
+    description: 'Returns the active run ID for the thread, or `null` when no run is active.',
+  },
+  {
+    name: 'abort',
+    type: '() => boolean',
+    description: 'Aborts the active run for the thread. Returns `true` when a run was aborted.',
+  },
+  {
+    name: 'unsubscribe',
+    type: '() => void',
+    description: 'Stops the subscription without aborting the active run.',
+  },
+]}
+/>
+
 ## Constructor parameters
 
 <PropertiesTable
