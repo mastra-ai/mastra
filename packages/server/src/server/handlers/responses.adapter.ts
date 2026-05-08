@@ -132,7 +132,7 @@ function stringifyToolArguments(value: unknown) {
     return value.__raw;
   }
 
-  return stringifyToolPayload(value);
+  return stringifyToolPayload(value === null ? undefined : value);
 }
 
 function createOutputMessage({
@@ -276,7 +276,6 @@ function mapMastraMessageToResponseToolItems({
     if (
       getMessageRole(message) === 'assistant' &&
       toolName &&
-      (toolInvocation.args !== undefined || toolInvocation.result === undefined) &&
       !emittedCallIds.has(toolCallId)
     ) {
       items.push(
@@ -823,6 +822,7 @@ type ToolCallStreamState = {
   itemId: string;
   name: string;
   outputIndex: number;
+  zeroArgumentInputEnded: boolean;
 };
 
 type ToolResultStreamState = {
@@ -978,6 +978,20 @@ function getToolCall(value: unknown) {
   return { toolCallId, toolName, args };
 }
 
+function getToolCallEnd(value: unknown) {
+  if (!isRecord(value) || value.type !== 'tool-call-input-streaming-end') {
+    return null;
+  }
+
+  const payload = getChunkPayload(value);
+  const toolCallId = payload?.toolCallId;
+  if (typeof toolCallId !== 'string') {
+    return null;
+  }
+
+  return { toolCallId };
+}
+
 function getToolResult(value: unknown) {
   if (!isRecord(value) || (value.type !== 'tool-result' && value.type !== 'tool-error')) {
     return null;
@@ -1067,6 +1081,7 @@ export function createResponseStreamEventTranslator(responseId: string) {
       itemId: toolCallId,
       name: toolName,
       outputIndex: nextOutputIndex++,
+      zeroArgumentInputEnded: false,
     };
     toolCalls.set(toolCallId, state);
 
@@ -1226,6 +1241,7 @@ export function createResponseStreamEventTranslator(responseId: string) {
         });
 
         ensured.state.argumentsText += toolCallDelta.delta;
+        ensured.state.zeroArgumentInputEnded = false;
         return [
           ...ensured.events,
           createResponseSseEvent({
@@ -1237,7 +1253,14 @@ export function createResponseStreamEventTranslator(responseId: string) {
         ];
       }
 
-      if (isRecord(value) && value.type === 'tool-call-input-streaming-end') {
+      const toolCallEnd = getToolCallEnd(value);
+      if (toolCallEnd) {
+        const state = toolCalls.get(toolCallEnd.toolCallId);
+        if (!state || state.completed) {
+          return [];
+        }
+
+        state.zeroArgumentInputEnded = !state.argumentsText;
         return [];
       }
 
@@ -1314,8 +1337,10 @@ export function createResponseStreamEventTranslator(responseId: string) {
         const events: ResponseSseEvent[] = [...toolCallEvents];
         if (!toolCallState.completed) {
           const args = stringifyFunctionCallArguments(toolResult.args, toolCallState.argumentsText || '{}');
+          const hasZeroArgumentHint = toolCallState.zeroArgumentInputEnded && !toolCallState.argumentsText;
           if (
             toolResult.args === undefined &&
+            !hasZeroArgumentHint &&
             (!toolCallState.argumentsText || !isCompleteJsonString(toolCallState.argumentsText))
           ) {
             pendingToolResults.set(toolResult.toolCallId, toolResult);

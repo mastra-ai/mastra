@@ -1964,7 +1964,7 @@ describe('Responses Handlers', () => {
   it('closes zero-argument streamed tool calls when the result arrives', async () => {
     vi.spyOn(toolAgent, 'stream').mockResolvedValue(
       createStreamResultFromChunks({
-        text: '',
+        text: 'Done.',
         chunks: [
           {
             type: 'tool-call-input-streaming-start',
@@ -1980,6 +1980,12 @@ describe('Responses Handlers', () => {
             },
           },
           createWeatherToolResultChunk({ callId: 'call_zero_args', weather: 'sunny' }),
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'Done.',
+            },
+          },
         ],
       }),
     );
@@ -2005,6 +2011,89 @@ describe('Responses Handlers', () => {
       status: 'completed',
     });
     expect(events.filter(event => event.type === 'response.function_call_arguments.done')).toHaveLength(1);
+    expect(events.find(event => event.type === 'response.completed')?.response.output).toMatchObject([
+      {
+        id: 'call_zero_args',
+        type: 'function_call',
+      },
+      {
+        id: 'call_zero_args:output',
+        type: 'function_call_output',
+      },
+      {
+        type: 'message',
+        content: [{ text: 'Done.' }],
+      },
+    ]);
+  });
+
+  it('uses tool-result args after an argument-free streaming end', async () => {
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResultFromChunks({
+        text: 'Done.',
+        chunks: [
+          {
+            type: 'tool-call-input-streaming-start',
+            payload: {
+              toolCallId: 'call_result_args',
+              toolName: 'weather',
+            },
+          },
+          {
+            type: 'tool-call-input-streaming-end',
+            payload: {
+              toolCallId: 'call_result_args',
+            },
+          },
+          {
+            type: 'tool-result',
+            payload: {
+              toolCallId: 'call_result_args',
+              toolName: 'weather',
+              args: { city: 'Lagos' },
+              result: { weather: 'sunny' },
+            },
+          },
+          {
+            type: 'text-delta',
+            payload: {
+              text: 'Done.',
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Use the weather tool',
+      store: false,
+      stream: true,
+    })) as Response;
+
+    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
+    const completedToolCall = events.find(
+      event => event.type === 'response.output_item.done' && event.item?.type === 'function_call',
+    );
+
+    expect(JSON.parse(completedToolCall?.item.arguments)).toEqual({ city: 'Lagos' });
+    expect(events.find(event => event.type === 'response.completed')?.response.output).toMatchObject([
+      {
+        id: 'call_result_args',
+        type: 'function_call',
+        arguments: JSON.stringify({ city: 'Lagos' }),
+      },
+      {
+        id: 'call_result_args:output',
+        type: 'function_call_output',
+      },
+      {
+        type: 'message',
+        content: [{ text: 'Done.' }],
+      },
+    ]);
   });
 
   it('uses the final tool-call chunk as canonical arguments after partial streamed deltas', async () => {
@@ -4092,6 +4181,148 @@ describe('Responses Handlers', () => {
           id: created.id,
           type: 'message',
           content: [{ text: 'The zero-argument tool is done.' }],
+        },
+      ]);
+    }
+  });
+
+  it('normalizes persisted null tool args to an empty object', async () => {
+    const output = mapMastraMessagesToResponseOutputItems({
+      fallbackText: 'The null-args tool is done.',
+      outputMessageId: 'resp_null_args',
+      status: 'completed',
+      messages: [
+        createDbMessage({
+          id: 'assistant-null-args-tool-call',
+          role: 'assistant',
+          type: 'tool-call',
+          createdAt: new Date('2026-03-23T10:00:00.000Z'),
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call_null_args',
+                toolName: 'weather',
+                args: null,
+              },
+            },
+          ],
+        }),
+        createDbMessage({
+          id: 'tool-null-args-result',
+          role: 'tool',
+          type: 'tool-result',
+          createdAt: new Date('2026-03-23T10:00:01.000Z'),
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_null_args',
+                toolName: 'weather',
+                result: { weather: 'sunny' },
+              },
+            },
+          ],
+        }),
+        createDbMessage({
+          id: 'assistant-null-args-final',
+          role: 'assistant',
+          createdAt: new Date('2026-03-23T10:00:02.000Z'),
+          parts: [{ type: 'text', text: 'The null-args tool is done.' }],
+        }),
+      ],
+    });
+
+    expect(output).toMatchObject([
+      {
+        id: 'call_null_args',
+        type: 'function_call',
+        call_id: 'call_null_args',
+        name: 'weather',
+        arguments: '{}',
+      },
+      {
+        id: 'call_null_args:output',
+        type: 'function_call_output',
+        call_id: 'call_null_args',
+        output: JSON.stringify({ weather: 'sunny' }),
+      },
+      {
+        id: 'resp_null_args',
+        type: 'message',
+        content: [{ text: 'The null-args tool is done.' }],
+      },
+    ]);
+  });
+
+  it('preserves persisted zero-argument assistant result-state tool calls without args', async () => {
+    vi.spyOn(toolAgent, 'generate').mockResolvedValue(
+      createGenerateResult({
+        text: 'The result-state tool is done.',
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-zero-arg-result-state',
+            role: 'assistant',
+            type: 'tool-call',
+            createdAt: new Date('2026-03-23T10:00:00.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_zero_arg_result_state',
+                  toolName: 'weather',
+                  result: { weather: 'sunny' },
+                },
+              },
+            ],
+          }),
+          createDbMessage({
+            id: 'assistant-zero-arg-result-state-final',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:00:01.000Z'),
+            parts: [{ type: 'text', text: 'The result-state tool is done.' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'Use the zero argument tool',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: created.id,
+    });
+
+    for (const output of [created.output, retrieved.output]) {
+      expect(output).toMatchObject([
+        {
+          id: 'call_zero_arg_result_state',
+          type: 'function_call',
+          call_id: 'call_zero_arg_result_state',
+          name: 'weather',
+          arguments: '{}',
+        },
+        {
+          id: 'call_zero_arg_result_state:output',
+          type: 'function_call_output',
+          call_id: 'call_zero_arg_result_state',
+          output: JSON.stringify({ weather: 'sunny' }),
+        },
+        {
+          id: created.id,
+          type: 'message',
+          content: [{ text: 'The result-state tool is done.' }],
         },
       ]);
     }
