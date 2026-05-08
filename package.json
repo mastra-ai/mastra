@@ -129,6 +129,14 @@
     "patchedDependencies": {
       "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",
       "tsup@8.5.1": "patches/tsup@8.5.1.patch"
+    },
+    "packageExtensions": {
+      "@codemirror/lang-jinja@6.0.0": {
+        "dependencies": {
+          "@codemirror/view": "^6.0.0",
+          "@codemirror/state": "^6.0.0"
+        }
+      }
     }
   },
   "license": "Apache-2.0",

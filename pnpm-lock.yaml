@@ -44,6 +44,8 @@ overrides:
   serialize-javascript@<7.0.5: ^7.0.5
   '@tootallnate/once@<3.0.1': ^3.0.1
 
+packageExtensionsChecksum: sha256-dhWAp0Q03uv8VBf6e05Iny76MdWwn9mfL4n9fiKMjT4=
+
 patchedDependencies:
   '@changesets/get-dependents-graph':
     hash: 1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535
@@ -29871,6 +29873,8 @@ snapshots:
     dependencies:
       '@codemirror/lang-html': 6.4.11
       '@codemirror/language': 6.12.3
+      '@codemirror/state': 6.6.0
+      '@codemirror/view': 6.41.1
       '@lezer/common': 1.5.2
       '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.2
