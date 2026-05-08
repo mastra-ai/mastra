@@ -122,7 +122,7 @@ describe('handleGoalCommand', () => {
     const createThread = vi.fn(async () => {
       currentThreadId = 'new-thread';
     });
-    const sendMessage = vi.fn();
+    const followUp = vi.fn();
     const ctx = {
       state: {
         pendingNewThread: true,
@@ -130,7 +130,7 @@ describe('handleGoalCommand', () => {
         harness: {
           createThread,
           getCurrentThreadId: vi.fn(() => currentThreadId),
-          sendMessage,
+          followUp,
         },
       },
       addUserMessage: vi.fn(),
@@ -144,7 +144,12 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(createThread.mock.invocationCallOrder[0]).toBeLessThan(goalManager.saveToThread.mock.invocationCallOrder[0]);
     expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
-    expect(sendMessage).toHaveBeenCalledWith({
+    // Goal trigger goes through followUp, NOT sendMessage. followUp queues
+    // during a running stream (plan-approval onGoal case) and falls through to
+    // sendMessage when idle (regular `/goal <text>` case). sendMessage here
+    // would start a concurrent stream that gates the suspended submit_plan
+    // turn's natural agent_end and prevents the judge from kicking in on idle.
+    expect(followUp).toHaveBeenCalledWith({
       content: '<system-reminder type="goal">finish the task</system-reminder>',
     });
   });
@@ -170,14 +175,14 @@ describe('handleGoalCommand', () => {
       saveToThread: vi.fn(),
       isActive: vi.fn(() => true),
     };
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const followUp = vi.fn().mockResolvedValue(undefined);
     const ctx = {
       state: {
         pendingNewThread: false,
         goalManager,
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
-          sendMessage,
+          followUp,
         },
       },
       addUserMessage: vi.fn(),
@@ -186,49 +191,52 @@ describe('handleGoalCommand', () => {
 
     await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
 
-    // Goal lifecycle is entered before the trigger message is sent so the
+    // Goal lifecycle is entered before the trigger message is queued so the
     // judge runs after the agent's first response.
     expect(goalManager.setGoal).toHaveBeenCalledWith(objective, 'openai/gpt-5.5', 50);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendMessage.mock.invocationCallOrder[0]);
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(followUp.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
 
-    // The trigger message is exactly one canonical goal reminder — no
-    // preamble, no concatenated reminders. The trailing $ in the assertion
-    // mirrors the legacy whole-message reminder regex used at render time.
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith({
+    // The trigger goes through followUp (queues during a running stream like
+    // the suspended submit_plan turn, falls through to sendMessage when idle)
+    // and is exactly one canonical goal reminder — no preamble, no
+    // concatenated reminders. The trailing $ in the assertion mirrors the
+    // legacy whole-message reminder regex used at render time.
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp).toHaveBeenCalledWith({
       content: '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
     });
-    const sentContent = sendMessage.mock.calls[0][0].content as string;
+    const sentContent = followUp.mock.calls[0][0].content as string;
     expect(sentContent).toMatch(/^<system-reminder type="goal">[\s\S]*<\/system-reminder>$/);
     expect(sentContent).not.toMatch(/begin executing/);
     expect(sentContent.match(/<system-reminder/g)).toHaveLength(1);
   });
 
-  it('enters real goal mode (active + persisted) before sending the trigger so the judge runs on agent_end', async () => {
+  it('enters real goal mode (active + persisted) before queuing the trigger so the judge runs on agent_end', async () => {
     // Regression for Tyler's review: "do we make sure we enter into goal mode
     // too? I noticed after approving a plan as goal, when the agent went idle
     // the judge would not kick in." This test uses the real GoalManager (not
-    // a mock) and proves that by the time the trigger message is sent — which
-    // is also the only point at which the agent can produce an agent_end —
-    // (1) goalManager.isActive() is true, and (2) the goal has already been
-    // persisted to thread metadata with status='active'. handleAgentEnd's
-    // maybeGoalContinuation only checks isActive(), so this guarantees the
-    // judge runs after the agent's first response on the plan-approval path.
+    // a mock) and proves that by the time the trigger message is queued —
+    // which is the only point at which the suspended submit_plan turn can
+    // produce an agent_end after resuming — (1) goalManager.isActive() is
+    // true, and (2) the goal has already been persisted to thread metadata
+    // with status='active'. handleAgentEnd's maybeGoalContinuation only
+    // checks isActive(), so this guarantees the judge runs after the agent's
+    // first response on the plan-approval path.
     const goalManager = new GoalManager();
     const objective = '# Ship it\n\n1. Build\n2. Test';
 
     let isActiveAtSetThreadSetting: boolean | undefined;
     let persistedGoalAtSetThreadSetting: unknown;
-    let isActiveAtSendMessage: boolean | undefined;
+    let isActiveAtFollowUp: boolean | undefined;
 
     const setThreadSetting = vi.fn(async ({ value }: { key: string; value: unknown }) => {
       isActiveAtSetThreadSetting = goalManager.isActive();
       persistedGoalAtSetThreadSetting = value;
     });
-    const sendMessage = vi.fn(async () => {
-      isActiveAtSendMessage = goalManager.isActive();
+    const followUp = vi.fn(async () => {
+      isActiveAtFollowUp = goalManager.isActive();
     });
 
     const ctx = {
@@ -238,7 +246,7 @@ describe('handleGoalCommand', () => {
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
           setThreadSetting,
-          sendMessage,
+          followUp,
         },
       },
       addUserMessage: vi.fn(),
@@ -248,13 +256,13 @@ describe('handleGoalCommand', () => {
     await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
 
     // Goal is active in memory AND was active when persisted, AND was active
-    // when the trigger message was sent. handleAgentEnd's maybeGoalContinuation
+    // when the trigger was queued. handleAgentEnd's maybeGoalContinuation
     // checks isActive() and only that — so this proves the judge will fire on
     // the next agent_end (incl. the suspended submit_plan turn that resumes
     // when the plan-approval response is delivered, since setGoal is sync).
     expect(goalManager.isActive()).toBe(true);
     expect(isActiveAtSetThreadSetting).toBe(true);
-    expect(isActiveAtSendMessage).toBe(true);
+    expect(isActiveAtFollowUp).toBe(true);
 
     // Persisted thread metadata captures status='active' so reloads stay in
     // goal mode.
@@ -271,6 +279,58 @@ describe('handleGoalCommand', () => {
     const liveGoal = goalManager.getGoal();
     expect(liveGoal).not.toBeNull();
     expect((persistedGoalAtSetThreadSetting as { id: string }).id).toBe(liveGoal!.id);
+  });
+
+  it('queues the goal trigger via followUp instead of starting a concurrent stream while a turn is suspended', async () => {
+    // Regression for the real bug Tyler hit: "after approving a plan as goal,
+    // when the agent went idle the judge would not kick in." Root cause:
+    // startGoal used to call harness.sendMessage directly, which starts a new
+    // stream and increments harness.currentOperationId. The plan-approval
+    // onGoal handler runs while the original user turn is still active (the
+    // submit_plan tool is awaiting plan_approval). When that suspended turn
+    // resumes after approvePlan and naturally ends, harness.sendMessage's
+    // emit gate `currentOperationId === operationId` fails — the original
+    // turn's agent_end is suppressed, handleAgentEnd never runs for it, and
+    // maybeGoalContinuation never fires. handleAgentEnd does run for the
+    // second concurrent stream, but by then memory state can have raced.
+    //
+    // Fix: queue the goal trigger via harness.followUp. When a turn is
+    // already running (plan-approval onGoal), followUp pushes to the harness
+    // followUpQueue; the suspended turn ends naturally, emits agent_end with
+    // the matching operationId, handleAgentEnd runs, and sendMessage's finally
+    // block drains the queue and runs the goal-reminder turn. After that turn
+    // ends, handleAgentEnd → maybeGoalContinuation fires with isActive()=true
+    // → judge runs on idle. This test pins that contract: startGoal MUST go
+    // through followUp (which has the queue-vs-send branch baked in), NOT
+    // sendMessage directly.
+    const goalManager = new GoalManager();
+    const followUp = vi.fn().mockResolvedValue(undefined);
+    // sendMessage is wired as a tripwire: if startGoal ever bypasses followUp
+    // and calls sendMessage directly, this test fails loudly.
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+
+    const ctx = {
+      state: {
+        pendingNewThread: false,
+        goalManager,
+        harness: {
+          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          setThreadSetting: vi.fn().mockResolvedValue(undefined),
+          followUp,
+          sendMessage,
+        },
+      },
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp).toHaveBeenCalledWith({
+      content: '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
+    });
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('updates the current goal when judge defaults change', async () => {

@@ -229,7 +229,14 @@ async function startGoal(
   ctx.addUserMessage(createGoalReminderMessage(goal.id, objective, goal.maxTurns, judgeModelId));
 
   try {
-    await state.harness.sendMessage({ content: toSystemReminderXml('goal', objective) });
+    // followUp queues the trigger when an agent stream is already running
+    // (the plan-approval "Use as /goal" path is invoked from inside the
+    // suspended submit_plan turn) and falls through to sendMessage when no
+    // stream is active (regular `/goal <text>` from idle). Using sendMessage
+    // directly here would start a second concurrent stream whose currentOperationId
+    // gates the original turn's agent_end, suppressing the handleAgentEnd that
+    // drives maybeGoalContinuation — i.e. the judge would never kick in on idle.
+    await state.harness.followUp({ content: toSystemReminderXml('goal', objective) });
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
