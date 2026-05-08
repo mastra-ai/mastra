@@ -1,0 +1,50 @@
+---
+title: "Reference: MrScraper tools | Tools & MCP"
+description: "API reference for @mastra/mrscraper — MrScraper fetch HTML, scrapers, results, and Google SERP sync as Mastra tools."
+packages:
+  - "@mastra/mrscraper"
+---
+
+# MrScraper tools
+
+The `@mastra/mrscraper` package exposes Mastra tools that call the same public HTTP APIs as the [MrScraper MCP](https://mrscraper.com) server’s default surface (`stdio` or HTTP `/mcp`). Use it when you want native `createTool()` integrations without running the Python MCP process.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/mrscraper zod
+```
+
+## Credentials
+
+- **App APIs** (fetch HTML, scrapers, results): set `MRSCRAPER_API_TOKEN` or `MRSCRAPER_TOKEN`, or pass `{ token }` to the factories.
+- **Google SERP sync**: set `MRSCRAPER_SYNC_ACCESS_TOKEN` (or `MRSCRAPER_SERP_ACCESS_TOKEN`), or pass `{ syncAccessToken }`.
+
+## Quick start
+
+```typescript title="src/mastra/tools/index.ts"
+import { createMrscraperTools } from '@mastra/mrscraper'
+
+const tools = createMrscraperTools()
+```
+
+## `createMrscraperTools()`
+
+Returns an object of tools:
+
+- `mrscraperFetchHtml`
+- `mrscraperGoogleSerpSync`
+- `mrscraperCreateAiScraper`, `mrscraperRerunAiScraper`, `mrscraperBulkRerunAiScraper`
+- `mrscraperRerunManualScraper`, `mrscraperBulkRerunManualScraper`
+- `mrscraperGetAllResults`, `mrscraperGetResultById`
+
+Each factory is also exported individually from `@mastra/mrscraper`.
+
+## Tool outputs
+
+Tools return `{ status_code?, data?, headers?, error? }`, matching the MCP server’s JSON shape. Large HTML or JSON payloads should be summarized or stored outside the model context.
+
+## Related
+
+- [MrScraper](https://mrscraper.com)
+- [`createTool()`](./create-tool)
