@@ -142,7 +142,7 @@ The session has two messaging primitives plus skill invocation. The model is bui
 | Operation | Idle thread | Active run on this thread | Returns |
 |---|---|---|---|
 | `message(opts)` | Starts a new run | **Drains into the live run** as new user input (no abort) | `Promise<AgentResult>`, or `AgentStream` if `stream: true`, or typed result if `output` is set |
-| `queue(opts)` | Sends as the next standalone turn | **Holds until idle**, then sends as a fresh turn | `Promise<AgentResult>` resolved when *this* item's turn completes |
+| `queue(opts)` | Sends as the next standalone turn | **Holds until idle**, then sends as a fresh turn | `Promise<AgentResult>` resolved when *this* item's turn completes (success or failure — one-shot, no auto-retry; see §4.2 and §5.7) |
 | `useSkill(name, opts)` | Runs the skill (delegates to `message`) | Throws `HarnessBusyError` | Typed or untyped result |
 
 **`message` is busy-independent.** Multiple concurrent `message()` calls (10 users typing at once) all deliver regardless of in-flight state — Slack semantics. From the model's perspective they show up as a sequence of user inputs interleaved into whatever reasoning context is live. Each caller's promise resolves independently when the run produces an assistant turn answering their signal. As with `queue`, admission can still fail for reasons unrelated to busy-ness — invalid options, closed session, storage failure on the signal write — but never with `HarnessBusyError`.
@@ -210,9 +210,33 @@ class Harness<TState = Record<string, unknown>> {
   listSessions(opts: {
     resourceId: string;
     includeClosed?: boolean;
+    // When set, returns only direct children of the given session
+    // (records whose `parentSessionId === parentSessionId`). Useful for
+    // walking the subagent tree without holding live object references.
+    parentSessionId?: string;
   }): Promise<SessionSummary[]>;
 
   closeSession(opts: { sessionId: string }): Promise<void>;
+
+  // Hard-delete: removes the record from storage. Cascades through
+  // `parentSessionId` — every descendant session is deleted too. Threads
+  // owned by descendants (created via `threadId: { fresh: true }`) are
+  // also deleted; threads merely referenced are left alone. See §5.5
+  // for the full cascade rule.
+  //
+  // `force: true` relaxes two preconditions that would otherwise abort
+  // the call:
+  //   1. Unknown ID — without `force`, throws `HarnessSessionNotFoundError`;
+  //      with `force`, returns successfully (idempotent delete).
+  //   2. Corrupt or schema-incompatible record — without `force`, throws
+  //      `HarnessSessionCorruptError` (the harness cannot read the record
+  //      well enough to walk descendants safely); with `force`, the harness
+  //      skips the cascade walk and removes the single corrupt record from
+  //      storage, leaving any orphan descendants for a follow-up call to
+  //      clean up via `listSessions({ parentSessionId, includeClosed: true })`.
+  // `force: true` is the recovery-path escape hatch (§5.7); use it only
+  // when normal deletion has already failed.
+  deleteSession(opts: { sessionId: string; force?: boolean }): Promise<void>;
 
   // Threads (persistent storage primitive)
   threads: {
@@ -342,6 +366,29 @@ class Session<TState = Record<string, unknown>> {
   ): Promise<z.infer<S>>;
   message(opts: MessageOptions): Promise<AgentResult>;
 
+  // Append a turn to the per-session queue. The promise resolves when
+  // *this* queued item's turn ends — success or failure. Resolution
+  // semantics:
+  //
+  //   - Turn completed (any `finishReason`, including agent-layer errors
+  //     surfaced as `AgentResult.error`): promise resolves with the
+  //     `AgentResult`. The item is removed from `pendingQueue` and the
+  //     next item drains. There is **no automatic retry** — a queued
+  //     item runs exactly once. If the caller wants a retry on failure,
+  //     they inspect the result and call `queue(...)` again themselves.
+  //
+  //   - Item rejected before it ran (session closed, workspace lost on
+  //     rehydration, harness-layer exception thrown before reaching the
+  //     agent): promise rejects with a typed Harness*Error. The item is
+  //     removed from `pendingQueue`. See §5.7.
+  //
+  // Crash-replay is the only re-execution path: if the process dies
+  // mid-turn, the item is preserved on `pendingQueue` and re-runs once
+  // on the next hydration (at-least-once durability, not retry — the
+  // logical first attempt is just being completed). The original
+  // in-process promise is gone with the dead process; remote observers
+  // see a `queue_item_replayed` event followed by the normal terminal
+  // event for the replayed turn (§10.2).
   queue(opts: QueueOptions): Promise<AgentResult>;
 
   useSkill<S extends ZodSchema | undefined = undefined>(
@@ -583,7 +630,7 @@ type FileAttachment =
     };
 ```
 
-Inline attachments larger than `HarnessConfig.files.maxInlineBytes` (default 10 MiB; see §9) are rejected at the entry point — callers must pre-upload via the file route or use a URL form.
+Inline attachments larger than `HarnessConfig.files.maxInlineBytes` (default 10 MiB; see §9) are rejected at the entry point. The cap applies only to the *inline* form (`{ kind: 'inline', bytes }`) — the path that ships the file as part of a `message()` / `queue()` body. Larger files take one of the other two paths: pre-upload via the file route (bounded by `files.maxUploadBytes`, default 100 MiB) and reference by `attachmentId`, or host externally and send as `kind: 'url'`. The pre-upload path exists precisely so large *local* files do not have to be hosted externally.
 
 ### 4.5 Errors
 
@@ -609,8 +656,8 @@ class HarnessQueueFullError extends Error {
 }
 
 // Thrown at admission for malformed options (e.g. `message({ output, stream: true })`,
-// negative `maxTurns` on `setGoal`, attachment exceeding `files.maxInlineBytes`).
-// Surfaces before any storage write.
+// negative `maxTurns` on `setGoal`, inline attachment exceeding `files.maxInlineBytes`,
+// pre-upload exceeding `files.maxUploadBytes`). Surfaces before any storage write.
 class HarnessValidationError extends Error {
   readonly field: string;
   readonly reason: string;
@@ -716,6 +763,20 @@ class HarnessSessionCorruptError extends Error {
 class HarnessStateSerializationError extends Error {
   readonly sessionId: string;
   readonly path: string;          // dotted path into `state` that failed
+}
+
+// Thrown by `emitEvent(...)` when a custom event payload is not
+// JSON-serializable (functions, class instances, `Map`/`Set`/`Date`,
+// `BigInt`, typed arrays, `undefined` values, symbols, circular refs).
+// The harness does not schema-check publisher fields, but it does enforce
+// serialisability so that in-process listeners and remote/SSE subscribers
+// (§13.3) see the same contract. Surfaces synchronously from the
+// `emitEvent` call site, before any subscriber observes the event.
+class HarnessEventSerializationError extends Error {
+  readonly sessionId: string;
+  readonly eventType: string;     // the offending custom `type`
+  readonly path: string;          // dotted path into `event.data` that failed
+  readonly reason: 'function' | 'class_instance' | 'cyclic' | 'bigint' | 'symbol' | 'undefined' | 'unsupported';
 }
 
 // Workspace provider — see §2.7, §9.
@@ -879,7 +940,14 @@ interface SessionRecord {
   id: string;
   resourceId: string;
   threadId: string;
-  parentSessionId?: string;          // subagent linkage
+  parentSessionId?: string;          // subagent or programmatic-child linkage
+
+  // How the record was created. 'subagent-tool' opts the record into the
+  // auto-close-on-subagent_end rule (§5.6). 'top-level' covers both regular
+  // user sessions and programmatic child sessions spawned via
+  // harness.session({ parentSessionId, ... }) — these stay open until an
+  // explicit close/delete or until parent cascade reaches them.
+  origin: 'top-level' | 'subagent-tool';
 
   // Per-turn defaults
   modeId: string;
@@ -1060,6 +1128,26 @@ interface PendingPlanApproval {
   source: 'parent' | 'subagent';
   subagentToolCallId?: string;
   requestedAt: number;
+
+  // Mode transition is *frozen at registration time* from the submitting mode's
+  // `HarnessMode.transitionsTo` — see §4.7. If the submitting mode does not
+  // declare a transition target, this field is undefined and approval resumes
+  // the run with no mode change. Capturing the target up front means a mode
+  // switch *while* the plan is pending does not retarget the approval.
+  transitionModeId?: string;
+
+  // Idempotency markers for the mode-flip side effect. Approving a plan has two
+  // side effects: it may change `modeId` and it resumes the suspended run.
+  // The mode write is guarded by these markers so a crash between "wrote mode"
+  // and "cleared pendingPlan" does not double-apply the transition on replay.
+  // On approval, if `transitionModeId` is set and `modeTransitionAppliedAt` is
+  // unset, the harness CAS-writes (`modeId = transitionModeId`,
+  // `approvedTransitionModeId = transitionModeId`,
+  // `modeTransitionAppliedAt = now`) under the session lease and emits
+  // `mode_changed`. On replay, the marker is observed and the mode write is
+  // skipped. See §5.7.
+  approvedTransitionModeId?: string;
+  modeTransitionAppliedAt?: number;
 }
 ```
 
@@ -1121,9 +1209,21 @@ interface MastraStorage {
     loadSessionByThread(opts: { threadId: string; resourceId: string }): Promise<SessionRecord | null>;
 
     // Listing. Closed records are excluded by default; pass `includeClosed: true`
-    // to surface them for history / audit views.
-    listSessions(opts: { resourceId: string; includeClosed?: boolean }): Promise<SessionSummary[]>;
+    // to surface them for history / audit views. `parentSessionId` filters to
+    // direct children — adapters MUST push this filter to the storage layer
+    // (do not load all sessions and filter in memory). Walking the full
+    // descendant tree is a recursive caller-side concern.
+    listSessions(opts: {
+      resourceId: string;
+      includeClosed?: boolean;
+      parentSessionId?: string;
+    }): Promise<SessionSummary[]>;
 
+    // Unconditional hard-delete of a single record. The harness layer's
+    // `harness.deleteSession(...)` (§4.1) calls this method once per
+    // descendant after walking the `parentSessionId` chain — adapters
+    // do *not* implement cascade logic themselves. No-op if the record
+    // is already gone.
     deleteSession(opts: { sessionId: string }): Promise<void>;
 
     // Session leases (new in v1) — see §5.8 for the write-concurrency contract.
@@ -1207,13 +1307,83 @@ The Harness keeps a configurable cap on live sessions to bound memory. When the 
 3. The record stays in storage with `closedAt: undefined`.
 4. The next `harness.session({ sessionId })` call re-hydrates transparently.
 
-**Pending interrupts pin the session in memory.** A session is *not* eligible for idle-timeout eviction while any of `pendingApproval`, `pendingSuspension`, `pendingQuestion`, or `pendingPlan` is set. Evicting a session that is parked on a human-in-the-loop prompt would silently kill an active stream the moment the user gets distracted. The pin lifts as soon as the prompt is answered (or the session is explicitly closed). Note that pressure-based eviction via `sessions.maxLive` still applies — pinning only protects against time-based idle eviction.
+A session may only leave the live map when a future hydration can faithfully reconstruct it. Three eviction paths exist, each with its own admissibility check:
+
+#### Idle eviction (`sessions.idleTimeoutMs`)
+
+A session is **interrupt-pinned** if any of `pendingApproval`, `pendingQuestion`, `pendingPlan`, `pendingSuspension` is set. Interrupt-pinned sessions are exempt from idle eviction indefinitely — until the interrupt is answered, the session is closed, or `sessions.pinnedTimeoutMs` fires (see below). Evicting a session parked on a human-in-the-loop prompt would silently kill an active stream the moment the user gets distracted.
+
+#### Pressure eviction (`sessions.maxLive`) — durable parking barrier
+
+`sessions.maxLive` is a pressure *target*, not permission to drop a non-resumable human prompt. When the live-session map exceeds `sessions.maxLive`, the harness picks eviction candidates by LRU among **resumable** sessions only. A session is **resumable** for pressure-eviction purposes iff **all** of:
+
+1. No agent run is currently executing in-process (no active stream, no in-flight tool call).
+2. If any pending interrupt field is set, the corresponding workflow snapshot has been durably committed to `agent.storage.workflows` (the agent run reached its suspension boundary, not just registered the pending record).
+3. The pending interrupt record itself is durably committed to `HarnessStorage` (the `saveSession` for the pending field has fsync'd, not just been issued).
+4. The session lease can be released cleanly (no in-flight `setState` updater, no draining queue item, no streaming subscriber that hasn't ack'd through the SSE ring buffer up to `sessions.maxEvictUnacked`).
+
+If a session is interrupt-pinned but conditions 2–4 are not all met, it is **non-resumable** and **skipped** for pressure eviction. `sessions.maxLive` is therefore a target, not a hard cap — the live map is permitted to temporarily exceed it rather than drop a session with an unresumable interrupt.
+
+In code shape:
+
+```ts
+function pressureEvictionCandidate(s: SessionRuntime): boolean {
+  if (s.hasActiveRun) return false;
+  if (s.isInterruptPinned && !s.durableParkingComplete) return false;
+  if (s.leaseHeldForFlush) return false;
+  if (s.unackedEventBacklog > config.sessions.maxEvictUnacked) return false;
+  return true;
+}
+```
+
+The harness emits `session_pin_overflow` (see §10.2) with `{ sessionId, pendingKind, liveCount, maxLive }` whenever it can't bring `liveCount` down to `maxLive`, so operators see the overshoot rather than discovering it through downstream OOM. Pair with an alert if you need a hard ceiling.
+
+#### `durableParkingComplete` — the barrier flip
+
+A session runtime tracks an internal flag `durableParkingComplete`, flipped only after the four conditions of the barrier are observed. The order matters: the `*_required` event for any pending interrupt is emitted **after** the durable barrier, not before. Subscribers (TUI, remote SSE, server-side workflow) acting on `tool_suspension_required` / `approval_required` / `question_pending` / `plan_pending` are guaranteed to find the matching pending record in storage if they reconnect. This closes a previously unspecified race where a fast subscriber could `respondApproval` before the harness had committed `pendingApproval`.
+
+```ts
+class SessionRuntime {
+  durableParkingComplete = false;
+
+  async parkOnInterrupt(pending: PendingInterrupt): Promise<void> {
+    // 1. Wait for agent run to reach its suspension boundary.
+    await this.agentRun.awaitSuspendedBoundary();         // resolves after `agent.storage.workflows` commits
+
+    // 2. Persist the pending field to HarnessStorage with the lease's ifVersion.
+    await this.storage.saveSession(this.record, {
+      ownerId: this.lease.ownerId,
+      ifVersion: this.record.version,
+    });
+
+    // 3. The session is now resumable from another process.
+    this.durableParkingComplete = true;
+
+    // 4. Emit the *_required event after the barrier.
+    this.emit(pending.toRequiredEvent());
+  }
+}
+```
+
+#### `sessions.pinnedTimeoutMs`
+
+Long-running interrupt-pinned sessions still face an upper bound — `sessions.pinnedTimeoutMs` (default `24 hours`) — after which they're evicted via `session_evicted` with `reason: 'pinned_timeout'`. That eviction path always satisfies the durable-parking barrier (it only fires *after* `durableParkingComplete`), so it is not a counterexample to the rule.
+
+#### Subagent inheritance
+
+Subagent sessions inherit their parent's lease (§5.6, §5.8). Pressure-eviction of a parent therefore evicts the entire subtree atomically. A subagent that is itself interrupt-pinned (e.g. a child agent waiting on `request_approval`) keeps the parent in the live map by raising the parent's effective `isInterruptPinned`. **Children pin parents transitively for pressure-eviction purposes.**
+
+#### Caller invisibility
 
 Eviction is invisible to callers. They always get a working `Session` from `harness.session(...)`; whether it was already in memory or just hydrated is an implementation detail.
+
+Net rule: **a session can only leave the live map if a future hydration can faithfully reconstruct it.** Idle eviction is gated on "no pending interrupt." Pressure eviction is gated on "durable parking complete." `pinnedTimeoutMs` eviction is gated on the same barrier. `session.close()` is the one path that can leave with a pending interrupt (and §5.5 documents that close-with-pending decisively cancels the interrupt rather than orphaning it).
 
 Configuration knobs (see §9):
 - `sessions.maxLive` — cap on hydrated sessions (default `Infinity` — no cap; opt in to a finite cap if you need eviction-by-pressure).
 - `sessions.idleTimeoutMs` — auto-evict after this period of no activity (default `2 hours`). The check is skipped while a session has a pending approval/suspension/question/plan.
+- `sessions.pinnedTimeoutMs` — upper bound on how long an interrupt-pinned session stays live (default `24 hours`). Eviction at this bound always satisfies the durable parking barrier.
+- `sessions.maxEvictUnacked` — maximum unacked events in the SSE ring buffer (§13.3) before a session is held back from pressure eviction. Default: half of `sessions.eventBufferSize`.
 - `sessions.flushDebounceMs` — debounce window for writing dirty state (default `500ms`).
 
 ### 5.5 Lifecycle
@@ -1226,11 +1396,26 @@ A session record is in one of three states:
 
 Transitions:
 
-- `session.close()` (or `harness.closeSession({ sessionId })` when you only have the ID) — flushes, evicts from memory, sets `closedAt`. Final.
-- `harness.threads.delete({ threadId })` — cascades: closes and deletes all sessions bound to that thread.
+- `session.close()` (or `harness.closeSession({ sessionId })` when you only have the ID) — flushes, evicts from memory, sets `closedAt`. Final. **Cascades through `parentSessionId`** — see "Cascade rule" below.
+- `harness.threads.delete({ threadId })` — closes and deletes every session **bound directly to that thread** (`SessionRecord.threadId === threadId`). Each closed session in turn cascades through `parentSessionId`. The cascade reaches descendants regardless of which thread they're on.
+- `harness.deleteSession({ sessionId })` — hard-delete. Removes the record from storage rather than just setting `closedAt`. Cascades the same way as `closeSession`, except every step in the chain is a hard-delete instead of a close.
 - Idle eviction — moves between "active in memory" and "active in storage only," never touches `closedAt`.
 
+**Cascade rule.** Closing or deleting a session walks `parentSessionId` and applies the same operation to every descendant. Concretely:
+
+- `closeSession(P)` finds all `SessionRecord`s with `parentSessionId === P.id`, calls `closeSession` on each, recursively. **Subagent sessions auto-close on `subagent_end` (§5.6), so most descendants are already closed by the time a parent close cascades — the cascade then becomes a no-op for them.** Live descendants (a subagent run that's still in flight when the parent is closed) are aborted with `abortSignal.reason === 'parent_aborted'` (§6.2), their pending approvals/suspensions/questions/plans are dropped, their attachments are deleted (§4.4), and their workspaces are torn down per the ownership model (§2.7).
+- `deleteSession(P)` does the same walk, but each step calls `deleteSession` instead of `closeSession`. Closed descendants on the way down are also hard-deleted, so the whole subtree leaves storage. Unknown IDs throw `HarnessSessionNotFoundError` unless `force: true`.
+- The cascade is **synchronous and durable** — `closeSession` / `deleteSession` only resolves once every descendant has been written. A crash mid-cascade leaves a partially-cascaded tree; the next `harness.session({ sessionId })` against a record whose ancestor is closed throws `HarnessSessionClosedError` and a follow-up `harness.deleteSession(...)` on the original target completes the cascade idempotently.
+
+**Why cascade.** Two windows it covers. (1) The abort-mid-subagent window: a subagent is in flight when the parent is closed. Without cascade, the child would keep running, consuming compute and emitting events nobody is listening for. (2) Hard-delete: closed subagent records (auto-closed at `subagent_end`) need to leave storage with their parent when `deleteSession` runs, otherwise the subtree leaks orphaned records pointing at a `parentSessionId` that no longer exists. Cascade is the safe-by-default rule for both.
+
+**Threads owned by subagent sessions.** A child session spawned with `threadId: { fresh: true }` (see §12.10) implicitly owns the thread the harness creates for it. When that child session is closed or deleted by cascade (or directly), the owned thread is closed/deleted too. A child session that *reuses* the parent's thread (`threadId: parent.threadId`) does not delete that thread on close — the thread keeps following the parent. The owning relationship is recorded on the thread record (`HarnessThread.ownedBySessionId?: string`) and is set once at thread creation; it cannot be reassigned.
+
+**Interaction with `harness.threads.delete`.** Deleting a thread cascades through both edges: every session bound to that thread is closed-and-deleted, and each of those sessions in turn deletes its descendants per the cascade rule. A descendant on a different thread (the common case for fresh-thread subagents) gets deleted; the descendant's owned thread is deleted with it. A descendant referencing some unrelated thread is *not* the right place to garbage-collect that other thread — only ownership triggers thread deletion.
+
 **Closed records and thread reuse.** A thread can outlive any single session that ran on it. After `session.close()` the thread is still a valid target for a new session: `harness.session({ threadId, resourceId })` ignores the closed record and creates a fresh active session bound to the same `threadId` (see §5.3). Closed records remain in storage as history — addressable by `harness.session({ sessionId })` (which throws `HarnessSessionClosedError`), surfaced by `harness.listSessions({ resourceId, includeClosed: true })`, and removed only by an explicit `harness.deleteSession(...)` or by `harness.threads.delete(...)` cascading.
+
+**No retention policy in v1.** Closed records (and their closed descendants) stay in storage until an explicit `deleteSession` / `threads.delete` removes them. If callers want time-based pruning, they run their own job against `listSessions({ includeClosed: true })`.
 
 Detach (proactively flush + drop without closing) is not exposed in v1. It happens implicitly via eviction. If real callers want explicit control later, we add `harness.detachSession({ sessionId })` in a minor.
 
@@ -1240,9 +1425,24 @@ A subagent session is a normal `SessionRecord` with `parentSessionId` set. It pe
 
 - Subagent state survives restarts the same way parent state does.
 - Walking `parentSessionId` rebuilds the subagent tree without needing in-memory state.
-- Subagent sessions are visible in `listSessions(...)` (filterable by `parentSessionId` if needed; not in v1).
+- Subagent sessions are visible in `listSessions(...)` and can be filtered to direct children with `listSessions({ resourceId, parentSessionId })` (§4.1).
 
 Subagent depth (§8) is computed from the chain of `parentSessionId` records, not from a runtime counter — so the cap holds across restarts.
+
+**Lifecycle is bound to the parent.** Closing or deleting the parent session cascades through `parentSessionId` to every descendant — see §5.5 for the rule. The interesting case is the abort-mid-subagent window: a subagent is still running (between `subagent_start` and `subagent_end`) when the parent is closed. The live subagent run is aborted with `abortSignal.reason === 'parent_aborted'` (§6.2), and the auto-close that would normally fire on `subagent_end` becomes a parent-driven close instead. After `subagent_end`, descendants are already closed (per the auto-close rule below), so a later parent close is a no-op for them; a parent hard-delete still walks them and removes their records. There is no v1 mechanism for a child session to "outlive" its parent; if you want a sibling that survives independently, create a top-level session under the same resource instead of a subagent.
+
+**Subagent-tool sessions are auto-closed on `subagent_end`.** A session created by the built-in subagent tool is bound 1:1 to the tool call that spawned it; once the call returns (success, error, or abort), the harness closes the child session as part of emitting `subagent_end`. The closed record stays in storage as history — surfaceable via `harness.listSessions({ resourceId, parentSessionId, includeClosed: true })` and readable for audit by adapters that bypass the harness layer. `harness.session({ sessionId: subagentId })` after `subagent_end` throws `HarnessSessionClosedError`, which is the right answer: the subagent is not a session you can re-enter, only a record you can inspect.
+
+The auto-close rule is keyed on **how the session was created**, not on the presence of `parentSessionId`. The `SessionRecord` carries an internal `origin: 'top-level' | 'subagent-tool'` field set at creation time — `origin: 'subagent-tool'` opts the record into auto-close. Programmatic child sessions created via `harness.session({ parentSessionId, ... })` (see §12.10 — a long-running background analysis spawned from a parent) get `origin: 'top-level'` and stay open until an explicit `close`/`delete` or until parent cascade reaches them. This split exists because programmatic children are general-purpose (the caller controls their lifetime), whereas subagent-tool children are scoped to a single tool call (the harness controls their lifetime).
+
+Auto-close has two practical consequences for subagent-tool sessions:
+
+- **Pending items on a subagent disappear with `subagent_end`.** A subagent that emits `tool_approval_required` and then has its run aborted (e.g. by a `parent_aborted` cascade or a tool error) closes immediately; the inbox item is dropped, and any client racing to respond gets `404 inbox.item_not_found`. This matches the "valid only between `subagent_start` and `subagent_end`" guarantee in §10.6.
+- **The cascade rule still applies for the live window.** Between `subagent_start` and `subagent_end`, a subagent is an active session — closing the parent during that window cascades the abort down per §5.5. After `subagent_end`, the descendant is already closed, so cascading from a later parent close is a no-op (or, for hard-delete, just removes the closed record).
+
+If a tool genuinely needs work that outlives the call that spawned it, the right shape is a top-level session under the same resource (`harness.session({ resourceId })`), not a subagent. Programmatic child sessions (`harness.session({ parentSessionId, ... })`) sit in between: they share the parent's identity and cascade with it, but are not tied to any single tool call — the caller controls their lifetime via `child.close()`.
+
+**Owned threads vs reused threads.** When a subagent is spawned with `threadId: { fresh: true }`, the harness allocates a new thread and marks it as owned by the child session (`HarnessThread.ownedBySessionId === child.id`). On child close/delete, the owned thread is closed/deleted with the session. When the subagent reuses the parent's thread, the thread is not owned by the child and survives child close along with the parent.
 
 ### 5.7 Failure and crash recovery
 
@@ -1256,9 +1456,18 @@ Persistence is what makes sessions resumable across server restarts and storage 
 **Rehydration failures.**
 
 - *Forward-compatible schema drift.* Unknown fields on a stored `SessionRecord` are preserved as-is and rewritten on the next flush. New optional fields added by a later harness version don't break older records.
-- *Backward-incompatible schema.* If a required field is missing or malformed, `harness.session(...)` throws `HarnessSessionCorruptError` with `reason: 'schema_incompatible'`. The record is left in storage; callers decide whether to repair or `harness.deleteSession({ sessionId, force: true })`.
-- *Corrupted JSON.* Throws `HarnessSessionCorruptError` with `reason: 'parse_failed'`.
-- *Pending interrupt with a missing workflow snapshot.* The session hydrates successfully, the corresponding `pendingApproval` / `pendingSuspension` / `pendingQuestion` / `pendingPlan` field is dropped, and an `error` event fires explaining that the suspended turn could not be resumed. The queue continues from the next item. Rationale: replicating the agent layer's `AGENT_RESUME_NO_SNAPSHOT_FOUND` at hydration time would brick the session for a recoverable mismatch (e.g. a snapshot TTL'd out, a workflow store rebuilt).
+- *Backward-incompatible schema.* If a required field is missing or malformed, `harness.session(...)` throws `HarnessSessionCorruptError` with `reason: 'schema_incompatible'`. The record is left in storage untouched.
+- *Corrupted JSON.* Throws `HarnessSessionCorruptError` with `reason: 'parse_failed'`. The record is left in storage untouched.
+
+**Recovery from `HarnessSessionCorruptError`.** Two paths, both routed through public Harness APIs (no need to reach into the storage adapter):
+
+1. *Repair out-of-band, then retry.* The operator inspects the raw record (via the storage adapter directly, since the harness can't load it), fixes the offending field, and calls `harness.session({ sessionId })` again. This is the right path when the data is recoverable — e.g. a forward-incompatible field rolled out and rolled back, or a schema migration that needs to run.
+2. *Force-delete the corrupt record.* `harness.deleteSession({ sessionId, force: true })` removes the corrupt record from storage in a single call. Because the harness can't read the record well enough to walk `parentSessionId` safely, `force: true` **skips the cascade walk** and removes only the named record. Any descendants (subagent records or programmatic children) are left in storage as orphans pointing at a `parentSessionId` that no longer exists.
+
+   Cleaning up orphans is a follow-up step: `harness.listSessions({ resourceId, parentSessionId: <corruptId>, includeClosed: true })` enumerates them, and a normal `harness.deleteSession({ sessionId })` per orphan removes them (each of those deletes runs its own cascade, so the subtree comes down cleanly). Orphan cleanup is optional — a stranded orphan is invisible to normal session resolution (its parent is gone, so cascade can't reach it, but it also can't be opened by any caller because its `parentSessionId` no longer resolves) and only matters if the operator cares about storage hygiene.
+
+The storage adapter's `deleteSession` (§5.2) is intentionally simpler — unconditional single-record delete, no cascade — and is the primitive that the harness's `force: true` path calls into. Operators with bulk-cleanup needs (e.g. wiping all sessions for a deleted resource) can use the adapter directly, but the public `harness.deleteSession` is sufficient for v1's recovery flows.
+- *Pending interrupt with a missing workflow snapshot.* The session hydrates successfully, the corresponding `pendingApproval` / `pendingSuspension` / `pendingQuestion` / `pendingPlan` field is dropped, and an `error` event fires explaining that the suspended turn could not be resumed. The queue continues from the next item. Rationale: replicating the agent layer's `AGENT_RESUME_NO_SNAPSHOT_FOUND` at hydration time would brick the session for a recoverable mismatch (e.g. a snapshot TTL'd out, a workflow store rebuilt). The durable-parking barrier (§5.4) is what makes this branch rare in practice: it guarantees that whenever a `pending*` field is set in storage, the corresponding workflow snapshot was committed *before* the field. So this branch fires only when the snapshot store was rebuilt, TTL'd out, or otherwise lost the snapshot from under a long-pinned session — never as a result of a torn write within `parkOnInterrupt`. The harness logs `harness.parking_torn` with `{ sessionId, pendingKind, runId }` whenever it triggers, so operators can distinguish "snapshot store evicted us" from "harness bug."
 
 **Crash mid-turn.** What a freshly hydrated session looks like depends on where the crash hit and which primitive originated the input:
 
@@ -1267,16 +1476,26 @@ Persistence is what makes sessions resumable across server restarts and storage 
 | `message(...)` in flight, signal not yet accepted by the agent | **Lost.** The message was never persisted (Slack semantics — `message` items aren't on `pendingQueue`). The caller's pending promise rejects. The user resends if they want the message delivered. |
 | `message(...)` accepted, run started, no suspension | Agent-layer durability: the signal is recorded in the agent's thread log. On hydration, the harness re-attaches via `agent.subscribeToThread(...)`. If the run completed before crash, the assistant turn is in the thread log. If it didn't, the model output is lost — but the user-side input survives in the thread log so they can ask again. |
 | `queue(...)` enqueued but not yet drained | Durable. Item still on `pendingQueue`. On the next `harness.session(...)` and once the thread is idle, the head is drained (signalled) as a fresh standalone turn. |
-| `queue(...)` drained and signalled, run mid-flight | At-least-once. The item is removed from `pendingQueue` *after* the turn completes. If the crash hit before completion, the item re-runs on hydration. Tools that are not idempotent should guard themselves; `QueuedItem.id` is exposed for de-duping. |
+| `queue(...)` drained and signalled, run mid-flight | At-least-once. The item is removed from `pendingQueue` *after* the turn ends — success or failure (see "Queue terminal outcomes" below). If the crash hit before the turn ended at all, the item re-runs on hydration with a `queue_item_replayed` event preceding the run. Tools that are not idempotent should guard themselves; `QueuedItem.id` is exposed for de-duping. |
 | Suspended on tool approval | `pendingApproval` is rehydrated. The workflow snapshot in `MastraStorage.workflows` survives the crash (it's owned by the agent layer, not the harness). The user responds via `respondToToolApproval(...)`; harness calls `agent.resumeStream({ approved, reason }, { runId })`. |
 | Suspended on tool execution (`suspend(data)`) | `pendingSuspension` is rehydrated — the *separate* persisted shape (§5.1), not a relabelled `pendingApproval`. The workflow snapshot survives. The external resumer (webhook handler, operator, …) calls `respondToToolSuspension({ toolCallId, resumeData })`; harness calls `agent.resumeStream(resumeData, { runId })`. The `resumeData` payload is opaque to the harness and flows straight back into the paused tool's continuation. |
 | `ask_user` outstanding | `pendingQuestion` is rehydrated. Responding via `respondToQuestion(...)` resumes the underlying agent turn. |
-| `submit_plan` outstanding | `pendingPlan` is rehydrated. Responding via `respondToPlanApproval(...)` resumes and (if approved) flips the session's mode. |
+| `submit_plan` outstanding | `pendingPlan` is rehydrated. Responding via `respondToPlanApproval(...)` resumes the run; if approved and `pendingPlan.transitionModeId` is set, the mode flip is applied at most once via the `approvedTransitionModeId` / `modeTransitionAppliedAt` markers (see §5.1). On replay, the markers cause the mode write to be skipped while the resume side effect proceeds. |
 | Mid-flush (storage transaction) | The transaction either committed or it didn't. At-least-once for queue items applies as above. |
 
 **Durability boundary.** The harness owns durability for `queue` items pre-acceptance. The agent layer owns durability for everything signal-driven post-acceptance (every `message(...)` and every drained `queue(...)`). The boundary is the `signal.accepted` resolution from `agent.sendSignal(...)`.
 
-**Queue replay.** Items in `pendingQueue` are durable. The head item is removed *after* its turn completes successfully. If a turn was mid-flight at crash time, the item re-runs (at-least-once). Per-turn overrides (`model`, `mode`, `yolo`) stored on the queued item replay with the same overrides. There is no `addTools` field to replay: `queue(...)` rejects `addTools` at admission so a queued item never represents a tool surface that storage cannot reproduce — see §4.3 and §5.1.
+**Queue terminal outcomes.** A queued item runs **exactly once**. The harness removes it from `pendingQueue` when the turn ends, regardless of whether the turn succeeded or failed. There is no retry ceiling, no exponential backoff, no automatic resend — those would smuggle implicit retry policy into a primitive that's supposed to be a sequential delivery queue, and a failed turn that auto-retried could double-spend tools, double-charge tokens, or cycle a model that is reliably failing. Callers that want retry build it themselves on top of the resolved promise.
+
+A queued item terminates in exactly one of three ways:
+
+1. **Turn completed.** The agent layer produced an `AgentResult` for the item — including results that carry `error` or a non-success `finishReason`. The in-process `queue()` promise resolves with that `AgentResult`; the SSE stream emits the normal terminal event for the run (`agent_end` with whatever `finishReason` the run produced). The item is removed from `pendingQueue`. The next item drains.
+2. **Failed before reaching the agent.** The harness threw before invoking the agent for this item — examples: the session was closed between admission and drain (`HarnessSessionClosedError`), the workspace provider couldn't be re-established on rehydration (`HarnessWorkspaceLostError`), the lease was lost mid-drain (`HarnessSessionLockedError`), or the agent layer threw a non-result-shaped exception. The in-process `queue()` promise rejects with the typed Harness error; the SSE stream emits `queue_item_failed` (§10.2) carrying the error code and the queued-item ID. The item is removed from `pendingQueue`. The next item drains.
+3. **Crash mid-turn.** Process dies between drain and turn-end. The item is **not** removed; it stays on `pendingQueue` and re-runs once on the next hydration. The original in-process `queue()` promise is gone with the dead process and never resolves. On replay, the SSE stream emits `queue_item_replayed` (§10.2) before the normal `agent_start` for the second attempt, then the replayed turn proceeds and ends per case (1) or (2). Crash-replay is **at-least-once durability**, not retry — we're completing the logical first attempt, which never had a terminal outcome before. After the replayed turn ends, the item is removed; no further replays.
+
+In-process callers and remote observers see the same terminal outcomes through different surfaces: a callback / promise (in-process) versus `queue_item_failed` + the run's terminal events (remote). The two never disagree about whether an item is done — both observe the same `pendingQueue` removal as the same write.
+
+**Queue replay constraints.** Per-turn overrides (`model`, `mode`, `yolo`) stored on the queued item replay with the same overrides. There is no `addTools` field to replay: `queue(...)` rejects `addTools` at admission so a queued item never represents a tool surface that storage cannot reproduce — see §4.3 and §5.1.
 
 **`message` durability is intentional.** Persisting interactive `message` items would defeat the Slack semantic — multiple concurrent users sending messages should not produce a recoverable queue, just live inputs into the conversation. If a caller wants survival across restarts, they use `queue`.
 
@@ -1331,6 +1550,8 @@ sessions: {
   // ...other session knobs
 }
 ```
+
+**Lease interaction with pressure eviction (§5.4).** Pressure eviction releases the session's lease cleanly — it does not "steal" it from itself. Because the durable-parking barrier's condition 1 already excludes any session with an in-flight run, the lease is never held against a resumable candidate. Subagent sessions inherit their parent's lease (§5.6); pressure-eviction of a parent therefore evicts the entire subtree atomically, releasing the single shared lease at the parent. A subagent that is itself interrupt-pinned keeps the parent in the live map by raising the parent's effective `isInterruptPinned` flag — children pin parents transitively for pressure-eviction purposes.
 
 ---
 
@@ -1427,8 +1648,8 @@ type SetStateFn<TState> = {
   Tools that don't care about the source can ignore `reason` and treat the signal as a flat "stop now."
 
 **Events.**
-- `emitEvent(event)` forwards any event to subscribers of this session. Custom event types pass through unchanged — the harness does not inspect or schema-validate them.
-- Tools **must not** synthesize harness-owned event types: `agent_start`, `agent_end`, `text_delta`, `tool_start`, `tool_end`, `subagent_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `goal_*`. The harness owns these and will overwrite or duplicate them. Use a custom type prefix (e.g. `myorg.tool.progress`) for tool-level signals.
+- `emitEvent(event)` forwards an event to subscribers of this session. The harness does not schema-check publisher-specific fields, but two things are validated eagerly and throw before any subscriber sees the event: (1) `type` must be dotted and must not be a reserved harness prefix (§10.3) — failure raises `HarnessValidationError`; (2) the payload must be JSON-serializable — failure raises `HarnessEventSerializationError` (`field: 'event.data'`, with the offending path). The serialization rule keeps in-process listeners and remote/SSE subscribers on the same contract — what a local listener sees is exactly what crosses the wire in §13.3, modulo transport.
+- Tools **must not** synthesize harness-owned event types: `agent_start`, `agent_end`, `text_delta`, `tool_start`, `tool_end`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `goal_*`. Emitting one is a `HarnessValidationError`. Use a custom dotted prefix (e.g. `myorg.tool.progress`) for tool-level signals.
 - `registerQuestion` / `registerPlanApproval` are how `ask_user` and `submit_plan` (and any custom suspending tools you write) hand control back to the user. The harness pairs the registration with a Mastra workflow suspension — see §5.7 for the resume story.
 
 **Subagent linkage.**
@@ -1456,7 +1677,7 @@ The harness slot is intentionally narrow. The following are out-of-contract:
 The built-in tools (`task_write`, `submit_plan`, `ask_user`) read `source` to keep parent and subagent state isolated:
 
 - **`task_write`** — writes to the calling session's task list. A subagent's task list is separate from the parent's; calling `task_write` from a subagent never overwrites the parent's tasks. (The mechanism: tasks live in `session.state`, and there are two sessions involved.)
-- **`submit_plan`** — registers a plan approval against the calling session. When approved by the user, the harness flips the calling session's mode (typically plan → build). A subagent's `submit_plan` flips the subagent's mode, never the parent's. The user-facing event is tagged with `source` so the UI can attribute it ("subagent X submitted a plan").
+- **`submit_plan`** — registers a plan approval against the calling session. The transition target is taken from the *submitting* mode's `HarnessMode.transitionsTo` (see §9) and frozen onto `PendingPlanApproval.transitionModeId` at registration time, so a mode switch while the plan is pending does not retarget the approval. On user approval, the harness applies the transition idempotently: it CAS-writes the new `modeId` together with `approvedTransitionModeId` and `modeTransitionAppliedAt` under the session lease, emits `mode_changed`, then resumes the run. On crash-replay (§5.7), the marker is observed and the mode flip is skipped — the resume side effect remains at-least-once but the mode side effect is exactly-once. If the submitting mode declares no `transitionsTo`, approval resumes the run with no mode change. A subagent's `submit_plan` flips the subagent's mode, never the parent's. The user-facing event is tagged with `source` so the UI can attribute it ("subagent X submitted a plan").
 - **`ask_user`** — registers a pending question against the calling session. The user sees the question with subagent attribution if `source === 'subagent'`.
 
 Custom tool authors implementing similar suspension patterns should follow the same rule: act on the calling session only, and tag user-facing events with `source` for attribution.
@@ -1527,10 +1748,14 @@ interface CommandDefinition {
 
 Resolution rules:
 - Structured form (`execute('gh', ['pr', 'list'])`) consults the registry.
-- String form (`execute('gh pr list')`) skips the registry — no parsing.
+- String form (`execute('gh pr list')`) is **not** parsed against the registry.
 - Registered `env` overrides caller `env` for the same keys (security boundary).
-- `'restricted'` policy: unregistered commands return `{ exitCode: 127 }`.
-- `'open'` policy (default): unregistered commands run normally.
+- `'open'` policy (default): unregistered structured commands run normally; string form runs normally.
+- `'restricted'` policy:
+  - Unregistered structured commands return `{ exitCode: 127 }`.
+  - **String-form execution is rejected with `HarnessValidationError`** (`field: 'command'`, `reason: 'string_form_not_allowed_in_restricted'`). Allowing string form would let any caller bypass the registry — `'restricted'` is therefore a complete allowlist for the structured surface and explicitly disables the unstructured surface.
+
+**Env exposure.** Caller-provided env passes through only for keys explicitly listed in the matched `CommandDefinition.allowCallerEnv?: string[]` (default: empty — caller env is dropped under `'restricted'`). Registered `env` values are server-side only and are **never** included in `tool_end` event payloads, command result bodies, or any wire response. The harness redacts registered keys before the result reaches a subscriber. This makes `'restricted'` a security-relevant claim end-to-end, not just at the registry boundary.
 
 ---
 
@@ -1557,10 +1782,30 @@ interface HarnessConfig<TState = Record<string, unknown>> {
   defaultResourceId?: string;                         // Default tenant
   defaultModelId?: string;                            // Fallback when session has none selected
   sessions?: {
-    maxLive?: number;                                 // Cap on hydrated sessions. Default: Infinity (no cap).
+    maxLive?: number;                                 // Soft target for the number of *resumable* sessions
+                                                      //   kept in memory. Default: Infinity (no cap).
+                                                      //   The harness performs LRU pressure eviction toward
+                                                      //   this target, but only on sessions that have
+                                                      //   completed durable parking (see §5.4). If every
+                                                      //   live session is mid-turn or non-resumable, the
+                                                      //   live map is permitted to temporarily exceed
+                                                      //   `maxLive` rather than drop a session with an
+                                                      //   unresumable interrupt. Pair with an alert on
+                                                      //   `session_pin_overflow` (§10.2) if you need a hard
+                                                      //   ceiling.
     idleTimeoutMs?: number;                           // Auto-evict after this idle period. Default: 2 * 60 * 60 * 1000 (2 hours).
-                                                      //   Sessions with a pending approval/suspension/question/plan
-                                                      //   are exempt from this check — see §5.4.
+                                                      //   Interrupt-pinned sessions (`pendingApproval`/
+                                                      //   `pendingQuestion`/`pendingPlan`/`pendingSuspension`
+                                                      //   set) are exempt — see §5.4.
+    pinnedTimeoutMs?: number;                         // Upper bound on how long an interrupt-pinned session
+                                                      //   stays live. Default: 24 * 60 * 60 * 1000 (24 hours).
+                                                      //   Eviction at this bound always satisfies the
+                                                      //   durable-parking barrier, so it surfaces as
+                                                      //   `session_evicted` with `reason: 'pinned_timeout'`
+                                                      //   (§10.2) rather than `session_pin_overflow`.
+    maxEvictUnacked?: number;                         // Maximum unacked events in the SSE ring buffer
+                                                      //   (§13.3) before a session is held back from
+                                                      //   pressure eviction. Default: half of `eventBufferSize`.
     flushDebounceMs?: number;                         // Debounce window for writing dirty state. Default: 500
     maxFlushFailures?: number;                        // Consecutive debounced-flush failures tolerated
                                                       //   before the session goes into storage-error mode.
@@ -1603,13 +1848,31 @@ interface HarnessConfig<TState = Record<string, unknown>> {
     maxDepth?: number;                                // Default: 1
   };
 
-  // File attachments
+  // File attachments. Three independent caps, one per delivery path:
   files?: {
-    maxInlineBytes?: number;                          // Inline attachments larger than this are rejected.
-                                                      //   Default: 10 * 1024 * 1024 (10 MiB).
-                                                      //   Larger files must use the `kind: 'url'` form
-                                                      //   or be pre-uploaded via the wire protocol's
-                                                      //   file route (see §13).
+    // Cap on the *inline* form (`{ kind: 'inline', bytes }`) — the
+    // attachment travels in the same request body as `message()` /
+    // `queue()`. Exceeding this cap is rejected at admission with
+    // `HarnessValidationError`. Default: 10 * 1024 * 1024 (10 MiB).
+    // This cap deliberately does NOT govern the pre-upload route — the
+    // whole point of pre-upload is to ship files larger than the inline
+    // budget without forcing external hosting.
+    maxInlineBytes?: number;
+
+    // Cap on the pre-upload route (`POST /attachments`). The body is a
+    // single attachment uploaded out-of-band; the resulting
+    // `attachmentId` is referenced from a later `message()` / `queue()`.
+    // Exceeding this cap returns `413 harness.validation` (`field:
+    // 'attachment.bytes'`). Default: 100 * 1024 * 1024 (100 MiB).
+    // Operators with resumable storage adapters can raise this freely.
+    maxUploadBytes?: number;
+
+    // Cap on the *resolved* size of any single persisted attachment
+    // referenced by a queued or in-flight item — including `kind: 'url'`
+    // attachments after the harness fetches metadata. Used to bound how
+    // much storage one session can pin via attachments. Default:
+    // `maxUploadBytes`. Exceeding this rejects the message at admission.
+    maxAttachmentBytes?: number;
   };
 
   // Goals — see §4.7
@@ -1720,6 +1983,75 @@ interface WorkspaceResumeContext extends WorkspaceCreateContext {
 // Sessions provisioned through this path are NOT durable across server
 // restarts — see §2.7.
 type WorkspaceFactoryFn = (ctx: WorkspaceCreateContext) => Workspace | Promise<Workspace>;
+
+// Mode catalog entry. Modes are the harness's notion of an operating profile
+// (e.g. "plan", "build", "research"). Each mode names exactly one backing
+// agent — there is no implicit default agent. The effective mode's `agentId`
+// selects the agent that handles `message`, `queue`, and `useSkill` for the
+// session. `getCurrentMode()` returns the resolved `HarnessMode`.
+//
+// Validation. At `harness.init()`:
+//   - `id` must be unique across `modes`.
+//   - `agentId` must resolve in `HarnessConfig.agents` — otherwise
+//     `HarnessConfigError` (field: `'modes[<id>].agentId'`).
+//   - `transitionsTo`, if set, must resolve to another `HarnessMode.id` —
+//     otherwise `HarnessConfigError` (field: `'modes[<id>].transitionsTo'`).
+interface HarnessMode {
+  id: string;
+  agentId: string;                                    // Required; must exist in `HarnessConfig.agents`
+  description?: string;                               // Surfaced in mode pickers / Studio UI
+  instructions?: string;                              // Layered above the agent's own instructions
+  tools?: ToolsetInput;                               // Mode-scoped tool overlay (replaces agent default)
+  addTools?: ToolsetInput;                            // Mode-scoped tool overlay (merged with agent default)
+
+  // Optional plan→build target. When the active mode submits a plan via
+  // `submit_plan`, the registered `PendingPlanApproval` freezes this value
+  // as `transitionModeId`. On approval, the harness flips the session into
+  // `modeId = transitionsTo` (idempotently — see §5.1, §5.7). If unset,
+  // approval resumes the run with no mode change.
+  transitionsTo?: string;
+}
+
+// Subagent type registry. Every `agentType` referenced by `setSubagentModel`,
+// `subagent_*` events, or the built-in `spawn_subagent` tool must be declared
+// here. Validation at `harness.init()` mirrors `HarnessMode`: missing keys
+// throw `HarnessConfigError`. The registry is the source of truth for what
+// subagent types exist, what backs them, and what their default surface is.
+interface SubagentDefinition {
+  agentId: string;                                    // Required; resolves in `HarnessConfig.agents`
+  modeId?: string;                                    // Default mode for this subagent's session.
+                                                      //   Resolves in `HarnessConfig.modes`. If unset,
+                                                      //   the subagent inherits the parent's mode.
+  description: string;                                // Shown to the parent agent in `spawn_subagent`'s
+                                                      //   tool description so the model can pick a type.
+  defaultModelId?: string;                            // Used when no `setSubagentModel` override is set
+                                                      //   and the spawn call doesn't pass `modelOverride`.
+  tools?: ToolsetInput;                               // Tool surface override for this subagent type.
+  workspace?: 'inherit' | 'fresh';                    // See §7. Default: 'inherit'.
+}
+
+// Extended subagent config (replaces the small shape shown above).
+//
+//   subagents?: {
+//     maxDepth?: number;                             // Default: 1
+//     types: Record<string, SubagentDefinition>;     // Required if any code path
+//                                                    //   touches subagents
+//   };
+//
+// The harness registers a built-in `spawn_subagent` tool when `types` is
+// non-empty:
+//
+//   input:  { agentType: keyof types; task: string; modelOverride?: string }
+//   output: { subagentSessionId: string; result: AgentResult }
+//
+// Errors:
+//   - Unknown `agentType`               → tool returns `{ isError: true }` with
+//                                         a `HarnessValidationError`-shaped
+//                                         payload (`field: 'agentType'`).
+//   - Depth cap exceeded                → tool returns `{ isError: true }` with
+//                                         `HarnessSubagentDepthExceededError`.
+//   - Invalid `modelOverride`           → `HarnessValidationError`
+//                                         (`field: 'modelOverride'`).
 ```
 
 ---
@@ -1756,6 +2088,7 @@ type HarnessEvent = HarnessEventBase & (
   | LifecycleEvent
   | StateEvent
   | TurnEvent
+  | QueueLifecycleEvent
   | ToolEvent
   | SubagentEvent
   | SuspensionEvent
@@ -1768,12 +2101,32 @@ type HarnessEvent = HarnessEventBase & (
 ### 10.2 Built-in event union
 
 ```ts
-// Lifecycle (harness-scoped unless noted)
+// Lifecycle (harness-scoped unless noted).
+//
+// One transition, one event:
+//   - `session_closed`  is *final* — `closedAt` is set in storage. The session
+//                       cannot be rehydrated. Use this when `closeSession` is
+//                       called explicitly or when `harness.shutdown()` tears
+//                       down the harness.
+//   - `session_evicted` is *non-final* — the live `Session` instance was
+//                       dropped from memory under one of several pressures.
+//                       The record stays on disk and the next
+//                       `harness.session(...)` call hydrates it back. The
+//                       `reason` field tells subscribers which pressure fired.
+//   - `session_hydrated` accompanies a re-load from storage so external
+//                       caches/UIs can refresh.
+//   - `session_pin_overflow` fires when a pinned session (pending interrupt)
+//                       was *not* pressure-evicted because the durable
+//                       parking barrier (§5.4) hadn't been reached, and
+//                       `sessions.maxLive` is therefore temporarily
+//                       exceeded. Operators use this to detect under-
+//                       provisioning rather than data loss.
 type LifecycleEvent =
-  | { type: 'session_created'; sessionId: string; resourceId: string; threadId: string; parentSessionId?: string }
-  | { type: 'session_closed';  sessionId: string; reason: 'requested' | 'evicted' | 'shutdown' }
-  | { type: 'session_evicted'; sessionId: string }                  // dropped from live cache; record stays
-  | { type: 'session_hydrated'; sessionId: string };                // re-loaded from storage on next access
+  | { type: 'session_created';   sessionId: string; resourceId: string; threadId: string; parentSessionId?: string }
+  | { type: 'session_closed';    sessionId: string; reason: 'requested' | 'shutdown' }
+  | { type: 'session_evicted';   sessionId: string; reason: 'idle' | 'pressure' | 'pinned_timeout' | 'shutdown' }
+  | { type: 'session_hydrated';  sessionId: string }
+  | { type: 'session_pin_overflow'; sessionId: string; pendingKind: 'approval' | 'suspension' | 'question' | 'plan'; liveCount: number; maxLive: number };
 
 // State (session-scoped)
 type StateEvent =
@@ -1782,17 +2135,60 @@ type StateEvent =
   | { type: 'model_changed'; modelId: string }
   | { type: 'token_usage_changed'; usage: TokenUsage };
 
-// Turn (session-scoped)
+// Turn (session-scoped).
+//
+// Correlation. `runId` identifies the assistant turn. Multiple `message()`
+// signals can drain into the same live run (§3), so `runId` alone does not
+// tell a remote client which signal a delta or final result belongs to.
+// The optional correlation fields below answer that question:
+//
+//   - `signalId`      — set on every event whose work was triggered by a
+//                       specific `message()` signal. `POST /messages`
+//                       returns `{ runId, signalId }`; the SDK filters
+//                       the SSE stream by `signalId` to surface only that
+//                       caller's text/tool/finish events. Mid-run signals
+//                       that drain into a live run still carry their own
+//                       `signalId` on subsequent events.
+//   - `queuedItemId`  — set on every event for a turn that was driven by
+//                       a queued item. `POST /queue` returns
+//                       `{ queuedItemId }`; the SDK filters by it.
+//
+// At most one of `signalId` / `queuedItemId` is populated for a given event.
+// Events that are not attributable to any single caller (e.g. interval-
+// driven goal continuations) carry neither.
 type TurnEvent =
-  | { type: 'agent_start';   runId: string; overrides?: HarnessOverrides }
-  | { type: 'text_delta';    runId: string; delta: string }
-  | { type: 'agent_end';     runId: string; finishReason: string; usage: TokenUsage }
-  | { type: 'error';         runId?: string; error: { code: string; message: string } };
+  | { type: 'agent_start';        runId: string; signalId?: string; queuedItemId?: string; overrides?: HarnessOverrides }
+  | { type: 'text_delta';         runId: string; signalId?: string; queuedItemId?: string; delta: string }
+  | { type: 'agent_end';          runId: string; signalId?: string; queuedItemId?: string; finishReason: string; usage: TokenUsage }
+  | { type: 'error';              runId?: string; signalId?: string; queuedItemId?: string; error: { code: string; message: string } };
 
-// Tool calls (session-scoped)
+// Queue lifecycle (session-scoped). Surfaces the same terminal information
+// the in-process queue() promise exposes to remote observers — see §5.7.
+//
+// `queue_item_failed` fires when a queued item terminates without ever
+// reaching the agent (closed session, workspace lost, harness exception
+// before drain). When a queued item *does* reach the agent and the run
+// produces an `AgentResult` (success or failure), the terminal event is
+// the run's normal `agent_end` — `queue_item_failed` is *not* emitted.
+//
+// `queue_item_replayed` fires once on hydration when the head item is
+// being re-driven after a crash mid-turn. It precedes the replayed run's
+// `agent_start` and exists so observers can tell a replay from a fresh
+// drain. Crash-replay is at-least-once durability (§5.7), not retry; an
+// item is replayed at most once because the second attempt is guaranteed
+// to terminate (case 1 or case 2 above) before another crash window can
+// affect the same item.
+type QueueLifecycleEvent =
+  | { type: 'queue_item_started';  queuedItemId: string; runId: string }
+  | { type: 'queue_item_failed';   queuedItemId: string; runId?: string; error: { code: string; message: string } }
+  | { type: 'queue_item_replayed'; queuedItemId: string; replayCount: number };
+
+// Tool calls (session-scoped). Carry the same correlation fields as
+// `TurnEvent` so a client filtering by `signalId` / `queuedItemId` sees
+// the full turn (text + tool calls), not just the model output.
 type ToolEvent =
-  | { type: 'tool_start';    runId: string; toolCallId: string; toolName: string; input: unknown }
-  | { type: 'tool_end';      runId: string; toolCallId: string; toolName: string; output: unknown; isError: boolean };
+  | { type: 'tool_start';    runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; input: unknown }
+  | { type: 'tool_end';      runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; output: unknown; isError: boolean };
 
 // Subagent activity (session-scoped — emitted on the *parent* session's subscriber).
 // `subagentSessionId` is the child session's ID and is stable across the subagent's
@@ -1822,7 +2218,9 @@ type SuspensionEvent =
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }))
   | ({ type: 'tool_suspension_required'; runId: string; toolCallId: string; toolName: string; suspendData: unknown }
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }))
-  | ({ type: 'question_pending';        runId: string; toolCallId: string; question: string; options?: string[]; selectionMode?: 'single' | 'multi' }
+  | ({ type: 'question_pending';        runId: string; toolCallId: string; question: string;
+       options?: { label: string; description?: string }[];
+       selectionMode?: 'single_select' | 'multi_select' }
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }))
   | ({ type: 'plan_approval_required';  runId: string; toolCallId: string; title: string; plan: string }
       & ({ source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string }));
@@ -1855,10 +2253,10 @@ The set is closed for built-in types (anything in the union above is harness-own
 
 Tools call `requestContext.get('harness').emitEvent(event)` to surface tool-level signals (progress, partial results, telemetry). Rules:
 
-- **Type must use a dotted prefix.** `myorg.tool.progress`, `acme.scan.matched`, etc. The leading segment should identify the publisher; the trailing segments are the publisher's choice.
-- **The harness does not validate the payload.** Anything beyond `type` is passed through to subscribers verbatim.
-- **The harness fills in the base fields** (`id`, `sessionId`, `timestamp`). Tools must not set those themselves.
-- **Built-in types are reserved.** Emitting any of `agent_*`, `text_delta`, `tool_*`, `subagent_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `token_usage_changed`, `tool_approval_required`, `tool_suspension_required`, `question_pending`, `plan_approval_required`, `attachment_*`, `storage_error`, `goal_*`, or `error` from a tool is a contract violation. The harness does not strip them — it just ends up duplicating the harness's own emission and corrupting subscriber state.
+- **Type must use a dotted prefix.** `myorg.tool.progress`, `acme.scan.matched`, etc. The leading segment should identify the publisher; the trailing segments are the publisher's choice. Type strings that don't match `^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$` are rejected with `HarnessValidationError` (`field: 'event.type'`).
+- **Payloads must be JSON-serializable.** The harness does not schema-check publisher-specific fields, but the same event stream feeds in-process subscribers and the SSE wire format in §13.3, so payloads must round-trip through `JSON.stringify` / `JSON.parse` without loss. Concretely: only plain objects, arrays, strings, finite numbers, booleans, and `null`. Functions, class instances, `Map`, `Set`, `Date`, `BigInt`, typed arrays, `undefined` values, symbols, and circular references are not allowed. `emitEvent(...)` validates the payload eagerly and throws `HarnessEventSerializationError` (`field: 'event.data'`, with the offending path) before the event reaches any subscriber. This keeps in-process and remote subscribers on the same contract — an event that an in-process listener sees is exactly an event that the SSE consumer sees, modulo transport.
+- **The harness fills in the base fields** (`id`, `sessionId`, `timestamp`). Tools must not set those themselves; supplying any of them is a `HarnessValidationError`.
+- **Built-in types are reserved.** Emitting any of `agent_*`, `text_delta`, `tool_*`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `token_usage_changed`, `tool_approval_required`, `tool_suspension_required`, `question_pending`, `plan_approval_required`, `attachment_*`, `storage_error`, `goal_*`, or `error` from a tool is rejected with `HarnessValidationError` (`field: 'event.type'`, `reason: 'reserved'`).
 
 Custom events go through the same base-field, ordering, and replay rules as built-in events. Subscribers should narrow by `type` and tolerate unknown types (forward-compatibility).
 
@@ -1866,6 +2264,7 @@ Custom events go through the same base-field, ordering, and replay rules as buil
 
 - **Per-session FIFO.** Within a single session, events are delivered to every subscriber in the order the harness emitted them. Subscribers added later still receive future events in order from the moment they subscribe; they do *not* automatically replay past events (use the SSE replay path in §10.5 for that).
 - **Per-turn coherence.** For a given `runId`: `agent_start` is the first event, `agent_end` (or `error`) is the last. Between them, `text_delta`, `tool_start`/`tool_end`, and any `subagent_*` events for tools running in that turn appear in the order the agent layer produced them. Suspension events (`*_required`, `question_pending`) interleave with text/tool events at the point the suspension occurred and are followed by either a `tool_end` (after resume) or an `agent_end` (after abort).
+- **Queue lifecycle events.** For a given `queuedItemId`: `queue_item_started` is emitted as soon as the item drains and the run is opened, immediately before `agent_start` for that run, and carries the same `runId`. A `queue_item_replayed` event (when present) precedes both `queue_item_started` and `agent_start` for the replay attempt — it is the first thing observers see for the replay. `queue_item_failed` is terminal for the queued item and is never followed by an `agent_start` for the same `queuedItemId`. A queued item that runs successfully has no `queue_item_failed` event; the run's `agent_end` is the terminal signal. All three queue lifecycle events propagate `queuedItemId` onto the subsequent turn events (`agent_*`, `text_delta`, `tool_*`) so a remote client can filter the SSE stream by `queuedItemId`.
 - **Cross-session.** No ordering is guaranteed across different sessions. Two sessions running in parallel emit independently; subscribers that observe both should sort by `(sessionId, id)` if they need a stable rendering.
 - **Listener delivery.** Listeners are invoked synchronously in registration order. Throwing from a listener does not stop other listeners and does not abort the turn — the exception is caught and logged. Listener errors are intentionally not re-emitted as events (that would invite feedback loops); subscribers that need visibility on their own failures should wrap their handler bodies.
 - **At-least-once on replay.** During SSE reconnect (§10.5), events that were already delivered before disconnect may be re-delivered if the client's `Last-Event-ID` predates them. Subscribers that mutate external state on event receipt must be idempotent — keying side effects by `event.id` is the standard pattern.
@@ -1909,7 +2308,7 @@ The wire-protocol contract (§13.2) is therefore: for any subagent-attributed pe
 
 **Direct subscription to a subagent's stream is supported.** Subagents are normal sessions, so `/sessions/<subagentSessionId>/events` is a valid SSE endpoint. A UI that wants raw subagent-internal events (text deltas, tool calls, custom events that aren't surfaced on the parent) can subscribe directly. Most UIs will not need to — the adapted `subagent_*` events on the parent stream cover the common case — but the option exists for richer renderings.
 
-**Lifecycle coupling.** If the parent session is closed while a subagent has a pending item, `harness.closeSession({ sessionId: parentSessionId })` cascades close to all live descendants (subagents are bound to the parent's lease — §5.8). The pending item disappears with the child session. A client that races to respond after the cascade gets `404 session.closed`. Clients should treat any `subagentSessionId` as valid only between the corresponding `subagent_start` and `subagent_end` on the parent stream.
+**Lifecycle coupling.** Subagent sessions auto-close on `subagent_end` (§5.6), so a `subagentSessionId` is only a valid response target between `subagent_start` and `subagent_end` on the parent stream — after `subagent_end`, the child session is already closed and `POST /sessions/:subagentSessionId/inbox/:itemId` returns `404 session.closed`. If the parent is closed during the live window (between `subagent_start` and `subagent_end`), the cascade rule in §5.5 aborts the in-flight subagent run with `abortSignal.reason === 'parent_aborted'`, drops any pending approval/suspension/question/plan on the child, and emits `subagent_end` with `isError: true`. After-the-fact races to respond also get `404 session.closed`. Clients should not store `subagentSessionId`s past `subagent_end`.
 
 ---
 
@@ -2346,6 +2745,9 @@ async function runBackgroundAnalysis(parent: Session, document: string) {
       sync: true, // typed extraction → fresh runId, clean turn boundary
     });
   } finally {
+    // Closes the child *and* the fresh thread it owns. If the parent is
+    // closed before this finally runs, the cascade rule in §5.5 closes
+    // the child anyway — the explicit close here is just hygiene.
     await child.close();
   }
 }
@@ -2756,11 +3158,12 @@ When the harness is registered on a `Mastra` instance served by Mastra Server, t
 | `GET` | `/harness/:name/sessions` | List sessions for the authenticated resource |
 | `POST` | `/harness/:name/sessions` | Resolve (find-or-create) a session |
 | `GET` | `/harness/:name/sessions/:sessionId` | Get session summary + current state snapshot |
-| `DELETE` | `/harness/:name/sessions/:sessionId` | Close (terminate) a session |
+| `POST` | `/harness/:name/sessions/:sessionId/close` | Close (terminate) a session — `harness.closeSession`. Sets `closedAt`, keeps the record in storage as history. Cascades through `parentSessionId` per §5.5; live descendants are aborted with `parent_aborted`, already-closed subagent records are no-ops in the walk. Optional body `{ reason?: string }` for audit. Idempotent: closing an already-closed session returns `204` without effect. Returns `404 harness.session_not_found` for unknown IDs. |
+| `DELETE` | `/harness/:name/sessions/:sessionId` | Hard-delete a session — `harness.deleteSession`. Removes the record from storage and hard-deletes every descendant by walking `parentSessionId`. Threads owned by descendants (via `threadId: { fresh: true }`) are deleted with them. Returns `204` on success. Without `?force=true`: returns `404 harness.session_not_found` for unknown IDs and `500 harness.session_corrupt` if the record can't be parsed. With `?force=true`: unknown IDs return `204`, and corrupt records are removed without walking the cascade (any orphan descendants are left for follow-up cleanup — see §5.7). Use `POST /close` first if you want a soft-close audit trail before deletion. |
 | `POST` | `/harness/:name/sessions/:sessionId/messages` | Send a message (`message` — busy-independent, signal-driven). Body `{ content, files?, ...overrides }`. Returns `{ runId, signalId }`. Final result observed via the SSE event stream. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session_closed`, `503 harness.storage`, or `409 harness.override_conflict` (when `model`/`mode`/`addTools` are set on a signal draining into an active run — body carries `activeRunId` and `conflictingFields`). |
 | `POST` | `/harness/:name/sessions/:sessionId/messages?sync=true` | Sync send with typed output (`message({ sync: true, output })`). Returns the typed result body. May respond `409 Conflict` with a `HarnessBusyError` payload. |
 | `POST` | `/harness/:name/sessions/:sessionId/messages?stream=true` | Stream a turn (SSE, `message({ stream: true })`). The response body is an SSE stream of the answering turn's chunks. |
-| `POST` | `/harness/:name/sessions/:sessionId/queue` | Enqueue an item for sequential delivery (`queue` — busy-independent). Returns `{ queuedItemId }`. Item runs as a fresh standalone turn once the thread is idle. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session_closed`, `503 harness.storage`, or `429 harness.queue_full` (when `sessions.maxQueueDepth` would be exceeded — body carries `currentDepth` and `maxQueueDepth`). |
+| `POST` | `/harness/:name/sessions/:sessionId/queue` | Enqueue an item for sequential delivery (`queue` — busy-independent). Returns `{ queuedItemId }`. Item runs as a fresh standalone turn once the thread is idle. Never returns `409 harness.busy`; admission errors map to `400 harness.validation`, `404 harness.session_closed`, `503 harness.storage`, or `429 harness.queue_full` (when `sessions.maxQueueDepth` would be exceeded — body carries `currentDepth` and `maxQueueDepth`). The terminal outcome of the enqueued item is observed on the SSE stream: a successful run ends with the standard `agent_end`; an item that never reaches the agent (closed session, workspace lost, harness exception before drain) ends with `queue_item_failed`; a crash-recovery replay is preceded by `queue_item_replayed` (§10, §5.7). |
 | `POST` | `/harness/:name/sessions/:sessionId/skills/:skillName` | Invoke a skill (`useSkill`). May respond `409 Conflict`. |
 | `GET` | `/harness/:name/sessions/:sessionId/events` | Subscribe to session events (SSE). |
 | `POST` | `/harness/:name/sessions/:sessionId/inbox/:itemId` | Respond to a pending approval / suspension / question / plan. Body discriminates on `kind`: `'tool-approval'` carries `{ approved, reason? }`, `'tool-suspension'` carries `{ resumeData }`, `'question'` carries `{ answer }`, `'plan-approval'` carries `{ approved, reason? }`. |
@@ -2886,6 +3289,9 @@ type HarnessErrorResponse = HarnessErrorResponseBase & (
       details: { sessionId: string; reason: 'parse_failed' | 'schema_incompatible' } }
   | { code: 'harness.state_serialization';     // → HarnessStateSerializationError
       details: { sessionId: string; path: string } }
+  | { code: 'harness.event_serialization';     // → HarnessEventSerializationError
+      details: { sessionId: string; eventType: string; path: string;
+                 reason: 'function' | 'class_instance' | 'cyclic' | 'bigint' | 'symbol' | 'undefined' | 'unsupported' } }
 
   // ── Server-layer (no typed class; SDK throws a generic Error) ───────────
   | { code: 'harness.permission_denied';       // Auth/tenancy boundary, set by the server middleware.
@@ -2988,7 +3394,12 @@ Trade-off: one round-trip, but the entire upload must complete before the messag
 
 Trade-off: two round-trips per file, but attachments can be uploaded in parallel, support resumable uploads if the storage adapter does, and survive client navigation. Best for large files, drag-drop UIs, and progress indicators.
 
-Both paths enforce `HarnessConfig.files.maxInlineBytes` (§9). Larger files **must** be hosted externally and sent as `kind: 'url'`.
+The two paths have different bounds (§9):
+
+- **Inline.** Each file part must be `≤ HarnessConfig.files.maxInlineBytes` (default 10 MiB). The cap is small on purpose — it bounds the size of a single `POST /messages` body so a slow upload doesn't tie up a request slot.
+- **Pre-upload.** Each `POST /attachments` body must be `≤ HarnessConfig.files.maxUploadBytes` (default 100 MiB). Resumable uploads (when the storage adapter supports them) make this the right path for large local files; the inline cap deliberately does not apply.
+
+Either way, every persisted attachment — inline, pre-uploaded, or `kind: 'url'` — must additionally satisfy `HarnessConfig.files.maxAttachmentBytes` (default: same as `maxUploadBytes`). For `kind: 'url'`, the harness probes the resource's `Content-Length` (or first range request) at admission; URLs that exceed the cap are rejected before the message reaches the queue. Files larger than `maxAttachmentBytes` cannot be referenced from a session at all and must be served from external storage that the agent fetches itself.
 
 The SDK exposes both paths:
 
@@ -3014,4 +3425,4 @@ await session.queue({
 
 Inline-form attachments coming through the in-process API (not the wire) follow the same flow internally: the harness writes them to `HarnessStorage.saveAttachment(...)` before persisting the queue item, then deletes them after the item is consumed.
 
-Attachments are **session-scoped**. They cannot be referenced from a different session, even within the same resource. `harness.closeSession(...)` cascades to `deleteAttachmentsForSession(...)`.
+Attachments are **session-scoped**. They cannot be referenced from a different session, even within the same resource. `harness.closeSession(...)` cascades to `deleteAttachmentsForSession(...)` for the closed session and, by §5.5, for every descendant the cascade reaches.

@@ -63,6 +63,7 @@ export default defineConfig({
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
+    'src/harness/v1/index.ts',
     'src/auth/ee/index.ts',
     'src/storage/domains/agents/index.ts',
     'src/storage/domains/mcp-clients/index.ts',
