@@ -1,0 +1,207 @@
+---
+title: "Reference: ProviderHistoryCompat | Processors"
+description: "API reference for the ProviderHistoryCompat processor in Mastra, which applies provider-specific history compatibility fixes."
+packages:
+  - "@mastra/core"
+---
+
+# ProviderHistoryCompat
+
+The `ProviderHistoryCompat` processor handles provider-specific history incompatibilities. It can rewrite the outbound language model prompt before a provider call, or react to API errors and retry with repaired message history.
+
+Use it when an agent may switch between model providers, reuse message history across providers, or call a provider that rejects fields emitted by another provider.
+
+## Usage example
+
+Add `ProviderHistoryCompat` to `inputProcessors` when you want all built-in compatibility rules available for an agent:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ProviderHistoryCompat } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'anthropic/claude-sonnet-4-5',
+  inputProcessors: [new ProviderHistoryCompat()],
+})
+```
+
+Mastra agents don't add this processor automatically. Add it explicitly when you need provider history compatibility rules, reactive API error recovery, custom rules, or predictable processor ordering.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'opts',
+    type: '{ additionalRules?: CompatRule[] }',
+    description: 'Configuration options for provider history compatibility rules.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'additionalRules',
+            type: 'CompatRule[]',
+            description:
+              'Custom compatibility rules to run after the built-in rules. Rules can rewrite the outbound prompt or repair persisted messages after matching an API error.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'provider-history-compat'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Provider History Compat'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => ProcessLLMRequestResult',
+    description:
+      'Runs preemptive compatibility rules against the converted LanguageModelV2Prompt immediately before the provider call. Returned prompt changes are transient and are not persisted to memory or message history.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+    description:
+      'Runs reactive compatibility rules when a provider rejects the request. Matching rules can mutate the message list and return retry: true on the first retry attempt.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Built-in rules
+
+`ProviderHistoryCompat` includes these built-in compatibility rules:
+
+| Rule | Provider | Timing | Behavior |
+| - | - | - | - |
+| `anthropic-tool-id-format` | Anthropic | Reactive API error recovery | Rewrites tool call IDs that contain characters outside `[a-zA-Z0-9_-]` and retries the request. |
+| `cerebras-strip-reasoning-content` | Cerebras | Preemptive prompt rewrite | Removes assistant `reasoning` parts from the outbound prompt so they're not serialized as unsupported `reasoning_content` fields. |
+| `anthropic-strip-foreign-reasoning-content` | Anthropic | Preemptive prompt rewrite | Removes non-Anthropic assistant `reasoning` parts from the outbound prompt. Anthropic-native thinking history is preserved. |
+
+Preemptive rules run through `processLLMRequest` after Mastra converts messages to the model prompt format and before the prompt is sent to the provider. These rewrites affect only the current provider call.
+
+Reactive rules run through `processAPIError` after a provider rejection. They can update the persisted `messageList` and request a retry.
+
+## `CompatRule`
+
+A `CompatRule` defines one provider history compatibility fix:
+
+```typescript
+import type { CompatRule } from '@mastra/core/processors'
+
+const removeUnsupportedPromptParts: CompatRule = {
+  name: 'remove-unsupported-prompt-parts',
+  applyToPrompt({ prompt, model }) {
+    // Return a modified LanguageModelV2Prompt, or undefined to leave it unchanged.
+    return undefined
+  },
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable rule identifier for logs and debugging.',
+    isOptional: false,
+  },
+  {
+    name: 'errorPatterns',
+    type: 'RegExp[]',
+    description:
+      'Patterns matched against provider API error messages and response bodies. Required for reactive rules that implement fix.',
+    isOptional: true,
+  },
+  {
+    name: 'fix',
+    type: '(messages: MastraDBMessage[]) => boolean',
+    description:
+      'Reactive fix that mutates persisted database messages after a matching API error. Return true when the rule changed messages and the request should retry.',
+    isOptional: true,
+  },
+  {
+    name: 'applyToPrompt',
+    type: '(args: { prompt: LanguageModelV2Prompt; model: unknown }) => LanguageModelV2Prompt | undefined',
+    description:
+      'Preemptive fix that rewrites the outbound prompt for the current provider call. Return undefined when no prompt change is needed.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Custom rules
+
+Pass custom rules through `additionalRules`. Custom rules run after the built-in rules:
+
+```typescript title="src/mastra/agents/custom-provider-compat.ts"
+import { Agent } from '@mastra/core/agent'
+import { ProviderHistoryCompat, type CompatRule } from '@mastra/core/processors'
+
+const stripUnsupportedAssistantMetadata: CompatRule = {
+  name: 'strip-unsupported-assistant-metadata',
+  applyToPrompt({ prompt, model }) {
+    if (typeof model !== 'string' || !model.startsWith('example-provider/')) {
+      return undefined
+    }
+
+    let changed = false
+    const nextPrompt = prompt.map(message => {
+      if (message.role !== 'assistant' || typeof message.content === 'string') {
+        return message
+      }
+
+      const nextContent = message.content.map(part => {
+        if (!('providerOptions' in part)) return part
+        changed = true
+        const { providerOptions: _providerOptions, ...rest } = part
+        return rest
+      })
+
+      return { ...message, content: nextContent }
+    })
+
+    return changed ? nextPrompt : undefined
+  },
+}
+
+export const agent = new Agent({
+  name: 'custom-provider-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'example-provider/model',
+  inputProcessors: [
+    new ProviderHistoryCompat({
+      additionalRules: [stripUnsupportedAssistantMetadata],
+    }),
+  ],
+})
+```
+
+Use `applyToPrompt` for provider-specific rewrites that shouldn't be saved to memory. Use `fix` with `errorPatterns` when the provider rejects persisted message history and the repaired history should be reused on future turns.
+
+## Related
+
+- [Processor interface](/reference/processors/processor-interface)
+- [Processors](/docs/agents/processors)
+- [PrefillErrorHandler](/reference/processors/prefill-error-handler)

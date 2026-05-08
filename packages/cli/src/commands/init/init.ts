@@ -80,6 +80,10 @@ export const init = async ({
       if (needsLibsql) {
         await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
       }
+      const needsDuckDB = (await depService.checkDependencies(['@mastra/duckdb'])) !== `ok`;
+      if (needsDuckDB) {
+        await depService.installPackages([`@mastra/duckdb${packageVersionTag}`]);
+      }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
       if (needsMemory) {
@@ -155,7 +159,7 @@ export const init = async ({
         // Write CLAUDE.md only if claude-code is in skills list
         const shouldWriteClaudeMd = skills?.includes('claude-code');
         if (shouldWriteClaudeMd) {
-          await writeClaudeMarkdown({ skills, mcpServer });
+          await writeClaudeMarkdown();
         }
       } catch (error) {
         // Don't fail initialization if markdown files fail to write
@@ -181,8 +185,8 @@ export const init = async ({
       p.note(`
       ${color.green('Mastra initialized successfully!')}
 
-      Add your ${color.cyan(key)} as an environment variable
-      in your ${color.cyan('.env')} file
+      Rename ${color.cyan('.env.example')} to ${color.cyan('.env')}
+      and add your ${color.cyan(key)}
       `);
     } else {
       p.note(`

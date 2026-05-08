@@ -100,18 +100,6 @@ for await (const chunk of stream) {
     "outputCost": 15
   },
   {
-    "model": "anthropic/claude-3-7-sonnet-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
     "model": "anthropic/claude-3-haiku-20240307",
     "imageInput": true,
     "audioInput": false,
@@ -250,7 +238,19 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "anthropic/claude-opus-4-7",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
     "maxOutput": 128000,
     "inputCost": 5,
     "outputCost": 25
@@ -310,7 +310,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 1000000,
     "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
@@ -383,7 +383,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "thinking",
-        "type": "{ type: \"adaptive\"; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { type: \"disabled\"; } | undefined",
+        "type": "{ type: \"adaptive\"; display?: \"omitted\" | \"summarized\" | undefined; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { type: \"disabled\"; } | undefined",
         "description": "",
         "isOptional": true
     },
@@ -400,26 +400,62 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "metadata",
+        "type": "{ userId?: string | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "mcpServers",
+        "type": "{ type: \"url\"; name: string; url: string; authorizationToken?: string | null | undefined; toolConfiguration?: { enabled?: boolean | null | undefined; allowedTools?: string[] | null | undefined; } | null | undefined; }[] | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "container",
         "type": "{ id?: string | undefined; skills?: { type: \"anthropic\" | \"custom\"; skillId: string; version?: string | undefined; }[] | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },
     {
+        "name": "toolStreaming",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "effort",
-        "type": "\"low\" | \"medium\" | \"high\" | \"max\" | undefined",
+        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "taskBudget",
+        "type": "{ type: \"tokens\"; total: number; remaining?: number | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "speed",
-        "type": "\"fast\" | undefined",
+        "type": "\"fast\" | \"standard\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "inferenceGeo",
+        "type": "\"us\" | \"global\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "anthropicBeta",
+        "type": "string[] | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "contextManagement",
-        "type": "{ edits: ({ type: \"clear_01\"; trigger?: { type: \"input_tokens\"; value: number; } | undefined; keep?: \"all\" | { type: \"thinking_turns\"; value: number; } | undefined; } | { type: \"compact_20260112\"; trigger?: { ...; } | undefined; pauseAfterCompaction?: boolean | undefined; instructions?: string | undefined; })[]; } |...",
+        "type": "{ edits: ({ type: \"clear_tool_uses_20250919\"; trigger?: { type: \"input_tokens\"; value: number; } | { type: \"tool_uses\"; value: number; } | undefined; keep?: { type: \"tool_uses\"; value: number; } | undefined; clearAtLeast?: { ...; } | undefined; clearToolInputs?: boolean | undefined; excludeTools?: string[] | undefin...",
         "description": "",
         "isOptional": true
     }

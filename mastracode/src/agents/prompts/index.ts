@@ -13,6 +13,7 @@ import { buildBasePrompt } from './base.js';
 import type { PromptContext as BasePromptContext } from './base.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
+import { modelSpecificPrompts } from './model.js';
 import { planModePrompt } from './plan.js';
 import { buildToolGuidance } from './tool-guidance.js';
 
@@ -57,6 +58,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
     projectName: ctx.projectName || 'unknown',
     gitBranch: ctx.gitBranch,
     platform: process.platform,
+    commonBinaries: ctx.commonBinaries,
     date: ctx.currentDate,
     mode: ctx.modeId,
     modelId: ctx.modelId,
@@ -66,7 +68,10 @@ export function buildFullPrompt(ctx: PromptContext): string {
 
   const base = buildBasePrompt(baseCtx);
   const entry = modePrompts[ctx.modeId] || modePrompts.build;
-  const modeSpecific = typeof entry === 'function' ? entry(ctx) : entry;
+  const modeSpecific = (typeof entry === 'function' ? entry(ctx) : entry) ?? '';
+  const modelSpecific = ctx.modelId
+    ? (modelSpecificPrompts[ctx.modelId as keyof typeof modelSpecificPrompts] ?? '')
+    : '';
 
   // Inject current task state so agent doesn't lose track after OM truncation
   let taskSection = '';
@@ -83,5 +88,13 @@ export function buildFullPrompt(ctx: PromptContext): string {
   const instructionSources = loadAgentInstructions(ctx.workingDir);
   const instructionsSection = formatAgentInstructions(instructionSources);
 
-  return base + taskSection + instructionsSection + '\n' + modeSpecific;
+  const sections = [
+    base,
+    taskSection.trim(),
+    instructionsSection.trim(),
+    modelSpecific.trim(),
+    modeSpecific.trim(),
+  ].filter(Boolean);
+
+  return sections.join('\n\n');
 }

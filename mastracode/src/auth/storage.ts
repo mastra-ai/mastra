@@ -22,7 +22,7 @@ import type {
  */
 export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   anthropic: 'anthropic/claude-opus-4-6',
-  'openai-codex': 'openai/gpt-5.2-codex',
+  'openai-codex': 'openai/gpt-5.5',
 };
 
 // Provider registry
@@ -125,6 +125,50 @@ export class AuthStorage {
   isLoggedIn(provider: string): boolean {
     const cred = this.data[provider];
     return cred?.type === 'oauth';
+  }
+
+  /**
+   * Check if a stored API key exists for a provider.
+   * Keys are stored under `apikey:<provider>` in auth.json.
+   */
+  hasStoredApiKey(provider: string): boolean {
+    const cred = this.data[`apikey:${provider}`];
+    return cred?.type === 'api_key' && cred.key.length > 0;
+  }
+
+  /**
+   * Get a stored API key for a provider, if any.
+   */
+  getStoredApiKey(provider: string): string | undefined {
+    const cred = this.data[`apikey:${provider}`];
+    return cred?.type === 'api_key' && cred.key.length > 0 ? cred.key : undefined;
+  }
+
+  /**
+   * Store an API key for a provider.
+   * Also sets the corresponding environment variable so model resolution can find it.
+   */
+  setStoredApiKey(provider: string, key: string, envVar?: string): void {
+    this.set(`apikey:${provider}`, { type: 'api_key', key });
+    if (envVar) {
+      process.env[envVar] = key;
+    }
+  }
+
+  /**
+   * Load all stored API keys into process.env.
+   * Called at startup so model resolution can find stored keys.
+   * Only sets env vars that aren't already set (env vars take precedence).
+   */
+  loadStoredApiKeysIntoEnv(providerEnvVars: Record<string, string | undefined>): void {
+    for (const [key, cred] of Object.entries(this.data)) {
+      if (!key.startsWith('apikey:') || cred.type !== 'api_key' || !cred.key) continue;
+      const provider = key.substring('apikey:'.length);
+      const envVar = providerEnvVars[provider];
+      if (envVar && !process.env[envVar]) {
+        process.env[envVar] = cred.key;
+      }
+    }
   }
 
   /**

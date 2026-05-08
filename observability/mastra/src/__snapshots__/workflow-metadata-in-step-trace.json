@@ -19,7 +19,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "production"
         },
         "input": {
           "value": "tacos"
@@ -46,6 +47,7 @@
             },
             "metadata": {
               "runId": "<runId-1>",
+              "environment": "production",
               "customValue": "tacos",
               "stepType": "metadata-test",
               "executionTime": "<date>"

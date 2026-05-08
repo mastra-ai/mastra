@@ -25,6 +25,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
 } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
@@ -353,6 +354,52 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
+      const result = await this.client.query({
+        query: `
+          SELECT traceId, spanId, parentSpanId, name,
+            entityType, entityId, entityName,
+            spanType, error, isEvent,
+            startedAt, endedAt, createdAt, updatedAt
+          FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          WHERE traceId = {traceId:String}
+          ORDER BY startedAt ASC
+        `,
+        query_params: { traceId },
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = (await result.json()) as any[];
+      if (!rows || rows.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: transformRows(rows) as GetTraceLightResponse['spans'],
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId },

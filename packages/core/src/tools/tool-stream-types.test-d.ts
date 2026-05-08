@@ -1,6 +1,6 @@
 import type { WritableStream } from 'node:stream/web';
 import { assertType, describe, expectTypeOf, it } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod/v4';
 import type { ToolStream } from './stream';
 
 describe('ToolStream', () => {

@@ -182,13 +182,6 @@ Searches for similar vectors with optional metadata filtering.
     defaultValue: 'false',
     description: 'Whether to include vector data in results',
   },
-  {
-    name: 'minScore',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '0',
-    description: 'Minimum similarity score threshold',
-  },
 ]}
 />
 
@@ -403,7 +396,7 @@ export const mongodbAgent = new Agent({
   name: 'mongodb-agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new MongoDBStore({
       id: 'mongodb-storage',

@@ -1,5 +1,5 @@
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
 import {

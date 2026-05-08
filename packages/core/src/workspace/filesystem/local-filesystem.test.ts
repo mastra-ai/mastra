@@ -12,6 +12,7 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
+  StaleFileError,
 } from '../errors';
 import { LocalFilesystem } from './local-filesystem';
 
@@ -149,6 +150,61 @@ describe('LocalFilesystem', () => {
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('new');
+    });
+
+    // =========================================================================
+    // Optimistic concurrency (expectedMtime)
+    // =========================================================================
+
+    it('should reject write when expectedMtime does not match (file modified externally)', async () => {
+      await localFs.writeFile('test.txt', 'original');
+      const stat = await localFs.stat('test.txt');
+      const originalMtime = stat.modifiedAt;
+
+      // Simulate external modification (e.g., LSP editor saving)
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await fs.writeFile(path.join(tempDir, 'test.txt'), 'externally modified');
+
+      await expect(
+        localFs.writeFile('test.txt', 'my update', { overwrite: true, expectedMtime: originalMtime }),
+      ).rejects.toThrow(StaleFileError);
+
+      // File should still contain the external modification
+      const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
+      expect(content).toBe('externally modified');
+    });
+
+    it('should succeed when expectedMtime matches', async () => {
+      await localFs.writeFile('test.txt', 'original');
+      const stat = await localFs.stat('test.txt');
+
+      await localFs.writeFile('test.txt', 'updated', { overwrite: true, expectedMtime: stat.modifiedAt });
+
+      const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
+      expect(content).toBe('updated');
+    });
+
+    it('should succeed with expectedMtime when file does not exist (new file)', async () => {
+      // expectedMtime on a non-existent file should not block the write
+      const fakeMtime = new Date('2020-01-01');
+      await localFs.writeFile('new-file.txt', 'content', { expectedMtime: fakeMtime });
+
+      const content = await fs.readFile(path.join(tempDir, 'new-file.txt'), 'utf-8');
+      expect(content).toBe('content');
+    });
+
+    it('should work normally without expectedMtime (existing behavior unchanged)', async () => {
+      await localFs.writeFile('test.txt', 'v1');
+
+      // External modification
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await fs.writeFile(path.join(tempDir, 'test.txt'), 'externally modified');
+
+      // Without expectedMtime, the write should succeed (no check)
+      await localFs.writeFile('test.txt', 'v2', { overwrite: true });
+
+      const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
+      expect(content).toBe('v2');
     });
   });
 
@@ -490,6 +546,31 @@ describe('LocalFilesystem', () => {
       await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
     });
 
+    it('should suggest the concrete relative form when the first segment exists in the workspace', async () => {
+      // Create a `src/` directory in the workspace; the LLM passes `/src/app.ts`.
+      // The hint should suggest `src/app.ts` because `<basePath>/src` is real.
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await expect(localFs.writeFile('/src/app.ts', 'nope')).rejects.toThrow(/"src\/app\.ts"/);
+      await expect(localFs.writeFile('/src/app.ts', 'nope')).rejects.toThrow(/relative path/);
+    });
+
+    it('should fall back to a soft hint when the suggested path would be misleading', async () => {
+      // `/etc/passwd` has no corresponding `<basePath>/etc` — don't invent a
+      // suggestion that points somewhere the LLM almost certainly didn't mean.
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(/relative to the workspace root/);
+      await expect(localFs.readFile('/etc/passwd')).rejects.not.toThrow(/"etc\/passwd"/);
+    });
+
+    it('should not suggest a relative path that would itself escape the workspace', async () => {
+      // `/../etc/passwd` strips to `../etc/passwd`. Suggesting that as a
+      // "relative path" would just fail again on the next turn — fall back
+      // to the soft hint instead.
+      await expect(localFs.readFile('/../etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('/../etc/passwd')).rejects.toThrow(/relative to the workspace root/);
+      await expect(localFs.readFile('/../etc/passwd')).rejects.not.toThrow(/"\.\.\//);
+    });
+
     it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
       // Write a file via relative path
       await localFs.writeFile('test.txt', 'relative content');
@@ -666,6 +747,38 @@ describe('LocalFilesystem', () => {
 
         const content = await fs.readFile(path.join(outsideDir, 'new-file.txt'), 'utf-8');
         expect(content).toBe('new content');
+      });
+
+      it('should allow access through the canonical target of a symlinked allowed path', async () => {
+        const allowedRootLink = path.join(tempDir, 'allowed-root-link');
+        await fs.symlink(outsideDir, allowedRootLink);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [allowedRootLink],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should allow access through a symlink path when the canonical root is allowed', async () => {
+        const allowedRootLink = path.join(tempDir, 'allowed-root-link');
+        await fs.symlink(outsideDir, allowedRootLink);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(allowedRootLink, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
       });
 
       it('should block path traversal that escapes all roots', async () => {

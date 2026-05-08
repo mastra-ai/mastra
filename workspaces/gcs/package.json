@@ -1,6 +1,6 @@
 {
   "name": "@mastra/gcs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Google Cloud Storage filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -39,11 +39,11 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.13",
-    "dotenv": "^17.3.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "dotenv": "^17.3.1",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

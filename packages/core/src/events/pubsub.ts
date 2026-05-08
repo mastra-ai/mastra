@@ -1,8 +1,79 @@
-import type { Event } from './types';
+import type { Event, EventCallback, SubscribeOptions } from './types';
+
+/**
+ * Delivery model for a PubSub implementation.
+ *
+ * - `pull`: consumers actively read from the broker (e.g. Redis Streams
+ *   XREADGROUP, GCP Pub/Sub streamingPull, SQS ReceiveMessage). Mastra runs
+ *   a long-lived `OrchestrationWorker` that owns a subscription loop.
+ *
+ * - `push`: events arrive without the consumer asking — either in-process
+ *   (EventEmitter dispatching to a registered listener) or out-of-process
+ *   (the broker POSTs to an HTTP endpoint, e.g. GCP Pub/Sub push, SNS,
+ *   EventBridge). Mastra wires the workflow handler directly to the pubsub
+ *   for in-process push, or relies on `POST /api/workers/events` for
+ *   broker push delivered over HTTP.
+ */
+export type PubSubDeliveryMode = 'pull' | 'push';
 
 export abstract class PubSub {
   abstract publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void>;
-  abstract subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void>;
-  abstract unsubscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void>;
+  abstract subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void>;
+  abstract unsubscribe(topic: string, cb: EventCallback): Promise<void>;
   abstract flush(): Promise<void>;
+
+  /**
+   * Delivery modes this PubSub implementation supports.
+   *
+   * Defaults to `['pull']` for backward compatibility — third-party
+   * implementations that don't override this property are treated as
+   * pull-mode, which preserves today's behavior.
+   *
+   * Implementations that deliver events without an active read loop (e.g.
+   * EventEmitter, GCP Pub/Sub push subscriptions) should declare `'push'`.
+   * Implementations that support both modes should declare both.
+   */
+  get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['pull'];
+  }
+
+  /**
+   * Get historical events for a topic.
+   * Default implementation returns empty array (no history support).
+   * Override in implementations that support event caching.
+   *
+   * @param topic - The topic to get history for
+   * @param offset - Starting index (0-based), defaults to 0
+   * @returns Array of events from the specified index
+   */
+  getHistory(_topic: string, _offset?: number): Promise<Event[]> {
+    return Promise.resolve([]);
+  }
+
+  /**
+   * Subscribe to a topic with automatic replay of cached events.
+   * First replays any cached history, then subscribes to live events.
+   * Default implementation falls back to regular subscribe (no replay).
+   * Override in implementations that support event caching.
+   *
+   * @param topic - The topic to subscribe to
+   * @param cb - Callback invoked for each event (both cached and live)
+   */
+  subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
+    return this.subscribe(topic, cb);
+  }
+
+  /**
+   * Subscribe to a topic with replay starting from a specific index.
+   * This is more efficient than full replay when the client knows their last position.
+   * Default implementation falls back to subscribeWithReplay (full replay).
+   * Override in implementations that support indexed event caching.
+   *
+   * @param topic - The topic to subscribe to
+   * @param offset - Start replaying from this index (0-based)
+   * @param cb - Callback invoked for each event
+   */
+  subscribeFromOffset(topic: string, _offset: number, cb: EventCallback): Promise<void> {
+    return this.subscribeWithReplay(topic, cb);
+  }
 }

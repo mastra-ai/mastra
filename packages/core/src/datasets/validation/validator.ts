@@ -1,7 +1,7 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
-import type { ZodSchema, ZodError, ZodIssue } from 'zod';
+import type { ZodSchema, ZodError, ZodIssue } from 'zod/v4';
+import { z } from 'zod/v4';
 import { SchemaValidationError } from './errors';
 import type { FieldError, BatchValidationResult } from './errors';
 

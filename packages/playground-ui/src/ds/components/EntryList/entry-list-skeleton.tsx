@@ -1,7 +1,8 @@
-import { EntryListEntriesSkeleton, type EntryListEntriesSkeletonProps } from './entry-list-entries-skeleton';
 import { EntryList } from './entry-list';
-import { EntryListTrim } from './entry-list-trim';
+import { EntryListEntriesSkeleton } from './entry-list-entries-skeleton';
+import type { EntryListEntriesSkeletonProps } from './entry-list-entries-skeleton';
 import { EntryListHeader } from './entry-list-header';
+import { EntryListTrim } from './entry-list-trim';
 
 export function EntryListSkeleton({ columns, numberOfRows }: EntryListEntriesSkeletonProps) {
   return (

@@ -48,13 +48,13 @@ export async function build({
         projectRoot: rootDir,
       });
 
-      logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
+      logger.info('Build successful, you can now deploy the .mastra/output directory to your target platform.');
       if (studio) {
         logger.info(
-          `To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs`,
+          'To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs',
         );
       } else {
-        logger.info(`To start the server, run: node .mastra/output/index.mjs`);
+        logger.info('To start the server, run: node .mastra/output/index.mjs');
       }
       return;
     }
@@ -77,13 +77,13 @@ export async function build({
       const { MastraError } = await import('@mastra/core/error');
       if (error instanceof MastraError) {
         const { message, ...details } = error.toJSONDetails();
-        logger.error(`${message}`, details);
+        logger.error(message, details);
       } else if (error instanceof Error) {
-        logger.error(`Mastra Build failed`, { error });
+        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
       }
     } catch {
       if (error instanceof Error) {
-        logger.error(`Mastra Build failed`, { error });
+        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
       }
     }
     process.exit(1);

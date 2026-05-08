@@ -39,6 +39,7 @@ export function createStreamFromGenerateResult(result: {
             input: unknown;
             providerExecuted?: boolean;
             dynamic?: boolean;
+            providerMetadata?: unknown;
           };
           toolCallMeta[toolCall.toolCallId] = { providerExecuted: toolCall.providerExecuted };
           controller.enqueue({
@@ -47,15 +48,18 @@ export function createStreamFromGenerateResult(result: {
             toolName: toolCall.toolName,
             providerExecuted: toolCall.providerExecuted,
             dynamic: toolCall.dynamic,
+            providerMetadata: toolCall.providerMetadata,
           });
           controller.enqueue({
             type: 'tool-input-delta',
             id: toolCall.toolCallId,
             delta: toolCall.input,
+            providerMetadata: toolCall.providerMetadata,
           });
           controller.enqueue({
             type: 'tool-input-end',
             id: toolCall.toolCallId,
+            providerMetadata: toolCall.providerMetadata,
           });
           controller.enqueue(toolCall);
         } else if (message.type === 'tool-result') {

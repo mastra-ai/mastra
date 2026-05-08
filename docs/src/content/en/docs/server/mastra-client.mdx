@@ -4,6 +4,7 @@ description: "Learn how to set up and use the Mastra Client SDK"
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
+  - "@mastra/react"
 ---
 
 # Mastra client SDK
@@ -12,15 +13,17 @@ The Mastra Client SDK provides a concise and type-safe interface for interacting
 
 ## Prerequisites
 
-To ensure smooth local development, make sure you have:
+Before you start local development, have:
 
 - Node.js `v22.13.0` or later
 - TypeScript `v4.7` or higher (if using TypeScript)
 - Your local Mastra server running (typically on port `4111`)
 
-## Usage
+:::note
 
 The Mastra Client SDK is designed for browser environments and uses the native `fetch` API for making HTTP requests to your Mastra server.
+
+:::
 
 ## Installation
 
@@ -44,15 +47,17 @@ export const mastraClient = new MastraClient({
 
 ## Core APIs
 
-The Mastra Client SDK exposes all resources served by the Mastra Server
+The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 - **[Agents](/reference/client-js/agents)**: Generate responses and stream conversations.
 - **[Memory](/reference/client-js/memory)**: Manage conversation threads and message history.
 - **[Tools](/reference/client-js/tools)**: Executed and managed tools.
 - **[Workflows](/reference/client-js/workflows)**: Trigger workflows and track their execution.
 - **[Vectors](/reference/client-js/vectors)**: Use vector embeddings for semantic search.
+- **[Responses](/reference/client-js/responses)**: Use Mastra Agents as a Responses API with an OpenAI-compatible, agent-backed interface. This API is currently experimental.
+- **[Conversations](/reference/client-js/conversations)**: Work with the stored conversation threads and item history behind Mastra Agents as a Responses API. This API is currently experimental.
 - **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
-- **[Telemetry](/reference/client-js/telemetry)**: Monitor app performance and trace activity.
+- **[Telemetry](/reference/client-js/telemetry)**: View app performance and trace activity.
 
 ## Generating responses
 
@@ -133,6 +138,23 @@ Visit [MastraClient](/reference/client-js/mastra-client) for more configuration 
 
 :::
 
+## Credentials and session cookies
+
+**Authenticate Mastra API calls with session cookies** when your UI and Mastra API aren't on the same origin—different host, subdomain, or port (for example Mastra Studio on one port and a custom server on another). Add **`credentials: 'include'`** to `MastraClient` so each request carries the cookies the user already has after sign-in. Skip this and you will often get **`401`** responses from Mastra even though login succeeded in the browser.
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const mastraClient = new MastraClient({
+  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+  credentials: 'include',
+})
+```
+
+**Allow credentialed cross-origin requests on your server**—see [CORS: requests with credentials](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#requests_with_credentials). You need a concrete `Access-Control-Allow-Origin` (not `*`) and `Access-Control-Allow-Credentials: true`, or the browser will block the call before it reaches Mastra.
+
+**Using `@mastra/react`?** Wrap your app with `MastraReactProvider`, set `baseUrl` and `apiPrefix` to match your server, and rely on the default `credentials: 'include'`. Change `credentials` only when you want `same-origin` or `omit` behavior.
+
 ## Adding request cancelling
 
 `MastraClient` supports request cancellation using the standard Node.js `AbortSignal` API. Useful for canceling in-flight requests, such as when users abort an operation or to clean up stale network calls.
@@ -154,7 +176,7 @@ export const mastraClient = new MastraClient({
 
 Calling `.abort()` will cancel any ongoing requests tied to that signal.
 
-```typescript {4}
+```typescript
 import { mastraClient, controller } from 'lib/mastra-client'
 
 const handleAbort = () => {
@@ -168,7 +190,7 @@ Define tools directly in client-side applications using the `createTool()` funct
 
 This lets agents trigger browser-side functionality such as DOM manipulation, local storage access, or other Web APIs, enabling tool execution in the user's environment rather than on the server.
 
-```typescript {27}
+```typescript {26}
 import { createTool } from '@mastra/client-js'
 import { z } from 'zod'
 
@@ -204,9 +226,9 @@ const handleClientTool = async () => {
 }
 ```
 
-### Client tool's agent
+### Client tool agent
 
-This is a standard Mastra [agent](../agents/overview#setting-up-agents) configured to return hex color codes, intended to work with the browser-based client tool defined above.
+This is a standard Mastra [agent](../agents/overview#quickstart) configured to return hex color codes, intended to work with the browser-based client tool defined above.
 
 ```typescript title="src/mastra/agents/color-agent"
 import { Agent } from '@mastra/core/agent'
@@ -217,13 +239,13 @@ export const colorAgent = new Agent({
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
-## Server-side environments
+## Use MastraClient on the server
 
-You can also use `MastraClient` in server-side environments such as API routes, serverless functions or actions. The usage will broadly remain the same but you may need to recreate the response to your client:
+You can also use `MastraClient` in server-side environments such as API routes, serverless functions, or actions. The usage remains the same, but you may need to recreate the response for your client:
 
 ```typescript {8}
 export async function action() {
@@ -237,7 +259,7 @@ export async function action() {
 
 ## Best practices
 
-1. **Error Handling**: Implement proper [error handling](/reference/client-js/error-handling) for development scenarios.
+1. **Error Handling**: Use [error handling](/reference/client-js/error-handling) for development scenarios.
 1. **Environment Variables**: Use environment variables for configuration.
 1. **Debugging**: Enable detailed [logging](/reference/client-js/logs) when needed.
-1. **Performance**: Monitor application performance, [telemetry](/reference/client-js/telemetry) and traces.
+1. **Performance**: Track application performance, [telemetry](/reference/client-js/telemetry), and traces.

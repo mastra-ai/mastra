@@ -82,6 +82,11 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   // e.g. {"a":1,} → {"a":1}
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
 
+  // Fix 5: Unquoted date/datetime values (issue #14230)
+  // e.g. {"dueStart": 2026-04-15} → {"dueStart": "2026-04-15"}
+  // e.g. {"start": 2026-04-15T09:00:00} → {"start": "2026-04-15T09:00:00"}
+  repaired = repaired.replace(/:\s*(\d{4}-\d{2}-\d{2}(?:T[\d:]+)?)\s*([,}])/g, ': "$1"$2');
+
   try {
     return JSON.parse(repaired);
   } catch {
@@ -196,7 +201,8 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
 
-    case 'file':
+    case 'file': {
+      const pm = (value as any).providerMetadata;
       return {
         type: 'file',
         runId: ctx.runId,
@@ -205,8 +211,10 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           data: value.data,
           base64: typeof value.data === 'string' ? value.data : undefined,
           mimeType: value.mediaType,
+          ...(pm != null ? { providerMetadata: pm } : {}),
         },
       };
+    }
 
     case 'tool-call': {
       let toolCallInput: Record<string, any> | undefined = undefined;
@@ -307,6 +315,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         runId: ctx.runId,
         from: ChunkFrom.AGENT,
         payload: {
+          providerMetadata: value.providerMetadata,
           stepResult: {
             reason: normalizeFinishReason(value.finishReason),
           },
@@ -317,7 +326,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           metadata: {
             providerMetadata: value.providerMetadata,
           },
-          messages,
+          messages: messages ?? {
+            all: [],
+            user: [],
+            nonUser: [],
+          },
           ...rest,
         },
       };
@@ -424,24 +437,30 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           providerMetadata: chunk.payload.providerMetadata,
         };
       }
-    case 'file':
-      if (mode === 'generate') {
-        return {
-          type: 'file',
-          file: new DefaultGeneratedFile({
-            data: chunk.payload.data,
-            mediaType: chunk.payload.mimeType,
-          }),
-        };
+    case 'file': {
+      const filePart =
+        mode === 'generate'
+          ? {
+              type: 'file' as const,
+              file: new DefaultGeneratedFile({
+                data: chunk.payload.data,
+                mediaType: chunk.payload.mimeType,
+              }),
+            }
+          : {
+              type: 'file' as const,
+              file: new DefaultGeneratedFileWithType({
+                data: chunk.payload.data,
+                mediaType: chunk.payload.mimeType,
+              }),
+            };
+
+      if (chunk.payload.providerMetadata) {
+        (filePart as any).providerMetadata = chunk.payload.providerMetadata;
       }
 
-      return {
-        type: 'file',
-        file: new DefaultGeneratedFileWithType({
-          data: chunk.payload.data,
-          mediaType: chunk.payload.mimeType,
-        }),
-      };
+      return filePart;
+    }
     case 'tool-call':
       return {
         type: 'tool-call',
@@ -474,7 +493,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'step-finish': {
-      const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
+      const { request: _request, providerMetadata: metadataProviderMetadata, ...rest } = chunk.payload.metadata;
       return {
         type: 'finish-step',
         response: {
@@ -485,7 +504,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         },
         usage: chunk.payload.output.usage,
         finishReason: chunk.payload.stepResult.reason,
-        providerMetadata,
+        providerMetadata: metadataProviderMetadata ?? chunk.payload.providerMetadata,
       };
     }
     case 'text-delta':
@@ -587,6 +606,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: undefined,
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
+      cacheCreationInputTokens: undefined,
       raw: undefined,
     };
   }
@@ -601,6 +621,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
+      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
       raw: usage,
     };
   }
@@ -613,6 +634,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,
     raw: usage,
   };
 }
