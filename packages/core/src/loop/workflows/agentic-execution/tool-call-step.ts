@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
+import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ProviderMetadata } from '../../../stream/types';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
@@ -46,6 +48,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -316,7 +319,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (toolRequiresApproval) {
           if (!resumeData) {
-            controller.enqueue({
+            safeEnqueue(controller, {
               type: 'tool-call-approval',
               runId,
               from: ChunkFrom.AGENT,
@@ -399,7 +402,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : undefined,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
-              controller.enqueue({
+              safeEnqueue(controller, {
                 type: 'tool-call-approval',
                 runId,
                 from: ChunkFrom.AGENT,
@@ -462,7 +465,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
               );
             } else {
-              controller.enqueue({
+              safeEnqueue(controller, {
                 type: 'tool-call-suspended',
                 runId,
                 from: ChunkFrom.AGENT,
@@ -564,6 +567,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // FGA authorization check before tool execution
+        const toolFgaProvider = mastra?.getServer?.()?.fga;
+        if (toolFgaProvider) {
+          const fgaUser = requestContext?.get('user');
+          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
+          if (!fgaUser) {
+            throw new FGADeniedError(
+              { id: 'unknown' },
+              { type: 'tool', id: inputData.toolName },
+              MastraFGAPermissions.TOOLS_EXECUTE,
+            );
+          }
+          await checkFGA({
+            fgaProvider: toolFgaProvider,
+            user: fgaUser,
+            resource: { type: 'tool', id: inputData.toolName },
+            permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          });
+        }
+
         const llmBgOverrides =
           typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
 
@@ -618,10 +641,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     opts?: {
                       abortSignal?: AbortSignal;
                       onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
+                      suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
+                      resumeData?: unknown;
                     },
                   ) => {
+                    // Override the agent loop's `suspend`/`resumeData` (which
+                    // would suspend the AGENT run via tool-call-approval) with
+                    // the bg-task workflow's, so calling `suspend()` from the
+                    // tool pauses the bg-task run instead.
                     return resolvedTool.execute!(bgArgs, {
                       ...toolOptions,
+                      ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                      suspend: async (data?: unknown, options?: SuspendOptions) => {
+                        await toolOptions.suspend?.(data, options);
+                        return opts?.suspend?.(data, options);
+                      },
                       outputWriter: async (chunk: any) => {
                         await opts?.onProgress?.(chunk);
                         return toolOptions.outputWriter?.(chunk);
@@ -716,6 +750,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       },
                     },
                     {
+                      mode: 'stream',
                       backgroundTasks: {
                         [params.toolCallId]: {
                           startedAt: params.startedAt,
@@ -797,9 +832,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       },
                     },
                     {
+                      mode: 'stream',
                       backgroundTasks: {
                         [params.toolCallId]: {
                           startedAt: params.startedAt,
+                          suspendedAt: params.suspendedAt,
                           taskId: params.taskId,
                         },
                       },
@@ -813,11 +850,34 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             });
 
+            const isSuspended = await bgTask.checkIfSuspended({
+              toolCallId: inputData.toolCallId,
+              runId,
+              agentId,
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+              toolName: inputData.toolName,
+            });
+            if (isSuspended && resumeDataToPassToToolOptions) {
+              const task = await bgTask.resume(resumeDataToPassToToolOptions);
+
+              return {
+                result: `Background task resumed. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
+                ...inputData,
+              };
+            }
+
             const { task, fallbackToSync } = await bgTask.dispatch();
 
             if (!fallbackToSync) {
-              // Emit background-task-started chunk
-              controller.enqueue({
+              // Emit background-task-started chunk. Use safeEnqueue: the
+              // agent stream may have closed by the time this fires (e.g.
+              // when the controller closes mid-dispatch in a long-lived
+              // streamUntilIdle wrapper) — without the guard, the throw
+              // bubbles up through the AI-SDK-v5 tool builder and gets
+              // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
+              // Controller is already closed`.
+              safeEnqueue(controller, {
                 type: 'background-task-started' as any,
                 runId,
                 from: ChunkFrom.AGENT,
@@ -857,6 +917,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         return { result, ...inputData };
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         return {
           error: error as Error,
           ...inputData,

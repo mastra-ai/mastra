@@ -117,7 +117,7 @@ export function generateRouteOpenAPI({
 /**
  * Helper to convert any PublicSchema to JSON Schema for OpenAPI
  */
-function schemaToJsonSchema(schema: PublicSchema<unknown>): JSONSchema7 {
+export function schemaToJsonSchema(schema: PublicSchema<unknown>): JSONSchema7 {
   const standardSchema = toStandardSchema(schema);
 
   return standardSchemaToJSONSchema(standardSchema);
