@@ -1,5 +1,5 @@
-import { Icon } from '@/ds/icons';
 import { Txt } from '../Txt';
+import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
 export interface EntityProps {

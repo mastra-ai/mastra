@@ -2,6 +2,7 @@
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
 import { processSlashCommand } from '../utils/slash-command-processor.js';
+import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
   handleCostCommand,
@@ -19,6 +20,7 @@ import {
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
+  handleThreadCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
   handleModelsPackCommand,
@@ -30,12 +32,24 @@ import {
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
+  handleBrowserCommand,
   handleThemeCommand,
   handleUpdateCommand,
+  handleMemoryGatewayCommand,
+  handleApiKeysCommand,
+  handleFeedbackCommand,
+  handleObservabilityCommand,
+  handleGoalCommand,
+  handleJudgeCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { showError, showInfo } from './display.js';
+import {
+  canRunSlashCommandDuringGoalJudge,
+  isGoalJudgeInputLocked,
+  showGoalJudgeInputLockInfo,
+} from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 
 /**
@@ -49,30 +63,60 @@ export async function dispatchSlashCommand(
 ): Promise<boolean> {
   const trimmedInput = input.trim();
 
-  // Strip leading slashes — pi-tui may pass /command or command depending
-  // on how the user invoked it.  Try custom commands first, then built-in.
-  const withoutSlashes = trimmedInput.replace(/^\/+/, '');
-  if (trimmedInput.startsWith('/')) {
-    const [cmdName, ...cmdArgs] = withoutSlashes.split(' ');
+  const slashMatch = trimmedInput.match(/^(\/\/?)([\s\S]*)$/);
+  const slashPrefix = slashMatch?.[1] ?? '';
+  const withoutSlashes = slashMatch?.[2] ?? trimmedInput;
+  const firstWhitespaceIndex = withoutSlashes.search(/\s/);
+  const commandText = firstWhitespaceIndex === -1 ? withoutSlashes : withoutSlashes.slice(0, firstWhitespaceIndex);
+  const rawArgsText = firstWhitespaceIndex === -1 ? '' : withoutSlashes.slice(firstWhitespaceIndex).trim();
+  const parsedArgs = rawArgsText ? rawArgsText.split(/\s+/) : [];
+
+  if (slashPrefix === '//') {
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      return true;
+    }
+
+    const cmdName = commandText;
+    const cmdArgs = parsedArgs;
     const customCommand = state.customSlashCommands.find(cmd => cmd.name === cmdName);
     if (customCommand) {
       await handleCustomSlashCommand(state, customCommand, cmdArgs);
       return true;
     }
-    // Not a custom command — fall through to built-in routing
+
+    showError(state, `Unknown custom command: ${cmdName}`);
+    return true;
   }
 
-  const [command, ...args] = withoutSlashes.split(' ');
+  const command = commandText;
+  const goalSubcommands = new Set(['status', 'pause', 'resume', 'clear']);
+  const firstGoalArg = parsedArgs[0]?.toLowerCase();
+  const args =
+    command === 'goal' && rawArgsText && !goalSubcommands.has(firstGoalArg ?? '') ? [rawArgsText] : parsedArgs;
+
+  if (isGoalJudgeInputLocked(state) && !canRunSlashCommandDuringGoalJudge(command, args)) {
+    showGoalJudgeInputLockInfo(state);
+    return true;
+  }
+
+  if (command.startsWith('goal/')) {
+    await handleGoalSourceCommand(state, command.slice('goal/'.length), args, buildCtx());
+    return true;
+  }
 
   switch (command) {
     case 'new':
-      handleNewCommand(buildCtx());
+      await handleNewCommand(buildCtx());
       return true;
     case 'clone':
       await handleCloneCommand(buildCtx());
       return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
+      return true;
+    case 'thread':
+      await handleThreadCommand(buildCtx());
       return true;
     case 'skills':
       await handleSkillsCommand(buildCtx());
@@ -149,11 +193,32 @@ export async function dispatchSlashCommand(
     case 'setup':
       await handleSetupCommand(buildCtx());
       return true;
+    case 'browser':
+      await handleBrowserCommand(buildCtx(), args);
+      return true;
     case 'theme':
       await handleThemeCommand(buildCtx(), args);
       return true;
     case 'update':
       await handleUpdateCommand(buildCtx());
+      return true;
+    case 'memory-gateway':
+      await handleMemoryGatewayCommand(buildCtx());
+      return true;
+    case 'api-keys':
+      await handleApiKeysCommand(buildCtx());
+      return true;
+    case 'feedback':
+      await handleFeedbackCommand(buildCtx(), args);
+      return true;
+    case 'observability':
+      await handleObservabilityCommand(buildCtx(), args);
+      return true;
+    case 'goal':
+      await handleGoalCommand(buildCtx(), args);
+      return true;
+    case 'judge':
+      await handleJudgeCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
@@ -170,6 +235,57 @@ export async function dispatchSlashCommand(
 /**
  * Handle a custom slash command by processing its template and adding to context.
  */
+async function handleGoalSourceCommand(
+  state: TUIState,
+  sourceName: string,
+  args: string[],
+  ctx: SlashCommandContext,
+): Promise<void> {
+  const customCommand = state.customSlashCommands.find(cmd => cmd.name === sourceName && cmd.goal === true);
+  if (customCommand) {
+    try {
+      const processedContent = await processSlashCommand(customCommand, args, process.cwd());
+      const objective = processedContent.trim();
+      if (!objective) {
+        showInfo(state, `Goal command /goal/${customCommand.name} produced no output.`);
+        return;
+      }
+      await startGoalWithDefaults(ctx, objective);
+    } catch (error) {
+      showError(
+        state,
+        `Error executing /goal/${sourceName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
+  }
+
+  const goalSkill = state.goalSkillCommands.find(skill => skill.name === sourceName);
+  if (goalSkill) {
+    try {
+      const workspace = ctx.getResolvedWorkspace();
+      const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
+      if (!skill || skill.metadata?.goal !== true) {
+        showError(state, `Unknown goal command: ${sourceName}`);
+        return;
+      }
+      const trimmedArgs = args.join(' ').trim();
+      const objective = `# Skill goal: ${skill.name}\n\n${skill.instructions}${
+        trimmedArgs ? `\n\nARGUMENTS: ${trimmedArgs}` : ''
+      }`;
+      await startGoalWithDefaults(ctx, objective);
+    } catch (error) {
+      showError(
+        state,
+        `Error executing /goal/${sourceName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
+  }
+
+  showError(state, `Unknown goal command: ${sourceName}`);
+}
+
 async function handleCustomSlashCommand(
   state: TUIState,
   command: { name: string; template: string; description?: string },
@@ -185,6 +301,11 @@ async function handleCustomSlashCommand(
       state.allSlashCommandComponents.push(slashComp);
       state.chatContainer.addChild(slashComp);
       state.ui.requestRender();
+
+      if (state.pendingNewThread) {
+        await state.harness.createThread();
+        state.pendingNewThread = false;
+      }
 
       // Wrap in <slash-command> tags so the assistant sees the full
       // content but addUserMessage won't double-render it.

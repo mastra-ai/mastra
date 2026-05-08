@@ -107,6 +107,7 @@ jobs:
     needs: check-permission
     if: needs.check-permission.outputs.authorized == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       issues: write
@@ -135,6 +136,7 @@ jobs:
         with:
           install-dependencies: 'false'
           package-json-file: trusted/package.json
+          cache-dependency-path: trusted/pnpm-lock.yaml
 
       - name: Install dependencies (trusted)
         run: pnpm install --frozen-lockfile
@@ -162,6 +164,7 @@ jobs:
         run: gh pr checkout "$PR_NUMBER"
 
       # ── Run the command from trusted code against the PR workspace ────
+      # Run from trusted/mastracode because that workspace owns the tsx binary used to launch the trusted runner script.
       - name: Run command
         env:
           COMMAND_NAME: ${{ needs.check-permission.outputs.command }}
@@ -170,8 +173,8 @@ jobs:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
           PR_WORKSPACE: ${{ github.workspace }}/pr-workspace
-        working-directory: trusted
-        run: npx tsx scripts/gh-dane-command/index.ts
+        working-directory: trusted/mastracode
+        run: pnpm exec tsx ../scripts/gh-dane-command/index.ts
 
       - name: React on success
         if: success()

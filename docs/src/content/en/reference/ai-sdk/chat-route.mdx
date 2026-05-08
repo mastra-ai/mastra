@@ -14,6 +14,16 @@ Creates a chat route handler for streaming agent conversations using the AI SDK 
 
 Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a framework-agnostic handler.
 
+`chatRoute()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
+:::note Disconnect behavior
+
+`chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
+
+If you want the server to continue generation and persist the final response after disconnect, build a [custom API route](/docs/server/custom-api-routes#continue-generation-after-client-disconnect) around `agent.stream()` and call `consumeStream()` on the returned `MastraModelOutput`.
+
+:::
+
 ## Usage example
 
 This example shows how to set up a chat route at the `/chat` endpoint that uses an agent with the ID `weatherAgent`.
@@ -56,6 +66,14 @@ export const mastra = new Mastra({
 <PropertiesTable
   content={[
   {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
+  {
     name: 'path',
     type: 'string',
     description: 'The route path (e.g., `/chat` or `/chat/:agentId`). Include `:agentId` for dynamic agent routing.',
@@ -66,6 +84,13 @@ export const mastra = new Mastra({
     name: 'agent',
     type: 'string',
     description: "The ID of the agent to use for this chat route. Required if the path doesn't include `:agentId`.",
+    isOptional: true,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/editor/overview) to be configured.",
     isOptional: true,
   },
   {

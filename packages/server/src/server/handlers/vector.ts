@@ -197,7 +197,7 @@ export async function listVectorStores({ mastra }: Pick<VectorContext, 'mastra'>
     // Convert to array and extract metadata
     const vectorList = Object.entries(vectors).map(([name, vector]) => ({
       name,
-      id: vector.id,
+      id: vector.id || name, // Use the key as fallback when vector has no id property
       type: vector.constructor.name,
       // Add any other metadata that might be useful
     }));

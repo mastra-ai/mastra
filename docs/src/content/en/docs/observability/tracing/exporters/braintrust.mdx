@@ -3,7 +3,6 @@ title: "Braintrust exporter | Tracing | Observability"
 description: "Send traces to Braintrust for evaluation and monitoring"
 packages:
   - "@mastra/braintrust"
-  - "@mastra/core"
   - "@mastra/observability"
 ---
 
@@ -93,6 +92,21 @@ new BraintrustExporter({
   logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 })
 ```
+
+## Querying Braintrust with returned `spanId`
+
+For Braintrust, use `spanId` as the root span identifier when searching for traces because Braintrust root-span queries are typically faster than trace-id queries.
+
+```typescript title="src/mastra/usage.ts"
+const result = await agent.stream('Summarize this ticket')
+
+console.log('Mastra trace ID:', result.traceId)
+console.log('Braintrust root span ID:', result.spanId)
+
+// Use result.spanId in your Braintrust lookup/query path
+```
+
+The same applies to `agent.generate()` and workflow run results (`run.start()`, `run.stream()` final state, `run.resume()`).
 
 ## Related
 

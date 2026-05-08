@@ -1,0 +1,43 @@
+{
+  "name": "@internal/core",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./storage": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.build.json",
+    "lint": "eslint .",
+    "build:lib": "tsup --config tsup.config.ts"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/node": "22.19.15",
+    "eslint": "^10.2.1",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

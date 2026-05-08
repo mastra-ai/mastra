@@ -40,11 +40,21 @@ describe('SubagentExecutionComponent', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
     const lines = renderPlain(comp);
 
-    expect(lines.some(l => l.includes('┌──'))).toBe(true);
+    expect(lines.some(l => l.includes('╭──'))).toBe(true);
     expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
-    expect(lines.some(l => l.includes('└──'))).toBe(true);
+    expect(lines.some(l => l.includes('╰──'))).toBe(true);
     expect(lines.some(l => l.includes('subagent'))).toBe(true);
     expect(lines.some(l => l.includes('explore'))).toBe(true);
+  });
+
+  it('renders fork as the type and the parent model id when forked', () => {
+    const comp = new SubagentExecutionComponent('explore', 'Summarize context', mockTui, 'openai/gpt-5.5', {
+      forked: true,
+    });
+    const lines = renderPlain(comp);
+
+    expect(lines.some(l => l.includes('subagent fork openai/gpt-5.5'))).toBe(true);
+    expect(lines.some(l => l.includes('subagent explore fork'))).toBe(false);
   });
 
   it('renders tool call activity while running', () => {
@@ -92,9 +102,9 @@ describe('SubagentExecutionComponent', () => {
 
       // Should still show full bordered box content
       expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('┌──'))).toBe(true);
+      expect(lines.some(l => l.includes('╭──'))).toBe(true);
       expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
-      expect(lines.some(l => l.includes('└──'))).toBe(true);
+      expect(lines.some(l => l.includes('╰──'))).toBe(true);
       expect(lines.some(l => l.includes('✓'))).toBe(true);
     });
 
@@ -109,7 +119,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('┌──'))).toBe(true);
+      expect(lines.some(l => l.includes('╭──'))).toBe(true);
     });
   });
 
@@ -134,7 +144,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('└──');
+      expect(lines[0]).toContain('╰──');
       expect(lines[0]).toContain('subagent');
       expect(lines[0]).toContain('explore');
       expect(lines[0]).toContain('✓');
@@ -156,7 +166,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('└──');
+      expect(lines[0]).toContain('╰──');
       expect(lines[0]).toContain('✗');
     });
 
@@ -178,10 +188,10 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('┌──'))).toBe(true);
+      expect(lines.some(l => l.includes('╭──'))).toBe(true);
       expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
       expect(lines.some(l => l.includes('search_content'))).toBe(true);
-      expect(lines.some(l => l.includes('└──'))).toBe(true);
+      expect(lines.some(l => l.includes('╰──'))).toBe(true);
     });
 
     it('toggleExpanded works correctly after completion', () => {
@@ -200,13 +210,13 @@ describe('SubagentExecutionComponent', () => {
       comp.toggleExpanded();
       lines = nonEmpty(renderPlain(comp));
       expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('┌──'))).toBe(true);
+      expect(lines.some(l => l.includes('╭──'))).toBe(true);
 
       // Toggle back to collapsed
       comp.toggleExpanded();
       lines = nonEmpty(renderPlain(comp));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('└──');
+      expect(lines[0]).toContain('╰──');
     });
 
     it('auto-collapses even if user expanded during execution', () => {
@@ -224,7 +234,7 @@ describe('SubagentExecutionComponent', () => {
       comp.finish(false, 5000);
       lines = nonEmpty(renderPlain(comp));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('└──');
+      expect(lines[0]).toContain('╰──');
     });
 
     it('shows full content while still running (not yet finished)', () => {
@@ -236,7 +246,7 @@ describe('SubagentExecutionComponent', () => {
       const lines = nonEmpty(renderPlain(comp));
 
       expect(lines.length).toBeGreaterThan(1);
-      expect(lines.some(l => l.includes('┌──'))).toBe(true);
+      expect(lines.some(l => l.includes('╭──'))).toBe(true);
       expect(lines.some(l => l.includes('Find usages'))).toBe(true);
     });
   });

@@ -3,6 +3,7 @@ title: "Custom API routes | Server"
 description: "Expose additional HTTP endpoints from your Mastra server."
 packages:
   - "@mastra/core"
+  - "@mastra/ai-sdk"
 ---
 
 # Custom API routes
@@ -70,7 +71,7 @@ export const mastra = new Mastra({
 
 ## OpenAPI documentation
 
-Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside Mastra server routes. Pass an `openapi` option with standard OpenAPI operation fields.
+Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside Mastra server routes. You can access the OpenAPI spec at `/api/openapi.json`, where both custom routes and built-in routes are listed. Pass an `openapi` option with standard OpenAPI operation fields.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -265,8 +266,68 @@ registerApiRoute('/user-profile', {
 
 For more information about authentication providers, see the [Auth documentation](/docs/server/auth).
 
+## Continue generation after client disconnect
+
+Built-in streaming helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) forward the incoming request's `AbortSignal` to `agent.stream()`. That's the right default when a browser disconnect should cancel the model call.
+
+If you want the server to keep generating and persist the final response even after the client disconnects, build a custom route around the underlying `MastraModelOutput`. Start the agent stream without forwarding `c.req.raw.signal`, then call `consumeStream()` in the background so generation continues server-side.
+
+```typescript title="src/mastra/index.ts"
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  InferUIMessageChunk,
+  UIMessage,
+} from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/chat/persist/:agentId', {
+        method: 'POST',
+        handler: async c => {
+          const { messages, memory } = await c.req.json()
+          const mastra = c.get('mastra')
+          const agent = mastra.getAgent(c.req.param('agentId'))
+
+          const stream = await agent.stream(messages, {
+            memory,
+            // Do not pass c.req.raw.signal if this route should keep running
+            // after the client disconnects.
+          })
+
+          void stream.consumeStream().catch(error => {
+            mastra.getLogger()?.error('Background stream consumption failed', { error })
+          })
+
+          const uiStream = createUIMessageStream({
+            originalMessages: messages,
+            execute: async ({ writer }) => {
+              for await (const part of toAISdkStream(stream, { from: 'agent' })) {
+                writer.write(part as InferUIMessageChunk<UIMessage>)
+              }
+            },
+          })
+
+          return createUIMessageStreamResponse({ stream: uiStream })
+        },
+      }),
+    ],
+  },
+})
+```
+
+:::note
+
+Use this pattern only when you intentionally want work to continue after the HTTP client is gone. If you want disconnects to cancel generation, keep using `chatRoute()` or forward the request `AbortSignal` yourself.
+
+:::
+
 ## Related
 
-- [registerApiRoute() Reference](/reference/server/register-api-route) - Full API reference
-- [Server Middleware](/docs/server/middleware) - Global middleware configuration
-- [Mastra Server](/docs/server/mastra-server) - Server configuration options
+- [registerApiRoute() Reference](/reference/server/register-api-route): Full API reference
+- [Server Middleware](/docs/server/middleware): Global middleware configuration
+- [Mastra Server](/docs/server/mastra-server): Server configuration options

@@ -1,16 +1,16 @@
+import { X } from 'lucide-react';
+import type { ElementType } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { ElementType } from 'react';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface ThreadsProps {
   children: React.ReactNode;
 }
 
 export const Threads = ({ children }: ThreadsProps) => {
-  return <nav className="bg-surface2 min-h-full overflow-hidden">{children}</nav>;
+  return <nav className="min-h-full overflow-hidden">{children}</nav>;
 };
 
 export interface ThreadLinkProps {

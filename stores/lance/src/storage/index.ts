@@ -3,12 +3,13 @@ import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
+import { StoreBackgroundTasksLance } from './domains/background-tasks';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreScoresLance } from './domains/scores';
 import { StoreWorkflowsLance } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { StoreMemoryLance, StoreScoresLance, StoreWorkflowsLance };
+export { StoreBackgroundTasksLance, StoreMemoryLance, StoreScoresLance, StoreWorkflowsLance };
 export type { LanceDomainConfig } from './db';
 
 export interface LanceStorageOptions {
@@ -118,6 +119,7 @@ export class LanceStorage extends MastraCompositeStore {
         workflows: new StoreWorkflowsLance({ client: instance.lanceClient }),
         scores: new StoreScoresLance({ client: instance.lanceClient }),
         memory: new StoreMemoryLance({ client: instance.lanceClient }),
+        backgroundTasks: new StoreBackgroundTasksLance({ client: instance.lanceClient }),
       };
       return instance;
     } catch (e: any) {
@@ -161,6 +163,7 @@ export class LanceStorage extends MastraCompositeStore {
       workflows: new StoreWorkflowsLance({ client }),
       scores: new StoreScoresLance({ client }),
       memory: new StoreMemoryLance({ client }),
+      backgroundTasks: new StoreBackgroundTasksLance({ client }),
     };
     return instance;
   }

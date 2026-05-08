@@ -13,7 +13,7 @@ packages:
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/sentry@beta
+npm install @mastra/sentry@latest
 ```
 
 ## Configuration
@@ -152,7 +152,7 @@ The exporter uses standard GenAI semantic conventions with Sentry-specific attri
 **For MODEL\_GENERATION spans:**
 
 - `gen_ai.system`: Model provider (e.g., `openai`, `anthropic`)
-- `gen_ai.request.model`: Model identifier (e.g., `gpt-4`)
+- `gen_ai.request.model`: Model identifier (e.g., `gpt-5.4`)
 - `gen_ai.response.model`: Response model
 - `gen_ai.response.text`: Output text response
 - `gen_ai.response.tool_calls`: Tool calls made during generation (JSON array)

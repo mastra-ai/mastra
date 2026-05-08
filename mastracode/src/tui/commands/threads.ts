@@ -1,23 +1,9 @@
-import { Spacer } from '@mariozechner/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
 import { ThreadLockError } from '../../utils/thread-lock.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
+import { askModalQuestion } from '../modal-question.js';
+import { showModalOverlay } from '../overlay.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
-
-function extractTextContent(message: HarnessMessage): string {
-  return message.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map(c => c.text)
-    .join(' ')
-    .trim();
-}
-
-function truncatePreview(text: string, maxLength = 50): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 3) + '...';
-}
 
 export function showThreadLockPrompt(
   ctx: SlashCommandContext,
@@ -25,8 +11,8 @@ export function showThreadLockPrompt(
   ownerPid: number,
   lockedThreadId?: string,
 ): void {
-  const questionComponent = new AskQuestionInlineComponent(
-    {
+  void (async () => {
+    const answer = await askModalQuestion(ctx.state.ui, {
       question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
       options: [
         { label: 'Switch thread', description: 'Pick a different thread' },
@@ -34,47 +20,28 @@ export function showThreadLockPrompt(
         ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
         { label: 'Exit', description: 'Exit' },
       ],
-      formatResult: answer => {
-        if (answer === 'Switch thread') return 'Opening thread selector...';
-        if (answer === 'Clone thread') return 'Cloning thread...';
-        if (answer === 'New thread') return 'Starting new thread.';
-        return 'Exiting.';
-      },
-      onSubmit: async answer => {
-        ctx.state.activeInlineQuestion = undefined;
-        if (answer === 'Switch thread') {
-          await handleThreadsCommand(ctx);
-        } else if (answer === 'Clone thread' && lockedThreadId) {
-          try {
-            const customTitle = await askCloneName(ctx.state);
-            const clonedThread = await ctx.state.harness.cloneThread({
-              sourceThreadId: lockedThreadId,
-              ...(customTitle ? { title: customTitle } : {}),
-            });
-            ctx.state.pendingNewThread = false;
-            await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
-          } catch (error) {
-            ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        } else if (answer === 'New thread') {
-          // pendingNewThread is already true from the caller
-        } else {
-          process.exit(0);
-        }
-      },
-      onCancel: () => {
-        ctx.state.activeInlineQuestion = undefined;
-        process.exit(0);
-      },
-    },
-    ctx.state.ui,
-  );
+    });
 
-  ctx.state.activeInlineQuestion = questionComponent;
-  ctx.state.chatContainer.addChild(questionComponent);
-  ctx.state.chatContainer.addChild(new Spacer(1));
-  ctx.state.ui.requestRender();
-  ctx.state.chatContainer.invalidate();
+    if (answer === 'Switch thread') {
+      await handleThreadsCommand(ctx);
+    } else if (answer === 'Clone thread' && lockedThreadId) {
+      try {
+        const customTitle = await askCloneName(ctx.state);
+        const clonedThread = await ctx.state.harness.cloneThread({
+          sourceThreadId: lockedThreadId,
+          ...(customTitle ? { title: customTitle } : {}),
+        });
+        ctx.state.pendingNewThread = false;
+        await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
+      } catch (error) {
+        ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else if (answer === 'New thread') {
+      // pendingNewThread is already true from the caller
+    } else {
+      process.exit(0);
+    }
+  })();
 }
 
 export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<void> {
@@ -82,6 +49,21 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
   const threads = await state.harness.listThreads({ allResources: true });
   const currentId = state.pendingNewThread ? null : state.harness.getCurrentThreadId();
   const currentResourceId = state.harness.getResourceId();
+  const threadById = new Map(threads.map(thread => [thread.id, thread] as const));
+
+  for (const [threadId, cachedPreview] of [...state.threadPreviewCache.entries()]) {
+    const thread = threadById.get(threadId);
+    if (!thread || cachedPreview.updatedAt < thread.updatedAt.getTime()) {
+      state.threadPreviewCache.delete(threadId);
+      state.attemptedThreadPreviewIds.delete(threadId);
+    }
+  }
+
+  for (const threadId of [...state.attemptedThreadPreviewIds]) {
+    if (!threadById.has(threadId)) {
+      state.attemptedThreadPreviewIds.delete(threadId);
+    }
+  }
 
   if (threads.length === 0) {
     ctx.showInfo('No threads yet. Send a message to create one.');
@@ -95,13 +77,28 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       currentThreadId: currentId,
       currentResourceId,
       currentProjectPath: state.projectInfo.rootPath,
-      getMessagePreview: async (threadId: string) => {
-        const firstUserMessage = await state.harness.getFirstUserMessageForThread({ threadId });
-        if (firstUserMessage) {
-          const text = extractTextContent(firstUserMessage);
-          return truncatePreview(text);
-        }
-        return null;
+      initialMessagePreviews: new Map(
+        [...state.threadPreviewCache.entries()].map(
+          ([threadId, cachedPreview]) => [threadId, cachedPreview.preview] as const,
+        ),
+      ),
+      initialAttemptedPreviewThreadIds: state.attemptedThreadPreviewIds,
+      onMessagePreviewsLoaded: (previews, attemptedThreadIds) => {
+        state.threadPreviewCache = new Map(
+          [...previews.entries()].flatMap(([threadId, preview]) => {
+            const thread = threadById.get(threadId);
+            return thread ? [[threadId, { preview, updatedAt: thread.updatedAt.getTime() }] as const] : [];
+          }),
+        );
+        state.attemptedThreadPreviewIds = attemptedThreadIds;
+      },
+      getMessagePreviews: async (threadIds: string[]) => {
+        return new Map(
+          threadIds.flatMap(threadId => {
+            const preview = state.threadPreviewCache.get(threadId)?.preview;
+            return preview ? [[threadId, preview] as const] : [];
+          }),
+        );
       },
       onSelect: async thread => {
         state.ui.hideOverlay();
@@ -129,6 +126,9 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
 
         state.chatContainer.clear();
         state.allToolComponents = [];
+        state.allSystemReminderComponents = [];
+        state.messageComponentsById.clear();
+        state.allShellComponents = [];
         state.pendingTools.clear();
         await ctx.renderExistingMessages();
 
@@ -160,11 +160,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       },
     });
 
-    state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
     selector.focused = true;
   });
 }

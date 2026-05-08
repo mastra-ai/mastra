@@ -2,13 +2,13 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import {
   formElementSizes,
   sharedFormElementStyle,
   sharedFormElementFocusStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(

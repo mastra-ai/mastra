@@ -14,7 +14,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Custom adapters
 
-Create a custom adapter when you need to run Mastra with a framework other than Hono or Express. This might be necessary if you have specific request/response handling requirements that `@mastra/hono` and `@mastra/express` don't support.
+Create a custom adapter when the prebuilt server adapters (Hono, Express, Fastify, Koa) don't support your framework or you have specific request/response handling requirements.
 
 A custom adapter translates between Mastra's route definitions and your framework's routing system. You'll implement methods that register middleware, handle requests, and send responses using your framework's APIs.
 
@@ -389,12 +389,14 @@ app.listen(4111)
 
 The existing [@mastra/hono](https://github.com/mastra-ai/mastra/blob/main/server-adapters/hono/src/index.ts) and [@mastra/express](https://github.com/mastra-ai/mastra/blob/main/server-adapters/express/src/index.ts) implementations are good references when building your custom adapter. They show how to handle framework-specific patterns for context storage, middleware registration, and response handling.
 
+If you want to use [Studio](/docs/studio/overview) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
+
 :::
 
 ## Related
 
-- [Server Adapters](/docs/server/server-adapters) - Overview and shared concepts
-- [Hono Adapter](/reference/server/hono-adapter) - Reference implementation
-- [Express Adapter](/reference/server/express-adapter) - Reference implementation
-- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/server/create-route) - Creating type-safe custom routes
+- [Server Adapters](/docs/server/server-adapters): Overview and shared concepts
+- [Hono Adapter](/reference/server/hono-adapter): Reference implementation
+- [Express Adapter](/reference/server/express-adapter): Reference implementation
+- [MastraServer Reference](/reference/server/mastra-server): Full API reference
+- [createRoute() Reference](/reference/server/create-route): Creating type-safe custom routes

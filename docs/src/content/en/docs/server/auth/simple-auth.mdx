@@ -1,11 +1,11 @@
 ---
-title: "SimpleAuth class | Auth"
+title: "Simple Auth | Auth"
 description: "Documentation for the SimpleAuth class, which provides token-to-user mapping authentication for development and basic API key scenarios."
 packages:
   - "@mastra/core"
 ---
 
-# SimpleAuth class
+# Simple Auth
 
 The `SimpleAuth` class provides token-based authentication using a basic token-to-user mapping. It's included in `@mastra/core/server` and is useful for development, testing, and basic API key authentication scenarios.
 
@@ -18,7 +18,7 @@ The `SimpleAuth` class provides token-based authentication using a basic token-t
 
 ## Installation
 
-SimpleAuth is included in `@mastra/core`, no additional packages required.
+`SimpleAuth` is included in `@mastra/core`, no additional packages required.
 
 ```typescript
 import { SimpleAuth } from '@mastra/core/server'
@@ -179,9 +179,3 @@ SimpleAuth is designed for simplicity, not production security:
 - All tokens must be known at startup
 
 For production applications, consider using [JWT](/docs/server/auth/jwt), [Clerk](/docs/server/auth/clerk), [Auth0](/docs/server/auth/auth0), or another identity provider.
-
-## Related
-
-- [Auth Overview](/docs/server/auth) - Authentication concepts
-- [JWT Auth](/docs/server/auth/jwt) - JSON Web Token authentication
-- [Custom Auth Provider](/docs/server/auth/custom-auth-provider) - Build your own provider

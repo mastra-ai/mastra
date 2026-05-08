@@ -34,6 +34,7 @@ export default async function setup(project: TestProject) {
       '--filter="create-mastra"',
       '--filter="...^mastra"',
       '--filter="@mastra/libsql"',
+      '--filter="@mastra/duckdb"',
       '--filter="@mastra/memory"',
       '--filter="@mastra/loggers"',
       '--filter="@mastra/evals"',

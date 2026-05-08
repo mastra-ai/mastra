@@ -7,10 +7,11 @@
 
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { mastra } from '../theme.js';
+import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
 
-const OBSERVER_COLOR = mastra.orange;
-const REFLECTOR_COLOR = mastra.red;
+// Read from proxy at render time so they pick up contrast adaptation
+const getObserverColor = () => mastra.orange;
+const getReflectorColor = () => mastra.red;
 const COLLAPSED_LINES = 10;
 
 function formatTokens(tokens: number): string {
@@ -21,7 +22,7 @@ function formatTokens(tokens: number): string {
 
 /** Truncate a string with ANSI codes to a visible width */
 function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]*m/g;
+  const ansiRegex = /\x1b\[[0-9;]{0,32}m/g;
   let visibleLength = 0;
   let result = '';
   let lastIndex = 0;
@@ -120,14 +121,13 @@ export class OMOutputComponent extends Container {
   }
   private rebuild(): void {
     this.clear();
-    this.addChild(new Spacer(1));
 
     const isReflection = this.data.type === 'reflection';
-    const color = isReflection ? REFLECTOR_COLOR : OBSERVER_COLOR;
+    const color = isReflection ? getReflectorColor() : getObserverColor();
     const border = (char: string) => chalk.bold.hex(color)(char);
 
-    const termWidth = process.stdout.columns || 80;
-    const maxLineWidth = termWidth - 6; // "│ " prefix + buffer
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2; // "│ " prefix + buffer + indent
     // Soft-wrap all original lines to terminal width
     const originalLines = this.data.observations.split('\n');
     const { groups, flat: wrappedLines } = softWrapLines(originalLines, maxLineWidth);
@@ -138,7 +138,7 @@ export class OMOutputComponent extends Container {
     const footerText = this.buildFooterText(color);
 
     // Top border
-    this.addChild(new Text(border('┌──'), 0, 0));
+    this.addChild(new Text(border('╭──'), BOX_INDENT, 0));
 
     // Content lines with left border
     let truncated = false;
@@ -191,7 +191,7 @@ export class OMOutputComponent extends Container {
 
     const displayOutput = borderedLines.join('\n');
     if (displayOutput.trim()) {
-      this.addChild(new Text(displayOutput, 0, 0));
+      this.addChild(new Text(displayOutput, BOX_INDENT, 0));
     }
 
     // Current task / suggested response sections
@@ -201,7 +201,7 @@ export class OMOutputComponent extends Container {
         ' ' +
         chalk.hex(color).bold('Current task: ') +
         chalk.hex(mastra.specialGray)(this.data.currentTask);
-      this.addChild(new Text(truncateAnsi(taskLine, termWidth - 2), 0, 0));
+      this.addChild(new Text(truncateAnsi(taskLine, termWidth - 2 - BOX_INDENT * 2), BOX_INDENT, 0));
     }
 
     if (this.data.suggestedResponse && (this.expanded || !truncated)) {
@@ -210,11 +210,12 @@ export class OMOutputComponent extends Container {
         ' ' +
         chalk.hex(color).bold('Suggested response: ') +
         chalk.hex(mastra.specialGray)(this.data.suggestedResponse);
-      this.addChild(new Text(truncateAnsi(sugLine, termWidth - 2), 0, 0));
+      this.addChild(new Text(truncateAnsi(sugLine, termWidth - 2 - BOX_INDENT * 2), BOX_INDENT, 0));
     }
 
     // Bottom border with footer
-    this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
+    this.addChild(new Spacer(1));
   }
 
   private buildFooterText(color: string): string {

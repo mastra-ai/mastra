@@ -1,12 +1,12 @@
 ---
-title: "Reference: Observational memory | Memory"
+title: "Reference: Observational Memory | Memory"
 description: "API reference for Observational Memory in Mastra — a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Observational memory
+# Observational Memory
 
 **Added in:** `@mastra/memory@1.1.0`
 
@@ -50,7 +50,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+    type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
     description:
       'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
     isOptional: true,
@@ -65,10 +65,33 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: "'thread'",
   },
   {
+    name: 'activateAfterIdle',
+    type: 'number | string',
+    description:
+      'Time before buffered observations or buffered reflections are forced to activate after inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. When the gap between the current time and the last assistant message part timestamp exceeds this value, buffered observational memory activates before the next prompt. Useful for aligning with prompt cache TTLs.',
+    isOptional: true,
+  },
+  {
     name: 'shareTokenBudget',
     type: 'boolean',
     description:
       'Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'temporalMarkers',
+    type: 'boolean',
+    description:
+      'Insert temporal-gap reminder markers before new user messages when the previous message in the thread is at least 10 minutes older. The marker is persisted in memory, emitted as an inline reminder event so clients can render it specially, and shown to the observer so it can anchor observations to when events occurred.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'retrieval',
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    description:
+      "**Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -83,7 +106,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.',
             isOptional: true,
@@ -94,6 +117,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             description:
               "Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
             isOptional: true,
+          },
+          {
+            name: 'threadTitle',
+            type: 'boolean',
+            description:
+              'When `true`, the Observer suggests short thread titles and updates the thread title when the conversation topic meaningfully changes. This is opt-in and defaults to disabled.',
+            isOptional: true,
+            defaultValue: 'false',
           },
           {
             name: 'messageTokens',
@@ -163,6 +194,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
             defaultValue: '1.2 (when bufferTokens is set)',
           },
+          {
+            name: 'previousObserverTokens',
+            type: 'number | false',
+            description:
+              "Optional token budget for the observer's previous-observations context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget while keeping the newest observations and preserving highlighted 🔴 items when possible. When a buffered reflection is pending, the already-reflected observation lines are automatically replaced with the reflection summary before truncation. Set to `0` to omit previous observations entirely, or `false` to disable truncation explicitly.",
+            isOptional: true,
+            defaultValue: '2000',
+          },
         ],
       },
     ],
@@ -178,7 +217,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
             isOptional: true,
@@ -328,12 +367,12 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     options: {
       observationalMemory: {
         // highlight-next-line
-        model: 'openai/gpt-4o-mini',
+        model: 'openai/gpt-5-mini',
       },
     },
   }),
@@ -349,7 +388,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -358,7 +397,7 @@ export const agent = new Agent({
           model: 'google/gemini-2.5-flash',
         },
         reflection: {
-          model: 'openai/gpt-4o-mini',
+          model: 'openai/gpt-5-mini',
         },
         // highlight-end
       },
@@ -378,7 +417,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'health-assistant',
   instructions: 'You are a health and wellness assistant.',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -764,6 +803,242 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
       'When enabled, thread IDs are hashed before being included in observation context. This prevents the LLM from recognizing patterns in thread identifiers. Automatically enabled when using resource scope through the Memory class.',
     isOptional: true,
     defaultValue: 'false',
+  },
+]}
+/>
+
+## Recall tool
+
+When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mode',
+    type: "'messages' | 'threads' | 'search'",
+    isOptional: true,
+    defaultValue: "'messages'",
+    description:
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists all threads for the current user. `"search"` finds messages by semantic similarity across all threads (requires vector store and embedder).',
+  },
+  {
+    name: 'query',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Search query for `mode: "search"`. Finds messages semantically similar to this text across all threads for the current user.',
+  },
+  {
+    name: 'cursor',
+    type: 'string',
+    isOptional: true,
+    description:
+      'A message ID to anchor the recall query. Required for `mode: "messages"` when browsing the current thread. Extract the start or end ID from an observation group range (e.g. from `_range: \\`startId:endId\\`_`, use either `startId` or `endId`). If a range string is passed directly, the tool returns a hint explaining how to extract the correct ID. Can be omitted when `threadId` is provided to start reading from the beginning of that thread.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Browse a different thread by its ID. Use `mode: "threads"` first to discover thread IDs. When provided without a `cursor`, reading starts from the beginning of the thread.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1',
+    description:
+      'Pagination offset. For messages: positive values page forward from cursor, negative values page backward. For threads: page number (0-indexed). `0` is treated as `1` for messages.',
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '20',
+    description: 'Maximum number of items to return per page.',
+  },
+  {
+    name: 'detail',
+    type: "'low' | 'high'",
+    isOptional: true,
+    defaultValue: "'low'",
+    description:
+      "Controls how much content is shown per message part. `'low'` shows truncated text and tool names with positional indices (`[p0]`, `[p1]`). `'high'` shows full content including tool arguments and results, clamped to one part per call with continuation hints.",
+  },
+  {
+    name: 'partIndex',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Fetch a single message part at full detail by its positional index. Use this when a low-detail recall shows an interesting part at `[p1]` — call again with `partIndex: 1` to see the full content without loading every part.',
+  },
+  {
+    name: 'before',
+    type: 'string',
+    isOptional: true,
+    description:
+      'For `mode: "threads"` only. Filter to threads created before this date. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
+  },
+  {
+    name: 'after',
+    type: 'string',
+    isOptional: true,
+    description:
+      'For `mode: "threads"` only. Filter to threads created after this date. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
+  },
+]}
+/>
+
+### Returns (messages mode)
+
+<PropertiesTable
+  content={[
+  {
+    name: 'messages',
+    type: 'string',
+    description: 'Formatted message content. Format depends on the `detail` level.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of messages in this page.',
+  },
+  {
+    name: 'cursor',
+    type: 'string',
+    description: 'The cursor message ID used for this query.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'The page number returned.',
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'The limit used for this query.',
+  },
+  {
+    name: 'hasNextPage',
+    type: 'boolean',
+    description: 'Whether more messages exist after this page.',
+  },
+  {
+    name: 'hasPrevPage',
+    type: 'boolean',
+    description: 'Whether more messages exist before this page.',
+  },
+  {
+    name: 'truncated',
+    type: 'boolean',
+    isOptional: true,
+    description:
+      'Present and `true` when the output was capped by the token budget. The agent can paginate or use `partIndex` to access remaining content.',
+  },
+  {
+    name: 'tokenOffset',
+    type: 'number',
+    isOptional: true,
+    description: 'Approximate number of tokens that were trimmed when `truncated` is true.',
+  },
+]}
+/>
+
+### Returns (threads mode)
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threads',
+    type: 'string',
+    description:
+      'Formatted thread listing. Each thread shows its title, ID, and dates. The current thread is marked with `← current`.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of threads returned.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'The page number returned.',
+  },
+  {
+    name: 'hasMore',
+    type: 'boolean',
+    description: 'Whether more threads exist on the next page.',
+  },
+]}
+/>
+
+### Returns (search mode)
+
+<PropertiesTable
+  content={[
+  {
+    name: 'results',
+    type: 'string',
+    description:
+      'Formatted search results grouped by thread. Each result shows the thread title, thread ID, relevance score, message preview, and a cursor ID for browsing into that thread.',
+  },
+  {
+    name: 'count',
+    type: 'number',
+    description: 'Number of matching messages found.',
+  },
+]}
+/>
+
+### ModelByInputTokens
+
+`ModelByInputTokens` selects a model based on the input token count. It chooses the model for the smallest threshold that covers the actual input size.
+
+#### Constructor
+
+```typescript
+new ModelByInputTokens(config)
+```
+
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets.
+
+#### Example
+
+```typescript
+import { ModelByInputTokens } from '@mastra/memory'
+
+const selector = new ModelByInputTokens({
+  upTo: {
+    10_000: 'google/gemini-2.5-flash', // Fast for small inputs
+    40_000: 'openai/gpt-5.4-mini', // Stronger for medium inputs
+    1_000_000: 'openai/gpt-5.4', // Most capable for large inputs
+  },
+})
+```
+
+#### Behavior
+
+- Thresholds are sorted internally, so the order in the config object doesn't matter.
+- `inputTokens ≤ smallest threshold` → uses that threshold's model
+- `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
+- OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly
+
+#### Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resolve',
+    type: '(inputTokens: number) => MastraModelConfig',
+    description:
+      'Returns the model for the given input token count. Throws if inputTokens exceeds the largest configured threshold. When this happens during an OM run, callers receive a TripWire/empty-text outcome instead of a normal assistant response.',
+  },
+  {
+    name: 'getThresholds',
+    type: '() => number[]',
+    description: 'Returns the configured thresholds in ascending order. Useful for introspection.',
   },
 ]}
 />

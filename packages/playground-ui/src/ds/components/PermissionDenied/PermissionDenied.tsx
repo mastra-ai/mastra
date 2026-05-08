@@ -1,7 +1,7 @@
-import * as React from 'react';
 import { ShieldX } from 'lucide-react';
-import { EmptyState } from '../EmptyState';
+import * as React from 'react';
 import { Icon } from '../../icons/Icon';
+import { EmptyState } from '../EmptyState';
 
 export interface PermissionDeniedProps {
   /** Resource type (e.g., "agents", "workflows") */

@@ -9,7 +9,9 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # CloudExporter
 
-Sends traces to Mastra Cloud for online visualization and monitoring.
+**Added in:** `@mastra/observability@1.8.0`
+
+Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform for online visualization and monitoring.
 
 ## Constructor
 
@@ -44,8 +46,26 @@ interface CloudExporterConfig extends BaseExporterConfig {
   /** Cloud access token (from env or config) */
   accessToken?: string
 
-  /** Cloud observability endpoint */
+  /** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
+  projectId?: string
+
+  /** Base cloud observability endpoint */
   endpoint?: string
+
+  /** Explicit cloud traces endpoint override */
+  tracesEndpoint?: string
+
+  /** Explicit cloud logs endpoint override */
+  logsEndpoint?: string
+
+  /** Explicit cloud metrics endpoint override */
+  metricsEndpoint?: string
+
+  /** Explicit cloud scores endpoint override */
+  scoresEndpoint?: string
+
+  /** Explicit cloud feedback endpoint override */
+  feedbackEndpoint?: string
 }
 ```
 
@@ -58,8 +78,9 @@ Extends `BaseExporterConfig`, which includes:
 
 The exporter reads these environment variables if not provided in config:
 
-- `MASTRA_CLOUD_ACCESS_TOKEN` - Project-scoped access token for authentication (generate in your Mastra Cloud project under **Project Settings → Access Tokens**)
-- `MASTRA_CLOUD_TRACES_ENDPOINT` - Custom endpoint (defaults to `https://api.mastra.ai/ai/spans/publish`)
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token for `CloudExporter` requests
+- `MASTRA_PROJECT_ID` - Project ID to use when deriving project-scoped collector routes such as `/projects/:projectId/ai/spans/publish`
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - Traces endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://observability.mastra.ai` in `@mastra/observability@1.9.2` and later
 
 ## Properties
 
@@ -75,7 +96,9 @@ readonly name = 'mastra-cloud-observability-exporter';
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Processes tracing events. Only exports SPAN\_ENDED events to Cloud.
+Processes tracing events for Cloud export.
+
+Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED` are ignored. Matching spans are buffered and uploaded to the Cloud traces endpoint on the next flush.
 
 <PropertiesTable
   props={[
@@ -88,13 +111,107 @@ Processes tracing events. Only exports SPAN\_ENDED events to Cloud.
 ]}
 />
 
+**Returns:** `Promise<void>` after the tracing event has been accepted for buffering or ignored.
+
+### `onLogEvent`
+
+```typescript prettier:false
+async onLogEvent(event: LogEvent): Promise<void>
+```
+
+Processes log signals for Cloud export.
+
+Every `LogEvent` passed to this handler is buffered and exported to the Cloud logs endpoint derived from the configured base endpoint. Unlike tracing, there is no additional event-status filtering at the `CloudExporter` level. If the exporter is disabled, this method becomes a no-op.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'LogEvent',
+    description: 'The log event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the log event has been accepted for buffering.
+
+### `onMetricEvent`
+
+```typescript prettier:false
+async onMetricEvent(event: MetricEvent): Promise<void>
+```
+
+Processes metric signals for Cloud export.
+
+Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. There is no additional filtering by metric subtype or status inside `CloudExporter`; the exporter forwards every metric event it receives unless it is disabled.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'MetricEvent',
+    description: 'The metric event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the metric event has been accepted for buffering.
+
+### `onScoreEvent`
+
+```typescript prettier:false
+async onScoreEvent(event: ScoreEvent): Promise<void>
+```
+
+Processes score signals for Cloud export.
+
+Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud scores endpoint derived from the configured base endpoint. There is no extra filtering at the exporter layer beyond the disabled-exporter check, so all score events received by this method are forwarded.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'ScoreEvent',
+    description: 'The score event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the score event has been accepted for buffering.
+
+### `onFeedbackEvent`
+
+```typescript prettier:false
+async onFeedbackEvent(event: FeedbackEvent): Promise<void>
+```
+
+Processes feedback signals for Cloud export.
+
+Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. There is no feedback-type filtering inside `CloudExporter`; all feedback events received here are forwarded unless the exporter is disabled.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'FeedbackEvent',
+    description: 'The feedback event to export',
+    required: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<void>` after the feedback event has been accepted for buffering.
+
 ### flush
 
 ```typescript prettier:false
 async flush(): Promise<void>
 ```
 
-Force flushes any buffered events to Mastra Cloud without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+Force flushes any buffered events to the Mastra platform without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -115,10 +232,10 @@ If no access token is provided via config or environment variable, the exporter:
 
 ### Batching
 
-The exporter batches spans for efficient network usage:
+The exporter batches tracing spans, logs, metrics, scores, and feedback for efficient network usage:
 
-- Flushes when batch size reaches `maxBatchSize`
-- Flushes when `maxBatchWaitMs` elapsed since first span in batch
+- Flushes when total buffered event count reaches `maxBatchSize`
+- Flushes when `maxBatchWaitMs` elapsed since the first buffered signal in the batch
 - Flushes on `shutdown()`
 
 ### Error handling
@@ -127,11 +244,18 @@ The exporter batches spans for efficient network usage:
 - Drops batches after all retries fail
 - Logs errors but continues processing new events
 
-### Event Processing
+### Endpoint routing
 
-- Only processes `SPAN_ENDED` events
-- Ignores `SPAN_STARTED` and `SPAN_UPDATED` events
-- Formats spans to MastraCloudSpanRecord format
+- Base origins derive signal endpoints automatically
+- Without `projectId`, derived routes use `/ai/{signal}/publish`
+- With `projectId` or `MASTRA_PROJECT_ID`, derived routes use `/projects/:projectId/ai/{signal}/publish`
+- Explicit full publish URLs are used as-is, even when `projectId` is configured
+
+### Signal Processing
+
+- `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
+- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for their respective signal type
+- All supported signal batches are uploaded to their matching Cloud publish endpoints during `flush()` and `shutdown()`
 
 ## `MastraCloudSpanRecord`
 
@@ -168,6 +292,7 @@ const exporter = new CloudExporter()
 // Explicit configuration
 const customExporter = new CloudExporter({
   accessToken: 'your-token',
+  projectId: 'project_123',
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
   logLevel: 'debug',
@@ -178,17 +303,17 @@ const customExporter = new CloudExporter({
 
 ### Documentation
 
-- [Tracing Overview](/docs/observability/tracing/overview) - Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters) - Exporter concepts
+- [Tracing Overview](/docs/observability/tracing/overview): Complete guide
+- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
 
 ### Other Exporters
 
-- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage persistence
-- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
+- [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
 
 ### Reference
 
-- [Configuration](/reference/observability/tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/tracing/interfaces) - Type definitions
+- [Configuration](/reference/observability/tracing/configuration): Configuration options
+- [Interfaces](/reference/observability/tracing/interfaces): Type definitions

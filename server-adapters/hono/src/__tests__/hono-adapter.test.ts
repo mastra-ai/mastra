@@ -467,6 +467,179 @@ describe('Hono Server Adapter', () => {
     },
   });
 
+  describe('OpenAPI Spec', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should serve the OpenAPI spec at /api/openapi.json', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const prefixedResponse = await fetch(`http://localhost:${port}/api/openapi.json`);
+      expect(prefixedResponse.status).toBe(200);
+      const prefixedSpec = await prefixedResponse.json();
+      expect(prefixedSpec.openapi).toBe('3.1.0');
+      expect(prefixedSpec.servers).toEqual([{ url: '/api' }]);
+    });
+
+    it('should set per-path servers override on custom routes in the spec', async () => {
+      const customRoutes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          openapi: {
+            summary: 'Health check',
+            description: 'Returns health status',
+            tags: ['Health'],
+            responses: {
+              200: { description: 'OK' },
+            },
+          },
+          handler: async c => {
+            return c.json({ status: 'ok' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
+      const spec = await response.json();
+
+      // Built-in routes should NOT have per-path servers (they use top-level servers)
+      const builtinPaths = Object.keys(spec.paths).filter(p => p !== '/health');
+      for (const p of builtinPaths) {
+        expect(spec.paths[p].servers).toBeUndefined();
+      }
+
+      expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toEqual([{ url: '/' }]);
+    });
+
+    it('should not add servers override to custom routes when no prefix is used', async () => {
+      const customRoutes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          openapi: {
+            summary: 'Health check',
+            description: 'Returns health status',
+            responses: { 200: { description: 'OK' } },
+          },
+          handler: async c => {
+            return c.json({ status: 'ok' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '',
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/openapi.json`);
+      const spec = await response.json();
+
+      expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toBeUndefined();
+      expect(spec.servers).toBeUndefined();
+    });
+
+    it('should enforce root-level servers override on custom routes', async () => {
+      const customRoutes = [
+        registerApiRoute('/external', {
+          method: 'GET',
+          openapi: {
+            summary: 'External endpoint',
+            description: 'Route with custom servers',
+            servers: [{ url: 'https://external.example.com' }],
+            responses: { 200: { description: 'OK' } },
+          },
+          handler: async c => {
+            return c.json({ ok: true });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
+      const spec = await response.json();
+
+      expect(spec.paths['/external']).toBeDefined();
+      expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 
@@ -553,6 +726,206 @@ describe('Hono Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+    });
+
+    it('should allow framework-internal routes under the server prefix', async () => {
+      const customRoutes = [
+        {
+          path: '/mastra/agents/bot/channels/slack/webhook',
+          method: 'POST' as const,
+          requiresAuth: false,
+          _mastraInternal: true,
+          handler: async (c: any) => c.json({ ok: true }),
+        },
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).resolves.not.toThrow();
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+  });
+
+  describe('Reserved context key injection prevention', () => {
+    it('should strip mastra__resourceId from client-provided requestContext in body', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should strip mastra__threadId from client-provided requestContext in body', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              mastra__threadId: 'injected-thread-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should strip reserved keys from client-provided requestContext in GET query params', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const queryContext = JSON.stringify({
+        mastra__resourceId: 'injected-victim-id',
+        mastra__threadId: 'injected-thread-id',
+        myKey: 'safe-value',
+      });
+
+      const response = await app.request(
+        new Request(`http://localhost/test/context?requestContext=${encodeURIComponent(queryContext)}`, {
+          method: 'GET',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
     });
   });
 });

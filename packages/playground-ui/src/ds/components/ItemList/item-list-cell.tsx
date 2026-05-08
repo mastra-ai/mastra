@@ -1,15 +1,10 @@
 import { cn } from '@/lib/utils';
 
-export type ItemListCellProps = {
+export type ItemListTextCellProps = {
   children: React.ReactNode;
   className?: string;
-  style?: React.CSSProperties;
 };
 
-export function ItemListCell({ children, className, style }: ItemListCellProps) {
-  return (
-    <div className={cn('', className)} style={style}>
-      {children}
-    </div>
-  );
+export function ItemListCell({ children, className }: ItemListTextCellProps) {
+  return <div className={cn('', className)}>{children}</div>;
 }

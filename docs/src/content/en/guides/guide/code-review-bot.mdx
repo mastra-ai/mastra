@@ -32,7 +32,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
-  skills: ['/skills'],
+  skills: ['skills'],
 })
 // highlight-end
 
@@ -135,7 +135,7 @@ When asked to review code:
 2. Follow the review process from the skill
 3. Check against the style guide in skill references
 4. Be constructive and specific with line numbers`,
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -152,7 +152,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
-  skills: ['/skills'],
+  skills: ['skills'],
 })
 
 export const mastra = new Mastra({
@@ -164,7 +164,7 @@ export const mastra = new Mastra({
 
 ## Test the bot
 
-Start Mastra Studio and interact with the code review bot to see it in action.
+Start [Studio](/docs/studio/overview) and interact with the code review bot to see it in action.
 
 ```bash npm2yarn
 npm run dev

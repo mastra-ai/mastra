@@ -121,7 +121,7 @@ import { runEvals } from '@mastra/core/evals'
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt'
 import { myAgent } from './agent'
 
-const scorer = createAnswerRelevancyScorer({ model: 'openai/gpt-4o' })
+const scorer = createAnswerRelevancyScorer({ model: 'openai/gpt-5.4' })
 
 const result = await runEvals({
   data: [

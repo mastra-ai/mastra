@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
@@ -17,6 +17,10 @@ class TestableExecutionEngine extends DefaultExecutionEngine {
     stepExecutionPath?: string[],
   ) {
     return this.fmtReturnValue<FormattedWorkflowResult>(pubsub, stepResults, lastOutput, error, stepExecutionPath);
+  }
+
+  deserializeRequestContextPublic(obj: Record<string, any>): RequestContext {
+    return this.deserializeRequestContext(obj);
   }
 }
 
@@ -180,6 +184,272 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
   });
 });
 
+describe('DefaultExecutionEngine.executeLoop cancellation', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+  });
+
+  // Reproduces https://github.com/mastra-ai/mastra/issues/15990
+  // A long-running dountil loop should stop iterating once the run is
+  // cancelled, even when the user's step does not observe abortSignal.
+  it('should stop iterating a dountil loop when abortController is aborted between iterations', async () => {
+    const workflowId = 'test-workflow';
+    const runId = randomUUID();
+
+    let iterations = 0;
+    const step = {
+      id: 'fetch-user',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: { iteration: number } }) => {
+        iterations++;
+        // Simulate a step that does NOT observe the abort signal,
+        // matching the user's repro (raw setTimeout/fetch).
+        // Trigger cancel while the second iteration is in-flight.
+        if (iterations === 2) {
+          abortController.abort();
+        }
+        return { iteration: (inputData?.iteration ?? 0) + 1 };
+      },
+    };
+
+    const entry = {
+      type: 'loop' as const,
+      step,
+      // dountil: stop when iteration >= 1000
+      condition: async ({ inputData }: { inputData: { iteration: number } }) => inputData.iteration >= 1000,
+      loopType: 'dountil' as const,
+    };
+
+    const result = await engine.executeLoop({
+      workflowId,
+      runId,
+      entry,
+      prevStep: { type: 'step', step } as any,
+      prevOutput: { iteration: 0 },
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    // The loop must terminate quickly with 'canceled' rather than running 1000 times.
+    expect(result.status).toBe('canceled');
+    // Should have stopped at the iteration that triggered cancel,
+    // not run the full 1000 iterations.
+    expect(iterations).toBeLessThan(10);
+  }, 30_000);
+
+  // The condition context exposes `abort()` and the run can also be cancelled
+  // externally while the condition is awaiting. If the condition returns a
+  // terminal value (e.g. dountil reaching its target) after that, the loop
+  // must still surface 'canceled' rather than 'success'.
+  it('should surface canceled when abortController is aborted during condition evaluation', async () => {
+    const workflowId = 'test-workflow';
+    const runId = randomUUID();
+
+    let stepCalls = 0;
+    const step = {
+      id: 'fetch-user',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: { iteration: number } }) => {
+        stepCalls++;
+        return { iteration: (inputData?.iteration ?? 0) + 1 };
+      },
+    };
+
+    const entry = {
+      type: 'loop' as const,
+      step,
+      // Condition aborts the run mid-evaluation, then returns true (dountil
+      // terminal value). Pre-fix, the loop exits as 'success'.
+      condition: async ({ abort }: { abort: () => void }) => {
+        abort();
+        return true;
+      },
+      loopType: 'dountil' as const,
+    };
+
+    const result = await engine.executeLoop({
+      workflowId,
+      runId,
+      entry,
+      prevStep: { type: 'step', step } as any,
+      prevOutput: { iteration: 0 },
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.status).toBe('canceled');
+    expect(stepCalls).toBe(1);
+  }, 30_000);
+});
+
+describe('DefaultExecutionEngine.executeForeach cancellation', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+  });
+
+  // Cancellation that lands before the next concurrency chunk starts must
+  // stop the foreach from dispatching more work. Steps that ignore abortSignal
+  // would otherwise let the loop keep iterating.
+  it('should return canceled before dispatching the next concurrency chunk', async () => {
+    const workflowId = 'test-workflow';
+    const runId = randomUUID();
+
+    let callCount = 0;
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => {
+        callCount++;
+        // Trigger cancel from inside a step but ignore the abort signal,
+        // matching user steps that don't observe abortSignal (e.g. raw fetch).
+        if (inputData === 1) {
+          abortController.abort();
+        }
+        return inputData * 2;
+      },
+    };
+
+    const entry = {
+      type: 'foreach' as const,
+      step,
+      opts: { concurrency: 2 },
+    };
+
+    const result = await engine.executeForeach({
+      workflowId,
+      runId,
+      entry,
+      prevStep: { type: 'step', step } as any,
+      prevOutput: [0, 1, 2, 3],
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.status).toBe('canceled');
+    // Items 2 and 3 (the next chunk) must not have been dispatched.
+    expect(callCount).toBe(2);
+  }, 30_000);
+
+  // Cancellation can land during the final concurrency chunk. Without the
+  // post-loop abort check, the foreach would emit a successful workflow-step
+  // result and persist 'success' even though the run was cancelled.
+  it('should return canceled when abortController is aborted during the final chunk', async () => {
+    const workflowId = 'test-workflow';
+    const runId = randomUUID();
+
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => {
+        // Single-chunk run (concurrency >= length), so this is the final chunk.
+        // Step ignores abortSignal — only the post-loop check can catch it.
+        if (inputData === 1) {
+          abortController.abort();
+        }
+        return inputData * 2;
+      },
+    };
+
+    const entry = {
+      type: 'foreach' as const,
+      step,
+      opts: { concurrency: 4 },
+    };
+
+    const result = await engine.executeForeach({
+      workflowId,
+      runId,
+      entry,
+      prevStep: { type: 'step', step } as any,
+      prevOutput: [0, 1],
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(result.status).toBe('canceled');
+  }, 30_000);
+});
+
 describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload deduplication', () => {
   let engine: TestableExecutionEngine;
   let pubsub: PubSub;
@@ -334,5 +604,46 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toBe(circular);
+  });
+});
+
+describe('DefaultExecutionEngine.deserializeRequestContext', () => {
+  it('should produce JSON-safe serialized request context values', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const requestContext = new RequestContext();
+    const circular: any = { name: 'service' };
+    circular.self = circular;
+
+    requestContext.set('userId', 'user-123');
+    requestContext.set('progressEmitter', () => undefined);
+    requestContext.set('service', circular);
+
+    const serialized = engine.serializeRequestContext(requestContext);
+
+    expect(() => JSON.stringify(requestContext.toJSON())).not.toThrow();
+    expect(() => JSON.stringify(serialized)).not.toThrow();
+    expect(serialized).toEqual({ userId: 'user-123' });
+  });
+
+  it('should return a RequestContext instance with all entries from the plain object', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const plainObj = { userId: 'user-123', tenantId: 'tenant-456', nested: { flag: true } };
+
+    const result = engine.deserializeRequestContextPublic(plainObj);
+
+    expect(result).toBeInstanceOf(RequestContext);
+    expect(result.get('userId')).toBe('user-123');
+    expect(result.get('tenantId')).toBe('tenant-456');
+    expect(result.get('nested')).toEqual({ flag: true });
+    expect(result.size()).toBe(3);
+  });
+
+  it('should return an empty RequestContext for an empty object', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+
+    const result = engine.deserializeRequestContextPublic({});
+
+    expect(result).toBeInstanceOf(RequestContext);
+    expect(result.size()).toBe(0);
   });
 });

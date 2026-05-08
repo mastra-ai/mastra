@@ -53,7 +53,7 @@ program
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
   .action(async (projectNameArg, args) => {
-    // Unify: use argument if present, else option
+    // TODO(major): Remove args.projectName in favor of projectNameArg
     const projectName = projectNameArg || args.projectName;
     const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
 
@@ -64,6 +64,7 @@ program
         addExample: true,
         createVersionTag,
         timeout,
+        projectName,
         mcpServer: args.mcp,
         directory: 'src/',
         template: args.template,

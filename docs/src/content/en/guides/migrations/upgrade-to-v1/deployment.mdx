@@ -5,9 +5,20 @@ description: "Learn how to migrate deployment configuration when upgrading to v1
 
 # Deployment
 
-The `CloudflareDeployer` configuration has been updated to use standard `wrangler.json` property names.
+The OpenAPI spec endpoint has moved to `/api/openapi.json`, and the `CloudflareDeployer` configuration has been updated to use standard `wrangler.json` property names.
 
 ## Changed
+
+### OpenAPI spec endpoint moved to `/api/openapi.json`
+
+The OpenAPI specification endpoint has moved from `/openapi.json` to `/api/openapi.json` to align with the `/api` prefix used by all built-in Mastra routes.
+
+If you have scripts or tools that consume the OpenAPI spec, update the URL:
+
+```diff
+- GET /openapi.json
++ GET /api/openapi.json
+```
 
 ### `CloudflareDeployer` uses standard `wrangler.json` property names
 

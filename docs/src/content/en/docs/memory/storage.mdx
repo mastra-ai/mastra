@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 })
 ```
 
-:::tip[Sharing the database with Mastra Studio]
+:::tip[Sharing the database with Studio]
 When running `mastra dev` alongside your application (e.g., Next.js), use an absolute path to ensure both processes access the same database:
 
 ```typescript
@@ -50,6 +50,7 @@ Each provider page includes installation instructions, configuration parameters,
 - [PostgreSQL](/reference/storage/postgresql)
 - [MongoDB](/reference/storage/mongodb)
 - [Upstash](/reference/storage/upstash)
+- [Redis](/reference/storage/redis)
 - [Cloudflare D1](/reference/storage/cloudflare-d1)
 - [Cloudflare KV & Durable Objects](/reference/storage/cloudflare)
 - [Convex](/reference/storage/convex)
@@ -119,7 +120,7 @@ This is useful when different types of data have different performance or operat
 
 ### Agent-level storage
 
-Agent-level storage overrides storage configured at the instance level. Add storage to a specific agent when you need data boundaries or compliance requirements:
+Agent-level storage overrides storage configured at the instance level. Add storage to a specific agent when you need to keep data separate or use different providers per agent.
 
 ```typescript title="src/mastra/agents/your-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -137,21 +138,17 @@ export const agent = new Agent({
 })
 ```
 
-:::warning
-[Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store) doesn't support agent-level storage.
-:::
-
 ## Threads and resources
 
 Mastra organizes conversations using two identifiers:
 
-- **Thread** - a conversation session containing a sequence of messages.
-- **Resource** - the entity that owns the thread, such as a user, organization, project, or any other domain entity in your application.
+- **Thread**: A conversation session containing a sequence of messages.
+- **Resource**: The entity that owns the thread, such as a user, organization, project, or any other domain entity in your application.
 
 Both identifiers are required for agents to store information:
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
+  <TabItem value="generate" label=".generate()">
     ```typescript
     const response = await agent.generate('hello', {
       memory: {
@@ -162,7 +159,7 @@ Both identifiers are required for agents to store information:
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     ```typescript
     const stream = await agent.stream('hello', {
       memory: {
@@ -175,7 +172,7 @@ Both identifiers are required for agents to store information:
 </Tabs>
 
 :::note
-[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
+[Studio](/docs/studio/overview) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
 :::
 
 ### Thread title generation
@@ -205,7 +202,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       generateTitle: {
-        model: 'openai/gpt-4o-mini',
+        model: 'openai/gpt-5-mini',
         instructions: 'Generate a 1 word title',
       },
     },

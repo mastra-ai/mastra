@@ -1,5 +1,5 @@
 import { useSearchParams, useNavigate } from 'react-router';
-import { LoginPage } from '@mastra/playground-ui';
+import { LoginPage } from '@/domains/auth/components/login-page';
 
 export function Login() {
   const [searchParams] = useSearchParams();
@@ -15,7 +15,7 @@ export function Login() {
     if (redirectUri.startsWith('http')) {
       window.location.href = redirectUri;
     } else {
-      navigate(redirectUri, { replace: true });
+      void navigate(redirectUri, { replace: true });
     }
   };
 

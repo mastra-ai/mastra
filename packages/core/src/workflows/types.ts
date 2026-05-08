@@ -15,9 +15,10 @@ import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
+import type { WorkflowScheduleInput } from './scheduler/types';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
-export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+export type OutputWriter<TChunk = any> = (chunk: TChunk, options?: { messageId?: string }) => Promise<void>;
 
 /**
  * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
@@ -434,6 +435,12 @@ export interface WorkflowErrorCallbackInfo {
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
+  /**
+   * When true, nested runs created by execute() share the parent's pubsub
+   * instance instead of creating an isolated one. Used by durable agent
+   * workflows so inner step events reach the outer subscriber.
+   */
+  sharePubsub?: boolean;
   shouldPersistSnapshot?: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
@@ -811,6 +818,18 @@ export type WorkflowConfig<
   options?: WorkflowOptions;
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
+  /**
+   * Optional cron schedule configuration. When set, the Mastra scheduler will
+   * publish a `workflow.start` event on the cron schedule.
+   * Only supported on the evented engine.
+   *
+   * Accepts either a single schedule object or an array of schedule objects.
+   * Array entries must each specify a unique stable `id`. The `inputData`,
+   * `initialState`, and `requestContext` fields on each schedule are
+   * type-checked against the workflow's `inputSchema`, `stateSchema`, and
+   * `requestContextSchema` respectively.
+   */
+  schedule?: WorkflowScheduleInput<NoInfer<TInput>, NoInfer<TState>, NoInfer<TRequestContext>>;
 };
 
 /**

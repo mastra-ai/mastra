@@ -15,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -24,6 +25,7 @@ import type {
   SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
@@ -60,7 +62,6 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    this.logger.debug(`InMemoryMemory: saveThread called for ${thread.id}`);
     const key = thread.id;
     this.db.threads.set(key, thread);
     return thread;
@@ -75,7 +76,6 @@ export class InMemoryMemory extends MemoryStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    this.logger.debug(`InMemoryMemory: updateThread called for ${id}`);
     const thread = this.db.threads.get(id);
 
     if (!thread) {
@@ -91,7 +91,6 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    this.logger.debug(`InMemoryMemory: deleteThread called for ${threadId}`);
     this.db.threads.delete(threadId);
 
     this.db.messages.forEach((msg, key) => {
@@ -112,8 +111,6 @@ export class InMemoryMemory extends MemoryStorage {
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
-
-    this.logger.debug(`InMemoryMemory: listMessages called for threads ${threadIds.join(', ')}`);
 
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new Error('threadId must be a non-empty string or array of non-empty strings');
@@ -137,7 +134,6 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     // Calculate offset from page
-
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     // Step 1: Get messages matching threadId(s) and optionally resourceId
@@ -310,8 +306,6 @@ export class InMemoryMemory extends MemoryStorage {
     page = 0,
     orderBy,
   }: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
-    this.logger.debug(`InMemoryMemory: listMessagesByResourceId called for resource ${resourceId}`);
-
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
@@ -396,8 +390,6 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    this.logger.debug(`InMemoryMemory: listMessagesById called`);
-
     const rawMessages = messageIds.map(id => this.db.messages.get(id)).filter(message => !!message);
 
     const list = new MessageList().add(
@@ -409,7 +401,6 @@ export class InMemoryMemory extends MemoryStorage {
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
-    this.logger.debug(`InMemoryMemory: saveMessages called with ${messages.length} messages`);
     // Simulate error handling for testing - check before saving
     if (messages.some(msg => msg.id === 'error-message' || msg.resourceId === null)) {
       throw new Error('Simulated error for testing');
@@ -527,8 +518,6 @@ export class InMemoryMemory extends MemoryStorage {
       return;
     }
 
-    this.logger.debug(`InMemoryMemory: deleteMessages called for ${messageIds.length} messages`);
-
     // Collect thread IDs to update
     const threadIds = new Set<string>();
 
@@ -560,8 +549,6 @@ export class InMemoryMemory extends MemoryStorage {
     this.validatePaginationInput(page, perPageInput ?? 100);
 
     const perPage = normalizePerPage(perPageInput, 100);
-
-    this.logger.debug(`InMemoryMemory: listThreads called with filter: ${JSON.stringify(filter)}`);
 
     // Start with all threads
     let threads = Array.from(this.db.threads.values());
@@ -600,7 +587,6 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    this.logger.debug(`InMemoryMemory: getResourceById called for ${resourceId}`);
     const resource = this.db.resources.get(resourceId);
     return resource
       ? { ...resource, metadata: resource.metadata ? { ...resource.metadata } : resource.metadata }
@@ -608,7 +594,6 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    this.logger.debug(`InMemoryMemory: saveResource called for ${resource.id}`);
     this.db.resources.set(resource.id, resource);
     return resource;
   }
@@ -622,7 +607,6 @@ export class InMemoryMemory extends MemoryStorage {
     workingMemory?: string;
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
-    this.logger.debug(`InMemoryMemory: updateResource called for ${resourceId}`);
     let resource = this.db.resources.get(resourceId);
 
     if (!resource) {
@@ -652,8 +636,6 @@ export class InMemoryMemory extends MemoryStorage {
 
   async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
-
-    this.logger.debug(`InMemoryMemory: cloneThread called for source thread ${sourceThreadId}`);
 
     // Get the source thread
     const sourceThread = this.db.threads.get(sourceThreadId);
@@ -758,10 +740,6 @@ export class InMemoryMemory extends MemoryStorage {
       });
     }
 
-    this.logger.debug(
-      `InMemoryMemory: cloned thread ${sourceThreadId} to ${newThreadId} with ${clonedMessages.length} messages`,
-    );
-
     return {
       thread: newThread,
       clonedMessages,
@@ -809,9 +787,21 @@ export class InMemoryMemory extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit?: number,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
-    const records = this.db.observationalMemory.get(key) ?? [];
+    let records = this.db.observationalMemory.get(key) ?? [];
+
+    if (options?.from) {
+      records = records.filter(r => r.createdAt >= options.from!);
+    }
+    if (options?.to) {
+      records = records.filter(r => r.createdAt <= options.to!);
+    }
+    if (options?.offset != null) {
+      records = records.slice(options.offset);
+    }
+
     return limit != null ? records.slice(0, limit) : records;
   }
 
@@ -923,6 +913,7 @@ export class InMemoryMemory extends MemoryStorage {
       createdAt: new Date(),
       suggestedContinuation: chunk.suggestedContinuation,
       currentTask: chunk.currentTask,
+      threadTitle: chunk.threadTitle,
     };
 
     // Add chunk to the array
@@ -1037,9 +1028,10 @@ export class InMemoryMemory extends MemoryStorage {
     const derivedLastObservedAt =
       lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
 
-    // Append activated content to active observations
+    // Append activated content to active observations with message boundary for cache stability
     if (record.activeObservations) {
-      record.activeObservations = `${record.activeObservations}\n\n${activatedContent}`;
+      const boundary = `\n\n--- message boundary (${derivedLastObservedAt.toISOString()}) ---\n\n`;
+      record.activeObservations = `${record.activeObservations}${boundary}${activatedContent}`;
     } else {
       record.activeObservations = activatedContent;
     }
@@ -1238,6 +1230,16 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.pendingMessageTokens = tokenCount;
+    record.updatedAt = new Date();
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    record.config = this.deepMergeConfig(record.config as Record<string, unknown>, input.config);
     record.updatedAt = new Date();
   }
 

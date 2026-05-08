@@ -1,5 +1,216 @@
 # @mastra/evals
 
+## 1.2.2
+
+### Patch Changes
+
+- Fixed prebuilt LLM-judge scorers (faithfulness, answer relevancy, bias, hallucination, toxicity, …) crashing with `TypeError: output.find is not a function` when used against workflows, inline tasks, or string targets. The shared input/output helpers and scorer run types now also accept `string`, `ModelMessage[]`, `{ prompt }` (workflow input), `{ text }` / `{ content }` (workflow / task output), and a single assistant message object — alongside the existing agent shape. ([#15805](https://github.com/mastra-ai/mastra/pull/15805))
+
+  ```ts
+  // Previously crashed; now works.
+  await createFaithfulnessScorer({ model, options: { context: ['Paris is the capital of France.'] } }).run({
+    input: { prompt: 'What is the capital of France?' },
+    output: { text: 'Paris is the capital of France.' },
+  });
+  ```
+
+  Fixes [#15615](https://github.com/mastra-ai/mastra/issues/15615).
+
+- Updated dependencies [[`6db978c`](https://github.com/mastra-ai/mastra/commit/6db978c42e94e75540a504f7230086f0b5cd35f9), [`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a), [`703a443`](https://github.com/mastra-ai/mastra/commit/703a44390c587d9c0b8ae94ec4edd8afb2a74044), [`808df1b`](https://github.com/mastra-ai/mastra/commit/808df1b39358b5f10b7317107e42b1fda7c87185)]:
+  - @mastra/core@1.29.1
+
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed prebuilt LLM-judge scorers (faithfulness, answer relevancy, bias, hallucination, toxicity, …) crashing with `TypeError: output.find is not a function` when used against workflows, inline tasks, or string targets. The shared input/output helpers and scorer run types now also accept `string`, `ModelMessage[]`, `{ prompt }` (workflow input), `{ text }` / `{ content }` (workflow / task output), and a single assistant message object — alongside the existing agent shape. ([#15805](https://github.com/mastra-ai/mastra/pull/15805))
+
+  ```ts
+  // Previously crashed; now works.
+  await createFaithfulnessScorer({ model, options: { context: ['Paris is the capital of France.'] } }).run({
+    input: { prompt: 'What is the capital of France?' },
+    output: { text: 'Paris is the capital of France.' },
+  });
+  ```
+
+  Fixes [#15615](https://github.com/mastra-ai/mastra/issues/15615).
+
+- Updated dependencies [[`512a013`](https://github.com/mastra-ai/mastra/commit/512a013f285aa9c0aa8f08a35b2ce09f9938b017), [`e9becde`](https://github.com/mastra-ai/mastra/commit/e9becdeed9176b9f8392e557bde12b933f99cf7a)]:
+  - @mastra/core@1.29.1-alpha.2
+
+## 1.2.1
+
+### Patch Changes
+
+- Fix answer-similarity scorer to align prompt guidelines with allowed match types ([#15001](https://github.com/mastra-ai/mastra/pull/15001))
+
+  The answer-similarity scorer could throw a ZodError when the LLM returned
+  "contradiction" as a matchType, since only exact/semantic/partial/missing are
+  valid. The prompt now correctly directs contradictory information to the
+  existing contradictions array instead.
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fix answer-similarity scorer to align prompt guidelines with allowed match types ([#15001](https://github.com/mastra-ai/mastra/pull/15001))
+
+  The answer-similarity scorer could throw a ZodError when the LLM returned
+  "contradiction" as a matchType, since only exact/semantic/partial/missing are
+  valid. The prompt now correctly directs contradictory information to the
+  existing contradictions array instead.
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
+## 1.2.0
+
+### Minor Changes
+
+- **Trajectory scorers**: Added scorers for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+  - `createTrajectoryScorerCode` — unified scorer that evaluates accuracy, efficiency, blacklist violations, and tool failure patterns in a single pass. Supports per-item expectations from datasets with static defaults. Nested `ExpectedStep.children` configs allow recursive evaluation with different rules per hierarchy level.
+  - `createTrajectoryAccuracyScorerCode` — deterministic accuracy scorer with strict, relaxed, and unordered ordering modes.
+  - `createTrajectoryAccuracyScorerLLM` — LLM-based scorer for semantic trajectory evaluation.
+
+  **Utility functions:**
+  - `extractTrajectory` / `extractWorkflowTrajectory` — Convert agent runs and workflow executions into structured trajectories
+  - `extractTrajectoryFromTrace` — Build hierarchical trajectories from observability trace spans, including nested agent/tool calls
+  - `compareTrajectories` — Compare actual vs. expected trajectories with configurable ordering and data matching. Accepts `ExpectedStep[]` for simpler expected step definitions
+  - `checkTrajectoryEfficiency` — Evaluate step counts, token usage, and duration against budgets
+  - `checkTrajectoryBlacklist` — Detect forbidden tools or tool sequences
+  - `analyzeToolFailures` — Detect retry patterns, fallbacks, and argument corrections
+
+  **Example — unified scorer with defaults:**
+
+  ```ts
+  import { createTrajectoryScorerCode } from '@mastra/evals/scorers';
+
+  const scorer = createTrajectoryScorerCode({
+    defaults: {
+      ordering: 'strict',
+      steps: [
+        { name: 'validate-input' },
+        {
+          name: 'research-agent',
+          stepType: 'agent_run',
+          children: {
+            ordering: 'unordered',
+            steps: [{ name: 'search' }, { name: 'summarize' }],
+          },
+        },
+        { name: 'save-result' },
+      ],
+      maxSteps: 10,
+      blacklistedTools: ['deleteAll'],
+    },
+  });
+  ```
+
+### Patch Changes
+
+- **Configurable weights**: Add `weights` option to `createTrajectoryScorerCode` for controlling how dimension scores are combined. Defaults to `{ accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 }`. ([#14740](https://github.com/mastra-ai/mastra/pull/14740))
+
+  ```ts
+  const scorer = createTrajectoryScorerCode({
+    defaults: { steps: [{ name: 'search' }], maxSteps: 5 },
+    weights: { accuracy: 0.6, efficiency: 0.2, toolFailures: 0.1, blacklist: 0.1 },
+  });
+  ```
+
+  **ExpectedStep redesign**: `ExpectedStep` is now a discriminated union mirroring `TrajectoryStep`. When you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). The old `data: Record<string, unknown>` field is replaced by direct variant fields.
+
+  ```ts
+  // Before: { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } }
+  // After:
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+  ```
+
+  **Remove `compareStepData`**: The `compareStepData` option is removed from `compareTrajectories`, `TrajectoryExpectation`, and all scorers. Data fields are now auto-compared when present on expected steps — if you specify `toolArgs` on an `ExpectedStep`, it will be compared against the actual step. If you omit it, only name and stepType are matched.
+
+  Also fixes documentation inaccuracies in `trajectory-accuracy.mdx` and `scorer-utils.mdx`.
+
+- Updated dependencies [[`dc514a8`](https://github.com/mastra-ai/mastra/commit/dc514a83dba5f719172dddfd2c7b858e4943d067), [`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`fbf22a7`](https://github.com/mastra-ai/mastra/commit/fbf22a7ad86bcb50dcf30459f0d075e51ddeb468), [`f16d92c`](https://github.com/mastra-ai/mastra/commit/f16d92c677a119a135cebcf7e2b9f51ada7a9df4), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`404fea1`](https://github.com/mastra-ai/mastra/commit/404fea13042181f0b0c73a101392ac87c79ceae2), [`ebf5047`](https://github.com/mastra-ai/mastra/commit/ebf5047e825c38a1a356f10b214c1d4260dfcd8d), [`12c647c`](https://github.com/mastra-ai/mastra/commit/12c647cf3a26826eb72d40b42e3c8356ceae16ed), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`675f15b`](https://github.com/mastra-ai/mastra/commit/675f15b7eaeea649158d228ea635be40480c584d), [`b174c63`](https://github.com/mastra-ai/mastra/commit/b174c63a093108d4e53b9bc89a078d9f66202b3f), [`819f03c`](https://github.com/mastra-ai/mastra/commit/819f03c25823373b32476413bd76be28a5d8705a), [`04160ee`](https://github.com/mastra-ai/mastra/commit/04160eedf3130003cf842ad08428c8ff69af4cc1), [`2c27503`](https://github.com/mastra-ai/mastra/commit/2c275032510d131d2cde47f99953abf0fe02c081), [`424a1df`](https://github.com/mastra-ai/mastra/commit/424a1df7bee59abb5c83717a54807fdd674a6224), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`eef7cb2`](https://github.com/mastra-ai/mastra/commit/eef7cb2abe7ef15951e2fdf792a5095c6c643333), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0), [`12c88a6`](https://github.com/mastra-ai/mastra/commit/12c88a6e32bf982c2fe0c6af62e65a3414519a75), [`43595bf`](https://github.com/mastra-ai/mastra/commit/43595bf7b8df1a6edce7a23b445b5124d2a0b473), [`78670e9`](https://github.com/mastra-ai/mastra/commit/78670e97e76d7422cf7025faf371b2aeafed860d), [`e8a5b0b`](https://github.com/mastra-ai/mastra/commit/e8a5b0b9bc94d12dee4150095512ca27a288d778), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`d400e7c`](https://github.com/mastra-ai/mastra/commit/d400e7c8b8d7afa6ba2c71769eace4048e3cef8e), [`f58d1a7`](https://github.com/mastra-ai/mastra/commit/f58d1a7a457588a996c3ecb53201a68f3d28c432), [`a49a929`](https://github.com/mastra-ai/mastra/commit/a49a92904968b4fc67e01effee8c7c8d0464ba85), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0
+
+## 1.2.0-alpha.1
+
+### Patch Changes
+
+- **Configurable weights**: Add `weights` option to `createTrajectoryScorerCode` for controlling how dimension scores are combined. Defaults to `{ accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 }`. ([#14740](https://github.com/mastra-ai/mastra/pull/14740))
+
+  ```ts
+  const scorer = createTrajectoryScorerCode({
+    defaults: { steps: [{ name: 'search' }], maxSteps: 5 },
+    weights: { accuracy: 0.6, efficiency: 0.2, toolFailures: 0.1, blacklist: 0.1 },
+  });
+  ```
+
+  **ExpectedStep redesign**: `ExpectedStep` is now a discriminated union mirroring `TrajectoryStep`. When you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). The old `data: Record<string, unknown>` field is replaced by direct variant fields.
+
+  ```ts
+  // Before: { name: 'search', stepType: 'tool_call', data: { input: { query: 'weather' } } }
+  // After:
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } }
+  ```
+
+  **Remove `compareStepData`**: The `compareStepData` option is removed from `compareTrajectories`, `TrajectoryExpectation`, and all scorers. Data fields are now auto-compared when present on expected steps — if you specify `toolArgs` on an `ExpectedStep`, it will be compared against the actual step. If you omit it, only name and stepType are matched.
+
+  Also fixes documentation inaccuracies in `trajectory-accuracy.mdx` and `scorer-utils.mdx`.
+
+- Updated dependencies [[`e333b77`](https://github.com/mastra-ai/mastra/commit/e333b77e2d76ba57ccec1818e08cebc1993469ff), [`60a224d`](https://github.com/mastra-ai/mastra/commit/60a224dd497240e83698cfa5bfd02e3d1d854844), [`949b7bf`](https://github.com/mastra-ai/mastra/commit/949b7bfd4e40f2b2cba7fef5eb3f108a02cfe938), [`d084b66`](https://github.com/mastra-ai/mastra/commit/d084b6692396057e83c086b954c1857d20b58a14), [`79c699a`](https://github.com/mastra-ai/mastra/commit/79c699acf3cd8a77e11c55530431f48eb48456e9), [`62757b6`](https://github.com/mastra-ai/mastra/commit/62757b6db6e8bb86569d23ad0b514178f57053f8), [`3d70b0b`](https://github.com/mastra-ai/mastra/commit/3d70b0b3524d817173ad870768f259c06d61bd23), [`3b45a13`](https://github.com/mastra-ai/mastra/commit/3b45a138d09d040779c0aba1edbbfc1b57442d23), [`8127d96`](https://github.com/mastra-ai/mastra/commit/8127d96280492e335d49b244501088dfdd59a8f1)]:
+  - @mastra/core@1.18.0-alpha.3
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- **Trajectory scorers**: Added scorers for evaluating agent and workflow execution paths. ([#14697](https://github.com/mastra-ai/mastra/pull/14697))
+  - `createTrajectoryScorerCode` — unified scorer that evaluates accuracy, efficiency, blacklist violations, and tool failure patterns in a single pass. Supports per-item expectations from datasets with static defaults. Nested `ExpectedStep.children` configs allow recursive evaluation with different rules per hierarchy level.
+  - `createTrajectoryAccuracyScorerCode` — deterministic accuracy scorer with strict, relaxed, and unordered ordering modes.
+  - `createTrajectoryAccuracyScorerLLM` — LLM-based scorer for semantic trajectory evaluation.
+
+  **Utility functions:**
+  - `extractTrajectory` / `extractWorkflowTrajectory` — Convert agent runs and workflow executions into structured trajectories
+  - `extractTrajectoryFromTrace` — Build hierarchical trajectories from observability trace spans, including nested agent/tool calls
+  - `compareTrajectories` — Compare actual vs. expected trajectories with configurable ordering and data matching. Accepts `ExpectedStep[]` for simpler expected step definitions
+  - `checkTrajectoryEfficiency` — Evaluate step counts, token usage, and duration against budgets
+  - `checkTrajectoryBlacklist` — Detect forbidden tools or tool sequences
+  - `analyzeToolFailures` — Detect retry patterns, fallbacks, and argument corrections
+
+  **Example — unified scorer with defaults:**
+
+  ```ts
+  import { createTrajectoryScorerCode } from '@mastra/evals/scorers';
+
+  const scorer = createTrajectoryScorerCode({
+    defaults: {
+      ordering: 'strict',
+      steps: [
+        { name: 'validate-input' },
+        {
+          name: 'research-agent',
+          stepType: 'agent_run',
+          children: {
+            ordering: 'unordered',
+            steps: [{ name: 'search' }, { name: 'summarize' }],
+          },
+        },
+        { name: 'save-result' },
+      ],
+      maxSteps: 10,
+      blacklistedTools: ['deleteAll'],
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`dc9fc19`](https://github.com/mastra-ai/mastra/commit/dc9fc19da4437f6b508cc355f346a8856746a76b), [`260fe12`](https://github.com/mastra-ai/mastra/commit/260fe1295fe7354e39d6def2775e0797a7a277f0)]:
+  - @mastra/core@1.18.0-alpha.1
+
 ## 1.1.2
 
 ### Patch Changes

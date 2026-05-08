@@ -3,12 +3,13 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
 import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const writeFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
   description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
   inputSchema: z.object({
-    path: z.string().describe('The path where to write the file (e.g., "/data/output.txt")'),
+    path: z.string().describe('The path where to write the file (e.g., "data/output.txt")'),
     content: z.string().describe('The content to write to the file'),
     overwrite: z.boolean().optional().default(true).describe('Whether to overwrite the file if it already exists'),
   }),
@@ -16,15 +17,31 @@ export const writeFileTool = createTool({
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
 
-    if (filesystem.readOnly) {
-      throw new WorkspaceReadOnlyError('write_file');
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'writeFile',
+      input: { path, overwrite, contentLength: content.length },
+      attributes: { filesystemProvider: filesystem.provider },
+    });
+
+    try {
+      if (filesystem.readOnly) {
+        throw new WorkspaceReadOnlyError('write_file');
+      }
+
+      await filesystem.writeFile(path, content, {
+        overwrite,
+        expectedMtime: (context as any)?.__expectedMtime,
+      });
+
+      const size = Buffer.byteLength(content, 'utf-8');
+      let output = `Wrote ${size} bytes to ${path}`;
+      output += await getEditDiagnosticsText(workspace, path, content);
+      span.end({ success: true }, { bytesTransferred: size });
+      return output;
+    } catch (err) {
+      span.error(err);
+      throw err;
     }
-
-    await filesystem.writeFile(path, content, { overwrite });
-
-    const size = Buffer.byteLength(content, 'utf-8');
-    let output = `Wrote ${size} bytes to ${path}`;
-    output += await getEditDiagnosticsText(workspace, path, content);
-    return output;
   },
 });

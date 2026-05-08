@@ -18,17 +18,17 @@ export type { SchemaField, FieldType as SchemaFieldType } from './types';
 export { createField } from './types';
 export { fieldsToJSONSchema, jsonSchemaToFields } from './utils';
 
-import { Root } from './json-schema-form-root';
+import { AddField } from './json-schema-form-add-field';
 import { Field } from './json-schema-form-field';
+import { FieldDescription } from './json-schema-form-field-description';
 import { FieldList } from './json-schema-form-field-list';
 import { FieldName } from './json-schema-form-field-name';
-import { FieldType } from './json-schema-form-field-type';
-import { FieldDescription } from './json-schema-form-field-description';
-import { FieldOptional } from './json-schema-form-field-optional';
 import { FieldNullable } from './json-schema-form-field-nullable';
+import { FieldOptional } from './json-schema-form-field-optional';
 import { FieldRemove } from './json-schema-form-field-remove';
+import { FieldType } from './json-schema-form-field-type';
 import { NestedFields } from './json-schema-form-nested-fields';
-import { AddField } from './json-schema-form-add-field';
+import { Root } from './json-schema-form-root';
 
 export const JSONSchemaForm = {
   Root,

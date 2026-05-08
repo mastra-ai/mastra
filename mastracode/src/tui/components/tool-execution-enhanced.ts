@@ -10,8 +10,8 @@ import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
-import { theme, mastra } from '../theme.js';
-import { CollapsibleComponent } from './collapsible.js';
+import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
@@ -113,7 +113,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private ui: TUI;
   private result?: ToolResult;
   private options: ToolExecutionOptions;
-  private collapsible?: CollapsibleComponent;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
 
@@ -129,11 +128,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     };
     this.expanded = !this.options.collapsedByDefault;
 
-    this.addChild(new Spacer(1));
-
-    // Content box with background
-    this.contentBox = new Box(1, 1, (text: string) => theme.bg('toolPendingBg', text));
+    // Content box - left indent for chat history alignment, no background
+    this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
+    this.addChild(new Spacer(2));
 
     this.rebuild();
   }
@@ -168,13 +166,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
   setExpanded(expanded: boolean): void {
     this.expanded = expanded;
-    if (this.collapsible) {
-      this.collapsible.setExpanded(expanded);
-      this.updateBgColor();
-      super.invalidate();
-      return;
-    }
-    // No collapsible — need a full rebuild (e.g. write tool, header-only tools)
     this.rebuild();
   }
 
@@ -189,31 +180,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private updateBgColor(): void {
-    // For shell, view, edit, and process commands, skip background - we use bordered box style instead
-    const isShellCommand = this.toolName === MC_TOOLS.EXECUTE_COMMAND;
-    const isViewCommand = this.toolName === MC_TOOLS.VIEW;
-    const isEditCommand = this.toolName === MC_TOOLS.STRING_REPLACE_LSP;
-    const isWriteCommand = this.toolName === MC_TOOLS.WRITE_FILE;
-    const isProcessCommand = this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT || this.toolName === MC_TOOLS.KILL_PROCESS;
-    const isTaskWrite = this.toolName === 'task_write';
-    const isWebSearch = isWebSearchTool(this.toolName);
-
-    if (
-      isShellCommand ||
-      isViewCommand ||
-      isEditCommand ||
-      isWriteCommand ||
-      isProcessCommand ||
-      isTaskWrite ||
-      isWebSearch
-    ) {
-      // No background - let terminal colors show through
-      this.contentBox.setBgFn((text: string) => text);
-      return;
-    }
-
-    const bgColor = this.isPartial ? 'toolPendingBg' : this.result?.isError ? 'toolErrorBg' : 'toolSuccessBg';
-    this.contentBox.setBgFn((text: string) => theme.bg(bgColor, text));
+    // No background for any tools - use bordered box style instead
+    this.contentBox.setBgFn((text: string) => text);
   }
 
   /**
@@ -226,7 +194,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private rebuild(): void {
     this.updateBgColor();
     this.contentBox.clear();
-    this.collapsible = undefined;
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
@@ -243,6 +210,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         break;
       case MC_TOOLS.FIND_FILES:
         this.renderListFilesEnhanced();
+        break;
+      case MC_TOOLS.LSP_INSPECT:
+        this.renderLspInspectEnhanced();
         break;
       case MC_TOOLS.GET_PROCESS_OUTPUT:
       case MC_TOOLS.KILL_PROCESS:
@@ -264,47 +234,62 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsObj = this.args as Record<string, unknown> | undefined;
     const fullPath = argsObj?.path ? String(argsObj.path) : '';
     const viewRange = argsObj?.view_range as [number, number] | undefined;
+    const offset = argsObj?.offset as number | undefined;
+    const limit = argsObj?.limit as number | undefined;
     // view tool uses view_range[0], workspace read_file uses offset
-    const startLine = viewRange?.[0] ?? (argsObj?.offset as number | undefined) ?? 1;
-    // Don't show border until we have a result
+    const startLine = viewRange?.[0] ?? offset ?? 1;
+
+    // Build range display from view_range or offset/limit
+    let rangeDisplay = '';
+    if (viewRange) {
+      rangeDisplay = theme.fg('muted', `:${viewRange[0]}-${viewRange[1]}`);
+    } else if (offset || limit) {
+      const from = offset ?? 1;
+      const to = limit ? from + limit - 1 : undefined;
+      rangeDisplay = theme.fg('muted', to ? `:${from}-${to}` : `:${from}`);
+    }
+
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+
     if (!this.result || this.isPartial) {
-      // Just show pending indicator
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-      const rangeDisplay = viewRange ? theme.fg('muted', `:${viewRange[0]},${viewRange[1]}`) : '';
       const status = this.getStatusIndicator();
-      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
-      const headerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
-      this.contentBox.addChild(new Text(headerText, 0, 0));
+      const pathDisplay = fullPath
+        ? fileLink(theme.fg('toolArgs', path), fullPath, startLine)
+        : theme.fg('toolArgs', path);
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
       return;
     }
 
-    const border = (char: string) => theme.bold(theme.fg('accent', char));
     const status = this.getStatusIndicator();
-    const rangeDisplay = viewRange ? theme.fg('muted', `:${viewRange[0]},${viewRange[1]}`) : '';
 
     // Calculate available width for path and truncate from beginning if needed
-    const termWidth = process.stdout.columns || 80;
-    const fixedParts = '└── view  ' + (rangeDisplay ? `:XXX,XXX` : '') + ' ✓'; // approximate fixed width
-    const availableForPath = termWidth - fixedParts.length - 6; // buffer
+    const termWidth = getTermWidth();
+    const fixedParts = '╰── view  ' + (rangeDisplay ? `:XXX,XXX` : '') + ' ✓'; // approximate fixed width
+    const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2; // buffer
     let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
     if (path.length > availableForPath && availableForPath > 10) {
       path = '…' + path.slice(-(availableForPath - 1));
     }
 
-    const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath, startLine) : theme.fg('accent', path);
+    const pathDisplay = fullPath
+      ? fileLink(theme.fg('toolArgs', path), fullPath, startLine)
+      : theme.fg('toolArgs', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
     this.contentBox.addChild(new Text('', 0, 0));
 
     // Top border
-    this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
     // Syntax-highlighted content with left border, truncated to prevent soft wrap
     const output = this.getFormattedOutput();
     if (output) {
-      const termWidth = process.stdout.columns || 80;
-      const maxLineWidth = termWidth - 6; // Account for border "│ " (2) + padding (2) + buffer (2)
+      const termWidth = getTermWidth();
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2; // Account for border "│ " (2) + buffer (2)
       const highlighted = highlightCode(output, fullPath, startLine);
       let lines = highlighted.split('\n');
 
@@ -319,7 +304,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       const borderedLines = lines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
 
@@ -333,7 +318,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
 
     // Bottom border with tool info
-    this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
   }
 
   private renderBashToolEnhanced(): void {
@@ -359,18 +344,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // Helper to render shell command with bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
-      const border = (char: string) => theme.bold(theme.fg('accent', char));
-      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('accent', command)}${cwdSuffix}${timeSuffix}${status}`;
+      const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('toolArgs', command)}${cwdSuffix}${timeSuffix}${status}`;
 
       // Top border
-      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       // Output lines with left border, truncated to prevent soft wrap
-      const termWidth = process.stdout.columns || 80;
-      const maxLineWidth = termWidth - 6; // Account for border "│ " (2) + buffer (4)
+      const termWidth = getTermWidth();
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2; // Account for border "│ " (2) + buffer (2)
       const borderedLines = outputLines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       const displayOutput = borderedLines.join('\n');
       if (displayOutput.trim()) {
@@ -378,7 +363,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       }
 
       // Bottom border with command info
-      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
     };
 
     if (!this.result || this.isPartial) {
@@ -453,23 +438,23 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const label = isKill ? 'kill' : isWait ? 'wait' : 'output';
 
     const renderBorderedProcess = (status: string, outputLines: string[]) => {
-      const border = (char: string) => theme.bold(theme.fg('accent', char));
-      const footerText = `${theme.fg('toolTitle', label)} ${theme.fg('accent', `PID ${pid}`)}${timeSuffix}${status}`;
+      const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+      const footerText = `${theme.bold(theme.fg('toolTitle', label))} ${theme.fg('toolArgs', `PID ${pid}`)}${timeSuffix}${status}`;
 
-      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
-      const termWidth = process.stdout.columns || 80;
-      const maxLineWidth = termWidth - 6;
+      const termWidth = getTermWidth();
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
       const borderedLines = outputLines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       const displayOutput = borderedLines.join('\n');
       if (displayOutput.trim()) {
         this.contentBox.addChild(new Text(displayOutput, 0, 0));
       }
 
-      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
     };
 
     const prepareOutputLines = (output: string): string[] => {
@@ -504,20 +489,20 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
       const status = this.getStatusIndicator();
       const pathDisplay = fullPath
-        ? fileLink(theme.fg('accent', path), fullPath, startLineNum)
-        : theme.fg('accent', path);
+        ? fileLink(theme.fg('toolArgs', path), fullPath, startLineNum)
+        : theme.fg('toolArgs', path);
 
       // If both old_str/old_string and new_str/new_string are available, show a bordered diff preview
       const oldStr = argsObj?.old_str ?? argsObj?.old_string;
       const newStr = argsObj?.new_str ?? argsObj?.new_string;
       if (oldStr != null && newStr != null) {
-        const border = (char: string) => theme.bold(theme.fg('accent', char));
-        const termWidth = process.stdout.columns || 80;
-        const maxLineWidth = termWidth - 6;
+        const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+        const termWidth = getTermWidth();
+        const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
         const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
         this.contentBox.addChild(new Text('', 0, 0));
-        this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+        this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
         const { lines: diffLines } = this.generateDiffLines(String(oldStr), String(newStr));
 
@@ -540,42 +525,44 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
         const borderedLines = linesToShow.map(line => {
           const truncated = truncateAnsi(line, maxLineWidth);
-          return border('│') + ' ' + truncated;
+          return border('│') + ' ' + theme.fg('toolOutput', truncated);
         });
         this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
 
-        this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+        this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
         return;
       }
 
-      // No diff args yet — just show header
+      // No diff args yet — show bordered header
+      const editBorder = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
       const headerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
-      this.contentBox.addChild(new Text(headerText, 0, 0));
+      this.contentBox.addChild(new Text(editBorder('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(`${editBorder('╰──')} ${headerText}`, 0, 0));
       return;
     }
 
-    const border = (char: string) => theme.bold(theme.fg('accent', char));
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
     const status = this.getStatusIndicator();
 
     // Calculate available width for path and truncate from beginning if needed
-    const termWidth = process.stdout.columns || 80;
-    const fixedParts = '└── edit  ' + startLine + ' ✓'; // approximate fixed width
-    const availableForPath = termWidth - fixedParts.length - 6; // buffer
+    const termWidth = getTermWidth();
+    const fixedParts = '╰── edit  ' + startLine + ' ✓'; // approximate fixed width
+    const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2; // buffer
     let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
     if (path.length > availableForPath && availableForPath > 10) {
       path = '…' + path.slice(-(availableForPath - 1));
     }
 
     const pathDisplay = fullPath
-      ? fileLink(theme.fg('accent', path), fullPath, startLineNum)
-      : theme.fg('accent', path);
+      ? fileLink(theme.fg('toolArgs', path), fullPath, startLineNum)
+      : theme.fg('toolArgs', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
     // Empty line padding above
     this.contentBox.addChild(new Text('', 0, 0));
 
     // Top border
-    this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
     // For edits, show the diff
     const finalOldStr = argsObj?.old_str ?? argsObj?.old_string;
@@ -598,7 +585,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         skippedBefore = start;
       }
       // Render diff lines with border, truncated to prevent wrap
-      const maxLineWidth = termWidth - 6;
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Show "skipped above" indicator
       if (skippedBefore > 0) {
@@ -609,7 +596,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       const borderedLines = linesToShow.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
 
@@ -626,7 +613,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       // Show error output
       const output = this.getFormattedOutput();
       if (output) {
-        const maxLineWidth = termWidth - 6;
+        const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
         const lines = output.split('\n').map(line => {
           const truncated = truncateAnsi(line, maxLineWidth);
           return border('│') + ' ' + theme.fg('error', truncated);
@@ -636,7 +623,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
 
     // Bottom border with tool info
-    this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
 
     // LSP diagnostics below the box
     const diagnostics = this.parseLSPDiagnostics();
@@ -759,32 +746,34 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // While streaming args (no result yet), show bordered box with content as it arrives
     if (!this.result || this.isPartial) {
       if (!content) {
-        // No content yet — just show pending header
+        // No content yet — show bordered pending header
+        const writeBorder = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
         const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
         const status = this.getStatusIndicator();
-        const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
-        const headerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
-        this.contentBox.addChild(new Text(headerText, 0, 0));
+        const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
+        const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
+        this.contentBox.addChild(new Text(writeBorder('╭──'), 0, 0));
+        this.contentBox.addChild(new Text(`${writeBorder('╰──')} ${footerText}`, 0, 0));
         return;
       }
 
       // Content is streaming in — show bordered box with syntax-highlighted preview
-      const border = (char: string) => theme.bold(theme.fg('accent', char));
+      const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
       const status = this.getStatusIndicator();
-      const termWidth = process.stdout.columns || 80;
-      const maxLineWidth = termWidth - 6;
+      const termWidth = getTermWidth();
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-      const fixedParts = '└── write   ⋯';
-      const availableForPath = termWidth - fixedParts.length - 6;
+      const fixedParts = '╰── write   ⋯';
+      const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2;
       if (path.length > availableForPath && availableForPath > 10) {
         path = '…' + path.slice(-(availableForPath - 1));
       }
-      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
+      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
       const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
       this.contentBox.addChild(new Text('', 0, 0));
-      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       const highlighted = highlightCode(content, fullPath);
       let lines = highlighted.split('\n');
@@ -806,31 +795,31 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       const borderedLines = lines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
 
-      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
       return;
     }
 
     // Complete — show final bordered result
-    const border = (char: string) => theme.bold(theme.fg('accent', char));
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
     const status = this.getStatusIndicator();
-    const termWidth = process.stdout.columns || 80;
-    const maxLineWidth = termWidth - 6;
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
     let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-    const fixedParts = '└── write   ✓';
-    const availableForPath = termWidth - fixedParts.length - 6;
+    const fixedParts = '╰── write   ✓';
+    const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2;
     if (path.length > availableForPath && availableForPath > 10) {
       path = '…' + path.slice(-(availableForPath - 1));
     }
-    const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
+    const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
 
     this.contentBox.addChild(new Text('', 0, 0));
-    this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
     if (this.result.isError) {
       const output = this.getFormattedOutput();
@@ -862,12 +851,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       const borderedLines = lines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
     }
 
-    this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
   }
   private renderListFilesEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
@@ -875,72 +864,329 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '/';
     const pattern = argsObj?.pattern ? String(argsObj.pattern) : '';
     const patternDisplay = pattern ? ' ' + theme.fg('muted', pattern) : '';
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const status = this.getStatusIndicator();
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
     if (!this.result || this.isPartial) {
-      const status = this.getStatusIndicator();
-      const pathDisplay = fullPath ? fileLink(theme.fg('accent', path), fullPath) : theme.fg('accent', path);
-      const header = `${theme.bold(theme.fg('toolTitle', 'list'))} ${pathDisplay}${patternDisplay}${status}`;
-      this.contentBox.addChild(new Text(header, 0, 0));
+      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'list'))} ${pathDisplay}${patternDisplay}${status}`;
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
       return;
     }
 
     const output = this.getFormattedOutput();
     if (output) {
-      const listStatus = this.getStatusIndicator();
-
-      // Extract summary line (e.g. "5 directories, 9 files") from tree output for the header
-      const lines = output.split('\n');
+      // Extract summary line (e.g. "5 directories, 9 files") from tree output for the footer
+      let lines = output.split('\n');
       const lastLine = lines[lines.length - 1]?.trim() || '';
       const summaryMatch = lastLine.match(/^\d+\s+directories?,\s+\d+\s+files?$/);
       const summaryDisplay = summaryMatch ? ' ' + theme.fg('muted', lastLine) : '';
+      // Remove the summary line from content if it matched
+      if (summaryMatch) {
+        lines = lines.slice(0, -1);
+      }
 
-      this.collapsible = new CollapsibleComponent(
-        {
-          header: `${theme.bold(theme.fg('toolTitle', 'list'))} ${theme.fg('accent', path)}${patternDisplay}${summaryDisplay}${listStatus}`,
-          expanded: this.expanded,
-          collapsedLines: 15,
-          expandedLines: 100,
-          showLineCount: false,
-        },
-        this.ui,
-      );
+      const collapsedLines = 15;
+      const totalLines = lines.length;
+      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
+      let skippedAbove = 0;
+      if (hasMore) {
+        skippedAbove = totalLines - collapsedLines;
+        lines = lines.slice(-collapsedLines);
+      }
 
-      this.collapsible.setContent(output);
-      this.contentBox.addChild(this.collapsible);
+      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'list'))} ${pathDisplay}${patternDisplay}${summaryDisplay}${status}`;
+
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+
+      if (skippedAbove > 0) {
+        this.contentBox.addChild(
+          new Text(border('│') + ' ' + theme.fg('muted', `... ${skippedAbove} lines above (ctrl+e to expand)`), 0, 0),
+        );
+      }
+
+      const borderedLines = lines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
+      });
+      this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
+
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
     }
+  }
+
+  private renderLspInspectEnhanced(): void {
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const status = this.getStatusIndicator();
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
+    const argsObj = this.args as { path?: string; line?: number; match?: string } | undefined;
+    const path_ = argsObj?.path;
+    const line = argsObj?.line;
+    const match = argsObj?.match;
+
+    // Build args summary for footer
+    const argsSummary = [
+      path_ ? shortenPath(path_.replace(process.cwd() + '/', '')) : null,
+      line ? `L${line}` : null,
+      match ? truncateAnsi(match.replace(/<<</g, '‹‹‹'), 40) : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    if (!this.result || this.isPartial) {
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+      return;
+    }
+
+    // Extract raw text from result
+    const rawText = this.result.content
+      .filter(c => c.type === 'text' && c.text)
+      .map(c => c.text!)
+      .join('\n');
+
+    if (this.result.isError || !rawText.trim()) {
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+      const output = this.getFormattedOutput();
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      if (output) {
+        this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('error', output), 0, 0));
+      }
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+      return;
+    }
+
+    // Parse lsp_inspect result
+    let parsed: {
+      hover?: { value: string; kind: string };
+      diagnostics?: Array<{ severity: string; message: string; source: string | null }>;
+      definition?: Array<{ location: string; preview: string | null }>;
+      implementation?: string[];
+      error?: string;
+    };
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      // Fall back to generic rendering if not valid JSON
+      this.renderGenericToolEnhanced();
+      return;
+    }
+
+    if (parsed.error) {
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('error', parsed.error), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+      return;
+    }
+
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+
+    // Render hover content
+    if (parsed.hover) {
+      const hoverValue = parsed.hover.value || '';
+      const hoverLines = hoverValue.split('\n').filter(line => line.trim() !== '');
+      if (hoverLines.length > 0) {
+        this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'hover:'), 0, 0));
+      }
+      for (const line of hoverLines) {
+        const truncated = truncateAnsi(line, maxLineWidth - 2);
+        const prefix = border('│') + ' ';
+        this.contentBox.addChild(new Text(prefix + theme.fg('text', truncated), 0, 0));
+      }
+    }
+
+    // Render line diagnostics
+    if (parsed.diagnostics && parsed.diagnostics.length > 0) {
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'diagnostics:'), 0, 0));
+
+      for (const diagnostic of parsed.diagnostics) {
+        const label = diagnostic.source ? `${diagnostic.severity} (${diagnostic.source})` : diagnostic.severity;
+        const diagLine = `${label}: ${diagnostic.message}`;
+        this.contentBox.addChild(
+          new Text(
+            border('│') +
+              ' ' +
+              theme.fg(diagnostic.severity === 'error' ? 'error' : 'text', truncateAnsi(diagLine, maxLineWidth - 2)),
+            0,
+            0,
+          ),
+        );
+      }
+    }
+
+    // Render definition entries
+    if (parsed.definition && parsed.definition.length > 0) {
+      // Add blank line before definition section for visual separation
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'definition:'), 0, 0));
+
+      for (const def of parsed.definition) {
+        const location = def.location || '';
+        const preview = def.preview || '';
+        // Parse location: "$cwd/path:Lline:Cchar" or just "path:Lline:Cchar"
+        const parsedLoc = this.parseLspLocation(location);
+        const displayLoc = parsedLoc
+          ? fileLink(
+              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
+              parsedLoc.absPath,
+              parsedLoc.line,
+            )
+          : theme.fg('toolOutput', location);
+
+        const defLine = border('│') + ' ' + displayLoc;
+        this.contentBox.addChild(new Text(truncateAnsi(defLine, maxLineWidth), 0, 0));
+
+        if (preview) {
+          const previewLine = border('│') + '   ' + theme.fg('text', truncateAnsi(preview, maxLineWidth - 3));
+          this.contentBox.addChild(new Text(previewLine, 0, 0));
+        }
+      }
+    }
+
+    // Render implementation entries
+    if (parsed.implementation && parsed.implementation.length > 0) {
+      const implCount = parsed.implementation.length;
+      const implLabel = implCount === 1 ? 'implementation:' : `implementations (${implCount}):`;
+
+      // Add blank line before implementation section for visual separation
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+
+      // Show first few implementations inline, collapse rest
+      const maxShow = this.expanded ? parsed.implementation.length : 5;
+      const shown = parsed.implementation.slice(0, maxShow);
+      const remaining = parsed.implementation.length - maxShow;
+
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', implLabel), 0, 0));
+
+      for (const loc of shown) {
+        const parsedLoc = this.parseLspLocation(loc);
+        const displayLoc = parsedLoc
+          ? fileLink(
+              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
+              parsedLoc.absPath,
+              parsedLoc.line,
+            )
+          : theme.fg('toolOutput', loc);
+        const implLine = border('│') + ' ' + displayLoc;
+        this.contentBox.addChild(new Text(truncateAnsi(implLine, maxLineWidth), 0, 0));
+      }
+
+      if (remaining > 0 && !this.expanded) {
+        const moreLine = border('│') + ' ' + theme.fg('toolOutput', `... ${remaining} more (ctrl+e to expand)`);
+        this.contentBox.addChild(new Text(moreLine, 0, 0));
+      }
+    }
+
+    // Show message if no results found
+    if (!parsed.hover && !parsed.diagnostics?.length && !parsed.definition?.length && !parsed.implementation?.length) {
+      this.contentBox.addChild(
+        new Text(
+          border('│') + ' ' + theme.fg('muted', 'No hover, diagnostics, definition, or implementation results'),
+          0,
+          0,
+        ),
+      );
+    }
+
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+  }
+
+  /**
+   * Parse an LSP location string like "$cwd/path:Lline:Cchar" into components.
+   */
+  private parseLspLocation(
+    location: string,
+  ): { absPath: string; shortPath: string; line: number; lineCol: string } | null {
+    // Match patterns like:
+    // - "$cwd/packages/core/src/foo.ts:L10:C5"
+    // - "/absolute/path/to/file.ts:L1:C1"
+    // - "path/to/file.ts:L10:C5"
+    const match = location.match(/^(.+?):L(\d+):C(\d+)$/);
+    if (!match) return null;
+
+    const rawPath = match[1]!;
+    const line = parseInt(match[2]!, 10);
+    const lineCol = `L${match[2]}:C${match[3]}`;
+
+    // Resolve to absolute path
+    let absPath: string;
+    let shortPath: string;
+    if (rawPath.startsWith('$cwd/')) {
+      absPath = process.cwd() + '/' + rawPath.slice(5);
+      shortPath = rawPath.slice(5); // Strip $cwd/ prefix
+    } else if (rawPath.startsWith('~')) {
+      absPath = os.homedir() + rawPath.slice(1);
+      shortPath = shortenPath(absPath);
+    } else if (rawPath.startsWith('/')) {
+      absPath = rawPath;
+      shortPath = absPath.startsWith(process.cwd() + '/')
+        ? absPath.slice(process.cwd().length + 1)
+        : shortenPath(absPath);
+    } else {
+      absPath = process.cwd() + '/' + rawPath;
+      shortPath = rawPath;
+    }
+
+    return { absPath, shortPath, line, lineCol };
   }
 
   private renderTaskWriteEnhanced(): void {
     const argsObj = this.args as { tasks?: TaskItem[] } | undefined;
     const tasks = argsObj?.tasks;
     const status = this.getStatusIndicator();
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
 
-    // Show a compact header — the pinned TaskProgressComponent handles live rendering
+    // Show a compact bordered header — the pinned TaskProgressComponent handles live rendering
     const count = tasks?.length ?? 0;
     const countSuffix = count > 0 ? theme.fg('muted', ` (${count} tasks)`) : '';
-    const header = `${theme.bold(theme.fg('toolTitle', 'task_write'))}${countSuffix}${status}`;
-    this.contentBox.addChild(new Text(header, 0, 0));
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'task_write'))}${countSuffix}${status}`;
+
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
     // Surface error details when the tool call fails
     if (!this.isPartial && this.result?.isError) {
       const output = this.getFormattedOutput();
       if (output) {
-        this.contentBox.addChild(new Text(theme.fg('error', output), 0, 0));
+        this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('error', output), 0, 0));
       }
     }
+
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
   }
 
   private renderWebSearchEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
-    const query = argsObj?.query ? String(argsObj.query) : '';
+    const action = argsObj?.action as Record<string, unknown> | undefined;
+    let query = argsObj?.query ? String(argsObj.query) : action?.query ? String(action.query) : '';
+    // Fallback: extract query from result content (OpenAI format: { action: { query } })
+    if (!query && this.result) {
+      try {
+        const raw = this.getFormattedOutput();
+        const parsed = JSON.parse(raw);
+        if (parsed?.action?.query) query = String(parsed.action.query);
+      } catch {
+        /* ignore */
+      }
+    }
     const status = this.getStatusIndicator();
 
-    const queryDisplay = query ? ` ${theme.fg('accent', `"${query}"`)}` : '';
+    const queryDisplay = query ? ` ${theme.fg('toolArgs', `"${query}"`)}` : '';
     const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
 
-    // Don't show border until we have a result
     if (!this.result || this.isPartial) {
-      this.contentBox.addChild(new Text(footerText, 0, 0));
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
       return;
     }
 
@@ -949,19 +1195,17 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       return;
     }
 
-    const border = (char: string) => theme.bold(theme.fg('accent', char));
-
     // Parse search results and format as a clean list of titles + URLs
     const output = this.formatWebSearchResults();
     if (output) {
-      const termWidth = process.stdout.columns || 80;
-      const maxLineWidth = termWidth - 6;
+      const termWidth = getTermWidth();
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
       this.contentBox.addChild(new Text('', 0, 0));
 
       // Top border
-      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
       let lines = output.split('\n');
 
@@ -976,7 +1220,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       const borderedLines = lines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
       });
       this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
 
@@ -989,7 +1233,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       }
 
       // Bottom border with tool info
-      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
     } else {
       this.contentBox.addChild(new Text(footerText, 0, 0));
     }
@@ -1004,19 +1248,25 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const raw = this.getFormattedOutput();
     if (!raw) return '';
 
-    // Try to parse as JSON array (Anthropic provider format)
+    // Try to parse as JSON
     try {
       const parsed = JSON.parse(raw);
+
+      // Anthropic provider format: JSON array of { url, title, pageAge, ... }
       if (Array.isArray(parsed)) {
         const lines: string[] = [];
         for (const item of parsed) {
           if (typeof item !== 'object' || item === null) continue;
           const url = typeof item.url === 'string' ? item.url : '';
           if (!url) continue;
-          const title = typeof item.title === 'string' && item.title ? item.title : url;
+          const title = typeof item.title === 'string' && item.title ? item.title : '';
           const age = typeof item.pageAge === 'string' && item.pageAge ? theme.fg('muted', ` (${item.pageAge})`) : '';
-          lines.push(`  ${theme.fg('accent', title)}${age}`);
-          lines.push(`  ${theme.fg('muted', url)}`);
+          if (title) {
+            lines.push(`  ${theme.fg('toolOutput', title)}${age}`);
+            lines.push(`  ${theme.fg('muted', url)}`);
+          } else {
+            lines.push(`  ${theme.fg('toolOutput', url)}${age}`);
+          }
         }
         if (lines.length > 0) return lines.join('\n');
 
@@ -1029,6 +1279,24 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         });
         return JSON.stringify(stripped, null, 2);
       }
+
+      // OpenAI provider format: { action: { query }, sources: [{ url, title }, ...] }
+      if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.sources)) {
+        const lines: string[] = [];
+        for (const source of parsed.sources) {
+          if (typeof source !== 'object' || source === null) continue;
+          const url = typeof source.url === 'string' ? source.url : '';
+          if (!url) continue;
+          const title = typeof source.title === 'string' && source.title ? source.title : '';
+          if (title) {
+            lines.push(`  ${theme.fg('toolOutput', title)}`);
+            lines.push(`  ${theme.fg('muted', url)}`);
+          } else {
+            lines.push(`  ${theme.fg('toolOutput', url)}`);
+          }
+        }
+        if (lines.length > 0) return lines.join('\n');
+      }
     } catch {
       // Not JSON — fall through to raw text (Tavily format)
     }
@@ -1038,50 +1306,69 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private renderGenericToolEnhanced(): void {
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
     const status = this.getStatusIndicator();
 
-    let argsSummary = '';
-    if (this.args && typeof this.args === 'object') {
-      const argsObj = this.args as Record<string, unknown>;
-      const keys = Object.keys(argsObj);
-      if (keys.length > 0) {
-        argsSummary = theme.fg('muted', ` (${keys.length} args)`);
-      }
-    }
+    const argsSummary = this.formatArgsSummary();
 
-    const header = `${theme.bold(theme.fg('toolTitle', this.toolName))}${argsSummary}${status}`;
+    const footerText = `${theme.bold(theme.fg('toolTitle', this.toolName))}${argsSummary}${status}`;
 
     if (!this.result || this.isPartial) {
-      this.contentBox.addChild(new Text(header, 0, 0));
-      // Show live key=value preview of args as they stream in
+      // Pending: show bordered header with args preview
       const preview = this.formatArgsPreview();
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
       if (preview.length > 0) {
-        this.contentBox.addChild(new Text(preview.join('\n'), 0, 0));
+        const previewLines = preview.map(line => border('│') + ' ' + theme.fg('toolOutput', line));
+        this.contentBox.addChild(new Text(previewLines.join('\n'), 0, 0));
       }
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
       return;
     }
 
     // Use enhanced error display for errors
     if (this.result.isError) {
-      this.renderErrorResult(header);
+      this.renderErrorResult(footerText);
       return;
     }
 
     const output = this.getFormattedOutput();
     if (output) {
-      this.collapsible = new CollapsibleComponent(
-        {
-          header,
-          expanded: this.expanded,
-          collapsedLines: 10,
-          expandedLines: 200,
-          showLineCount: true,
-        },
-        this.ui,
-      );
+      const termWidth = getTermWidth();
+      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
-      this.collapsible.setContent(output);
-      this.contentBox.addChild(this.collapsible);
+      // Empty line padding above
+      this.contentBox.addChild(new Text('', 0, 0));
+
+      // Top border
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+
+      let lines = output.split('\n');
+      const collapsedLines = 10;
+      const totalLines = lines.length;
+      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
+
+      if (hasMore) {
+        lines = lines.slice(0, collapsedLines);
+      }
+
+      const borderedLines = lines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + theme.fg('toolOutput', truncated);
+      });
+      this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
+
+      if (hasMore) {
+        const remaining = totalLines - collapsedLines;
+        this.contentBox.addChild(
+          new Text(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`), 0, 0),
+        );
+      }
+
+      // Bottom border with tool info
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+    } else {
+      // No output - just show the footer line
+      this.contentBox.addChild(new Text(footerText, 0, 0));
     }
   }
 
@@ -1096,8 +1383,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const keys = Object.keys(argsObj);
     if (keys.length === 0) return [];
 
-    const termWidth = process.stdout.columns || 80;
-    const maxLineWidth = termWidth - 4; // small margin
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2 - 2; // -2 for "│ " border prefix
     const lines: string[] = [];
 
     for (let i = 0; i < keys.length; i++) {
@@ -1131,6 +1418,47 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       lines.push(line);
     }
     return lines;
+  }
+
+  /**
+   * Compact inline args summary for the footer line.
+   * Shows key=value pairs truncated to fit on one line.
+   */
+  private formatArgsSummary(): string {
+    if (!this.args || typeof this.args !== 'object') return '';
+    const argsObj = this.args as Record<string, unknown>;
+    const entries = Object.entries(argsObj).filter(([, v]) => v !== undefined);
+    if (entries.length === 0) return '';
+
+    const termWidth = getTermWidth();
+    // Leave room for tool name, status indicator, borders
+    const maxLen = Math.max(20, termWidth - this.toolName.length - 15 - BOX_INDENT * 2);
+    const parts: string[] = [];
+    let currentLen = 0;
+
+    for (const [key, raw] of entries) {
+      let val: string;
+      if (typeof raw === 'string') {
+        const firstLine = raw.split('\n')[0]!;
+        val = firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine;
+        val = `"${val}"`;
+      } else if (Array.isArray(raw)) {
+        val = `[${raw.length}]`;
+      } else if (typeof raw === 'object' && raw !== null) {
+        val = '{…}';
+      } else {
+        val = String(raw);
+      }
+      const part = `${key}=${val}`;
+      if (currentLen + part.length + 2 > maxLen && parts.length > 0) {
+        parts.push('…');
+        break;
+      }
+      parts.push(part);
+      currentLen += part.length + 2;
+    }
+
+    return ' ' + theme.fg('toolArgs', parts.join(', '));
   }
 
   private getStatusIndicator(): string {
@@ -1208,19 +1536,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     try {
       const { content } = extractContent(errorText);
       error = content;
-
-      // Try to create an Error object with better structure
-      const errorMatch = content.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m);
-      if (errorMatch) {
-        const err = new Error(errorMatch[2]!);
-        err.name = errorMatch[1]!;
-        // Try to extract stack trace
-        const stackMatch = content.match(/\n\s+at\s+.+/g);
-        if (stackMatch) {
-          err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
-        }
-        error = err;
-      }
+      const parsed = parseErrorFromContent(content);
+      if (parsed) error = parsed;
     } catch {
       // Keep as string
     }
@@ -1340,42 +1657,23 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     return codeLines.join('\n');
   }
 }
-/** Truncate a string with ANSI codes to a visible width.
- *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
+/** Parse a `Name: message\n  at ...` error string into an Error object.
+ *  Returns null if the content does not look like a JavaScript Error.
+ *  Preserves the behaviour of the original `/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m`
+ *  pattern (same captures for well-formed inputs) while using bounded
+ *  quantifiers and `[ \t]` separators to avoid the polynomial backtracking
+ *  CodeQL flagged on pathological inputs.
+ *  Exported for unit testing.
  */
-function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g;
-  let visibleLength = 0;
-  let result = '';
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = ansiRegex.exec(str)) !== null) {
-    // Add text before this ANSI code
-    const textBefore = str.slice(lastIndex, match.index);
-    const remaining = maxWidth - visibleLength;
-    if (textBefore.length <= remaining) {
-      result += textBefore;
-      visibleLength += textBefore.length;
-    } else {
-      result += textBefore.slice(0, remaining - 1) + '…';
-      result += '\x1b]8;;\x07\x1b[0m'; // Close any open hyperlink + reset styles
-      return result;
-    }
-    // Add the ANSI code (doesn't count toward visible length)
-    result += match[0];
-    lastIndex = match.index + match[0].length;
+export function parseErrorFromContent(content: string): Error | null {
+  const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.{1,8192})$/m);
+  if (!errorMatch) return null;
+  const err = new Error(errorMatch[2]!);
+  err.name = errorMatch[1]!;
+  // Stack frames are always space/tab-indented — never vertical whitespace.
+  const stackMatch = content.match(/\n[ \t]+at[ \t]+.+/g);
+  if (stackMatch) {
+    err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
   }
-
-  // Add remaining text after last ANSI code
-  const remaining = str.slice(lastIndex);
-  const spaceLeft = maxWidth - visibleLength;
-  if (remaining.length <= spaceLeft) {
-    result += remaining;
-  } else {
-    result += remaining.slice(0, spaceLeft - 1) + '…';
-    result += '\x1b]8;;\x07\x1b[0m'; // Close hyperlink + reset
-  }
-
-  return result;
+  return err;
 }
