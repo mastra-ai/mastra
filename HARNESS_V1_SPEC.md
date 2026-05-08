@@ -354,6 +354,14 @@ class Session<TState = Record<string, unknown>> {
   listSkills(): HarnessSkill[];
   getSkill(name: string): HarnessSkill | undefined;
 
+  // Drop the cached workspace-discovery result. The next listSkills /
+  // getSkill / useSkill call re-scans the workspace. Code-registered
+  // skills are unaffected — they live on the harness and don't need
+  // refreshing. Local-only: workspace discovery requires server-side
+  // filesystem access, so refreshSkills is absent from RemoteSession.
+  // See §4.6 and §13.5.
+  refreshSkills(): Promise<void>;
+
   // Concurrency / inspection (read-only). Cancellation is not a session
   // concern in v1 — see §3.
   isBusy(): boolean;
@@ -764,7 +772,9 @@ This precedence rule means a deployment can override a workspace skill by regist
 
 **Workspace discovery.**
 
-- Discovery runs on first `useSkill` or `session.listSkills()` call per session, and is cached for the session's lifetime. Subsequent changes to skill files in the workspace are not picked up until the session is closed and re-opened.
+- Discovery runs on first `useSkill` or `session.listSkills()` call per session, and is cached for the session's lifetime by default. Files added, removed, or edited in the workspace after that point are not visible until the cache is dropped.
+- The in-session refresh path is `await session.refreshSkills()`. It clears the cached scan; the next `listSkills` / `getSkill` / `useSkill` call re-runs workspace discovery. Code-registered skills are not affected — they're held on the harness, not on the session, and never go stale. A TUI exposing a "reload skills" command should call this; long-running server sessions can call it on a workspace-mutation hook (e.g. after a `git pull` in a `shared` workspace, or when a file watcher reports a change under `.claude/skills/`).
+- `refreshSkills` is local-only. Workspace discovery requires server-side filesystem access, so the method is absent from `RemoteSession` (§13.5). A remote client that wants the same effect should ask the server for it through a product-specific route, or close and re-open the session.
 - The skill file format mirrors Anthropic's skill spec: a YAML frontmatter block with `name` + `description`, followed by a Markdown body containing the instructions.
 - Files outside `.claude/skills/<name>/SKILL.md` are ignored. There is no recursion into subdirectories beyond `<name>/`.
 - If the session has no workspace, only code-registered skills are available.
@@ -2885,7 +2895,7 @@ await session.queue({ content: 'Refactor auth' });
 - POSTs/PATCHes to the corresponding route and returns the deserialized result, or
 - (for `subscribe`) opens an SSE connection to `/events`, dispatches events to the listener, and returns an unsubscribe function.
 
-Methods listed in §13.5 (raw `getWorkspace`, function-valued `addTools`, `onInterval`, cross-session subscriptions, the functional form of `setState`) are absent from the `RemoteSession` type. Reaching for them on a remote session fails to type-check.
+Methods listed in §13.5 (raw `getWorkspace`, function-valued `addTools`, `onInterval`, cross-session subscriptions, the functional form of `setState`, and `refreshSkills`) are absent from the `RemoteSession` type. Reaching for them on a remote session fails to type-check.
 
 **Reconnection** is automatic. If the SSE stream drops, the client reconnects with `Last-Event-ID` and replays events newer than the last seen ID. If the supplied ID is from a previous epoch (server restart or session eviction) or older than the live buffer, the server returns `412 Precondition Failed`; the client transparently re-fetches state via `GET /sessions/:sessionId` and resumes from the new tail. See §10.5 for the full contract.
 
@@ -2920,6 +2930,7 @@ async function tarball(session: Session) {
 - **The functional form of `setState`** (`setState(prev => next)`). The updater is a closure executed against live state under the session lease, and closures cannot be sent across the wire. The object form (`setState(patch)`) is on `RemoteSession` and rides the dedicated `PATCH /sessions/:sessionId/state` route (§13.2). Remote callers that need read-modify-write must `await session.getState()`, compute the next value locally, and PATCH the resulting patch. Note this is not atomic across concurrent remote writers — if that matters, fall back to `setState(prev => next)` in-process or model the field as something the server already serialises (a queued item, a goal, a permission grant) instead.
 
 - **Non-JSON values inside `state`.** Functions, class instances, circular references, `Map`, `Set`, and `Date` do not round-trip. Same constraint as the in-process flush: violations reject with `HarnessStateSerializationError` (§5.7). Recommended: keep `state` to plain JSON shapes and put richer values behind ID references in workspace files, attachments, or your own datastore.
+- **`session.refreshSkills()`.** Workspace skill discovery scans the server-side filesystem for `.claude/skills/<name>/SKILL.md`; only the server can run that scan, so the method is absent from `RemoteSession`. The `listSkills` / `getSkill` / `useSkill` reads remain — they serve from the cached scan, which the server populates on first access (§4.6). Remote products that want a manual refresh should expose a product-specific route that calls `session.refreshSkills()` server-side, or close and re-open the session.
 - **Direct `HarnessStorage` access.** The remote SDK never exposes the storage interface; durable state is reached only through `Session` methods.
 
 `RemoteSafeSession` is the interface name. Clients targeting both deployment shapes should declare their dependencies as `RemoteSafeSession`, not `Session`, to keep the local/remote distinction enforced at the type system.
