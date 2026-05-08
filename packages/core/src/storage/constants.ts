@@ -44,6 +44,10 @@ export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 
+// Harness tables (HARNESS_V1_SPEC.md §5)
+export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
+export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -77,7 +81,9 @@ export type TABLE_NAMES =
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
-  | typeof TABLE_CHANNEL_CONFIG;
+  | typeof TABLE_CHANNEL_CONFIG
+  | typeof TABLE_HARNESS_SESSIONS
+  | typeof TABLE_HARNESS_ATTACHMENTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -618,6 +624,54 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     data: { type: 'jsonb', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  // Harness session record + lease columns. See HARNESS_V1_SPEC.md §5.1.
+  // Pending interrupts (approval/suspension/question/plan), the queue,
+  // workspace state, and user state are stored as JSONB blobs because the
+  // shapes are defined by the harness layer and the adapter does not query
+  // their internals.
+  [TABLE_HARNESS_SESSIONS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    resource_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: false },
+    parent_session_id: { type: 'text', nullable: true },
+    origin: { type: 'text', nullable: false },
+    owns_thread: { type: 'boolean', nullable: false },
+    mode_id: { type: 'text', nullable: false },
+    model_id: { type: 'text', nullable: false },
+    subagent_model_overrides: { type: 'jsonb', nullable: false },
+    permission_rules: { type: 'jsonb', nullable: false },
+    session_grants: { type: 'jsonb', nullable: false },
+    token_usage: { type: 'jsonb', nullable: false },
+    pending_queue: { type: 'jsonb', nullable: false },
+    pending_approval: { type: 'jsonb', nullable: true },
+    pending_suspension: { type: 'jsonb', nullable: true },
+    pending_question: { type: 'jsonb', nullable: true },
+    pending_plan: { type: 'jsonb', nullable: true },
+    observational_memory: { type: 'jsonb', nullable: true },
+    goal: { type: 'jsonb', nullable: true },
+    workspace: { type: 'jsonb', nullable: true },
+    state: { type: 'jsonb', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    last_activity_at: { type: 'bigint', nullable: false },
+    closed_at: { type: 'bigint', nullable: true },
+    version: { type: 'integer', nullable: false },
+    owner_id: { type: 'text', nullable: true },
+    lease_expires_at: { type: 'bigint', nullable: true },
+  },
+  // Harness attachments. Bytes are stored as base64 in `data_b64` because
+  // the shared `StorageColumn['type']` union does not yet include `blob`.
+  // For v1 attachment sizes (HarnessConfig.files.maxAttachmentBytes, default
+  // 100 MiB) the 33% base64 overhead is acceptable; switching to a true
+  // BLOB column is a lossless schema migration when we extend the union.
+  [TABLE_HARNESS_ATTACHMENTS]: {
+    session_id: { type: 'text', nullable: false },
+    attachment_id: { type: 'text', nullable: false },
+    name: { type: 'text', nullable: false },
+    mime_type: { type: 'text', nullable: false },
+    size_bytes: { type: 'bigint', nullable: false },
+    created_at: { type: 'bigint', nullable: false },
+    data_b64: { type: 'text', nullable: false },
+  },
 };
 
 /**
@@ -626,6 +680,10 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  */
 export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
+  [TABLE_HARNESS_ATTACHMENTS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENTS],
+    compositePrimaryKey: ['session_id', 'attachment_id'],
+  },
 };
 
 /**

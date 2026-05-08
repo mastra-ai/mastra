@@ -45,6 +45,8 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_schedule_triggers: new Map(),
       mastra_channel_installations: new Map(),
       mastra_channel_config: new Map(),
+      mastra_harness_sessions: new Map(),
+      mastra_harness_attachments: new Map(),
     };
   }
 

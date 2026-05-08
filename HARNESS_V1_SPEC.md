@@ -942,6 +942,12 @@ interface SessionRecord {
   threadId: string;
   parentSessionId?: string;          // subagent or programmatic-child linkage
 
+  // True when this session was created with `threadId: { fresh: true }` and
+  // therefore owns the underlying thread under `MastraStorage.memory`.
+  // The harness layer reads this on cascade-delete to decide whether to
+  // tear the thread down with the session. See §5.6.
+  ownsThread: boolean;
+
   // How the record was created. 'subagent-tool' opts the record into the
   // auto-close-on-subagent_end rule (§5.6). 'top-level' covers both regular
   // user sessions and programmatic child sessions spawned via
@@ -1159,28 +1165,13 @@ Transient runtime state (`AbortController`, in-flight model-call promises, SSE l
 
 ### 5.2 Storage shape
 
-`MastraStorage` gains a `harness` domain:
+`MastraStorage` gains a `harness` domain. Threads and messages are **not** part of it — those continue to live under `MastraStorage.memory`, the existing domain that already owns thread and message storage for the agent runtime. The harness reuses that domain unchanged: `harness.threads.*` (§4.1) and message reads delegate to `mastra.storage.memory.*`. The harness domain owns only what is genuinely new in v1 — session records, leases, and the attachments index.
 
 ```ts
 interface MastraStorage {
   // ...existing domains (agents, memory, workflows, ...)...
 
   harness: {
-    // Threads (already specified — moved here under the harness domain)
-    // Threads. Like `loadSession`, the direct-ID primitives do NOT enforce
-    // resource scoping — the harness layer cross-checks each record's
-    // `resourceId` before returning to a caller (see §2.3). `listThreads`
-    // takes `resourceId` as part of `ListThreadsOptions` and is expected to
-    // filter at the storage layer for efficiency.
-    saveThread(record: HarnessThread): Promise<void>;
-    loadThread(opts: { threadId: string }): Promise<HarnessThread | null>;
-    listThreads(opts: ListThreadsOptions): Promise<HarnessThread[]>;
-    deleteThread(opts: { threadId: string }): Promise<void>;
-
-    // Messages
-    appendMessages(opts: { threadId: string; messages: HarnessMessage[] }): Promise<void>;
-    listMessages(opts: { threadId: string } & ListMessagesOptions): Promise<HarnessMessage[]>;
-
     // Sessions (new in v1)
     saveSession(
       record: SessionRecord,
@@ -1409,7 +1400,7 @@ Transitions:
 
 **Why cascade.** Two windows it covers. (1) The abort-mid-subagent window: a subagent is in flight when the parent is closed. Without cascade, the child would keep running, consuming compute and emitting events nobody is listening for. (2) Hard-delete: closed subagent records (auto-closed at `subagent_end`) need to leave storage with their parent when `deleteSession` runs, otherwise the subtree leaks orphaned records pointing at a `parentSessionId` that no longer exists. Cascade is the safe-by-default rule for both.
 
-**Threads owned by subagent sessions.** A child session spawned with `threadId: { fresh: true }` (see §12.10) implicitly owns the thread the harness creates for it. When that child session is closed or deleted by cascade (or directly), the owned thread is closed/deleted too. A child session that *reuses* the parent's thread (`threadId: parent.threadId`) does not delete that thread on close — the thread keeps following the parent. The owning relationship is recorded on the thread record (`HarnessThread.ownedBySessionId?: string`) and is set once at thread creation; it cannot be reassigned.
+**Threads owned by subagent sessions.** A child session spawned with `threadId: { fresh: true }` (see §12.10) implicitly owns the thread the harness creates for it. When that child session is closed or deleted by cascade (or directly), the owned thread is deleted with it. A child session that *reuses* the parent's thread (`threadId: parent.threadId`) does not delete that thread on close — the thread keeps following the parent. Ownership is recorded on the session record (`SessionRecord.ownsThread: boolean`, frozen at creation) rather than on the thread itself: the harness layer composes session storage with the existing `MastraStorage.memory` thread storage, and ownership is metadata only the harness needs to interpret. On cascade, `harness.deleteSession(...)` reads `ownsThread` and, when set, calls `mastra.storage.memory.deleteThread({ threadId })` after the session row is removed.
 
 **Interaction with `harness.threads.delete`.** Deleting a thread cascades through both edges: every session bound to that thread is closed-and-deleted, and each of those sessions in turn deletes its descendants per the cascade rule. A descendant on a different thread (the common case for fresh-thread subagents) gets deleted; the descendant's owned thread is deleted with it. A descendant referencing some unrelated thread is *not* the right place to garbage-collect that other thread — only ownership triggers thread deletion.
 
@@ -1442,7 +1433,7 @@ Auto-close has two practical consequences for subagent-tool sessions:
 
 If a tool genuinely needs work that outlives the call that spawned it, the right shape is a top-level session under the same resource (`harness.session({ resourceId })`), not a subagent. Programmatic child sessions (`harness.session({ parentSessionId, ... })`) sit in between: they share the parent's identity and cascade with it, but are not tied to any single tool call — the caller controls their lifetime via `child.close()`.
 
-**Owned threads vs reused threads.** When a subagent is spawned with `threadId: { fresh: true }`, the harness allocates a new thread and marks it as owned by the child session (`HarnessThread.ownedBySessionId === child.id`). On child close/delete, the owned thread is closed/deleted with the session. When the subagent reuses the parent's thread, the thread is not owned by the child and survives child close along with the parent.
+**Owned threads vs reused threads.** When a subagent is spawned with `threadId: { fresh: true }`, the harness allocates a new thread under `MastraStorage.memory` and sets `SessionRecord.ownsThread = true` on the child. On child close/delete, the owned thread is deleted with the session. When the subagent reuses the parent's thread, `ownsThread` is false on the child and the thread survives child close along with the parent.
 
 ### 5.7 Failure and crash recovery
 

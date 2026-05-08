@@ -9,6 +9,7 @@
 
 import type { Agent } from '../../agent';
 import type { ToolsInput } from '../../agent/types';
+import type { HarnessStorage, SessionRecord as StoredSessionRecord } from '../../storage/domains/harness';
 
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).
@@ -123,8 +124,23 @@ export interface HarnessConfig {
    */
   defaultModeId?: string;
 
-  // Other 9 fields (storage, sessions, workspace, subagents, skills,
-  // goals, files, intervals, observationalMemory) land here.
+  /**
+   * Session-runtime config (§9 + §5). Currently only carries the storage
+   * binding; eviction, lease, and queue knobs land here as we wire them up.
+   */
+  sessions?: {
+    /**
+     * Where SessionRecords, leases, and attachment metadata are persisted.
+     * Required for any harness that accepts non-`fresh` resolves or that
+     * survives process restart — the in-memory adapter is fine for tests
+     * and short-lived scripts. Optional only because the field itself
+     * lands incrementally.
+     */
+    storage?: HarnessStorage;
+  };
+
+  // Remaining fields (workspace, subagents, skills, goals, files,
+  // intervals, observationalMemory) land here as we wire them up.
 
   [key: string]: unknown;
 }
@@ -136,12 +152,12 @@ export interface Session {
   readonly resourceId: string;
 }
 
-/** Persisted session shape (§5.1). Stubbed when we get to storage.ts. */
-export interface SessionRecord {
-  id: string;
-  resourceId: string;
-  threadId: string;
-}
+/**
+ * Persisted session shape (§5.1). The canonical definition lives in
+ * `@mastra/core/storage/domains/harness/types` because adapters need it; the
+ * harness layer re-exports it here so consumers can stay on a single import.
+ */
+export type SessionRecord = StoredSessionRecord;
 
 /** Attachment handle returned by upload (§13.7). */
 export interface AttachmentRef {
