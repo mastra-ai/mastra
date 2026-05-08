@@ -17,14 +17,14 @@ Reach for it when the same request shape repeats across users or sessions, for e
 
 ## Quickstart
 
-Add a `ResponseCache` to the agent's `inputProcessors`. You bring the cache backend (any `MastraCache` implementation) — for development, the helper below adapts the `MastraServerCache` registered on a `Mastra` instance:
+Add a `ResponseCache` to the agent's `inputProcessors` and pass any `MastraServerCache` as the backend. For development, `InMemoryServerCache` works out of the box:
 
 ```typescript title="src/mastra/agents/search-agent.ts"
 import { Agent } from '@mastra/core/agent'
-import { InMemoryServerCache, createMastraCacheFromServerCache } from '@mastra/core/cache'
+import { InMemoryServerCache } from '@mastra/core/cache'
 import { ResponseCache } from '@mastra/core/processors'
 
-const cache = createMastraCacheFromServerCache(new InMemoryServerCache())
+const cache = new InMemoryServerCache()
 
 export const searchAgent = new Agent({
   name: 'Search Agent',
@@ -86,21 +86,14 @@ Pass `scope: null` to deliberately share entries across all callers — only use
 
 ## Custom cache backend
 
-`ResponseCache` requires a `MastraCache`. Implement the interface for any backend (Redis, DynamoDB, etc.):
+`ResponseCache` accepts any `MastraServerCache`. For production, use `RedisCache` from `@mastra/redis`:
 
 ```typescript title="src/mastra/agents/cached-agent.ts"
 import { Agent } from '@mastra/core/agent'
-import type { MastraCache } from '@mastra/core/cache'
 import { ResponseCache } from '@mastra/core/processors'
+import { RedisCache } from '@mastra/redis'
 
-const cache: MastraCache = {
-  async get(key) {
-    /* ... */
-  },
-  async set(key, value, ttlSeconds) {
-    /* ... */
-  },
-}
+const cache = new RedisCache({ url: process.env.REDIS_URL })
 
 export const agent = new Agent({
   name: 'Cached Agent',
@@ -110,14 +103,7 @@ export const agent = new Agent({
 })
 ```
 
-To wire an existing `MastraServerCache` (e.g. the `RedisCache` from `@mastra/redis`), use `createMastraCacheFromServerCache`:
-
-```typescript
-import { createMastraCacheFromServerCache } from '@mastra/core/cache'
-import { RedisCache } from '@mastra/redis'
-
-const cache = createMastraCacheFromServerCache(new RedisCache({ url: process.env.REDIS_URL }))
-```
+For a custom backend, extend `MastraServerCache` and implement its abstract methods (the processor only calls `get` and `set`).
 
 ## How caching is implemented
 

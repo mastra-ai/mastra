@@ -1,6 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MastraCache } from '../../cache';
+import { MastraServerCache } from '../../cache';
 import { ResponseCache } from '../../processors/processors/response-cache';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
@@ -46,39 +46,56 @@ async function waitForSets(cache: { sets: number }, expected: number) {
   }
 }
 
-function createMemoryCache(): MastraCache & {
-  store: Map<string, unknown>;
-  sets: number;
-  gets: number;
-  ttls: Array<number | undefined>;
-} {
-  const store = new Map<string, unknown>();
-  const ttls: Array<number | undefined> = [];
-  let sets = 0;
-  let gets = 0;
-  return {
-    store,
-    ttls,
-    get sets() {
-      return sets;
-    },
-    get gets() {
-      return gets;
-    },
-    async get<T>(key: string): Promise<T | undefined> {
-      gets++;
-      return store.get(key) as T | undefined;
-    },
-    async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
-      sets++;
-      ttls.push(ttlSeconds);
-      store.set(key, value);
-    },
-  };
+class RecordingServerCache extends MastraServerCache {
+  readonly store = new Map<string, unknown>();
+  readonly ttls: Array<number | undefined> = [];
+  sets = 0;
+  gets = 0;
+
+  constructor() {
+    super({ name: 'RecordingServerCache' });
+  }
+
+  async get(key: string): Promise<unknown> {
+    this.gets++;
+    return this.store.get(key);
+  }
+
+  async set(key: string, value: unknown, ttlMs?: number): Promise<void> {
+    this.sets++;
+    this.ttls.push(ttlMs);
+    this.store.set(key, value);
+  }
+
+  async listLength(): Promise<number> {
+    return 0;
+  }
+
+  async listPush(): Promise<void> {}
+
+  async listFromTo(): Promise<unknown[]> {
+    return [];
+  }
+
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+
+  async clear(): Promise<void> {
+    this.store.clear();
+  }
+
+  async increment(): Promise<number> {
+    return 0;
+  }
+}
+
+function createMemoryCache(): RecordingServerCache {
+  return new RecordingServerCache();
 }
 
 function createAgent(args: {
-  cache: MastraCache;
+  cache: MastraServerCache;
   agentId?: string;
   ttl?: number;
   scope?: string | null;
@@ -162,11 +179,12 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(cache.sets).toBe(0);
     });
 
-    it('writes the configured TTL on cache writes', async () => {
+    it('writes the configured TTL on cache writes (converts seconds to ms)', async () => {
       const ttlAgent = createAgent({ cache, ttl: 999, agentId: 'ttl-agent' });
       await ttlAgent.agent.generate('Hi');
       await waitForSets(cache, 1);
-      expect(cache.ttls).toEqual([999]);
+      // ResponseCache.ttl is seconds; MastraServerCache.set takes ms.
+      expect(cache.ttls).toEqual([999_000]);
     });
   });
 

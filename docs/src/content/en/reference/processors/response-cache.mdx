@@ -17,10 +17,10 @@ There is no agent-level option for response caching; register `ResponseCache` ex
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
-import { InMemoryServerCache, createMastraCacheFromServerCache } from '@mastra/core/cache'
+import { InMemoryServerCache } from '@mastra/core/cache'
 import { ResponseCache } from '@mastra/core/processors'
 
-const cache = createMastraCacheFromServerCache(new InMemoryServerCache())
+const cache = new InMemoryServerCache()
 
 const agent = new Agent({
   name: 'Search Agent',
@@ -49,9 +49,9 @@ See [Response caching](/docs/agents/response-caching) for the conceptual overvie
   content={[
   {
     name: 'cache',
-    type: 'MastraCache',
+    type: 'MastraServerCache',
     description:
-      'The cache backend. Required. Implement `MastraCache` directly or wire an existing `MastraServerCache` (e.g. `RedisCache` from `@mastra/redis`) using `createMastraCacheFromServerCache`.',
+      'The cache backend. Required. Pass any `MastraServerCache` implementation — `InMemoryServerCache` for local development, `RedisCache` from `@mastra/redis` for production, or your own subclass for a custom backend.',
     isOptional: false,
   },
   {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { MastraCache } from '../../cache';
+import type { MastraServerCache } from '../../cache';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import type {
   CachedLLMStepResponse,
@@ -94,12 +94,12 @@ export interface ResponseCacheOptions {
   /**
    * The cache backend. Required; the processor is a no-op without one.
    *
-   * Designed as a plug point: a Redis-backed `MastraCache` implementation
-   * delivers production-grade response caching, and a filesystem-backed
-   * one (planned follow-up) lets the same primitive record/replay LLM
-   * responses for tests.
+   * Pass any {@link MastraServerCache} implementation — `InMemoryServerCache`
+   * for local development, `RedisCache` from `@mastra/redis` for production,
+   * or your own subclass for a custom backend (e.g. a filesystem-backed
+   * fixture recorder).
    */
-  cache: MastraCache;
+  cache: MastraServerCache;
 
   /**
    * Override the auto-derived cache key. See {@link ResponseCacheKeyFn} for
@@ -152,7 +152,7 @@ export interface ResponseCacheContextOptions {
 }
 
 /**
- * Processor that reads/writes per-step LLM responses from a {@link MastraCache}.
+ * Processor that reads/writes per-step LLM responses from a {@link MastraServerCache}.
  *
  * Implements both `processLLMRequest` (cache lookup; short-circuit on hit)
  * and `processLLMResponse` (cache write on completion). The two hooks share
@@ -261,7 +261,8 @@ export class ResponseCache implements Processor<'mastra/response-cache'> {
 
     let cached: CachedLLMStepResponse | undefined;
     try {
-      cached = await cache.get<CachedLLMStepResponse>(cacheKey);
+      const raw = await cache.get(cacheKey);
+      cached = raw == null ? undefined : (raw as CachedLLMStepResponse);
     } catch {
       // Read failures are non-fatal — fall through to a real call. Don't
       // stash a key, since we don't trust the backend right now.
@@ -303,7 +304,9 @@ export class ResponseCache implements Processor<'mastra/response-cache'> {
     };
 
     try {
-      await cache.set(cacheKey, cached, ttl ?? DEFAULT_RESPONSE_CACHE_TTL_SECONDS);
+      // MastraServerCache uses milliseconds; ResponseCache.ttl is seconds.
+      const ttlMs = (ttl ?? DEFAULT_RESPONSE_CACHE_TTL_SECONDS) * 1000;
+      await cache.set(cacheKey, cached, ttlMs);
     } catch {
       // Write failures are non-fatal.
     }

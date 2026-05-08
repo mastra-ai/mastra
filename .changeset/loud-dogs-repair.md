@@ -10,10 +10,10 @@ Caching is opt-in: register `ResponseCache` explicitly on `inputProcessors`. The
 
 ```ts
 import { Agent } from '@mastra/core/agent';
-import { InMemoryServerCache, createMastraCacheFromServerCache } from '@mastra/core/cache';
+import { InMemoryServerCache } from '@mastra/core/cache';
 import { ResponseCache } from '@mastra/core/processors';
 
-const cache = createMastraCacheFromServerCache(new InMemoryServerCache());
+const cache = new InMemoryServerCache();
 
 const agent = new Agent({
   name: 'Search Agent',
@@ -63,7 +63,6 @@ The cache key is derived from the resolved prompt Mastra is about to send to the
 
 Also adds:
 
-- `MastraCache` interface and `InMemoryServerCache` (in `@mastra/core/cache`) for plugging in custom backends.
-- `createMastraCacheFromServerCache` adapter that turns any `MastraServerCache` (e.g. `RedisCache` from `@mastra/redis`) into a `MastraCache`.
+- `InMemoryServerCache` (in `@mastra/core/cache`) for local development. `ResponseCache` accepts any `MastraServerCache` directly — use `RedisCache` from `@mastra/redis` for production.
 - `MastraServerCache.set()` now accepts an optional `ttlMs` argument so implementations can override the configured default TTL on a per-entry basis. `InMemoryServerCache` and `RedisCache` (in `@mastra/redis`) both honor this.
 - New paired processor hooks `processLLMRequest` and `processLLMResponse`. `ProcessLLMRequestResult` may return `{ response }` to short-circuit the LLM call with a cached payload.
