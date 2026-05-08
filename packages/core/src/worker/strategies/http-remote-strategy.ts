@@ -54,7 +54,7 @@ export class HttpRemoteStrategy implements StepExecutionStrategy {
     return { type: 'bearer', token };
   }
 
-  async executeStep(params: StepExecutionParams): Promise<StepResult<any, any, any, any>> {
+  async executeStep(params: StepExecutionParams): Promise<StepResult<unknown, unknown, unknown, unknown>> {
     const url = new URL(
       `workflows/${encodeURIComponent(params.workflowId)}/runs/${encodeURIComponent(params.runId)}/steps/execute`,
       this.#baseUrl,
@@ -79,7 +79,7 @@ export class HttpRemoteStrategy implements StepExecutionStrategy {
       throw new StepExecutionError(res.status, text);
     }
 
-    return res.json() as Promise<StepResult<any, any, any, any>>;
+    return res.json() as Promise<StepResult<unknown, unknown, unknown, unknown>>;
   }
 
   /**
@@ -92,7 +92,7 @@ export class HttpRemoteStrategy implements StepExecutionStrategy {
    */
   #buildBody(params: StepExecutionParams): string {
     const { abortSignal: _abortSignal, requestContext, ...rest } = params;
-    let safeRequestContext: Record<string, any>;
+    let safeRequestContext: Record<string, unknown>;
     try {
       safeRequestContext = JSON.parse(JSON.stringify(requestContext ?? {}));
     } catch (err) {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { RedisStreamsPubSub } from './index';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
@@ -51,10 +51,6 @@ function captureCalls() {
 
 describe('RedisStreamsPubSub', () => {
   let pubsubs: RedisStreamsPubSub[] = [];
-
-  beforeAll(() => {
-    if (!REDIS_URL) throw new Error('REDIS_URL not set');
-  });
 
   function createPubSub(): RedisStreamsPubSub {
     const ps = new RedisStreamsPubSub({ url: REDIS_URL, blockMs: 200 });
@@ -145,6 +141,13 @@ describe('RedisStreamsPubSub', () => {
       // Both should have received at least one (round-robin distributes).
       expect(a.calls.length).toBeGreaterThan(0);
       expect(b.calls.length).toBeGreaterThan(0);
+
+      // Critical invariant for competing consumers: every message id was
+      // delivered exactly once across the group. Summing call counts above
+      // is necessary but not sufficient — assert no id appears twice.
+      const allIds = [...a.calls, ...b.calls].map(c => c.event.id);
+      expect(allIds).toHaveLength(N);
+      expect(new Set(allIds).size).toBe(N);
     });
 
     it('different groups on the same topic each receive every message', async () => {

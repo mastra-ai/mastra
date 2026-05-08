@@ -122,24 +122,29 @@ const fanoutKickoff = createStep({
   },
 });
 
-// Lazy, per-process producer-side BackgroundTaskManager used by the
-// fanout workflow step to enqueue dispatch events when the host
-// process started Mastra with workers: false (i.e. the HTTP server
-// process in the all-workers-split test, which can't auto-create a
-// manager). We unsubscribe its worker callback so it never competes
-// with the standalone bg worker process.
-let producerBgManager: { enqueue: (p: any) => Promise<{ task: { id: string } }> } | undefined;
-async function getProducerBgManager(mastra: any): Promise<typeof producerBgManager> {
+// Producer-side BackgroundTaskManager used by the fanout workflow step to
+// enqueue dispatch events when the host process started Mastra with
+// workers: false (i.e. the HTTP server process in the all-workers-split
+// test, which can't auto-create a manager). We unsubscribe its worker
+// callback so it never competes with the standalone bg worker process.
+//
+// Cached per Mastra instance (rather than a module-global) so concurrent
+// or sequential tests with their own Mastra don't share a stale manager
+// holding onto a closed Redis client.
+type ProducerBgManager = { enqueue: (p: any) => Promise<{ task: { id: string } }> };
+const producerBgManagers = new WeakMap<object, ProducerBgManager>();
+async function getProducerBgManager(mastra: any): Promise<ProducerBgManager | undefined> {
   if (mastra.backgroundTaskManager) return mastra.backgroundTaskManager;
-  if (producerBgManager) return producerBgManager;
+  const cached = producerBgManagers.get(mastra);
+  if (cached) return cached;
   const manager: any = new BackgroundTaskManager({ enabled: true });
   manager.__registerMastra(mastra);
   await manager.init(mastra.pubsub);
   if (manager.workerCallback) {
     await mastra.pubsub.unsubscribe('background-tasks', manager.workerCallback);
   }
-  producerBgManager = manager;
-  return producerBgManager;
+  producerBgManagers.set(mastra, manager);
+  return manager;
 }
 
 const fanoutEnqueueAndWait = createStep({

@@ -1,6 +1,6 @@
 ---
 '@mastra/core': minor
-'mastra': patch
+'mastra': minor
 '@mastra/server': minor
 '@mastra/redis-streams': patch
 ---
@@ -83,3 +83,33 @@ Push-capable PubSub:
 - `WorkflowEventProcessor` gains a `handle(event)` method that returns a
   structured `{ ok, retry }` result. The original `process(event, ack?)`
   method is preserved as a thin wrapper for back-compat.
+
+Public-API example for a push-capable PubSub:
+
+```ts
+import { Mastra } from '@mastra/core/mastra';
+import { EventEmitterPubSub } from '@mastra/core/pubsub';
+
+const mastra = new Mastra({
+  // A push-capable broker (GCP Pub/Sub push, SNS, EventEmitter, …).
+  // EventEmitterPubSub reports supportedModes = ['pull', 'push'].
+  pubsub: new EventEmitterPubSub(),
+  workflows: { myWorkflow },
+});
+
+// In-process push pubsubs are auto-wired here. For out-of-process
+// push (e.g. HTTP webhook from a cloud broker), POST the event to
+// /api/workflows/events on your Mastra server instead.
+await mastra.startWorkers();
+
+// Direct invocation (e.g. inside an HTTP handler that bridges from a
+// cloud broker's push delivery):
+await mastra.handleWorkflowEvent({
+  id: 'evt-1',
+  type: 'workflow.start',
+  runId: 'run-1',
+  createdAt: new Date(),
+  data: { workflowId: 'myWorkflow', inputData: { name: 'world' } },
+});
+```
+

@@ -174,35 +174,38 @@ describe('worker resilience and concurrency', () => {
       logger: false,
       workers: false,
     });
-    const storageInstance = controlMastra.getStorage();
-    const schedulesStore: any = await storageInstance!.getStore('schedules');
+    try {
+      const storageInstance = controlMastra.getStorage();
+      const schedulesStore: any = await storageInstance!.getStore('schedules');
 
-    const scheduleId = `filter-${Date.now()}`;
-    const now = Date.now();
-    await schedulesStore.createSchedule({
-      id: scheduleId,
-      target: { type: 'workflow', workflowId: 'cross-process-scheduled', inputData: { name: 'filter' } },
-      cron: '* * * * * *',
-      status: 'active',
-      nextFireAt: now + 200,
-      createdAt: now,
-      updatedAt: now,
-    });
+      const scheduleId = `filter-${Date.now()}`;
+      const now = Date.now();
+      await schedulesStore.createSchedule({
+        id: scheduleId,
+        target: { type: 'workflow', workflowId: 'cross-process-scheduled', inputData: { name: 'filter' } },
+        cron: '* * * * * *',
+        status: 'active',
+        nextFireAt: now + 200,
+        createdAt: now,
+        updatedAt: now,
+      });
 
-    // Give the scheduler enough time to tick.
-    await waitFor(async () => {
-      const updated = await schedulesStore.getSchedule(scheduleId);
-      return updated && updated.lastFireAt && updated.lastFireAt > now;
-    }, 15_000);
+      // Give the scheduler enough time to tick.
+      await waitFor(async () => {
+        const updated = await schedulesStore.getSchedule(scheduleId);
+        return updated && updated.lastFireAt && updated.lastFireAt > now;
+      }, 15_000);
 
-    // The schedule fired (lastFireAt advanced) but the step never
-    // executed (no orchestrator process exists).
-    expect(countMarker(server, 'step-execute-hit')).toBe(0);
-    expect(countMarker(server, 'scheduled-step-ran')).toBe(0);
+      // The schedule fired (lastFireAt advanced) but the step never
+      // executed (no orchestrator process exists).
+      expect(countMarker(server, 'step-execute-hit')).toBe(0);
+      expect(countMarker(server, 'scheduled-step-ran')).toBe(0);
 
-    // Pause and clean up.
-    await schedulesStore.updateSchedule(scheduleId, { status: 'paused' });
-    await controlMastra.shutdown();
+      // Pause the schedule so the running scheduler stops triggering it.
+      await schedulesStore.updateSchedule(scheduleId, { status: 'paused' });
+    } finally {
+      await controlMastra.shutdown();
+    }
   }, 30_000);
 
   it('a workflow started before any orchestrator exists still completes once one joins', async () => {

@@ -80,19 +80,20 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
       backgroundTasks: { enabled: true },
       logger: false,
     });
-    // Inject a logger after construction so we can capture the warn.
-    (mastra as any).__logger = { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() };
-    // The warn call lives behind the private #logger; the test relies on the
-    // public side-effect of `targets` being empty.
+    mastra.setLogger({
+      logger: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+    });
     for (const w of mastra.workers) {
       vi.spyOn(w, 'start').mockResolvedValue(undefined);
       vi.spyOn(w, 'init').mockResolvedValue(undefined);
     }
 
     await mastra.startWorkers();
-    // Should not throw, should not start any worker.
+    // Should not throw, should not start any worker, and must have warned
+    // about the empty filter so users know MASTRA_WORKERS was misspelled.
     for (const w of mastra.workers) {
       expect((w as any).start.mock.calls.length).toBe(0);
     }
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('MASTRA_WORKERS=nonexistent'));
   });
 });

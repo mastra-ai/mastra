@@ -548,6 +548,14 @@ export class Mastra<
   // Callback registered against the pubsub when running in push mode so we can
   // unsubscribe it cleanly during stopWorkers().
   #pushSubscription?: { topic: string; cb: EventCallback };
+  // Tracks (topic, listener) pairs registered against the pubsub on behalf of
+  // user-defined event listeners during startWorkers(). Used to make
+  // startWorkers()/stopWorkers() idempotent — a second startWorkers() call
+  // must not double-subscribe the same listener.
+  #userEventSubscriptions: Array<{
+    topic: string;
+    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+  }> = [];
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -997,6 +1005,13 @@ export class Mastra<
     this.#storage = storage;
 
     this.#backgroundTaskConfig = config?.backgroundTasks;
+    // Auto-create the background-task manager only when this Mastra is
+    // running workers. When `workers: false`, the consumer of the
+    // background-tasks topic must live elsewhere — the producer can still
+    // construct its own `BackgroundTaskManager` and call `init()` directly
+    // (see redis-streams cross-process tests for that pattern). Initializing
+    // a worker here would compete with the dedicated worker process for
+    // dispatch events.
     if (workersOption !== false) {
       this.#ensureBackgroundTaskManager();
     }
@@ -3945,7 +3960,8 @@ export class Mastra<
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
-    // Only when starting all workers (not when targeting a specific one)
+    // Only when starting all workers (not when targeting a specific one).
+    // Idempotent: skip pairs we've already subscribed.
     if (!name) {
       for (const topic in this.#events) {
         if (!this.#events[topic]) {
@@ -3954,7 +3970,12 @@ export class Mastra<
 
         const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
         for (const listener of listeners) {
+          const alreadySubscribed = this.#userEventSubscriptions.some(
+            sub => sub.topic === topic && sub.cb === listener,
+          );
+          if (alreadySubscribed) continue;
           await this.#pubsub.subscribe(topic, listener);
+          this.#userEventSubscriptions.push({ topic, cb: listener });
         }
       }
     }
@@ -3977,17 +3998,13 @@ export class Mastra<
       this.#pushSubscription = undefined;
     }
 
-    // Unsubscribe user-defined event listeners
-    for (const topic in this.#events) {
-      if (!this.#events[topic]) {
-        continue;
-      }
-
-      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
-      for (const listener of listeners) {
-        await this.#pubsub.unsubscribe(topic, listener);
-      }
+    // Unsubscribe only the (topic, listener) pairs we actually registered in
+    // startWorkers() — keeps stopWorkers() symmetric with startWorkers() and
+    // avoids unsubscribing listeners that startWorkers never owned.
+    for (const { topic, cb } of this.#userEventSubscriptions) {
+      await this.#pubsub.unsubscribe(topic, cb);
     }
+    this.#userEventSubscriptions = [];
 
     await this.#pubsub.flush();
   }

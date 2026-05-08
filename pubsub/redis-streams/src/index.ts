@@ -389,8 +389,10 @@ export class RedisStreamsPubSub extends PubSub {
       if (settled) return;
       settled = true;
       try {
+        // Only ack against this consumer group. Do NOT xDel: the stream may
+        // be consumed by other groups, and xDel removes the entry for all of
+        // them. Stream growth is bounded elsewhere via MAXLEN-style trimming.
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
-        await this.#writeClient.xDel(sub.streamKey, [streamId]);
       } catch (err) {
         this.#logger?.debug?.('redis-streams: ack cleanup failed', {
           topic: sub.topic,
@@ -414,8 +416,8 @@ export class RedisStreamsPubSub extends PubSub {
           max: this.#maxDeliveryAttempts,
         });
         try {
+          // Group-scoped ack only — see ack() above for why we never xDel.
           await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
-          await this.#writeClient.xDel(sub.streamKey, [streamId]);
         } catch (err) {
           this.#logger?.debug?.('redis-streams: ack on dropped poison message failed', {
             topic: sub.topic,

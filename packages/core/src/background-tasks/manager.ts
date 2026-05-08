@@ -132,7 +132,13 @@ export class BackgroundTaskManager {
       const { buildBackgroundTaskWorkflow } = await import('./workflow');
       const workflow = buildBackgroundTaskWorkflow(this);
       if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
-        this.#mastra.__registerInternalWorkflow(workflow as any);
+        // The `__background-task` workflow is typed against `EventedEngineType`
+        // and a concrete input/output schema, while `__registerInternalWorkflow`
+        // accepts the looser default `Workflow` shape. The cast is purely a
+        // type-level bridge — the runtime value is a real Workflow.
+        this.#mastra.__registerInternalWorkflow(
+          workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
+        );
       }
     }
 
@@ -176,6 +182,9 @@ export class BackgroundTaskManager {
    * resolve the executor by tool name via this registry.
    */
   registerStaticExecutor(toolName: string, executor: ToolExecutor): void {
+    if (this.staticExecutors.has(toolName)) {
+      this.#mastra?.getLogger?.()?.debug?.(`Overwriting existing static executor for tool "${toolName}"`);
+    }
     this.staticExecutors.set(toolName, executor);
   }
 

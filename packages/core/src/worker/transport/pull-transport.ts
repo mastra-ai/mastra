@@ -18,6 +18,10 @@ export class PullTransport implements WorkerTransport {
   }
 
   async start(router: EventRouter): Promise<void> {
+    if (this.#callbacks.length > 0) {
+      this.#logger?.debug('[PullTransport] start() called while already subscribed; ignoring duplicate call');
+      return;
+    }
     const workflowCb: EventCallback = (event, ack, nack) => {
       // route() is async; surface unexpected rejections as a nack instead
       // of an unhandledRejection. The router's own try/catch already turns

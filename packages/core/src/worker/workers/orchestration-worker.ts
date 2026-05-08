@@ -89,11 +89,14 @@ export class OrchestrationWorker extends MastraWorker {
 
   async stop(): Promise<void> {
     if (!this.#running) return;
-    this.#running = false;
 
-    if (this.#transport) {
-      await this.#transport.stop();
-      this.#transport = undefined;
+    try {
+      if (this.#transport) {
+        await this.#transport.stop();
+        this.#transport = undefined;
+      }
+    } finally {
+      this.#running = false;
     }
   }
 
@@ -123,6 +126,7 @@ export class OrchestrationWorker extends MastraWorker {
     this.deps?.logger?.error('OrchestrationWorker: error processing event', {
       type: event.type,
       runId: event.runId,
+      retry: result.retry,
     });
     if (nack) {
       await nack();

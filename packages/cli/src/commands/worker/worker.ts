@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { FileService } from '../../services/service.file';
 import { createLogger } from '../../utils/logger';
 import { WorkerBundler } from './WorkerBundler';
@@ -18,7 +18,7 @@ export async function startWorker({
 }) {
   const workerName = name || 'all';
   const rootDir = root || process.cwd();
-  const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
+  const mastraDir: string = dir ? (isAbsolute(dir) ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
 
@@ -47,6 +47,13 @@ export async function startWorker({
     const child = spawn(process.execPath, [outputFile], {
       stdio: 'inherit',
       env: process.env,
+    });
+
+    child.on('error', err => {
+      logger.error(`Worker process failed to start: ${err instanceof Error ? err.message : String(err)}`, {
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      process.exit(1);
     });
 
     child.on('exit', code => {

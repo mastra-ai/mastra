@@ -76,9 +76,8 @@ describe('cross-process scheduler', () => {
   }, 60_000);
 
   afterAll(async () => {
-    await killProcess(scheduler);
-    await killProcess(worker);
-    await killProcess(server);
+    // allSettled so a single zombie process doesn't block the others.
+    await Promise.allSettled([killProcess(scheduler), killProcess(worker), killProcess(server)]);
     await storage?.cleanup();
   });
 

@@ -153,12 +153,17 @@ describe('BackgroundTaskWorker', () => {
     await worker.init(deps);
     expect(worker.manager).toBeDefined();
     expect(worker.isRunning).toBe(false);
+    // init() must not touch pubsub — that's what start() is for.
+    expect(deps._pubsub.subscribe).not.toHaveBeenCalled();
 
     await worker.start();
     expect(worker.isRunning).toBe(true);
+    // start() owns the manager here, so init(pubsub) ran and subscribed.
+    expect(deps._pubsub.subscribe).toHaveBeenCalled();
 
     await worker.stop();
     expect(worker.isRunning).toBe(false);
+    expect(deps._pubsub.unsubscribe).toHaveBeenCalled();
   });
 
   it('start() before init() throws', async () => {

@@ -39,12 +39,13 @@ export class WorkerBundler extends Bundler {
 
   protected getEntry(): string {
     const nameArg = this.workerName === 'all' ? 'undefined' : JSON.stringify(this.workerName);
+    const startedLabel = this.workerName === 'all' ? 'Workers' : `Worker ${JSON.stringify(this.workerName)}`;
     return `
     import { mastra } from '#mastra';
 
     await mastra.startWorkers(${nameArg});
 
-    console.log('[mastra] Worker${this.workerName === 'all' ? 's' : ' "' + this.workerName + '"'} started');
+    console.log(${JSON.stringify(`[mastra] ${startedLabel} started`)});
 
     const shutdown = async () => {
       console.log('[mastra] Shutting down workers...');

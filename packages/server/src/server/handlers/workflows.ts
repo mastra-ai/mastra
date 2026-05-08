@@ -1198,18 +1198,18 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 // Used by standalone OrchestrationWorker instances with HttpRemoteStrategy.
 // ============================================================================
 
+// `workflowId` and `runId` are taken from path params (single source of
+// truth); they are intentionally omitted from the request body schema.
 const stepExecutionBodySchema = z.object({
-  workflowId: z.string(),
-  runId: z.string(),
   stepId: z.string(),
-  executionPath: z.array(z.number()),
+  executionPath: z.array(z.number().int().nonnegative()),
   stepResults: z.record(z.string(), z.any()),
   state: z.record(z.string(), z.any()),
   requestContext: z.record(z.string(), z.any()),
   input: z.any().optional(),
   resumeData: z.any().optional(),
-  retryCount: z.number().optional(),
-  foreachIdx: z.number().optional(),
+  retryCount: z.number().int().nonnegative().optional(),
+  foreachIdx: z.number().int().nonnegative().optional(),
   format: z.enum(['legacy', 'vnext']).optional(),
   perStep: z.boolean().optional(),
   validateInputs: z.boolean().optional(),
@@ -1301,7 +1301,10 @@ const workflowEventSchema = z.object({
   type: z.string(),
   data: z.unknown(),
   runId: z.string(),
-  createdAt: z.union([z.string(), z.date()]).transform(v => (v instanceof Date ? v : new Date(v))),
+  createdAt: z
+    .union([z.string(), z.date()])
+    .transform(v => (v instanceof Date ? v : new Date(v)))
+    .refine(d => !Number.isNaN(d.getTime()), { message: 'Invalid createdAt' }),
   index: z.number().optional(),
   deliveryAttempt: z.number().optional(),
 });
