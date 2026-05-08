@@ -20,16 +20,7 @@ import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.
 import type { ModelInformation } from '../types';
 import { isOptional, isNullable, isNull, isObj, isArr, isUnion, isString, isNumber, isIntersection } from '../zodTypes';
 
-/**
- * Recursively converts union type arrays (e.g., `type: ["string", "null"]`) to
- * Gemini-compatible JSON Schema.
- *
- * Gemini's function calling API does not support union type arrays in JSON Schema.
- * This function converts patterns like `{ type: ["string", "null"] }` to
- * `{ type: "string", nullable: true }`. If multiple non-null types remain,
- * it removes `type` instead of preserving an array Gemini rejects.
- */
-function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any> {
+function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string, any> {
   if (typeof schema !== 'object' || schema === null) {
     return schema;
   }
@@ -55,9 +46,6 @@ function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any>
     delete result.const;
   }
 
-  // Convert nullable anyOf patterns directly to nullable: true. If multiple
-  // non-null branches remain, omit a concrete type rather than preserving an
-  // anyOf union for providers that reject union-shaped tool parameters.
   if (result.anyOf && Array.isArray(result.anyOf)) {
     const nullSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type === 'null');
     const nonNullSchemas = result.anyOf.filter((s: any) => !(typeof s === 'object' && s !== null && s.type === 'null'));
@@ -65,46 +53,41 @@ function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any>
     if (nullSchema) {
       const { anyOf: _, ...rest } = result;
       if (nonNullSchemas.length === 1 && typeof nonNullSchemas[0] === 'object' && nonNullSchemas[0] !== null) {
-        const fixedOther = fixNullableUnionTypes(nonNullSchemas[0]);
+        const fixedOther = fixAISDKNullableUnionTypes(nonNullSchemas[0]);
         return fixedOther.type ? { ...rest, ...fixedOther, nullable: true } : { ...rest, ...fixedOther };
       }
       return rest;
     }
   }
 
-  // Recursively fix properties
   if (result.properties && typeof result.properties === 'object') {
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, fixNullableUnionTypes(value as any)]),
+      Object.entries(result.properties).map(([key, value]) => [key, fixAISDKNullableUnionTypes(value as any)]),
     );
   }
 
-  // Recursively fix items
   if (result.items) {
     if (Array.isArray(result.items)) {
-      result.items = result.items.map((item: any) => fixNullableUnionTypes(item));
+      result.items = result.items.map((item: any) => fixAISDKNullableUnionTypes(item));
     } else {
-      result.items = fixNullableUnionTypes(result.items);
+      result.items = fixAISDKNullableUnionTypes(result.items);
     }
   }
 
-  // Recursively fix additionalProperties (e.g., z.record() value schemas)
   if (result.additionalProperties && typeof result.additionalProperties === 'object') {
-    result.additionalProperties = fixNullableUnionTypes(result.additionalProperties);
+    result.additionalProperties = fixAISDKNullableUnionTypes(result.additionalProperties);
   }
 
-  // Recursively fix anyOf/oneOf/allOf
   if (result.anyOf && Array.isArray(result.anyOf)) {
-    result.anyOf = result.anyOf.map((s: any) => fixNullableUnionTypes(s));
+    result.anyOf = result.anyOf.map((s: any) => fixAISDKNullableUnionTypes(s));
   }
   if (result.oneOf && Array.isArray(result.oneOf)) {
-    result.oneOf = result.oneOf.map((s: any) => fixNullableUnionTypes(s));
+    result.oneOf = result.oneOf.map((s: any) => fixAISDKNullableUnionTypes(s));
   }
   if (result.allOf && Array.isArray(result.allOf)) {
-    result.allOf = result.allOf.map((s: any) => fixNullableUnionTypes(s));
+    result.allOf = result.allOf.map((s: any) => fixAISDKNullableUnionTypes(s));
   }
 
-  // Gemini requires anyOf to be the only field in the schema — strip all siblings
   if (result.anyOf && Array.isArray(result.anyOf)) {
     if (result.description) {
       for (const item of result.anyOf) {
@@ -176,14 +159,13 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   public processToJSONSchema(schema: PublicSchema<any>, io?: 'input' | 'output'): JSONSchema7 {
-    const result = super.processToJSONSchema(schema, io);
-    return fixNullableUnionTypes(result as Record<string, any>) as JSONSchema7;
+    return super.processToJSONSchema(schema, io);
   }
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
     const compat = this.processToCompatSchema(zodSchema);
     const transformedJsonSchema = standardSchemaToJSONSchema(compat);
-    const fixedJsonSchema = fixNullableUnionTypes(transformedJsonSchema as Record<string, any>) as JSONSchema7;
+    const fixedJsonSchema = fixAISDKNullableUnionTypes(transformedJsonSchema as Record<string, any>) as JSONSchema7;
 
     return jsonSchema(fixedJsonSchema, {
       validate: (value: unknown) => {

@@ -119,9 +119,7 @@ describe('GoogleSchemaCompatLayer', () => {
             nullable: true,
             description: 'A nullable string',
           },
-          jsonValue: {
-            description: 'A JSON-serializable value',
-          },
+          jsonValue: {},
         },
       });
       expect((schema.jsonSchema as any).properties.jsonValue.type).toBeUndefined();
