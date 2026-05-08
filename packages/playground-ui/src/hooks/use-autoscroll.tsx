@@ -26,7 +26,9 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
       }
 
       scrollFrameRef.current = requestAnimationFrame(() => {
-        area.scrollTop = area.scrollHeight;
+        if (shouldScrollRef.current) {
+          area.scrollTop = area.scrollHeight;
+        }
         scrollFrameRef.current = null;
       });
     };
@@ -42,6 +44,18 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
     const resizeObserver = new ResizeObserver(scrollToEnd);
     resizeObserver.observe(area);
 
+    const cancelPendingScroll = () => {
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+
+    const stopFollowing = () => {
+      shouldScrollRef.current = false;
+      cancelPendingScroll();
+    };
+
     const registerUserScrollIntent = () => {
       userScrollIntentRef.current = true;
 
@@ -55,10 +69,19 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
       }, 250);
     };
 
-    const cancelPendingScroll = () => {
-      if (scrollFrameRef.current !== null) {
-        cancelAnimationFrame(scrollFrameRef.current);
-        scrollFrameRef.current = null;
+    const handleWheel = (event: WheelEvent) => {
+      registerUserScrollIntent();
+
+      if (event.deltaY < 0) {
+        stopFollowing();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      registerUserScrollIntent();
+
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) {
+        stopFollowing();
       }
     };
 
@@ -79,18 +102,18 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
       }
     };
 
-    area.addEventListener('wheel', registerUserScrollIntent, { passive: true });
+    area.addEventListener('wheel', handleWheel, { passive: true });
     area.addEventListener('touchmove', registerUserScrollIntent, { passive: true });
     area.addEventListener('pointerdown', registerUserScrollIntent);
-    area.addEventListener('keydown', registerUserScrollIntent);
+    area.addEventListener('keydown', handleKeyDown);
     area.addEventListener('scroll', handleScroll);
     scrollToEnd();
 
     return () => {
-      area.removeEventListener('wheel', registerUserScrollIntent);
+      area.removeEventListener('wheel', handleWheel);
       area.removeEventListener('touchmove', registerUserScrollIntent);
       area.removeEventListener('pointerdown', registerUserScrollIntent);
-      area.removeEventListener('keydown', registerUserScrollIntent);
+      area.removeEventListener('keydown', handleKeyDown);
       area.removeEventListener('scroll', handleScroll);
       mutationObserver.disconnect();
       resizeObserver.disconnect();
