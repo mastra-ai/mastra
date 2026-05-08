@@ -46,7 +46,8 @@ export class ArizeExporter extends OtelExporter {
     const projectName = config.projectName ?? process.env.ARIZE_PROJECT_NAME ?? process.env.PHOENIX_PROJECT_NAME;
 
     // Determine endpoint: config > PHOENIX_COLLECTOR_ENDPOINT > PHOENIX_ENDPOINT > ARIZE_AX_ENDPOINT (if spaceId is set)
-    let endpoint: string | undefined = config.endpoint ?? process.env.PHOENIX_COLLECTOR_ENDPOINT ?? process.env.PHOENIX_ENDPOINT;
+    let endpoint: string | undefined =
+      config.endpoint ?? process.env.PHOENIX_COLLECTOR_ENDPOINT ?? process.env.PHOENIX_ENDPOINT;
 
     const headers: Record<string, string> = {
       ...config.headers,
