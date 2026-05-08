@@ -366,6 +366,11 @@ export type CopilotModelEntry = {
   name: string;
   /** Vendor field from the API (e.g. `Anthropic`, `OpenAI`). */
   vendor: string;
+  /**
+   * Endpoints the model exposes (e.g. `/chat/completions`, `/responses`, `/v1/messages`).
+   * Empty when the API didn't return `supported_endpoints` for this entry.
+   */
+  supportedEndpoints: string[];
   /** True when `supported_endpoints` includes `/v1/messages` (Anthropic-shaped Copilot model). */
   isAnthropicShaped: boolean;
   /** True when `capabilities.supports.vision` is true. */
@@ -432,13 +437,17 @@ export async function fetchCopilotModels(opts: {
     const supportsVision = supports?.vision === true;
     const supportsToolCalls = supports?.tool_calls === true;
 
-    const supportedEndpoints = obj.supported_endpoints;
-    const isAnthropicShaped = Array.isArray(supportedEndpoints) && supportedEndpoints.includes('/v1/messages');
+    const rawEndpoints = obj.supported_endpoints;
+    const supportedEndpoints = Array.isArray(rawEndpoints)
+      ? rawEndpoints.filter((e): e is string => typeof e === 'string')
+      : [];
+    const isAnthropicShaped = supportedEndpoints.includes('/v1/messages');
 
     result.push({
       id,
       name,
       vendor,
+      supportedEndpoints,
       isAnthropicShaped,
       supportsVision,
       supportsToolCalls,

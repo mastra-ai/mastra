@@ -91,16 +91,22 @@ export function getAvailableModePacks(
   }
 
   if (access['github-copilot']) {
-    // Pack chosen with GitHub Copilot premium-request multipliers in mind:
-    //   build / plan: claude-sonnet-4.5 (1x premium request)
-    //   fast:        gpt-4.1            (0x — included with all paid Copilot plans)
+    // Every slot uses gpt-4.1 because it's the only Copilot model that:
+    //   - routes through the OpenAI `/chat/completions` adapter wired in
+    //     `providers/github-copilot.ts` (Anthropic-shaped Claude lives on
+    //     `/v1/messages`; Gemini speaks a third shape — neither works yet),
+    //   - is available on every paid Copilot tier, and
+    //   - is free (0x premium-request multiplier).
+    // Once per-vendor routing lands, swap build/plan to a higher-tier model
+    // (e.g. claude-sonnet-4.5 at 1x) and let users pick any non-disabled
+    // catalog model from the picker.
     packs.push({
       id: 'github-copilot',
       name: 'GitHub Copilot',
-      description: 'GitHub Copilot subscription (Claude Sonnet for build/plan, GPT-4.1 for fast)',
+      description: 'GitHub Copilot subscription (GPT-4.1 across all modes)',
       models: {
-        build: 'github-copilot/claude-sonnet-4.5',
-        plan: 'github-copilot/claude-sonnet-4.5',
+        build: 'github-copilot/gpt-4.1',
+        plan: 'github-copilot/gpt-4.1',
         fast: 'github-copilot/gpt-4.1',
       },
     });

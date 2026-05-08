@@ -33,7 +33,7 @@ describe('getAvailableModePacks', () => {
     expect(PROVIDER_DEFAULT_MODELS['openai-codex']).toBe(packs.find(pack => pack.id === 'openai')?.models.build);
   });
 
-  it('exposes a GitHub Copilot pack with low-multiplier model defaults', () => {
+  it('exposes a GitHub Copilot pack that uses only OpenAI-compatible models', () => {
     const packs = getAvailableModePacks({
       anthropic: false,
       openai: false,
@@ -45,12 +45,13 @@ describe('getAvailableModePacks', () => {
 
     const pack = packs.find(p => p.id === 'github-copilot');
     expect(pack).toBeDefined();
-    // Pack chosen with Copilot premium-request multipliers in mind:
-    //   - claude-sonnet-4.5 = 1x for build/plan
-    //   - gpt-4.1 = 0x (free) for fast
+    // Every slot is gpt-4.1: it's the only Copilot model that works through the
+    // current OpenAI `/chat/completions` adapter, is on every paid Copilot tier,
+    // and is free (0x premium-request multiplier). Anthropic-shaped Claude
+    // models would error today because they live on `/v1/messages`.
     expect(pack?.models).toEqual({
-      plan: 'github-copilot/claude-sonnet-4.5',
-      build: 'github-copilot/claude-sonnet-4.5',
+      plan: 'github-copilot/gpt-4.1',
+      build: 'github-copilot/gpt-4.1',
       fast: 'github-copilot/gpt-4.1',
     });
   });

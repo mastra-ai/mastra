@@ -24,7 +24,10 @@ import type {
 export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   anthropic: 'anthropic/claude-opus-4-6',
   'openai-codex': 'openai/gpt-5.5',
-  'github-copilot': 'github-copilot/claude-sonnet-4.5',
+  // gpt-4.1 routes through `/chat/completions` (which our OpenAI-compatible
+  // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
+  // are not yet wired up, so picking one as the post-login default would error.
+  'github-copilot': 'github-copilot/gpt-4.1',
 };
 
 // Provider registry

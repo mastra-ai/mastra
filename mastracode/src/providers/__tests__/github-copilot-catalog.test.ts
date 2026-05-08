@@ -173,7 +173,9 @@ describe('getCopilotModelCatalog', () => {
       const { getCopilotModelCatalog } = await import('../github-copilot.js');
       const models = await getCopilotModelCatalog({ authStorage: githubCopilotStorage as any });
 
-      expect(models.map(m => m.id).sort()).toEqual(['claude-sonnet-4.5', 'gpt-4.1']);
+      // The fallback only includes OpenAI-compatible models — Anthropic-shaped
+      // Claude wouldn't work through the current `/chat/completions` adapter.
+      expect(models.map(m => m.id)).toEqual(['gpt-4.1']);
       expect(warnSpy).toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();
@@ -196,5 +198,45 @@ describe('getCopilotModelCatalog', () => {
 
     const [url] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://copilot-api.company.ghe.com/models');
+  });
+});
+
+describe('isCopilotModelOpenAICompatible', () => {
+  function entry(overrides: Partial<{ supportedEndpoints: string[] }>) {
+    return {
+      id: 'm',
+      name: 'M',
+      vendor: 'X',
+      isAnthropicShaped: false,
+      supportsVision: false,
+      supportsToolCalls: false,
+      supportedEndpoints: [],
+      ...overrides,
+    };
+  }
+
+  it('keeps models that explicitly advertise /chat/completions', async () => {
+    const { isCopilotModelOpenAICompatible } = await import('../github-copilot.js');
+    expect(isCopilotModelOpenAICompatible(entry({ supportedEndpoints: ['/chat/completions'] }))).toBe(true);
+    expect(isCopilotModelOpenAICompatible(entry({ supportedEndpoints: ['/chat/completions', '/responses'] }))).toBe(
+      true,
+    );
+  });
+
+  it('drops models that only advertise /v1/messages (Anthropic-shaped)', async () => {
+    const { isCopilotModelOpenAICompatible } = await import('../github-copilot.js');
+    expect(isCopilotModelOpenAICompatible(entry({ supportedEndpoints: ['/v1/messages'] }))).toBe(false);
+  });
+
+  it('drops models that only advertise the Responses API', async () => {
+    // Pure-/responses models would need the `responses()` adapter, not the
+    // chat-completions adapter currently wired in `githubCopilotProvider`.
+    const { isCopilotModelOpenAICompatible } = await import('../github-copilot.js');
+    expect(isCopilotModelOpenAICompatible(entry({ supportedEndpoints: ['/responses'] }))).toBe(false);
+  });
+
+  it('keeps models with missing/empty supported_endpoints (legacy fallback)', async () => {
+    const { isCopilotModelOpenAICompatible } = await import('../github-copilot.js');
+    expect(isCopilotModelOpenAICompatible(entry({ supportedEndpoints: [] }))).toBe(true);
   });
 });

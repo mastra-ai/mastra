@@ -230,7 +230,7 @@ const copilotMiddleware: LanguageModelMiddleware = {
  * API, so we wire `@ai-sdk/openai` to it via {@link buildGitHubCopilotOAuthFetch}.
  */
 export function githubCopilotProvider(
-  modelId: string = 'claude-sonnet-4.5',
+  modelId: string = 'gpt-4.1',
   options?: { headers?: Record<string, string> },
 ): MastraModelConfig {
   const headers = options?.headers;
@@ -266,27 +266,40 @@ export function githubCopilotProvider(
 
 /**
  * Hard-coded fallback advertised when the live `/models` request fails (network
- * down, expired token, etc.). Both are widely available across paid Copilot
- * tiers, so the user can still pick a model without a live API call.
+ * down, expired token, etc.). Only includes models that route through the OpenAI
+ * `/chat/completions` adapter implemented here — Anthropic-shaped Copilot models
+ * (Claude on `/v1/messages`) and Gemini are NOT included since calling them via
+ * `/chat/completions` returns "model not supported" / "Bad Request" at runtime.
+ *
+ * Available across all paid Copilot tiers and free of premium-request charges.
  */
 const COPILOT_FALLBACK_MODELS: CopilotModelEntry[] = [
-  {
-    id: 'claude-sonnet-4.5',
-    name: 'Claude Sonnet 4.5',
-    vendor: 'Anthropic',
-    isAnthropicShaped: false,
-    supportsVision: true,
-    supportsToolCalls: true,
-  },
   {
     id: 'gpt-4.1',
     name: 'GPT-4.1',
     vendor: 'OpenAI',
+    supportedEndpoints: ['/chat/completions'],
     isAnthropicShaped: false,
     supportsVision: true,
     supportsToolCalls: true,
   },
 ];
+
+/**
+ * True when this Copilot model can be called through the OpenAI chat-completions
+ * adapter that backs `githubCopilotProvider()`.
+ *
+ * Copilot exposes Anthropic models on `/v1/messages` and Gemini on its own shape;
+ * neither speaks `/chat/completions`, so calling them through this provider fails
+ * with "model not supported" (Anthropic) or "Bad Request" (Gemini). Filter those
+ * out of the picker until we add per-vendor routing.
+ */
+export function isCopilotModelOpenAICompatible(entry: CopilotModelEntry): boolean {
+  // Legacy / missing metadata: assume compatible (older API responses don't include
+  // `supported_endpoints`, and historically every listed model spoke chat/completions).
+  if (entry.supportedEndpoints.length === 0) return true;
+  return entry.supportedEndpoints.includes('/chat/completions');
+}
 
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 const CATALOG_FAILURE_TTL_MS = 60 * 1000;

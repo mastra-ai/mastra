@@ -510,14 +510,15 @@ describe('fetchCopilotModels', () => {
     expect(models.map(m => m.id).sort()).toEqual(['allowed', 'enabled', 'unconfigured']);
   });
 
-  it('marks /v1/messages-shaped models as Anthropic-shaped', async () => {
+  it('captures supported_endpoints and flags /v1/messages-shaped models as Anthropic-shaped', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         jsonResponse({
           data: [
             modelEntry({ id: 'gpt-4.1', supported_endpoints: ['/chat/completions'] }),
-            modelEntry({ id: 'claude-sonnet-4.5', supported_endpoints: ['/chat/completions', '/v1/messages'] }),
+            modelEntry({ id: 'claude-sonnet-4.5', supported_endpoints: ['/v1/messages'] }),
+            modelEntry({ id: 'legacy', supported_endpoints: undefined }),
           ],
         }),
       ),
@@ -529,8 +530,14 @@ describe('fetchCopilotModels', () => {
     });
 
     const byId = Object.fromEntries(models.map(m => [m.id, m]));
+    expect(byId['gpt-4.1']?.supportedEndpoints).toEqual(['/chat/completions']);
     expect(byId['gpt-4.1']?.isAnthropicShaped).toBe(false);
+    expect(byId['claude-sonnet-4.5']?.supportedEndpoints).toEqual(['/v1/messages']);
     expect(byId['claude-sonnet-4.5']?.isAnthropicShaped).toBe(true);
+    // Missing supported_endpoints normalizes to an empty array; the catalog
+    // filter treats this as "legacy/compatible" and keeps it.
+    expect(byId['legacy']?.supportedEndpoints).toEqual([]);
+    expect(byId['legacy']?.isAnthropicShaped).toBe(false);
   });
 
   it('throws when the API returns a non-2xx status', async () => {
