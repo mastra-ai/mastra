@@ -276,6 +276,40 @@ describe('ObservabilityBus', () => {
       expect(onScoreEvent).toHaveBeenCalledWith(event);
     });
 
+    it('should fall back to deprecated addScoreToTrace for exporters without onScoreEvent', () => {
+      const addScoreToTrace = vi.fn();
+      const exporter = createMockExporter({ onScoreEvent: undefined, addScoreToTrace });
+      bus.registerExporter(exporter);
+
+      const event = createScoreEvent();
+      event.score.spanId = 'span-fallback-test';
+      event.score.scorerName = 'Readable Fallback Scorer';
+      event.score.metadata = { source: 'legacy-fallback-test' };
+      bus.emit(event);
+
+      expect(addScoreToTrace).toHaveBeenCalledWith({
+        traceId: event.score.traceId,
+        spanId: 'span-fallback-test',
+        score: 0.85,
+        reason: 'Relevant response',
+        scorerName: 'Readable Fallback Scorer',
+        metadata: { source: 'legacy-fallback-test' },
+      });
+    });
+
+    it('should prefer onScoreEvent over deprecated addScoreToTrace when both are implemented', () => {
+      const onScoreEvent = vi.fn();
+      const addScoreToTrace = vi.fn();
+      const exporter = createMockExporter({ onScoreEvent, addScoreToTrace });
+      bus.registerExporter(exporter);
+
+      const event = createScoreEvent();
+      bus.emit(event);
+
+      expect(onScoreEvent).toHaveBeenCalledWith(event);
+      expect(addScoreToTrace).not.toHaveBeenCalled();
+    });
+
     it('should not fail when exporter has no onScoreEvent handler', () => {
       const exporter = createMockExporter({ onScoreEvent: undefined });
       bus.registerExporter(exporter);

@@ -2182,6 +2182,61 @@ describe('BraintrustExporter', () => {
       expect(mockSpan.end).toHaveBeenCalledTimes(3);
     });
   });
+
+  describe('onScoreEvent', () => {
+    const baseScore = {
+      scoreId: 'score-1',
+      timestamp: new Date(),
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      scorerId: 'accuracy',
+      scorerName: 'Accuracy',
+      scoreSource: 'live',
+      score: 0.9,
+      reason: 'good',
+      metadata: { sessionId: 's-1' },
+    };
+
+    it('forwards score events to logger.logFeedback keyed by spanId', async () => {
+      mockLogger.logFeedback = vi.fn();
+      mockInitLogger.mockResolvedValue(mockLogger);
+
+      await exporter.onScoreEvent({ type: 'score', score: { ...baseScore } } as any);
+
+      expect(mockLogger.logFeedback).toHaveBeenCalledTimes(1);
+      const arg = mockLogger.logFeedback.mock.calls[0][0];
+      expect(arg).toMatchObject({
+        id: 'span-1',
+        scores: { Accuracy: 0.9 },
+        comment: 'good',
+        source: 'external',
+      });
+      expect(arg.metadata).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', sessionId: 's-1' });
+    });
+
+    it('falls back to traceId when spanId is missing', async () => {
+      mockLogger.logFeedback = vi.fn();
+      mockInitLogger.mockResolvedValue(mockLogger);
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { ...baseScore, spanId: undefined },
+      } as any);
+
+      expect(mockLogger.logFeedback).toHaveBeenCalledWith(expect.objectContaining({ id: 'trace-1' }));
+    });
+
+    it('skips when both spanId and traceId are missing', async () => {
+      mockLogger.logFeedback = vi.fn();
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { ...baseScore, spanId: undefined, traceId: undefined },
+      } as any);
+
+      expect(mockLogger.logFeedback).not.toHaveBeenCalled();
+    });
+  });
 });
 
 // ==============================================================================
