@@ -37,7 +37,7 @@ vi.mock('../../prompt-api-key.js', () => ({
   promptForApiKeyIfNeeded: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { DEFAULT_MAX_TURNS } from '../../goal-manager.js';
+import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
 import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
 describe('createGoalReminderMessage', () => {
@@ -204,6 +204,73 @@ describe('handleGoalCommand', () => {
     expect(sentContent).toMatch(/^<system-reminder type="goal">[\s\S]*<\/system-reminder>$/);
     expect(sentContent).not.toMatch(/begin executing/);
     expect(sentContent.match(/<system-reminder/g)).toHaveLength(1);
+  });
+
+  it('enters real goal mode (active + persisted) before sending the trigger so the judge runs on agent_end', async () => {
+    // Regression for Tyler's review: "do we make sure we enter into goal mode
+    // too? I noticed after approving a plan as goal, when the agent went idle
+    // the judge would not kick in." This test uses the real GoalManager (not
+    // a mock) and proves that by the time the trigger message is sent — which
+    // is also the only point at which the agent can produce an agent_end —
+    // (1) goalManager.isActive() is true, and (2) the goal has already been
+    // persisted to thread metadata with status='active'. handleAgentEnd's
+    // maybeGoalContinuation only checks isActive(), so this guarantees the
+    // judge runs after the agent's first response on the plan-approval path.
+    const goalManager = new GoalManager();
+    const objective = '# Ship it\n\n1. Build\n2. Test';
+
+    let isActiveAtSetThreadSetting: boolean | undefined;
+    let persistedGoalAtSetThreadSetting: unknown;
+    let isActiveAtSendMessage: boolean | undefined;
+
+    const setThreadSetting = vi.fn(async ({ value }: { key: string; value: unknown }) => {
+      isActiveAtSetThreadSetting = goalManager.isActive();
+      persistedGoalAtSetThreadSetting = value;
+    });
+    const sendMessage = vi.fn(async () => {
+      isActiveAtSendMessage = goalManager.isActive();
+    });
+
+    const ctx = {
+      state: {
+        pendingNewThread: false,
+        goalManager,
+        harness: {
+          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          setThreadSetting,
+          sendMessage,
+        },
+      },
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
+
+    // Goal is active in memory AND was active when persisted, AND was active
+    // when the trigger message was sent. handleAgentEnd's maybeGoalContinuation
+    // checks isActive() and only that — so this proves the judge will fire on
+    // the next agent_end (incl. the suspended submit_plan turn that resumes
+    // when the plan-approval response is delivered, since setGoal is sync).
+    expect(goalManager.isActive()).toBe(true);
+    expect(isActiveAtSetThreadSetting).toBe(true);
+    expect(isActiveAtSendMessage).toBe(true);
+
+    // Persisted thread metadata captures status='active' so reloads stay in
+    // goal mode.
+    expect(persistedGoalAtSetThreadSetting).toMatchObject({
+      objective,
+      status: 'active',
+      judgeModelId: 'openai/gpt-5.5',
+      maxTurns: 50,
+      turnsUsed: 0,
+    });
+
+    // The persisted goal id is stable and matches the live goal — proves we
+    // didn't accidentally save a different/stale goal record.
+    const liveGoal = goalManager.getGoal();
+    expect(liveGoal).not.toBeNull();
+    expect((persistedGoalAtSetThreadSetting as { id: string }).id).toBe(liveGoal!.id);
   });
 
   it('updates the current goal when judge defaults change', async () => {
