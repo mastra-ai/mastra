@@ -849,7 +849,7 @@ export class Harness<TState = {}> {
         // Lock release failed; proceed with state cleanup regardless
       }
       this.currentThreadId = null;
-    this.tokenUsage = createEmptyTokenUsage();
+      this.tokenUsage = createEmptyTokenUsage();
     }
 
     this.emit({ type: 'thread_deleted', threadId });
