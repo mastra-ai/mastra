@@ -3,8 +3,14 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { BaseMessageListInput } from './message-list';
 import type { MastraDBMessage } from './message-list/state/types';
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type AgentSignalType = 'user-message' | 'system-reminder' | string;
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type AgentSignalContents = BaseMessageListInput;
 
 type AgentSignalInputBase = {
@@ -14,18 +20,30 @@ type AgentSignalInputBase = {
   metadata?: Record<string, unknown>;
 };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type UserMessageAgentSignalInput = AgentSignalInputBase & {
   type: 'user-message';
   contents: AgentSignalContents;
 };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type ContextAgentSignalInput = AgentSignalInputBase & {
   type: Exclude<AgentSignalType, 'user-message'>;
   contents: string;
 };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type AgentSignalInput = UserMessageAgentSignalInput | ContextAgentSignalInput;
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type AgentSignalDataPart = {
   type: `data-${string}`;
   data: {
@@ -38,6 +56,9 @@ export type AgentSignalDataPart = {
   };
 };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type CreatedAgentSignal = AgentSignalInput & {
   __isCreatedSignal: true;
   id: string;

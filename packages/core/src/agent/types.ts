@@ -79,6 +79,9 @@ export type AgentInstructions = SystemMessage;
 
 export type { AgentSignalInput as AgentSignal, AgentSignalType, AgentSignalDataPart } from './signals';
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type SendAgentSignalOptions<OUTPUT = unknown> =
   | {
       runId: string;
@@ -102,11 +105,17 @@ export interface AgentThreadRun<OUTPUT = unknown> {
   cleanup: () => void;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export interface AgentSubscribeToThreadOptions {
   resourceId?: string;
   threadId: string;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export interface AgentThreadSubscription<OUTPUT = unknown> {
   stream: AsyncIterable<AgentChunkType<OUTPUT>>;
   activeRunId: () => string | null;

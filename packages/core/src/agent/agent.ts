@@ -5937,6 +5937,9 @@ export class Agent<
     return this.#mastra?.agentThreadStreamRuntime ?? this.#threadStreamRuntime;
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
   async subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
@@ -5951,6 +5954,9 @@ export class Agent<
     return this.#getThreadStreamRuntime().abortRun(runId);
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
   sendSignal<OUTPUT = TOutput>(
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,

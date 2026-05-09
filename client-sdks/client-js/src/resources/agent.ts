@@ -276,6 +276,9 @@ export class Agent extends BaseResource {
     });
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
   sendSignal<OUTPUT = unknown>(params: SendAgentSignalParams<OUTPUT>): Promise<{ accepted: true; runId: string }> {
     return this.request(`/agents/${this.agentId}/signals`, {
       method: 'POST',
@@ -283,6 +286,9 @@ export class Agent extends BaseResource {
     });
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
       processDataStream: ({

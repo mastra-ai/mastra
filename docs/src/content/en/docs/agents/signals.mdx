@@ -1,0 +1,148 @@
+---
+title: "Signals | Agents"
+description: "Learn how to send follow-up context into an active Mastra agent thread."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Signals
+
+:::note Experimental
+
+Agent signals are experimental. The API may change in a future release.
+
+:::
+
+Signals add new context to an agent thread while a response is active, or start a new stream when the thread is idle. Use them for follow-up user messages, system reminders, and other thread-scoped events that need to appear in conversation order.
+
+## When to use signals
+
+Use signals when you need to:
+
+- Send a follow-up message while an agent is streaming
+- Add system-generated context to a thread without rewriting the user's message
+- Observe one active thread stream from another client
+- Start an idle thread stream from a queued signal
+
+## Send a follow-up message
+
+Use `sendSignal()` with `type: 'user-message'` to send a user follow-up into a thread. Target an active run by `runId`, or target a thread with `resourceId` and `threadId`.
+
+```typescript title="src/mastra/signals.ts"
+const result = await agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Can you compare that with the previous option?',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+
+console.log(result.runId)
+```
+
+When a run is active for that thread, Mastra queues the signal and drains it at a stream boundary. The model sees the new message before it continues the response.
+
+## Start a stream when the thread is idle
+
+Pass `ifIdle.streamOptions` when the signal starts a new stream if no run is active for the thread.
+
+```typescript title="src/mastra/signals.ts"
+await agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Continue with the next step.',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    ifIdle: {
+      streamOptions: {
+        memory: {
+          resource: 'user_123',
+          thread: 'thread_456',
+        },
+      },
+    },
+  },
+)
+```
+
+Mastra starts the idle stream with the signal as the first input. If another idle signal arrives before that stream starts, Mastra queues it instead of launching a second run for the same thread.
+
+## Subscribe to a thread stream
+
+Use `subscribeToThread()` when a client needs to observe the active stream for a thread. The subscription yields agent stream chunks and exposes helpers for the active run.
+
+```typescript title="src/mastra/signals.ts"
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+for await (const chunk of subscription.stream) {
+  console.log(chunk)
+}
+
+console.log(subscription.activeRunId())
+```
+
+Call `subscription.abort()` to abort the active run for the thread. Call `subscription.unsubscribe()` to close only this subscription.
+
+## Send signals from the client SDK
+
+The JavaScript client exposes the same thread signal APIs.
+
+```typescript title="src/app/chat.ts"
+const subscription = await client.getAgent('supportAgent').subscribeToThread({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+await client.getAgent('supportAgent').sendSignal({
+  signal: {
+    type: 'user-message',
+    contents: 'Show the shorter version.',
+  },
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+await subscription.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
+  },
+})
+```
+
+## Custom signal types
+
+Signals can carry custom context. Non-user signal types are wrapped as XML and inserted as user-role context so they can appear in the middle of the conversation history.
+
+```typescript title="src/mastra/signals.ts"
+await agent.sendSignal(
+  {
+    type: 'system-reminder',
+    contents: 'The user asked for a concise answer.',
+    attributes: {
+      source: 'processor',
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+Use XML-safe signal type names and attribute names. Signal type names and attribute names can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
+
+## API reference
+
+- [`Agent.sendSignal()`](/reference/agents/agent#sendsignal)
+- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothread)
+- [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
+- [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)

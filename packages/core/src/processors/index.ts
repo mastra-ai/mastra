@@ -59,6 +59,8 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
   /**
