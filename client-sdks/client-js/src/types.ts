@@ -359,6 +359,23 @@ export type ResponsesOutputItemDoneEvent = {
   sequence_number?: number;
 };
 
+export type ResponsesFunctionCallArgumentsDeltaEvent = {
+  type: 'response.function_call_arguments.delta';
+  output_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesFunctionCallArgumentsDoneEvent = {
+  type: 'response.function_call_arguments.done';
+  output_index: number;
+  item_id: string;
+  name: string;
+  arguments: string;
+  sequence_number?: number;
+};
+
 export type ResponsesCompletedEvent = {
   type: 'response.completed';
   response: ResponsesResponse;
@@ -374,6 +391,8 @@ export type ResponsesStreamEvent =
   | ResponsesOutputTextDoneEvent
   | ResponsesContentPartDoneEvent
   | ResponsesOutputItemDoneEvent
+  | ResponsesFunctionCallArgumentsDeltaEvent
+  | ResponsesFunctionCallArgumentsDoneEvent
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {

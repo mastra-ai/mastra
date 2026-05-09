@@ -42,6 +42,102 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('createToolCallStep background task stream replay', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should replay a synthetic tool-call only once per resumed background task stream', async () => {
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        context.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'resumed-run',
+            result: { first: true },
+            completedAt: new Date(),
+          },
+        });
+        context.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'resumed-run',
+            result: { second: true },
+            completedAt: new Date(),
+          },
+        });
+
+        return {
+          task: { id: 'task-1' },
+          fallbackToSync: false,
+        };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const tools = {
+      'background-tool': {
+        backgroundConfig: { enabled: true },
+        execute: vi.fn(),
+      },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'background-tool',
+          args: { query: 'customers' },
+        },
+      }),
+    );
+    let replayedToolCalls: any[] = [];
+    await vi.waitFor(() => {
+      replayedToolCalls = controller.enqueue.mock.calls
+        .map(([chunk]) => chunk)
+        .filter(chunk => chunk.type === 'tool-call');
+      expect(replayedToolCalls).toHaveLength(1);
+    });
+
+    expect(replayedToolCalls).toHaveLength(1);
+    expect(replayedToolCalls[0]).toMatchObject({
+      type: 'tool-call',
+      runId: 'resumed-run',
+      payload: {
+        toolCallId: 'call-1',
+        toolName: 'background-tool',
+        args: { query: 'customers' },
+      },
+    });
+  });
+});
+
 describe('createToolCallStep tool execution error handling', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
@@ -213,6 +309,7 @@ describe('createToolCallStep tool approval workflow', () => {
     const inputData = makeInputData();
 
     const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -226,8 +323,6 @@ describe('createToolCallStep tool approval workflow', () => {
         }),
       }),
     );
-
-    await new Promise(resolve => setImmediate(resolve));
 
     expect(suspend).toHaveBeenCalledWith(
       {

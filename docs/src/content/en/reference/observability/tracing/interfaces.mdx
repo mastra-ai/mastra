@@ -156,7 +156,12 @@ interface ObservabilityExporter {
   /** Export tracing events */
   exportTracingEvent(event: TracingEvent): Promise<void>
 
-  /** Add score to a trace (optional) */
+  /**
+   * @deprecated Implement `onScoreEvent` instead. Eval scores now flow through the
+   * unified observability bus as `ScoreEvent`s. This method is preserved on the
+   * interface for backwards compatibility with existing exporters; new exporters
+   * should not implement it.
+   */
   addScoreToTrace?({
     traceId,
     spanId,

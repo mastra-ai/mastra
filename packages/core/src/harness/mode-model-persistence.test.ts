@@ -127,4 +127,31 @@ describe('Harness mode-model persistence across restarts', () => {
     expect(restoreEvent).toBeDefined();
     expect(restoreEvent?.previousModeId).toBe('build');
   });
+
+  it('approving a plan resolves the suspended plan tool before aborting for the mode switch', async () => {
+    const session = createHarness(storage);
+    await session.init();
+    await session.createThread();
+    await session.switchMode({ modeId: 'plan' });
+
+    const controller = new AbortController();
+    (session as unknown as { abortController: AbortController | null }).abortController = controller;
+
+    let resolved: { action: 'approved' | 'rejected'; feedback?: string } | undefined;
+    let wasAbortedWhenResolved: boolean | undefined;
+    session.registerPlanApproval({
+      planId: 'plan-1',
+      resolve: result => {
+        wasAbortedWhenResolved = controller.signal.aborted;
+        resolved = result;
+      },
+    });
+
+    await session.respondToPlanApproval({ planId: 'plan-1', response: { action: 'approved' } });
+
+    expect(wasAbortedWhenResolved).toBe(false);
+    expect(controller.signal.aborted).toBe(true);
+    expect(session.getCurrentModeId()).toBe('build');
+    expect(resolved).toEqual({ action: 'approved' });
+  });
 });
