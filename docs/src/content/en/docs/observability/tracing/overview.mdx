@@ -299,7 +299,7 @@ export const mastra = new Mastra({
         serviceName: 'my-service',
         exporters: [
           new ArizeExporter({
-            endpoint: process.env.PHOENIX_ENDPOINT,
+            endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
           new DefaultExporter(), // Keep Studio access
@@ -351,6 +351,28 @@ execute: async (inputData, context) => {
 ```
 
 Metadata set here will be shown in all configured exporters.
+
+### Tagging traces with the deployment environment
+
+Set the top-level `environment` field on Mastra to automatically attach the deployment environment to all observability signals without passing `tracingOptions.metadata.environment` on each call.
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  environment: 'production',
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+})
+```
+
+If `environment` is not set, Mastra falls back to `process.env.NODE_ENV`. If neither is set, the field is left undefined rather than guessed.
+
+Per-call `tracingOptions.metadata.environment` always takes precedence, so individual calls can still override the value when needed.
 
 ### Automatic Metadata from `RequestContext`
 

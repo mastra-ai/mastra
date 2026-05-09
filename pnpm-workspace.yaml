@@ -7,6 +7,7 @@ packages:
   - stores/*
   - browser/*
   - voice/*
+  - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
   - server-adapters/*
@@ -15,6 +16,7 @@ packages:
   - integrations/*
   - auth/*
   - observability/*
+  - channels/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
@@ -24,10 +26,10 @@ packages:
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
-  '@vitest/coverage-v8': 4.0.18
-  '@vitest/ui': 4.0.18
-  typescript: ^5.9.3
-  vitest: 4.0.18
+  '@vitest/coverage-v8': 4.1.5
+  '@vitest/ui': 4.1.5
+  typescript: ^6.0.3
+  vitest: 4.1.5
   zod: ^4.3.6
 
 patchedDependencies:
@@ -36,3 +38,10 @@ patchedDependencies:
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
+trustPolicyExclude:
+  # Security fix for GHSA middleware-based route protection bypass (CVE).
+  # 3.47.4 is published with provenance attestation rather than trusted publisher,
+  # but it is the official fix published on the @clerk/shared latest-v5 tag.
+  - '@clerk/shared@3.47.4'
+  # 0.7.4 is published with provenance attestation rather than trusted publisher.
+  - 'prettier-plugin-tailwindcss@0.7.4'

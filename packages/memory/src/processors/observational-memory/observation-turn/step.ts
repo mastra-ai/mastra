@@ -1,7 +1,9 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages, getMessageListPartsForToolScan } from '../message-utils';
+import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -62,6 +64,7 @@ export class ObservationStep {
         resourceId,
         checkThreshold: true,
         messages: step0Messages,
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
@@ -90,8 +93,11 @@ export class ObservationStep {
         observationTokens: obsTokens,
         threadId,
         writer: this.turn.writer,
+        messageList,
+        currentModel: this.turn.actorModelContext,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -103,15 +109,23 @@ export class ObservationStep {
     // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
     // while the agent loop continues. We must not observe/buffer until they complete.
     const allMsgsForToolCheck = messageList.get.all.db();
-    const hasIncompleteToolCalls = allMsgsForToolCheck.some(msg => {
-      const parts = getMessageListPartsForToolScan(msg);
-      return parts.some(part => {
-        if ((part as { type?: string })?.type !== 'tool-invocation') return false;
-        const state = (part as { toolInvocation?: { state?: string } }).toolInvocation?.state;
-        return state === 'call' || state === 'partial-call';
-      });
-    });
-    omDebug(`[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}`);
+    const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
+    const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
+    const latestStepParts = [
+      ...getLatestStepParts(getMessageListPartsForToolScan(lastMessage) as MastraDBMessage['content']['parts']),
+      ...pendingStepMessages.flatMap(msg =>
+        getLatestStepParts(getMessageListPartsForToolScan(msg) as MastraDBMessage['content']['parts']),
+      ),
+    ];
+    const hasIncompleteToolCalls = latestStepParts.some(
+      part =>
+        part?.type === 'tool-invocation' &&
+        ((part as { toolInvocation?: { state?: string } }).toolInvocation?.state === 'call' ||
+          (part as { toolInvocation?: { state?: string } }).toolInvocation?.state === 'partial-call'),
+    );
+    omDebug(
+      `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
+    );
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
     let statusSnapshot = await om.getStatus({
@@ -317,6 +331,7 @@ export class ObservationStep {
         threadId,
         resourceId,
         messages: messageList.get.all.db(),
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
@@ -332,8 +347,10 @@ export class ObservationStep {
           threadId,
           writer: this.turn.writer,
           messageList,
+          currentModel: this.turn.actorModelContext,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
+          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
         });
 
         return {
@@ -354,6 +371,36 @@ export class ObservationStep {
       writer: this.turn.writer,
       observabilityContext: this.turn.observabilityContext,
     });
+
+    if (obsResult.observed) {
+      const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
+      const liveMessages = messageList.get.all.db();
+      let latestObservedIndex = -1;
+
+      for (let i = liveMessages.length - 1; i >= 0; i--) {
+        const message = liveMessages[i];
+        if (message && observedMessageIds.has(message.id)) {
+          latestObservedIndex = i;
+          break;
+        }
+      }
+
+      const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      om.sealMessagesForBuffering(messagesToSeal);
+
+      try {
+        await this.turn.hooks?.onSyncObservationComplete?.();
+      } catch (error) {
+        omDebug(
+          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (messagesToSeal.length > 0) {
+        await om.persistMessages(messagesToSeal, threadId, resourceId);
+      }
+    }
 
     return {
       succeeded: obsResult.observed,

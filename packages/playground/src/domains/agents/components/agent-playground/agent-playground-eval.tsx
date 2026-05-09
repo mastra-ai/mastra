@@ -367,8 +367,8 @@ export function ExperimentResultsPanel({
   const { navigate } = useLinkComponent();
 
   const { data: traceData, isLoading: isLoadingTrace } = useQuery({
-    queryKey: ['trace', viewingTraceId],
-    queryFn: () => client.getTrace(viewingTraceId!),
+    queryKey: ['trace-light', viewingTraceId],
+    queryFn: () => client.getTraceLight(viewingTraceId!),
     enabled: !!viewingTraceId,
   });
 
@@ -676,7 +676,6 @@ export function ExperimentResultsPanel({
       <TraceDialog
         traceId={viewingTraceId}
         traceSpans={traceData?.spans}
-        traceDetails={traceData?.spans?.find(s => !s.parentSpanId)}
         isOpen={!!viewingTraceId}
         onClose={() => setViewingTraceId(undefined)}
         isLoadingSpans={isLoadingTrace}

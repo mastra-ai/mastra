@@ -11,6 +11,7 @@ import type {
   GetScoreTimeSeriesResponse,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   AggregationInterval,
   AggregationType,
 } from '@mastra/core/storage';
@@ -154,6 +155,7 @@ function toSeriesName(values: unknown[]): string {
 
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    scoreId: row.scoreId as string,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -231,12 +233,13 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
+       v(s.scoreId),
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
@@ -272,7 +275,8 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.tags ?? null),
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
-     ].join(', ')})`,
+     ].join(', ')})
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -284,6 +288,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
+      v(legacyScore.scoreId),
       v(legacyScore.timestamp),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
@@ -324,12 +329,13 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}`,
+     VALUES ${tuples.join(',\n       ')}
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -361,6 +367,13 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
   };
+}
+
+export async function getScoreById(db: DuckDBConnection, scoreId: string): Promise<ScoreRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(`SELECT * FROM score_events WHERE scoreId = ? LIMIT 1`, [
+    scoreId,
+  ]);
+  return rows[0] ? (rowToScoreRecord(rows[0]) as ScoreRecord) : null;
 }
 
 export async function getScoreAggregate(

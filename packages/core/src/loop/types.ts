@@ -36,6 +36,7 @@ import type {
   ModelManagerModelConfig,
   StreamTransportRef,
 } from '../stream/types';
+import type { ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -66,8 +67,14 @@ export type StreamInternal = {
   backgroundTaskManager?: BackgroundTaskManager;
   // Agent-level background task config
   agentBackgroundConfig?: AgentBackgroundConfig;
+  // Transform policy for display/transcript tool payloads.
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
+  // When true, backgroundTaskCheckStep returns immediately without waiting for
+  // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
+  // continuation from the outside — the inner loop shouldn't also wait.
+  skipBgTaskWait?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -123,6 +130,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
   errorProcessors?: ErrorProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;

@@ -3,6 +3,7 @@ import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   createResponseBodySchema,
@@ -17,9 +18,9 @@ import { handleError } from './error';
 import {
   buildCompletedResponse,
   buildInProgressResponse,
+  createResponseStreamEventTranslator,
   createMessageId,
   createOutputTextPart,
-  extractTextDelta,
   formatSseEvent,
   mapMastraToolsToResponseTools,
   mapResponseInputToExecutionMessages,
@@ -42,7 +43,7 @@ import type {
   ThreadExecutionContext,
   UsageLike,
 } from './responses.storage';
-import { getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
+import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
 type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
@@ -149,11 +150,7 @@ function getStreamedMessageOutputItem(response: ResponseObject, responseId: stri
     response.output.find(
       (item): item is Extract<ResponseObject['output'][number], { type: 'message' }> =>
         item.type === 'message' && item.id === responseId,
-    ) ??
-    response.output.find(
-      (item): item is Extract<ResponseObject['output'][number], { type: 'message' }> => item.type === 'message',
-    ) ??
-    null
+    ) ?? null
   );
 }
 
@@ -215,7 +212,13 @@ async function resolveThreadExecutionContext({
       throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
     }
 
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId: conversationId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -242,7 +245,13 @@ async function resolveThreadExecutionContext({
   const threadId = effectiveThreadId;
   const existingThread = await memory.getThreadById({ threadId });
   if (existingThread) {
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -500,6 +509,7 @@ async function storeCompletedResponse({
   metadata,
   completedState,
   messages,
+  outputItems,
 }: {
   agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
@@ -508,6 +518,7 @@ async function storeCompletedResponse({
   metadata: Omit<ResponseTurnRecordMetadata, 'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'>;
   completedState: CompletedResponseState;
   messages: MastraDBMessage[];
+  outputItems: ResponseObject['output'];
 }): Promise<void> {
   if (!didStore || !threadContext) {
     return;
@@ -523,6 +534,7 @@ async function storeCompletedResponse({
       usage: completedState.usageDetails,
       providerOptions: completedState.providerOptions,
       messageIds: [],
+      outputItems,
     },
     threadContext,
     messages,
@@ -546,6 +558,7 @@ async function finalizeResponse({
   configuredTools,
   responseMetadata,
   fallbackText,
+  fallbackOutputItems,
 }: {
   agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
@@ -563,13 +576,16 @@ async function finalizeResponse({
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
   >;
   fallbackText: string;
+  fallbackOutputItems?: (completedState: CompletedResponseState) => ResponseObject['output'];
 }): Promise<FinalizedResponse> {
   const completedState = await resolveCompletedResponseState(result, fallbackText);
+  const fallbackItems = fallbackOutputItems?.(completedState);
   const responseMessages = await resolveResponseTurnMessagesForStorage({
     result,
     responseId,
     text: completedState.text,
     threadContext,
+    fallbackOutputItems: threadContext ? fallbackItems : undefined,
   });
   const response = buildCompletedResponse({
     responseId,
@@ -587,6 +603,7 @@ async function finalizeResponse({
     providerOptions: completedState.providerOptions,
     tools: configuredTools,
     messages: responseMessages,
+    fallbackOutputItems: fallbackItems,
     store: didStore,
   });
 
@@ -598,6 +615,7 @@ async function finalizeResponse({
     metadata: responseMetadata,
     completedState,
     messages: responseMessages,
+    outputItems: response.output,
   });
 
   return { completedState, response, responseMessages };
@@ -618,10 +636,62 @@ async function prepareCreateResponseRequest({
   requestContext: RequestContext;
 }): Promise<PreparedCreateResponseRequest> {
   const executionInput = mapResponseInputToExecutionMessages(body.input) as AgentExecutionInput;
-  const agent = await resolveResponseAgent({
-    mastra,
-    agentId: body.agent_id,
-  });
+  let previousResponseTurnRecord: ResponseTurnRecord | null = null;
+  let resolvedAgent: Agent<any, any, any, any> | null = null;
+
+  if (body.previous_response_id) {
+    if (body.agent_id) {
+      resolvedAgent = await resolveResponseAgent({ mastra, agentId: body.agent_id });
+      previousResponseTurnRecord = await findResponseTurnRecord({
+        agent: resolvedAgent,
+        responseId: body.previous_response_id,
+        requestContext,
+      });
+
+      if (!previousResponseTurnRecord) {
+        const owningResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
+          mastra,
+          responseId: body.previous_response_id,
+          requestContext,
+        });
+
+        if (owningResponseTurnRecord) {
+          if (owningResponseTurnRecord.metadata.agentId === body.agent_id) {
+            previousResponseTurnRecord = owningResponseTurnRecord;
+          } else {
+            throw new HTTPException(400, {
+              message: `Stored response ${body.previous_response_id} belongs to agent ${owningResponseTurnRecord.metadata.agentId}, not ${body.agent_id}`,
+            });
+          }
+        }
+
+        if (!previousResponseTurnRecord) {
+          throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+        }
+      }
+    } else {
+      if (!mastra) {
+        throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
+      }
+
+      previousResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
+        mastra,
+        responseId: body.previous_response_id,
+        requestContext,
+      });
+
+      if (!previousResponseTurnRecord) {
+        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+      }
+    }
+  }
+
+  const agent =
+    resolvedAgent ??
+    (await resolveResponseAgent({
+      mastra,
+      agentId: body.agent_id ?? previousResponseTurnRecord?.metadata.agentId,
+    }));
   const resolvedModel = await agent.getModel({
     requestContext,
     modelConfig: body.model,
@@ -657,14 +727,6 @@ async function prepareCreateResponseRequest({
             : 'conversation_id requires the target agent to have memory storage configured',
       })
     : null;
-  const previousResponseTurnRecord = body.previous_response_id
-    ? await findResponseTurnRecord({ agent, responseId: body.previous_response_id, requestContext })
-    : null;
-
-  if (body.previous_response_id && !previousResponseTurnRecord) {
-    throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
-  }
-
   const configuredTools = mapMastraToolsToResponseTools(
     (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
   );
@@ -776,26 +838,8 @@ function createResponseEventStream({
         type: 'response.in_progress',
         response: createdResponse,
       });
-      enqueueEvent('response.output_item.added', {
-        type: 'response.output_item.added',
-        output_index: 0,
-        item: {
-          id: responseId,
-          type: 'message',
-          role: 'assistant',
-          status: 'in_progress',
-          content: [],
-        },
-      });
-      enqueueEvent('response.content_part.added', {
-        type: 'response.content_part.added',
-        output_index: 0,
-        content_index: 0,
-        item_id: responseId,
-        part: createOutputTextPart(''),
-      });
 
-      let text = '';
+      const streamEvents = createResponseStreamEventTranslator(responseId);
       const fullStream = await streamResult.fullStream;
       const reader = fullStream.getReader();
 
@@ -806,17 +850,13 @@ function createResponseEventStream({
             break;
           }
 
-          const delta = extractTextDelta(value);
-          if (delta) {
-            text += delta;
-            enqueueEvent('response.output_text.delta', {
-              type: 'response.output_text.delta',
-              output_index: 0,
-              content_index: 0,
-              item_id: responseId,
-              delta,
-            });
+          for (const event of streamEvents.consume(value)) {
+            enqueueEvent(event.event, event.payload);
           }
+        }
+
+        for (const event of streamEvents.flushPendingToolResults()) {
+          enqueueEvent(event.event, event.payload);
         }
 
         const { completedState, response } = await finalizeResponse({
@@ -832,36 +872,29 @@ function createResponseEventStream({
           conversationId: threadContext?.threadId ?? body.conversation_id,
           configuredTools,
           responseMetadata,
-          fallbackText: text,
-        });
-        enqueueEvent('response.output_text.done', {
-          type: 'response.output_text.done',
-          output_index: 0,
-          content_index: 0,
-          item_id: responseId,
-          text: completedState.text,
+          fallbackText: streamEvents.text,
+          fallbackOutputItems: completedState =>
+            streamEvents.getOutputItems({
+              text: completedState.text,
+              status: completedState.status,
+            }),
         });
 
-        const completedItem = getStreamedMessageOutputItem(response, responseId) ?? {
-          id: responseId,
-          type: 'message' as const,
-          role: 'assistant' as const,
-          status: 'completed' as const,
-          content: [createOutputTextPart(completedState.text)],
-        };
-
-        enqueueEvent('response.content_part.done', {
-          type: 'response.content_part.done',
-          output_index: 0,
-          content_index: 0,
-          item_id: responseId,
-          part: createOutputTextPart(completedState.text),
-        });
-        enqueueEvent('response.output_item.done', {
-          type: 'response.output_item.done',
-          output_index: 0,
-          item: completedItem,
-        });
+        const completedItem = getStreamedMessageOutputItem(response, responseId);
+        if (completedItem || completedState.text) {
+          for (const event of streamEvents.completeText(
+            completedState.text,
+            completedItem ?? {
+              id: responseId,
+              type: 'message' as const,
+              role: 'assistant' as const,
+              status: 'completed' as const,
+              content: [createOutputTextPart(completedState.text)],
+            },
+          )) {
+            enqueueEvent(event.event, event.payload);
+          }
+        }
         enqueueEvent('response.completed', {
           type: 'response.completed',
           response,
@@ -886,7 +919,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   description: 'Creates a response through a Mastra-hosted Responses API-compatible route',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:execute',
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
       const {
@@ -988,7 +1021,7 @@ export const GET_RESPONSE_ROUTE = createRoute({
   description: 'Returns a previously stored response object',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:read',
+  requiresPermission: MastraFGAPermissions.AGENTS_READ,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
@@ -1013,7 +1046,7 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   description: 'Deletes a stored response so it can no longer be retrieved or chained',
   tags: ['Responses'],
   requiresAuth: true,
-  requiresPermission: 'agents:delete',
+  requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });

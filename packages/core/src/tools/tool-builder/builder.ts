@@ -312,6 +312,7 @@ export class CoreToolBuilder extends MastraBase {
             )
           : undefined,
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+        transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
         inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
@@ -459,6 +460,7 @@ export class CoreToolBuilder extends MastraBase {
                 threadId,
                 resourceId,
                 outputWriter: execOptions.outputWriter,
+                flushMessages: execOptions.flushMessages,
               },
             };
           } else if (isWorkflowExecution) {
@@ -760,13 +762,22 @@ export class CoreToolBuilder extends MastraBase {
 
     // Map AI SDK's needsApproval to our requireApproval
     // needsApproval can be boolean or a function that takes input and returns boolean
-    let requireApproval = this.options.requireApproval;
+    let requireApproval = false;
     let needsApprovalFn: ((input: any) => boolean | Promise<boolean>) | undefined;
+
+    if (typeof this.options.requireApproval === 'function') {
+      requireApproval = true;
+      needsApprovalFn = this.options.requireApproval;
+    } else if (typeof this.options.requireApproval === 'boolean') {
+      requireApproval = this.options.requireApproval;
+      needsApprovalFn = undefined;
+    }
 
     if (isVercelTool(this.originalTool) && 'needsApproval' in this.originalTool) {
       const needsApproval = (this.originalTool as any).needsApproval;
       if (typeof needsApproval === 'boolean') {
         requireApproval = needsApproval;
+        needsApprovalFn = undefined;
       } else if (typeof needsApproval === 'function') {
         // Store the function to evaluate it per-call
         needsApprovalFn = needsApproval;
@@ -799,6 +810,7 @@ export class CoreToolBuilder extends MastraBase {
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+      transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
       inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,

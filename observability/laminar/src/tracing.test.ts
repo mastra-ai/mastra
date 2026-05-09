@@ -1,7 +1,7 @@
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LaminarExporter, otelSpanIdToUUID, otelTraceIdToUUID } from './tracing';
+import { LaminarExporter, otelSpanIdToUUID, otelTraceIdToUUID, stripTrailingSlash } from './tracing';
 
 // Mock OTLP exporter so tests never hit the network.
 vi.mock('@opentelemetry/exporter-trace-otlp-proto', () => ({
@@ -132,5 +132,56 @@ describe('LaminarExporter', () => {
 
     const body2 = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
     expect(body2.spanId).toBe(otelSpanIdToUUID('0000000000000002'));
+  });
+
+  it('onScoreEvent posts the score event payload to the evaluator endpoint', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as Response);
+
+    await exporter.onScoreEvent({
+      type: 'score',
+      score: {
+        scoreId: 'score-1',
+        timestamp: new Date(),
+        traceId: '00000000000000000000000000000001',
+        spanId: '0000000000000002',
+        scorerId: 'accuracy',
+        scorerName: 'Accuracy',
+        score: 0.75,
+        reason: 'ok',
+        metadata: { foo: 'bar' },
+      },
+    } as any);
+
+    expect(fetchSpy).toHaveBeenCalled();
+    const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
+    expect(body.name).toBe('Accuracy');
+    expect(body.score).toBe(0.75);
+    expect(body.spanId).toBe(otelSpanIdToUUID('0000000000000002'));
+    expect(body.metadata).toMatchObject({ foo: 'bar', reason: 'ok' });
+  });
+});
+
+describe('stripTrailingSlash', () => {
+  it('removes trailing slashes', () => {
+    expect(stripTrailingSlash('https://example.com/')).toBe('https://example.com');
+    expect(stripTrailingSlash('https://example.com///')).toBe('https://example.com');
+  });
+
+  it('returns the input unchanged when there is no trailing slash', () => {
+    const url = 'https://example.com/path';
+    expect(stripTrailingSlash(url)).toBe(url);
+  });
+
+  it('runs in linear time on pathological input (no ReDoS)', () => {
+    const input = 'https://x/' + '/'.repeat(100_000);
+    stripTrailingSlash('https://x/' + '/'.repeat(100)); // warm up JIT
+    const start = performance.now();
+    stripTrailingSlash(input);
+    const elapsed = performance.now() - start;
+    // Generous budget — linear implementation finishes in microseconds;
+    // exponential backtracking would take seconds or hang.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

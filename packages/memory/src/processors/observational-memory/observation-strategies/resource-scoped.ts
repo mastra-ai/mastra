@@ -85,8 +85,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      if (result.messages.length > 0) {
-        this.messagesByThread.set(thread.id, result.messages);
+      const messages = result.messages.filter(msg => msg.role !== 'system');
+      if (messages.length > 0) {
+        this.messagesByThread.set(thread.id, messages);
       }
     }
 

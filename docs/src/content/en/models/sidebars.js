@@ -27,7 +27,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'gateways/azure-openai',
-          label: 'Azure-openai',
+          label: 'Azure OpenAI',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/mastra',
+          label: 'Mastra',
         },
         {
           type: 'doc',
@@ -100,6 +105,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
+        },
+        {
+          type: 'doc',
+          id: 'providers/abliteration-ai',
+          label: 'abliteration.ai',
         },
         {
           type: 'doc',
@@ -203,6 +213,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/digitalocean',
+          label: 'DigitalOcean',
+        },
+        {
+          type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
         },
@@ -223,13 +238,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/firmware',
-          label: 'Firmware',
+          id: 'providers/friendli',
+          label: 'Friendli',
         },
         {
           type: 'doc',
-          id: 'providers/friendli',
-          label: 'Friendli',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
         },
         {
           type: 'doc',
@@ -245,6 +260,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hpc-ai',
+          label: 'HPC-AI',
         },
         {
           type: 'doc',
@@ -285,6 +305,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kiro',
+          label: 'Kiro',
         },
         {
           type: 'doc',
@@ -378,6 +403,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neuralwatt',
+          label: 'Neuralwatt',
+        },
+        {
+          type: 'doc',
           id: 'providers/nova',
           label: 'Nova',
         },
@@ -448,6 +478,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/regolo-ai',
+          label: 'Regolo AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
         },
@@ -493,6 +528,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-tokenhub',
+          label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
           id: 'providers/the-grid-ai',
           label: 'The Grid AI',
         },
@@ -515,6 +555,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/vultr',
           label: 'Vultr',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wafer.ai',
+          label: 'Wafer',
         },
         {
           type: 'doc',

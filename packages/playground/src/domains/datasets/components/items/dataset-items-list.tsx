@@ -102,98 +102,100 @@ export function DatasetItemsList({
   const gridColumns = [isSelectionActive ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <EntityList columns={gridColumns}>
-      <EntityList.Top>
-        {isSelectionActive && !maxSelection && (
-          <EntityList.TopCell>
-            <Checkbox
-              checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-              onCheckedChange={handleSelectAllToggle}
-              aria-label="Select all items"
-            />
-          </EntityList.TopCell>
-        )}
-        {isSelectionActive && maxSelection && <EntityList.TopCell>&nbsp;</EntityList.TopCell>}
-        {columns.map(col => (
-          <EntityList.TopCell key={col.name}>{col.label || col.name}</EntityList.TopCell>
-        ))}
-      </EntityList.Top>
+    <>
+      <EntityList columns={gridColumns}>
+        <EntityList.Top>
+          {isSelectionActive && !maxSelection && (
+            <EntityList.TopCell>
+              <Checkbox
+                checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                onCheckedChange={handleSelectAllToggle}
+                aria-label="Select all items"
+              />
+            </EntityList.TopCell>
+          )}
+          {isSelectionActive && maxSelection && <EntityList.TopCell>&nbsp;</EntityList.TopCell>}
+          {columns.map(col => (
+            <EntityList.TopCell key={col.name}>{col.label || col.name}</EntityList.TopCell>
+          ))}
+        </EntityList.Top>
 
-      {items.length === 0 && searchQuery ? (
-        <EntityList.NoMatch message="No items match your search" />
-      ) : (
-        <EntityList.Rows>
-          {items.map(item => {
-            const createdAtDate = new Date(item.createdAt);
-            const isSelected = featuredItemId === item.id;
+        {items.length === 0 && searchQuery ? (
+          <EntityList.NoMatch message="No items match your search" />
+        ) : (
+          <EntityList.Rows>
+            {items.map(item => {
+              const createdAtDate = new Date(item.createdAt);
+              const isSelected = featuredItemId === item.id;
 
-            return (
-              <EntityList.Row
-                key={item.id}
-                onClick={() => onItemClick?.(item.id)}
-                selected={isSelected || selectedIds.has(item.id)}
-              >
-                {isSelectionActive && (
-                  <EntityList.Cell>
-                    <Checkbox
-                      checked={selectedIds.has(item.id)}
-                      onCheckedChange={() => {}} // no-op: selection handled by onClick for shift-key multi-select
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleToggleSelection(item.id, e.shiftKey, allIds);
-                      }}
-                      aria-label={`Select item ${item.id}`}
-                    />
-                  </EntityList.Cell>
-                )}
-                <EntityList.TextCell>
-                  <span className="truncate block font-mono">{item.id}</span>
-                </EntityList.TextCell>
-                <EntityList.TextCell>
-                  <span className="truncate block font-mono">{truncateValue(item.input, 60)}</span>
-                </EntityList.TextCell>
-                {columns.some(col => col.name === 'groundTruth') && (
+              return (
+                <EntityList.Row
+                  key={item.id}
+                  onClick={() => onItemClick?.(item.id)}
+                  selected={isSelected || selectedIds.has(item.id)}
+                >
+                  {isSelectionActive && (
+                    <EntityList.Cell>
+                      <Checkbox
+                        checked={selectedIds.has(item.id)}
+                        onCheckedChange={() => {}} // no-op: selection handled by onClick for shift-key multi-select
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleToggleSelection(item.id, e.shiftKey, allIds);
+                        }}
+                        aria-label={`Select item ${item.id}`}
+                      />
+                    </EntityList.Cell>
+                  )}
                   <EntityList.TextCell>
-                    <span className="truncate block font-mono">
-                      {item.groundTruth ? truncateValue(item.groundTruth, 40) : '-'}
-                    </span>
+                    <span className="truncate block font-mono">{item.id}</span>
                   </EntityList.TextCell>
-                )}
-                {columns.some(col => col.name === 'trajectory') && (
                   <EntityList.TextCell>
-                    {item.expectedTrajectory ? (
-                      <span className="text-xs">
-                        {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
-                          ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
-                          : 'Yes'}
+                    <span className="truncate block font-mono">{truncateValue(item.input, 60)}</span>
+                  </EntityList.TextCell>
+                  {columns.some(col => col.name === 'groundTruth') && (
+                    <EntityList.TextCell>
+                      <span className="truncate block font-mono">
+                        {item.groundTruth ? truncateValue(item.groundTruth, 40) : '-'}
                       </span>
-                    ) : (
-                      <span className="text-neutral4">—</span>
-                    )}
+                    </EntityList.TextCell>
+                  )}
+                  {columns.some(col => col.name === 'trajectory') && (
+                    <EntityList.TextCell>
+                      {item.expectedTrajectory ? (
+                        <span className="text-xs">
+                          {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
+                            ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
+                            : 'Yes'}
+                        </span>
+                      ) : (
+                        <span className="text-neutral4">—</span>
+                      )}
+                    </EntityList.TextCell>
+                  )}
+                  <EntityList.TextCell>
+                    <span className="truncate block text-neutral2">{formatDate(createdAtDate)}</span>
                   </EntityList.TextCell>
-                )}
-                <EntityList.TextCell>
-                  <span className="truncate block text-neutral2">{formatDate(createdAtDate)}</span>
-                </EntityList.TextCell>
-              </EntityList.Row>
-            );
-          })}
+                </EntityList.Row>
+              );
+            })}
 
-          <div ref={setEndOfListElement} className="h-1 col-span-full">
-            {isFetchingNextPage && (
-              <div className="flex justify-center py-4">
-                <Spinner />
-              </div>
-            )}
-            {!hasNextPage && items.length > 0 && (
-              <Txt variant="ui-xs" className="text-icon3 text-center py-4 block">
-                All items loaded
-              </Txt>
-            )}
-          </div>
-        </EntityList.Rows>
+            <div ref={setEndOfListElement} className="h-1 col-span-full">
+              {isFetchingNextPage && (
+                <div className="flex justify-center py-4">
+                  <Spinner />
+                </div>
+              )}
+            </div>
+          </EntityList.Rows>
+        )}
+      </EntityList>
+      {!hasNextPage && items.length > 0 && (
+        <Txt variant="ui-xs" className="text-icon3 text-center">
+          All items loaded
+        </Txt>
       )}
-    </EntityList>
+    </>
   );
 }
 

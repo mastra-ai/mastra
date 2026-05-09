@@ -6,6 +6,7 @@ import {
   SettingsIcon,
   ToolsIcon,
   WorkflowIcon,
+  cn,
   useMainSidebar,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
@@ -36,6 +37,7 @@ type SidebarLink = NavLink & {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
   requiresExperimentalFeatures?: boolean;
+  activePaths?: string[];
 };
 
 type SidebarSection = Omit<NavSection, 'links'> & {
@@ -159,6 +161,7 @@ const mainNavigation: SidebarSection[] = [
       {
         name: 'Traces',
         url: '/observability',
+        activePaths: ['/traces'],
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
         indent: true,
@@ -203,12 +206,14 @@ declare global {
 
 function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
   // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
-  return pathname === link.url || pathname.startsWith(link.url + '/');
+  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
+  if (matches(link.url)) return true;
+  return link.activePaths?.some(matches) ?? false;
 }
 
 export function AppSidebar() {
   const { Link } = useLinkComponent();
-  const { state } = useMainSidebar();
+  const { state, isMobile } = useMainSidebar();
 
   const location = useLocation();
   const pathname = location.pathname;
@@ -258,26 +263,38 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
+      <div className="pt-3 mb-4">
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+            <div className="relative grid place-items-center size-9">
+              <LogoWithoutText
+                className={cn(
+                  'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
+                  !isMobile && 'group-hover/sidebar:opacity-0',
+                )}
+              />
+              {!isMobile && (
+                <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+                  <MainSidebar.Trigger />
+                </div>
+              )}
+            </div>
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          // Authenticated: avatar on same row as logo
           <span className="flex items-center justify-between pl-3 pr-2">
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 flex-1 min-w-0">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-serif text-sm">Mastra Studio</span>
+              <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+              {!isMobile && <MainSidebar.Trigger />}
             </span>
             <AuthStatus />
           </span>
         ) : (
-          // Not authenticated: no login button (shown in main content via AuthRequired)
-          <span className="flex items-center gap-2 pl-3">
+          <span className="flex items-center gap-2 pl-3 pr-2">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-serif text-sm">Mastra Studio</span>
+            <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+            {!isMobile && <MainSidebar.Trigger />}
           </span>
         )}
       </div>
@@ -318,17 +335,13 @@ export function AppSidebar() {
         })}
       </MainSidebar.Nav>
 
-      <MainSidebar.Bottom>
+      <MainSidebar.Bottom className="pb-3">
         {state !== 'collapsed' && (
           <>
             <MainSidebar.NavSeparator />
             <MastraVersionFooter collapsed={false} />
           </>
         )}
-        <MainSidebar.NavSeparator />
-        <div className="flex justify-end pb-3">
-          <MainSidebar.Trigger />
-        </div>
       </MainSidebar.Bottom>
     </MainSidebar>
   );

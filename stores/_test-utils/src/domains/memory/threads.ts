@@ -29,6 +29,20 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15998
+    // Core gates auto-generated thread titles on `!thread.title`, so adapters
+    // must preserve an empty title round-trip rather than substituting a
+    // placeholder like `Thread <id>`.
+    it('should preserve an empty thread title (issue #15998)', async () => {
+      const thread = { ...createSampleThread(), title: '' };
+
+      const savedThread = await memoryStorage.saveThread({ thread });
+      expect(savedThread.title).toBe('');
+
+      const retrievedThread = await memoryStorage.getThreadById({ threadId: thread.id });
+      expect(retrievedThread?.title).toBe('');
+    });
+
     it('should create and retrieve a thread with the same given threadId and resourceId', async () => {
       const exampleThreadId = '1346362547862769664';
       const exampleResourceId = '532374164040974346';
@@ -62,6 +76,51 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     it('should return null for non-existent thread', async () => {
       const result = await memoryStorage.getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
+    });
+
+    describe('resourceId isolation in getThreadById', () => {
+      it('should return thread when resourceId matches (tenant match)', async () => {
+        const id = `thread-match-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId });
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe(id);
+      });
+
+      it('should return null when resourceId does not match (tenant mismatch)', async () => {
+        const id = `thread-mismatch-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const otherResourceId = `tenant-other-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: otherResourceId });
+        expect(result).toBeNull();
+      });
+
+      it('should treat an empty string resourceId as an explicit scope', async () => {
+        const id = `thread-empty-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: '' });
+        expect(result).toBeNull();
+      });
+
+      it('should return thread when resourceId is not provided (backwards compatibility)', async () => {
+        const id = `thread-no-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id });
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe(id);
+      });
     });
 
     it('should get threads by resource ID', async () => {

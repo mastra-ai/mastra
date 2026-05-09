@@ -14,6 +14,7 @@ import { MessageList } from '../../message-list';
 import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
+  agent: Agent<any, any, any, any>;
   agentName: string;
   logger: MastraBase['logger'];
   getMemory: Agent['getMemory'];
@@ -21,7 +22,6 @@ export type AgentCapabilities = {
   generateMessageId: Mastra['generateId'];
   mastra?: Mastra;
   _agentNetworkAppend?: boolean;
-  saveStepMessages: Agent['saveStepMessages'];
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
@@ -32,6 +32,12 @@ export type AgentCapabilities = {
         overrides?: OutputProcessorOrWorkflow[];
       }) => Promise<OutputProcessorOrWorkflow[]> | OutputProcessorOrWorkflow[]);
   inputProcessors?:
+    | InputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
+  llmRequestInputProcessors?:
     | InputProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;

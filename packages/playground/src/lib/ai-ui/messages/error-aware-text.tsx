@@ -1,5 +1,5 @@
 import { useAssistantState } from '@assistant-ui/react';
-import { Alert, AlertDescription, AlertTitle, Badge, Icon, cn } from '@mastra/playground-ui';
+import { Notice, Badge, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessageMetadata } from '@mastra/react';
 import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -21,19 +21,17 @@ export const ErrorAwareText = () => {
 
   if (metadata?.status === 'warning') {
     return (
-      <Alert variant="warning">
-        <AlertTitle as="h5">Warning</AlertTitle>
-        <AlertDescription as="p">{text}</AlertDescription>
-      </Alert>
+      <Notice variant="warning" title="Warning">
+        <Notice.Message>{text}</Notice.Message>
+      </Notice>
     );
   }
 
   if (metadata?.status === 'error') {
     return (
-      <Alert variant="destructive">
-        <AlertTitle as="h5">Error</AlertTitle>
-        <AlertDescription as="p">{text}</AlertDescription>
-      </Alert>
+      <Notice variant="destructive" title="Error">
+        <Notice.Message>{text}</Notice.Message>
+      </Notice>
     );
   }
 
@@ -50,10 +48,9 @@ export const ErrorAwareText = () => {
           </Badge>
         </button>
         {!collapsedCompletionCheck && (
-          <Alert variant="info">
-            <AlertTitle as="h5">{taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
+          <Notice variant="info" title={taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}>
             <MarkdownText />
-          </Alert>
+          </Notice>
         )}
       </div>
     );
@@ -69,20 +66,18 @@ export const ErrorAwareText = () => {
       const errorMessage = trimmedText.substring('__ERROR__:'.length);
 
       return (
-        <Alert variant="destructive">
-          <AlertTitle as="h5">Error</AlertTitle>
-          <AlertDescription as="p">{errorMessage}</AlertDescription>
-        </Alert>
+        <Notice variant="destructive" title="Error">
+          <Notice.Message>{errorMessage}</Notice.Message>
+        </Notice>
       );
     } else if (trimmedText.startsWith('Error:')) {
       // Handle plain error messages without special prefix
       const errorMessage = trimmedText.substring('Error:'.length).trim();
 
       return (
-        <Alert variant="destructive">
-          <AlertTitle as="h5">Error</AlertTitle>
-          <AlertDescription as="p">{errorMessage}</AlertDescription>
-        </Alert>
+        <Notice variant="destructive" title="Error">
+          <Notice.Message>{errorMessage}</Notice.Message>
+        </Notice>
       );
     }
 
@@ -91,10 +86,9 @@ export const ErrorAwareText = () => {
   } catch {
     // Fallback to displaying the raw text if something goes wrong
     return (
-      <Alert variant="destructive">
-        <AlertTitle as="h5">Error</AlertTitle>
-        <AlertDescription as="p">{String(text)}</AlertDescription>
-      </Alert>
+      <Notice variant="destructive" title="Error">
+        <Notice.Message>{String(text)}</Notice.Message>
+      </Notice>
     );
   }
 };

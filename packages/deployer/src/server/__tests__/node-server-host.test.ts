@@ -88,7 +88,7 @@ describe('createNodeServer host binding', () => {
       getServer: vi.fn(() => ({})),
       getServerMiddleware: vi.fn(() => []),
       getLogger: vi.fn(() => logger),
-      startEventEngine: vi.fn(),
+      startWorkers: vi.fn(),
       listAgents: vi.fn(() => []),
       setMastraServer: vi.fn(),
     } as unknown as Mastra;

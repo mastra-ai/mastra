@@ -255,6 +255,69 @@ describe('Mid-Loop Observation', () => {
       expect(recordAfterStep1?.lastObservedAt).toBeDefined();
     });
 
+    it('should rotate the response message id after synchronous observation persists', async () => {
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+      const sealedAtRotate: boolean[] = [];
+      const rotateResponseMessageId = vi.fn(() => {
+        const latestAssistant = [...messageList.get.all.db()].reverse().find(message => message.role === 'assistant');
+        sealedAtRotate.push(
+          !!(latestAssistant?.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed,
+        );
+        return 'rotated-response-id';
+      });
+
+      const messageList = new MessageList({
+        threadId,
+        resourceId,
+      });
+
+      for (let i = 0; i < 20; i++) {
+        const msg = createTestMessage(
+          `Step ${i}: `.padEnd(200, 'x'),
+          i % 2 === 0 ? 'user' : 'assistant',
+          `msg-${i}`,
+          new Date(Date.now() - (20 - i) * 1000),
+        );
+        messageList.add(msg, 'memory');
+      }
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).not.toHaveBeenCalled();
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(sealedAtRotate).toEqual([true]);
+    });
+
     it('should NOT trigger observation on step 0', async () => {
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};

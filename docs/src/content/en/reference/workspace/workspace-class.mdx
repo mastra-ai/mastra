@@ -26,7 +26,7 @@ const workspace = new Workspace({
     workingDirectory: './workspace',
   }),
   bm25: true,
-  autoIndexPaths: ['/docs'],
+  autoIndexPaths: ['docs'],
 })
 ```
 
@@ -50,8 +50,9 @@ const workspace = new Workspace({
   },
   {
     name: 'filesystem',
-    type: 'WorkspaceFilesystem',
-    description: 'Filesystem provider instance (e.g., LocalFilesystem)',
+    type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
+    description:
+      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
     isOptional: true,
   },
   {
@@ -75,8 +76,9 @@ const workspace = new Workspace({
   },
   {
     name: 'embedder',
-    type: '(text: string) => Promise<number[]>',
-    description: 'Embedder function for generating vectors. Required when vectorStore is provided.',
+    type: 'Embedder',
+    description:
+      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/workspace/search#batch-embedding).',
     isOptional: true,
   },
   {
@@ -244,7 +246,8 @@ Tool names must be unique across all workspace tools. Setting a custom name that
   {
     name: 'filesystem',
     type: 'WorkspaceFilesystem | undefined',
-    description: 'The filesystem provider',
+    description:
+      'The static filesystem provider. Returns `undefined` when a resolver function is configured — use `hasFilesystemConfig()` to check availability.',
   },
   {
     name: 'sandbox',
@@ -410,6 +413,45 @@ workspace.setToolsConfig(undefined)
 ]}
 />
 
+### Dynamic filesystem
+
+#### `hasFilesystemConfig()`
+
+Check whether a filesystem is configured, either as a static instance or a resolver function. Use this instead of checking `workspace.filesystem` directly, because a resolver-based workspace returns `undefined` from the `filesystem` property.
+
+```typescript
+if (workspace.hasFilesystemConfig()) {
+  // Filesystem tools are available
+}
+```
+
+**Returns:** `boolean`
+
+#### `resolveFilesystem({ requestContext })`
+
+Resolve the filesystem for a given request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static filesystem is configured, returns it directly. Returns `undefined` if no filesystem is configured.
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+const ctx = new RequestContext([['agent-role', 'admin']])
+const fs = await workspace.resolveFilesystem({ requestContext: ctx })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'The request context to pass to the resolver function.',
+  },
+]}
+/>
+
+**Returns:** `Promise<WorkspaceFilesystem | undefined>`
+
 ## Agent tools
 
 A workspace provides tools to agents based on what's configured.
@@ -429,7 +471,7 @@ Added when a filesystem is configured:
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
-Write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
 
 ### Sandbox tools
 

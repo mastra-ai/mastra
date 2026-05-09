@@ -362,9 +362,9 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'schema',
-                    type: 'z.ZodSchema<S>',
+                    type: 'StandardJSONSchemaV1',
                     isOptional: false,
-                    description: 'Zod schema defining the expected output structure.',
+                    description: 'Standard JSON Schema defining the expected output structure.',
                   },
                 ],
               },
@@ -509,7 +509,7 @@ const stream = await agent.stream('message for agent')
                     type: 'MemoryConfig',
                     isOptional: true,
                     description:
-                      'Configuration for memory behavior including lastMessages, readOnly, semanticRecall, and workingMemory.',
+                      'Configuration for memory behavior including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
                   },
                 ],
               },
@@ -808,6 +808,49 @@ const stream = await agent.stream('message for agent')
               },
             ],
           },
+          {
+            name: 'versions',
+            type: 'VersionOverrides',
+            isOptional: true,
+            description:
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+            properties: [
+              {
+                type: 'VersionOverrides',
+                parameters: [
+                  {
+                    name: 'agents',
+                    type: 'Record<string, VersionSelector>',
+                    isOptional: true,
+                    description: 'A map of agent IDs to their version selectors.',
+                    properties: [
+                      {
+                        type: 'VersionSelector',
+                        parameters: [
+                          {
+                            name: 'versionId',
+                            type: 'string',
+                            isOptional: true,
+                            description: 'Target a specific version by ID.',
+                          },
+                        ],
+                      },
+                      {
+                        parameters: [
+                          {
+                            name: 'status',
+                            type: "'draft' | 'published'",
+                            isOptional: true,
+                            description: 'Target the latest version with this publication status.',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
@@ -952,9 +995,9 @@ await agent.stream('message for agent', {
 })
 ```
 
-## OpenAI WebSocket transport
+## Responses WebSocket transport
 
-Opt into OpenAI Responses WebSocket streaming via `providerOptions.openai.transport`. This only applies to streaming calls and is currently supported for direct OpenAI models (for example, `openai/gpt-5.4`). If WebSocket streaming is unavailable, Mastra falls back to HTTP streaming. By default, Mastra closes the WebSocket when the stream finishes.
+Opt into Responses WebSocket streaming with provider options. This only applies to streaming calls and is supported for direct OpenAI models and Azure OpenAI Responses deployments. If WebSocket streaming is unavailable, Mastra falls back to HTTP streaming. By default, Mastra closes the WebSocket when the stream finishes.
 
 ```ts title="index.ts"
 const stream = await agent.stream('Hello', {
@@ -965,6 +1008,20 @@ const stream = await agent.stream('Hello', {
         url: 'wss://api.openai.com/v1/responses',
         closeOnFinish: true, // default
       },
+    },
+  },
+})
+```
+
+For Azure OpenAI, configure the gateway with `useResponsesAPI: true`, then use `providerOptions.azure.transport`.
+
+```ts title="index.ts"
+const stream = await agent.stream('Hello', {
+  providerOptions: {
+    azure: {
+      transport: 'websocket',
+      store: false,
+      websocket: { closeOnFinish: true },
     },
   },
 })
@@ -985,6 +1042,8 @@ const stream = await agent.stream('Hello', {
 // Later, when you're done with the connection:
 stream.transport?.close()
 ```
+
+Responses WebSocket connections run one response at a time. Mastra rejects overlapping continuation requests that include `previous_response_id` on the same WebSocket transport. Wait for the active stream to finish before sending the next turn in the response chain.
 
 ## Related
 

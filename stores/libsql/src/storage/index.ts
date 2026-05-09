@@ -6,6 +6,7 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
+import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
@@ -13,6 +14,7 @@ import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
+import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
@@ -24,6 +26,7 @@ export {
   AgentsLibSQL,
   BackgroundTasksLibSQL,
   BlobsLibSQL,
+  ChannelsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
   MCPClientsLibSQL,
@@ -31,6 +34,7 @@ export {
   MemoryLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
+  SchedulesLibSQL,
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
   SkillsLibSQL,
@@ -157,6 +161,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
+    const channels = new ChannelsLibSQL(domainConfig);
     const datasets = new DatasetsLibSQL(domainConfig);
     const experiments = new ExperimentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
@@ -167,6 +172,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const skills = new SkillsLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
+    const schedules = new SchedulesLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -174,6 +180,7 @@ export class LibSQLStore extends MastraCompositeStore {
       memory,
       observability,
       agents,
+      channels,
       datasets,
       experiments,
       promptBlocks,
@@ -184,6 +191,7 @@ export class LibSQLStore extends MastraCompositeStore {
       skills,
       blobs,
       backgroundTasks,
+      schedules,
     };
   }
 }

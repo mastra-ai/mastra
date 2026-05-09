@@ -2,6 +2,8 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
+import { isTemporalGapMarker } from './date-utils';
+import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -693,9 +695,97 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart | undefined {
+  if (!isRecord(block) || typeof block.type !== 'string') {
+    return undefined;
+  }
+
+  const mediaType = typeof block.mediaType === 'string' ? block.mediaType : undefined;
+  const filename = typeof block.filename === 'string' ? block.filename : undefined;
+
+  switch (block.type) {
+    case 'image-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const image = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'image', image, mimeType: mediaType };
+    }
+
+    case 'image-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'image', image: url, mimeType: mediaType };
+    }
+
+    case 'media': {
+      const data = block.data;
+      if (typeof data !== 'string' || !mediaType) return undefined;
+      const dataUri = `data:${mediaType};base64,${data}`;
+      if (mediaType.toLowerCase().startsWith('image/')) {
+        return { type: 'image', image: dataUri, mimeType: mediaType };
+      }
+      return { type: 'file', data: dataUri, mimeType: mediaType };
+    }
+
+    case 'file-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const dataUri = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'file', data: dataUri, mimeType: mediaType, filename };
+    }
+
+    case 'file-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'file', data: url, mimeType: mediaType, filename };
+    }
+
+    default:
+      return undefined;
+  }
+}
+
+function extractToolResultAttachments(
+  result: unknown,
+  counter: ObserverAttachmentCounter,
+): { resultWithoutAttachments: unknown; attachments: ObserverInputAttachmentPart[] } {
+  if (!isRecord(result) || result.type !== 'content' || !Array.isArray(result.value)) {
+    return { resultWithoutAttachments: result, attachments: [] };
+  }
+
+  const record = result;
+
+  const attachments: ObserverInputAttachmentPart[] = [];
+  const newValue = (record.value as unknown[]).map(block => {
+    const attachment = mapToolResultBlockToAttachment(block);
+    if (!attachment) {
+      return block;
+    }
+
+    attachments.push(toObserverInputAttachmentPart(attachment));
+    const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
+    return { type: isRecord(block) ? block.type : undefined, placeholder };
+  });
+
+  if (attachments.length === 0) {
+    return { resultWithoutAttachments: result, attachments };
+  }
+
+  return { resultWithoutAttachments: { ...record, value: newValue }, attachments };
+}
+
 function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
-  const timeLabel = time && time !== previousTime ? ` (${time})` : '';
-  return `${title}${timeLabel}: ${body}`;
+  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+
+  if (!title) {
+    return timeLabel ? `${timeLabel}: ${body}` : body;
+  }
+
+  return `${title}${timeLabel ? ` ${timeLabel}` : ''}: ${body}`;
 }
 
 function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
@@ -743,6 +833,30 @@ function formatObserverLines(
   };
 }
 
+function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
+  const metadata =
+    typeof msg.content === 'object' && msg.content && 'metadata' in msg.content
+      ? (msg.content.metadata as { gapText?: unknown; reminderType?: unknown; systemReminder?: unknown })
+      : undefined;
+
+  if (metadata?.reminderType === 'temporal-gap' && typeof metadata.gapText === 'string') {
+    return metadata.gapText;
+  }
+
+  if (
+    typeof metadata?.systemReminder === 'object' &&
+    metadata.systemReminder &&
+    'type' in metadata.systemReminder &&
+    metadata.systemReminder.type === 'temporal-gap' &&
+    'gapText' in metadata.systemReminder &&
+    typeof metadata.systemReminder.gapText === 'string'
+  ) {
+    return metadata.systemReminder.gapText;
+  }
+
+  return undefined;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -755,6 +869,8 @@ function formatObserverMessage(
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
   let lines: ObserverFormattedLine[] = [];
+
+  const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
 
   const pushLine = (title: string, body: string, createdAt?: unknown) => {
     if (!body) {
@@ -770,7 +886,9 @@ function formatObserverMessage(
     });
   };
 
-  if (typeof msg.content === 'string') {
+  if (temporalGapText) {
+    pushLine('', temporalGapText, messageCreatedAt);
+  } else if (typeof msg.content === 'string') {
     pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
     msg.content.parts.forEach(part => {
@@ -788,9 +906,19 @@ function formatObserverMessage(
             part as { providerMetadata?: Record<string, any> },
             inv.result,
           );
+          const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(
+            resultForObserver,
+            counter,
+          );
+          if (extractedAttachments.length > 0) {
+            attachments.push(...extractedAttachments);
+          }
           pushLine(
             `Tool Result ${inv.toolName}`,
-            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            maybeTruncate(
+              formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
+              maxLen,
+            ),
             partCreatedAt,
           );
           return;
@@ -893,8 +1021,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 /** Truncate a string to maxLen characters, appending a note if truncated. */
 function maybeTruncate(str: string, maxLen?: number): string {
   if (!maxLen || str.length <= maxLen) return str;
-  const truncated = str.slice(0, maxLen);
-  const remaining = str.length - maxLen;
+  const truncated = safeSlice(str, maxLen);
+  const remaining = str.length - truncated.length;
   return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
@@ -1341,7 +1469,7 @@ export function sanitizeObservationLines(observations: string): string {
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
-      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      lines[i] = safeSlice(lines[i]!, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
       changed = true;
     }
   }

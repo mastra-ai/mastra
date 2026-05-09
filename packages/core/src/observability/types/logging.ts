@@ -35,6 +35,9 @@ export interface LoggerContext {
  * Signal identity stays on the top-level `traceId` / `spanId` fields.
  */
 export interface ExportedLog {
+  /** Unique identifier for this log event, generated at emission time */
+  logId: string;
+
   /** When the log was emitted */
   timestamp: Date;
 

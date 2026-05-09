@@ -10,7 +10,7 @@
  * const agent = new Agent({
  *   workspace: new Workspace({
  *     filesystem: new LocalFilesystem({ basePath: './data' }),
- *     skills: ['/skills'],
+ *     skills: ['skills'],
  *   }),
  * });
  *

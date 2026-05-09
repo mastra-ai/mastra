@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -17,6 +18,7 @@ import {
   createObservationStartMarker,
 } from './markers';
 import type { ModelByInputTokens } from './model-by-input-tokens';
+import { didProviderChange } from './model-context';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -32,12 +34,52 @@ import { withOmTracingSpan } from './tracing';
 import type {
   ObservationDebugEvent,
   ObservationMarkerConfig,
+  ObservationModelContext,
   ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
 } from './types';
+
+function formatModelContext(provider?: string, modelId?: string): string | undefined {
+  if (provider && modelId) {
+    return `${provider}/${modelId}`;
+  }
+
+  return modelId;
+}
+
+function getCurrentModel(model?: ObservationModelContext): string | undefined {
+  return formatModelContext(model?.provider, model?.modelId);
+}
+
+function getLastModelFromMessageList(messageList?: MessageList): string | undefined {
+  const messages = messageList?.get.all.db();
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+      continue;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (part?.type === 'step-start' && typeof part.model === 'string' && part.model.length > 0) {
+        return part.model;
+      }
+    }
+
+    const metadata = message.content.metadata as { provider?: string; modelId?: string } | undefined;
+    const model = formatModelContext(metadata?.provider, metadata?.modelId);
+    if (model) {
+      return model;
+    }
+  }
+
+  return undefined;
+}
 
 type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
 
@@ -54,6 +96,27 @@ async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal
   if (abortSignal?.aborted) throw new Error('The operation was aborted.');
   return result;
 }
+
+/**
+ * Minimum size of combined (buffered reflection + unreflected tail) expressed
+ * as a ratio of the regular threshold-activation target
+ * (reflectThreshold × (1 − bufferActivation)). Early TTL / provider-change
+ * triggers are suppressed if the post-activation size would fall below this
+ * floor — keeps early activations close to the system's tuned post-activation
+ * size while still letting them fire sooner than a threshold activation.
+ */
+const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
+
+/**
+ * Result of an attempt to activate a buffered reflection. The caller uses
+ * this to decide whether to fall through to sync reflection or background
+ * buffering, without re-deriving state that `tryActivateBufferedReflection`
+ * already evaluated.
+ */
+type TryActivateResult =
+  | { status: 'activated' }
+  | { status: 'no-buffer' }
+  | { status: 'suppressed'; reason: 'composition' | 'size' };
 
 /**
  * Runs the Reflector agent for compressing observations.
@@ -81,6 +144,7 @@ export class ReflectorRunner {
     resourceId?: string,
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
+  private mastra?: Mastra;
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -103,6 +167,7 @@ export class ReflectorRunner {
     ) => Promise<void>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
+    mastra?: Mastra;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -115,15 +180,24 @@ export class ReflectorRunner {
     this.persistMarkerToStorage = opts.persistMarkerToStorage;
     this.persistMarkerToMessage = opts.persistMarkerToMessage;
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
+    this.mastra = opts.mastra;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
   }
 
   private createAgent(model: ConcreteReflectionModel): Agent {
-    return new Agent({
+    const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
       model,
     });
+    if (this.mastra) {
+      agent.__registerMastra(this.mastra);
+    }
+    return agent;
   }
 
   private getObservationMarkerConfig(record?: ObservationalMemoryRecord): ObservationMarkerConfig {
@@ -133,6 +207,7 @@ export class ReflectorRunner {
         record ? this.getEffectiveReflectionTokens(record) : this.reflectionConfig.observationTokens,
       ),
       scope: this.scope,
+      activateAfterIdle: this.reflectionConfig.activateAfterIdle,
     };
   }
 
@@ -165,6 +240,7 @@ export class ReflectorRunner {
       startedAt: string;
       recordId: string;
       threadId: string;
+      resourceId?: string;
     },
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
@@ -307,7 +383,9 @@ export class ReflectorRunner {
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
-        await streamContext.writer.custom(failedMarker).catch(() => {});
+        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+        await streamContext.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
+        await this.persistMarkerToStorage(failedMarker, streamContext.threadId, streamContext.resourceId);
 
         const retryCycleId = crypto.randomUUID();
         streamContext.cycleId = retryCycleId;
@@ -322,7 +400,9 @@ export class ReflectorRunner {
           config: this.getObservationMarkerConfig(),
         });
         streamContext.startedAt = startMarker.data.startedAt;
-        await streamContext.writer.custom(startMarker).catch(() => {});
+        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+        await streamContext.writer.custom({ ...startMarker, transient: true }).catch(() => {});
+        await this.persistMarkerToStorage(startMarker, streamContext.threadId, streamContext.resourceId);
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
@@ -376,7 +456,8 @@ export class ReflectorRunner {
             recordId: record.id,
             threadId: record.threadId ?? '',
           });
-          void writer.custom(failedMarker).catch(() => {});
+          // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+          void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
           await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         omError('[OM] Async buffered reflection failed', error);
@@ -452,7 +533,13 @@ export class ReflectorRunner {
         threadIds: record.threadId ? [record.threadId] : [],
         config: this.getObservationMarkerConfig(currentRecord),
       });
-      void writer.custom(startMarker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void writer.custom({ ...startMarker, transient: true }).catch(() => {});
+      await this.persistMarkerToStorage(
+        startMarker,
+        currentRecord.threadId ?? '',
+        currentRecord.resourceId ?? undefined,
+      );
     }
 
     const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
@@ -495,7 +582,8 @@ export class ReflectorRunner {
         threadId: currentRecord.threadId ?? '',
         observations: reflectResult.observations,
       });
-      void writer.custom(endMarker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void writer.custom({ ...endMarker, transient: true }).catch(() => {});
       await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
 
@@ -504,26 +592,44 @@ export class ReflectorRunner {
 
   /**
    * Try to activate buffered reflection when threshold is reached.
-   * Returns true if activation succeeded.
+   * Returns a discriminated result so the caller can distinguish between
+   * "activated", "no buffer present", and "suppressed by overshoot guard"
+   * without re-deriving that state.
    */
   private async tryActivateBufferedReflection(
     record: ObservationalMemoryRecord,
     lockKey: string,
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
-  ): Promise<boolean> {
+    activationMetadata?: {
+      triggeredBy: 'threshold' | 'ttl' | 'provider_change';
+      lastActivityAt?: number;
+      ttlExpiredMs?: number;
+      previousModel?: string;
+      currentModel?: string;
+    },
+  ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
-      try {
-        await Promise.race([
-          asyncOp,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-        ]);
-      } catch {
-        // Timeout or error - proceed with what we have
+      // TTL and provider-change triggers should not block on in-progress
+      // reflection buffering. The async op will finish in the background
+      // and the buffered result will be available for activation on the next turn.
+      if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: async op in progress, not blocking for ${activationMetadata.triggeredBy} trigger`,
+        );
+      } else {
+        omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
+        try {
+          await Promise.race([
+            asyncOp,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
+          ]);
+        } catch {
+          // Timeout or error - proceed with what we have
+        }
       }
     }
 
@@ -537,8 +643,8 @@ export class ReflectorRunner {
     );
 
     if (!freshRecord?.bufferedReflection) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection after re-fetch, returning false`);
-      return false;
+      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection after re-fetch`);
+      return { status: 'no-buffer' };
     }
 
     const beforeTokens = freshRecord.observationTokenCount ?? 0;
@@ -552,6 +658,51 @@ export class ReflectorRunner {
       ? `${freshRecord.bufferedReflection}\n\n${unreflectedContent}`
       : freshRecord.bufferedReflection!;
     const combinedTokenCount = this.tokenCounter.countObservations(combinedObservations);
+
+    // Early-trigger overshoot guard:
+    // TTL and provider-change triggers can fire immediately after a buffered reflection
+    // is written — before observations have grown enough to produce a healthy
+    // activation outcome. Two checks guard against this:
+    //
+    // 1. Composition floor (≥ 50/50 mix): unreflected tail must be at least as
+    //    large as the buffered reflection. Prevents post-activation active
+    //    observations from collapsing to ~just the buffered reflection.
+    //
+    // 2. Size floor (≥ 75% of regular activation target): combined
+    //    reflection + tail must be at least 75% of what a normal threshold
+    //    activation would leave. Regular activation target ≈ reflectThreshold
+    //    × (1 − bufferActivation) (the raw tail remaining when a threshold
+    //    activation fires). 75% keeps early fires close to the system's tuned
+    //    post-activation size while still allowing them to happen sooner than
+    //    normal. Prevents cliff cases like 17k → 4k active observations.
+    //
+    // If either check fails, keep the buffer in place for the eventual
+    // threshold activation.
+    if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+      const unreflectedTailTokens = unreflectedContent ? this.tokenCounter.countObservations(unreflectedContent) : 0;
+      const bufferedReflectionTokens = freshRecord.bufferedReflectionTokens ?? 0;
+      if (unreflectedTailTokens < bufferedReflectionTokens) {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — unreflectedTailTokens=${unreflectedTailTokens} < bufferedReflectionTokens=${bufferedReflectionTokens}; keeping buffer for threshold activation`,
+        );
+        return { status: 'suppressed', reason: 'composition' };
+      }
+
+      // bufferActivation is guaranteed defined here: reaching this function
+      // requires isAsyncReflectionEnabled(), which in turn requires a
+      // defined, positive bufferActivation. Dropping the ?? fallback keeps
+      // that invariant visible in the types.
+      const bufferActivation = this.reflectionConfig.bufferActivation!;
+      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(freshRecord));
+      const regularActivationTarget = reflectThreshold * (1 - bufferActivation);
+      const minCombinedTokens = Math.round(regularActivationTarget * EARLY_ACTIVATION_SIZE_FLOOR_RATIO);
+      if (combinedTokenCount < minCombinedTokens) {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — combinedTokenCount=${combinedTokenCount} < minCombinedTokens=${minCombinedTokens} (${EARLY_ACTIVATION_SIZE_FLOOR_RATIO * 100}% of regular activation target ${Math.round(regularActivationTarget)}, threshold=${reflectThreshold}, bufferActivation=${bufferActivation}); keeping buffer for threshold activation`,
+        );
+        return { status: 'suppressed', reason: 'size' };
+      }
+    }
 
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
@@ -582,9 +733,15 @@ export class ReflectorRunner {
         threadId: freshRecord.threadId ?? '',
         generationCount: afterRecord?.generationCount ?? freshRecord.generationCount ?? 0,
         observations: afterRecord?.activeObservations,
+        triggeredBy: activationMetadata?.triggeredBy,
+        lastActivityAt: activationMetadata?.lastActivityAt,
+        ttlExpiredMs: activationMetadata?.ttlExpiredMs,
+        previousModel: activationMetadata?.previousModel,
+        currentModel: activationMetadata?.currentModel,
         config: this.getObservationMarkerConfig(freshRecord),
       });
-      void writer.custom(activationMarker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void writer.custom({ ...activationMarker, transient: true }).catch(() => {});
       await this.persistMarkerToMessage(
         activationMarker,
         messageList,
@@ -595,7 +752,7 @@ export class ReflectorRunner {
 
     BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
 
-    return true;
+    return { status: 'activated' };
   }
 
   /**
@@ -610,9 +767,11 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter;
     abortSignal?: AbortSignal;
     messageList?: MessageList;
+    currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
+    lastActivityAt?: number;
   }): Promise<void> {
     const {
       record,
@@ -620,9 +779,12 @@ export class ReflectorRunner {
       writer,
       abortSignal,
       messageList,
+      currentModel,
       reflectionHooks,
       requestContext,
       observabilityContext,
+      lastActivityAt,
+      threadId: requestedThreadId,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
@@ -658,9 +820,33 @@ export class ReflectorRunner {
       }
     }
 
-    if (observationTokens < reflectThreshold) {
+    const activateAfterIdle = this.reflectionConfig.activateAfterIdle;
+    const ttlExpiredMs =
+      activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+    const ttlExpired =
+      ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
+    const actorModel = getCurrentModel(currentModel);
+    const lastModel = getLastModelFromMessageList(messageList);
+    const providerChanged =
+      this.reflectionConfig.activateOnProviderChange === true && didProviderChange(actorModel, lastModel);
+
+    if (observationTokens < reflectThreshold && !ttlExpired && !providerChanged) {
       return;
     }
+
+    const activationTriggeredBy =
+      observationTokens >= reflectThreshold
+        ? ('threshold' as const)
+        : providerChanged
+          ? ('provider_change' as const)
+          : ('ttl' as const);
+    const activationMetadata = {
+      triggeredBy: activationTriggeredBy,
+      lastActivityAt: activationTriggeredBy === 'ttl' ? lastActivityAt : undefined,
+      ttlExpiredMs: activationTriggeredBy === 'ttl' ? ttlExpiredMs : undefined,
+      previousModel: activationTriggeredBy === 'provider_change' ? lastModel : undefined,
+      currentModel: activationTriggeredBy === 'provider_change' ? actorModel : undefined,
+    };
 
     // ═══════════════════════════════════════════════════════════
     // LOCKING: Check if reflection is already in progress
@@ -678,8 +864,26 @@ export class ReflectorRunner {
     // ASYNC ACTIVATION: Try to activate buffered reflection first
     // ════════════════════════════════════════════════════════════════════════
     if (this.buffering.isAsyncReflectionEnabled()) {
-      const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer, messageList);
-      if (activationSuccess) {
+      const activationResult = await this.tryActivateBufferedReflection(
+        record,
+        lockKey,
+        writer,
+        messageList,
+        activationMetadata,
+      );
+      if (activationResult.status === 'activated') {
+        return;
+      }
+      // Early-trigger overshoot guard: tryActivateBufferedReflection already
+      // decided the early trigger should not activate the existing buffer.
+      // Don't fall through to sync reflection (which would compress the
+      // entire active observations — the lossy outcome we're preventing) or
+      // start another background buffering op on top of the existing one.
+      // Return and let the next turn re-evaluate.
+      if (activationResult.status === 'suppressed') {
+        omDebug(
+          `[OM:reflect] skipping sync fallback / re-buffer after suppressed early ${activationMetadata.triggeredBy} activation (reason=${activationResult.reason})`,
+        );
         return;
       }
       if (this.reflectionConfig.blockAfter && observationTokens >= this.reflectionConfig.blockAfter) {
@@ -687,6 +891,13 @@ export class ReflectorRunner {
           `[OM:reflect] blockAfter exceeded (${observationTokens} >= ${this.reflectionConfig.blockAfter}), falling through to sync reflection`,
         );
       } else {
+        const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
+        if (observationTokens < activationPoint) {
+          omDebug(
+            `[OM:reflect] skipping async reflection — observationTokens (${observationTokens}) below activation point (${activationPoint}), triggered by ${activationTriggeredBy}`,
+          );
+          return;
+        }
         omDebug(
           `[OM:reflect] async activation failed, no blockAfter or below it (obsTokens=${observationTokens}, blockAfter=${this.reflectionConfig.blockAfter}) — starting background reflection`,
         );
@@ -712,7 +923,7 @@ export class ReflectorRunner {
 
     const cycleId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    const threadId = opts.threadId ?? 'unknown';
+    const threadId = requestedThreadId ?? 'unknown';
 
     if (writer) {
       const startMarker = createObservationStartMarker({
@@ -724,7 +935,9 @@ export class ReflectorRunner {
         threadIds: [threadId],
         config: this.getObservationMarkerConfig(record),
       });
-      await writer.custom(startMarker).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      await writer.custom({ ...startMarker, transient: true }).catch(() => {});
+      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
     }
 
     this.emitDebugEvent({
@@ -743,6 +956,7 @@ export class ReflectorRunner {
           startedAt,
           recordId: record.id,
           threadId,
+          resourceId: record.resourceId ?? undefined,
         }
       : undefined;
 
@@ -781,7 +995,9 @@ export class ReflectorRunner {
           recordId: record.id,
           threadId,
         });
-        await writer.custom(endMarker).catch(() => {});
+        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+        await writer.custom({ ...endMarker, transient: true }).catch(() => {});
+        await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
       }
 
       this.emitDebugEvent({
@@ -805,7 +1021,9 @@ export class ReflectorRunner {
           recordId: record.id,
           threadId,
         });
-        await writer.custom(failedMarker).catch(() => {});
+        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+        await writer.custom({ ...failedMarker, transient: true }).catch(() => {});
+        await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
       }
       reflectionError = error instanceof Error ? error : new Error(String(error));
       if (abortSignal?.aborted) {

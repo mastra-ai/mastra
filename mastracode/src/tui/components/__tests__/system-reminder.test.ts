@@ -47,6 +47,34 @@ describe('SystemReminderComponent', () => {
     expect(lines.some(line => line.includes('Path: /repo/src/agents/nested/AGENTS.md'))).toBe(false);
   });
 
+  it('renders initial goal metadata inline in the title', () => {
+    const comp = new SystemReminderComponent({
+      message: 'Finish the implementation.',
+      reminderType: 'goal',
+      goalMaxTurns: 20,
+      judgeModelId: 'openai/gpt-5.5',
+    });
+
+    const lines = nonEmpty(renderPlain(comp));
+
+    expect(lines.some(line => line.includes('Goal (20 max attempts, judge: openai/gpt-5.5)'))).toBe(true);
+    expect(lines.some(line => line.includes('Finish the implementation.'))).toBe(true);
+    expect(lines.some(line => line.trim() === 'Goal set (20 max attempts, judge: openai/gpt-5.5)')).toBe(false);
+    expect(lines.some(line => line.includes('System Reminder'))).toBe(false);
+  });
+
+  it('renders Goal title for goal judge reminders', () => {
+    const comp = new SystemReminderComponent({
+      message: '[Goal attempt 1/20] Keep working.',
+      reminderType: 'goal-judge',
+    });
+
+    const lines = nonEmpty(renderPlain(comp));
+
+    expect(lines.some(line => line.includes('Goal'))).toBe(true);
+    expect(lines.some(line => line.includes('System Reminder'))).toBe(false);
+  });
+
   it('renders the original title for regular system reminders', () => {
     const comp = new SystemReminderComponent({
       message: 'The user has approved the plan, begin executing.',

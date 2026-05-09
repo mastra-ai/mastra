@@ -4,10 +4,12 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
+import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
 // Heartbeat Handlers
@@ -113,6 +115,23 @@ export interface HarnessSubagent {
    * tools are visible.
    */
   allowedWorkspaceTools?: string[];
+
+  /**
+   * Default "forked" mode for this subagent type. When `true`, invocations
+   * inherit the parent agent's conversation context: the parent thread is
+   * cloned and the subagent runs on the fork with the parent agent's
+   * instructions and tools, preserving prompt-cache prefix.
+   *
+   * The parent's `instructions`, `tools`, `allowedHarnessTools`,
+   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
+   * are ignored when a run is forked — the parent agent is used as-is.
+   *
+   * Callers can override per-invocation by passing `forked` in the tool
+   * input. Forked subagents require memory to be configured on the Harness.
+   *
+   * @default false
+   */
+  forked?: boolean;
 }
 
 /**
@@ -126,7 +145,14 @@ export type HarnessStateSchema<T> = T;
 /**
  * Identifiers for the built-in harness tools that can be selectively disabled.
  */
-export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
+export type BuiltinToolId =
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
@@ -235,7 +261,8 @@ export interface HarnessConfig<TState = {}> {
   /**
    * Built-in tool IDs to disable.
    * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
-   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
+   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_update',
+   * 'task_complete', 'task_check', 'subagent'.
    */
   disableBuiltinTools?: BuiltinToolId[];
 
@@ -256,6 +283,13 @@ export interface HarnessConfig<TState = {}> {
     acquire: (threadId: string) => void | Promise<void>;
     release: (threadId: string) => void | Promise<void>;
   };
+
+  /**
+   * Observability entrypoint for tracing, scoring, and feedback.
+   * When provided, the internal Mastra instance is configured with this
+   * observability backend so that agent runs produce trace spans.
+   */
+  observability?: ObservabilityEntrypoint;
 }
 
 /**
@@ -398,6 +432,21 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  raw?: unknown;
+}
+
+/** Creates a zero-initialized TokenUsage object. */
+export function createEmptyTokenUsage(): TokenUsage {
+  return {
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  };
 }
 
 // =============================================================================
@@ -474,12 +523,41 @@ export interface ActiveSubagentState {
   agentType: string;
   task: string;
   modelId?: string;
+  forked?: boolean;
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
   durationMs?: number;
   result?: string;
 }
+
+/**
+ * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
+ *
+ * `single_select` is the default for prompts that provide options, preserving the
+ * original one-answer behavior. `multi_select` tells the UI that the user may choose
+ * more than one option and return those selections as an array.
+ */
+export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
+
+/**
+ * A structured choice rendered by the UI for an `ask_user` prompt.
+ *
+ * The label is the value returned to the model when the option is selected. The
+ * optional description gives the UI more context without changing the answer value.
+ */
+export interface HarnessQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/**
+ * Answer shape accepted by `respondToQuestion()` for pending `ask_user` prompts.
+ *
+ * Free-text and single-select prompts resolve with a string. Multi-select prompts
+ * resolve with a string array containing each selected option label.
+ */
+export type HarnessQuestionAnswer = string | string[];
 
 /**
  * Canonical display state maintained by the Harness.
@@ -535,7 +613,8 @@ export interface HarnessDisplayState {
   pendingQuestion: {
     questionId: string;
     question: string;
-    options?: Array<{ label: string; description?: string }>;
+    options?: HarnessQuestionOption[];
+    selectionMode?: HarnessQuestionSelectionMode;
   } | null;
 
   /** A plan awaiting user approval (null when none) */
@@ -564,19 +643,11 @@ export interface HarnessDisplayState {
   modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
 
   // ── Tasks ────────────────────────────────────────────────────────────
-  /** Current task list (from task_write tool) */
-  tasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  /** Current task list (from task tools) */
+  tasks: TaskItemSnapshot[];
 
   /** Previous task list snapshot (for diff detection) */
-  previousTasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  previousTasks: TaskItemSnapshot[];
 }
 
 /**
@@ -586,7 +657,7 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
@@ -760,6 +831,12 @@ export type HarnessEvent =
       observationTokens: number;
       messagesActivated: number;
       generationCount: number;
+      triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+      lastActivityAt?: number;
+      ttlExpiredMs?: number;
+      activateAfterIdle?: number;
+      previousModel?: string;
+      currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
   | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
@@ -767,7 +844,8 @@ export type HarnessEvent =
       type: 'ask_question';
       questionId: string;
       question: string;
-      options?: Array<{ label: string; description?: string }>;
+      options?: HarnessQuestionOption[];
+      selectionMode?: HarnessQuestionSelectionMode;
     }
   | {
       type: 'plan_approval_required';
@@ -776,7 +854,7 @@ export type HarnessEvent =
       plan: string;
     }
   | { type: 'plan_approved' }
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
+  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
       type: 'subagent_tool_start';
@@ -804,11 +882,7 @@ export type HarnessEvent =
   | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
   | {
       type: 'task_updated';
-      tasks: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        activeForm: string;
-      }>;
+      tasks: TaskItemSnapshot[];
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
@@ -816,6 +890,27 @@ export type HarnessEvent =
  * Listener function for harness events.
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
+
+/**
+ * Listener function for coalesced harness display state snapshots.
+ */
+export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
+
+export interface HarnessDisplayStateSubscriptionOptions {
+  /**
+   * Minimum quiet window before non-critical display state callbacks.
+   *
+   * @default 250
+   */
+  windowMs?: number;
+
+  /**
+   * Maximum time a pending display state snapshot may wait while updates continue.
+   *
+   * @default 500
+   */
+  maxWaitMs?: number;
+}
 
 // =============================================================================
 // Messages
@@ -839,7 +934,18 @@ export type HarnessMessageContent =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
-  | { type: 'system_reminder'; message: string; reminderType?: string; path?: string }
+  | {
+      type: 'system_reminder';
+      message: string;
+      reminderType?: string;
+      path?: string;
+      precedesMessageId?: string;
+      gapText?: string;
+      gapMs?: number;
+      timestamp?: string;
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+    }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
@@ -886,6 +992,21 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Update harness state */
   setState: (updates: Partial<TState>) => Promise<void>;
 
+  /** Update harness state from the latest state snapshot in a serialized transaction */
+  updateState?: <TResult>(
+    updater: (state: Readonly<TState>) =>
+      | {
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }
+      | Promise<{
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }>,
+  ) => Promise<TResult>;
+
   /** Current thread ID */
   threadId: string | null;
 
@@ -905,7 +1026,7 @@ export interface HarnessRequestContext<TState = unknown> {
   emitEvent?: (event: HarnessEvent) => void;
 
   /** Register a pending question resolver (used by ask_user tools) */
-  registerQuestion?: (params: { questionId: string; resolve: (answer: string) => void }) => void;
+  registerQuestion?: (params: { questionId: string; resolve: (answer: HarnessQuestionAnswer) => void }) => void;
 
   /** Register a pending plan approval resolver (used by submit_plan tools) */
   registerPlanApproval?: (params: {
