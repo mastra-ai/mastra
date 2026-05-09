@@ -359,6 +359,23 @@ export type ResponsesOutputItemDoneEvent = {
   sequence_number?: number;
 };
 
+export type ResponsesFunctionCallArgumentsDeltaEvent = {
+  type: 'response.function_call_arguments.delta';
+  output_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesFunctionCallArgumentsDoneEvent = {
+  type: 'response.function_call_arguments.done';
+  output_index: number;
+  item_id: string;
+  name: string;
+  arguments: string;
+  sequence_number?: number;
+};
+
 export type ResponsesCompletedEvent = {
   type: 'response.completed';
   response: ResponsesResponse;
@@ -374,6 +391,8 @@ export type ResponsesStreamEvent =
   | ResponsesOutputTextDoneEvent
   | ResponsesContentPartDoneEvent
   | ResponsesOutputItemDoneEvent
+  | ResponsesFunctionCallArgumentsDeltaEvent
+  | ResponsesFunctionCallArgumentsDoneEvent
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
@@ -609,8 +628,10 @@ export interface ListMemoryThreadsParams {
   agentId?: string;
   page?: number;
   perPage?: number;
-  orderBy?: 'createdAt' | 'updatedAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -749,6 +770,7 @@ export interface McpToolInfo {
   description?: string;
   inputSchema: string;
   toolType?: MCPToolType;
+  _meta?: Record<string, unknown>;
 }
 
 export interface McpServerToolListResponse {
@@ -1468,8 +1490,10 @@ export interface AgentVersionResponse {
 export interface ListAgentVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListAgentVersionsResponse {
@@ -1557,8 +1581,10 @@ export interface ScorerVersionResponse {
 export interface ListScorerVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListScorerVersionsResponse {
@@ -2486,8 +2512,10 @@ export interface PromptBlockVersionResponse {
 export interface ListPromptBlockVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListPromptBlockVersionsResponse {
@@ -2513,7 +2541,14 @@ export interface DeletePromptBlockVersionResponse {
   message: string;
 }
 
-export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+export type BackgroundTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -2554,26 +2589,44 @@ export interface ScheduleResponse {
   lastRunId?: string;
   lastRun?: ScheduleRunSummary;
   metadata?: Record<string, unknown>;
+  ownerType?: string;
+  ownerId?: string;
   createdAt: number;
   updatedAt: number;
 }
 
-export type ScheduleTriggerStatus = 'published' | 'failed';
+export type ScheduleTriggerOutcome =
+  | 'published'
+  | 'failed'
+  | 'skipped'
+  | 'acked'
+  | 'alerted'
+  | 'deferred'
+  | 'appended-from-queue'
+  | 'dropped-stale'
+  | 'dropped-superseded'
+  | 'dropped-busy';
+
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
 
 export interface ScheduleTriggerResponse {
+  id?: string;
   scheduleId: string;
-  runId: string;
+  runId: string | null;
   scheduledFireAt: number;
   actualFireAt: number;
-  status: ScheduleTriggerStatus;
+  outcome: ScheduleTriggerOutcome;
   error?: string;
+  triggerKind?: ScheduleTriggerKind;
+  parentTriggerId?: string;
+  metadata?: Record<string, unknown>;
   run?: ScheduleRunSummary;
 }
 
-export interface ListSchedulesParams {
+export type ListSchedulesParams = {
   workflowId?: string;
   status?: ScheduleStatus;
-}
+} & ({ ownerType?: undefined; ownerId?: undefined } | { ownerType: string; ownerId?: string });
 
 export interface ListSchedulesResponse {
   schedules: ScheduleResponse[];

@@ -170,7 +170,7 @@ const response = await agent.streamUntilIdle('Research solana for me', {
     thread: 'thread-1',
     resource: 'resource-1',
   },
-  maxIdleMs: 5 * 60_000,
+  maxIdleMs: 5 * 60_000, //optional
 })
 
 response.processDataStream({
@@ -178,6 +178,31 @@ response.processDataStream({
     if (chunk.type === 'background-task-completed') {
       console.log('task complete:', chunk.payload.taskId)
     }
+  },
+})
+```
+
+### `resumeStreamUntilIdle()`
+
+Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `resumeStream()`:
+
+```typescript
+const response = await agent.resumeStreamUntilIdle(
+  { approved: true, selectedOption: 'plan-b' },
+  {
+    memory: {
+      thread: 'thread-1',
+      resource: 'resource-1',
+    },
+    runId: 'run-123',
+    toolCallId: 'tool-call-456', // optional
+    maxIdleMs: 5 * 60_000, //optional
+  },
+)
+
+await response.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
   },
 })
 ```

@@ -159,8 +159,19 @@ export interface GlobalSettings {
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
     omReflectionThreshold: number | null;
+    /**
+     * Whether observations and reflections use the terse caveman-style instruction.
+     * `null` means inherit the built-in default (currently `false` — caveman is
+     * opt-in via `/om` settings). Used as the default for new threads unless
+     * overridden per-thread.
+     */
+    omCavemanObservations: boolean | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
+    /** Default judge model for /goal. */
+    goalJudgeModel: string | null;
+    /** Default max attempts for /goal. */
+    goalMaxTurns: number | null;
   };
   // Global behavior preferences
   preferences: {
@@ -231,7 +242,10 @@ const DEFAULTS: GlobalSettings = {
     reflectorModelOverride: null,
     omObservationThreshold: null,
     omReflectionThreshold: null,
+    omCavemanObservations: null,
     subagentModels: {},
+    goalJudgeModel: null,
+    goalMaxTurns: null,
   },
   preferences: {
     yolo: null,

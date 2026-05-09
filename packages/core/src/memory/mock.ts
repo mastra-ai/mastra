@@ -87,7 +87,7 @@ export class MockMemory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.saveMessages({ messages });
+    return memoryStorage.saveMessages({ messages: messages.filter(message => message.role !== 'system') });
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
@@ -121,7 +121,10 @@ export class MockMemory extends MastraMemory {
 
     return {
       ...result,
-      messages: filterSystemReminderMessages(result.messages, includeSystemReminders),
+      messages: filterSystemReminderMessages(
+        result.messages.filter(message => message.role !== 'system'),
+        includeSystemReminders,
+      ),
     };
   }
 

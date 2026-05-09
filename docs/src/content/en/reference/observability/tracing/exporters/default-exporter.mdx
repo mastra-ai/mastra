@@ -170,6 +170,8 @@ Failed flushes are retried with exponential backoff:
 - Maximum attempts: `maxRetries`
 - Batch is dropped after all retries fail
 
+When storage does not support a signal or retries are exhausted, `DefaultExporter` emits an `ObservabilityDropEvent` through `onDroppedEvent` handlers registered on exporters and bridges. The drop event includes the signal, reason, count, exporter name, storage name when known, and sanitized error details.
+
 ### Out-of-Order Handling
 
 For `batch-with-updates` strategy:

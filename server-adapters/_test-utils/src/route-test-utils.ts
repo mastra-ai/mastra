@@ -40,6 +40,9 @@ export function generateContextualValue(fieldName?: string): string {
 
   const field = fieldName.toLowerCase();
 
+  // Timestamp fields used in body validation need a valid ISO string.
+  if (field === 'createdat' || field === 'updatedat') return new Date().toISOString();
+
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
@@ -92,6 +95,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
   if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
   if (field.includes('block')) return 'test-prompt-block';
+  if (field === 'uri') return 'ui://test/app';
 
   return 'test-string';
 }
@@ -168,6 +172,13 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         if (zod4Def.check === 'safeint') {
           requiresSafeInt = true;
           requiresInt = true;
+        }
+        // Zod 4 emits `int()` as `number_format` with `format: 'int' | 'safeint'`.
+        if (zod4Def.check === 'number_format') {
+          if (zod4Def.format === 'int' || zod4Def.format === 'safeint') {
+            requiresInt = true;
+            if (zod4Def.format === 'safeint') requiresSafeInt = true;
+          }
         }
       }
     }

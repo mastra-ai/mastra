@@ -50,7 +50,8 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
   {
     name: 'endpoint',
     type: 'string',
-    description: 'Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.',
+    description:
+      'Collector endpoint for trace exports. Falls back to PHOENIX_COLLECTOR_ENDPOINT env var. Required for Phoenix.',
     required: false,
   },
   {
@@ -145,7 +146,7 @@ Flushes pending data and shuts down the client.
 ```typescript
 import { ArizeExporter } from '@mastra/arize'
 
-// For Phoenix: Set PHOENIX_ENDPOINT, PHOENIX_API_KEY, PHOENIX_PROJECT_NAME
+// For Phoenix: Set PHOENIX_COLLECTOR_ENDPOINT, PHOENIX_API_KEY, PHOENIX_PROJECT_NAME
 // For Arize AX: Set ARIZE_SPACE_ID, ARIZE_API_KEY, ARIZE_PROJECT_NAME
 const exporter = new ArizeExporter()
 ```

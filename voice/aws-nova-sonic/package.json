@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-aws-nova-sonic",
-  "version": "0.1.1-alpha.0",
+  "version": "0.1.1",
   "description": "Mastra AWS Nova 2 Sonic voice integration",
   "type": "module",
   "main": "dist/index.js",
