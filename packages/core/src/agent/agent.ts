@@ -945,7 +945,7 @@ export class Agent<
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
-    // User-configured processors run last to allow customization
+    // User-configured processors run after auto-derived layers to allow customization
     return [
       ...memoryProcessors,
       ...workspaceProcessors,
