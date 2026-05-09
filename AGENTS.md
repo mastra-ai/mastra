@@ -42,3 +42,26 @@ react-best-practices
 tailwind-best-practices
 mastra-smoke-test
 smoke-test create Mastra project and smoke test studio
+
+## Cursor Cloud specific instructions
+
+### Environment
+- Node.js >=22.13.0 and pnpm 10.29.3 are pre-installed via corepack.
+- `pnpm install --frozen-lockfile` is the update script; it runs automatically on VM startup.
+- Some pnpm build scripts (esbuild, @swc/core, sharp, etc.) may be blocked by pnpm's trust policy. The built binaries for esbuild are still present in the pnpm store and work for builds via tsup/rollup. If a build fails with missing native binaries, run `pnpm rebuild <package>` for the specific package.
+
+### Building
+- See `DEVELOPMENT.md` for the full build guide and available `pnpm build:*` / `pnpm test:*` scripts.
+- Always prefer targeted builds (`pnpm build:core`, `pnpm build:cli`, etc.) over `pnpm build` which builds the entire monorepo.
+- The CLI build (`pnpm build:cli`) includes the playground UI and takes ~90s on first run; subsequent runs use Turborepo cache.
+
+### Running the dev server (Studio)
+- The `examples/agent` project requires `OPENAI_API_KEY` at initialization (the `OpenAIVoice()` constructor checks eagerly). Set the env var before running `pnpm mastra:dev` from `examples/agent/`.
+- Before running the example agent, install its deps: `cd examples/agent && pnpm install --ignore-workspace`.
+- Alternatively, scaffold a minimal project with `create-mastra` (see `.claude/skills/smoke-test/SKILL.md`) which does not require API keys at startup.
+
+### Testing
+- Core tests (`pnpm test:core`): ~8000 tests. With `OPENAI_API_KEY` set, 421/429 files pass (7860/8045 tests). Without the key, ~126 additional tests fail. The remaining ~7 failing files are flaky e2e tests or require Docker services.
+- Server tests (`pnpm test:server`) pass fully without API keys (1217 tests).
+- Integration tests for stores require Docker and per-package docker-compose files.
+- MCP tests (`pnpm test:mcp`) have a known self-import resolution issue in the test harness.
