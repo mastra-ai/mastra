@@ -19,8 +19,7 @@
  * ```
  */
 
-import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
+import type { MastraDBMessage } from '../agent/message-list';
 import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs } from '../processors/index';
 
 const REMINDER_TYPE = 'browser-context';
@@ -86,7 +85,7 @@ export class BrowserContextProcessor {
     return { messages: args.messages, systemMessages };
   }
 
-  processInputStep(args: ProcessInputStepArgs): MessageList | undefined {
+  async processInputStep(args: ProcessInputStepArgs) {
     // Only inject per-request context at the first step
     if (args.stepNumber !== 0) return;
 
@@ -96,17 +95,16 @@ export class BrowserContextProcessor {
     const parts: string[] = [];
 
     if (ctx.currentUrl) {
-      parts.push(`Current URL: ${escapeXml(ctx.currentUrl)}`);
+      parts.push(`Current URL: ${ctx.currentUrl}`);
     }
 
     if (ctx.pageTitle) {
-      parts.push(`Page title: ${escapeXml(ctx.pageTitle)}`);
+      parts.push(`Page title: ${ctx.pageTitle}`);
     }
 
     if (parts.length === 0) return;
 
     const reminderText = parts.join(' | ');
-    const reminderMarkup = `<system-reminder type="${REMINDER_TYPE}">${reminderText}</system-reminder>`;
 
     // Only suppress if the trailing message is already the same browser reminder
     const existingMessages = args.messageList.get.all.db();
@@ -114,10 +112,17 @@ export class BrowserContextProcessor {
       return;
     }
 
-    // Add as a new user message at the end of history to preserve prompt cache
-    const reminderMessage = createBrowserReminderMessage(reminderMarkup, ctx.currentUrl, ctx.pageTitle);
-    args.messageList.add(reminderMessage, 'user');
-    args.rotateResponseMessageId?.();
+    await args.sendSignal?.({
+      type: 'system-reminder',
+      contents: reminderText,
+      attributes: {
+        type: REMINDER_TYPE,
+      },
+      metadata: {
+        url: ctx.currentUrl,
+        title: ctx.pageTitle,
+      },
+    });
 
     return args.messageList;
   }
@@ -127,41 +132,6 @@ interface BrowserReminderMetadata {
   type: typeof REMINDER_TYPE;
   url?: string;
   title?: string;
-}
-
-function createBrowserReminderMessage(
-  reminderMarkup: string,
-  url: string | undefined,
-  title: string | undefined,
-): MastraDBMessage {
-  const reminderMeta: BrowserReminderMetadata = {
-    type: REMINDER_TYPE,
-    url,
-    title,
-  };
-
-  const content: MastraMessageContentV2 = {
-    format: 2,
-    parts: [{ type: 'text', text: reminderMarkup }],
-    metadata: {
-      systemReminder: reminderMeta,
-    },
-  };
-
-  return {
-    id: crypto.randomUUID(),
-    role: 'user',
-    content,
-    createdAt: new Date(),
-  };
-}
-
-/**
- * Escape XML special characters in browser-derived values.
- * Prevents URLs or page titles containing <, &, or </system-reminder> from breaking the markup.
- */
-function escapeXml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 /**
@@ -175,13 +145,16 @@ function hasTrailingBrowserReminder(
   title: string | undefined,
 ): boolean {
   const msg = messages[messages.length - 1];
-  if (!msg || msg.role !== 'user') return false;
+  if (!msg || (msg.role !== 'user' && msg.role !== 'signal')) return false;
 
   const metadata = msg.content.metadata;
-  if (typeof metadata !== 'object' || metadata === null || !('systemReminder' in metadata)) {
+  if (typeof metadata !== 'object' || metadata === null) {
     return false;
   }
 
-  const reminder = (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder;
+  const reminder =
+    'systemReminder' in metadata
+      ? (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder
+      : (metadata as unknown as BrowserReminderMetadata);
   return reminder?.type === REMINDER_TYPE && reminder.url === url && reminder.title === title;
 }

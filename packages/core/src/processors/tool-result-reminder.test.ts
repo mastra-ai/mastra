@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
 import { MastraLanguageModelV3Mock } from '../loop/test-utils/MastraLanguageModelV3Mock';
 import type { RequestContext } from '../request-context';
 import { AgentsMDInjector } from './tool-result-reminder';
@@ -156,15 +157,29 @@ function createProcessInputStepArgs(
     retryCount: 0,
     model: new MastraLanguageModelV3Mock({}),
     writer,
+    sendSignal: async signalInput => {
+      const signal = createSignal(signalInput);
+      rotateResponseMessageId?.();
+      messageList.add(signal.toDBMessage(), 'input');
+      await writer?.custom(signal.toDataPart());
+      return signal;
+    },
   } as ProcessInputStepArgs;
 }
 
 function extractReminderMarkup(messageList: TestMessageList): string[] {
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'user')
-    .map(message => getMessageText(message))
-    .filter(text => text.includes('<system-reminder'));
+  return messageList.get.all.db().flatMap(message => {
+    if (message.role === 'signal' && message.content.metadata?.type === 'dynamic-agents-md') {
+      const path = message.content.metadata.path;
+      return typeof path === 'string'
+        ? [`<system-reminder type="dynamic-agents-md" path="${path}">${getMessageText(message)}</system-reminder>`]
+        : [];
+    }
+
+    if (message.role !== 'user') return [];
+    const text = getMessageText(message);
+    return text.includes('<system-reminder') ? [text] : [];
+  });
 }
 
 function getMessageText(message: MastraDBMessage): string {
@@ -206,12 +221,14 @@ describe('AgentsMDInjector', () => {
       `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
     ]);
     const injectedReminder = messageList.get.all.db().at(-1);
-    expect(injectedReminder?.content.metadata).toEqual({
-      systemReminder: {
+    expect(injectedReminder?.role).toBe('signal');
+    expect(injectedReminder?.content.metadata).toEqual(
+      expect.objectContaining({
         path: '/repo/src/agents/nested/AGENTS.md',
         type: 'dynamic-agents-md',
-      },
-    });
+        signal: expect.objectContaining({ type: 'system-reminder' }),
+      }),
+    );
   });
 
   it('injects reminder for tool calls array format', async () => {
@@ -247,15 +264,17 @@ describe('AgentsMDInjector', () => {
     );
 
     expect(chunks).toEqual([
-      {
+      expect.objectContaining({
         type: 'data-system-reminder',
-        data: {
-          message: 'Project guidance from CLAUDE',
-          reminderType: 'dynamic-agents-md',
-          path: '/repo/CLAUDE.md',
-        },
-        transient: true,
-      },
+        data: expect.objectContaining({
+          type: 'system-reminder',
+          contents: 'Project guidance from CLAUDE',
+          metadata: {
+            path: '/repo/CLAUDE.md',
+            type: 'dynamic-agents-md',
+          },
+        }),
+      }),
     ]);
     expect(extractReminderMarkup(messageList)).toEqual([
       `<system-reminder type="dynamic-agents-md" path="/repo/CLAUDE.md">Project guidance from CLAUDE</system-reminder>`,
