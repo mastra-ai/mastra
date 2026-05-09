@@ -1983,7 +1983,13 @@ Notes:
 
     const embeddingData: Array<{
       embeddings: number[][];
-      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      metadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      >;
     }> = [];
     let dimension: number | undefined;
 
@@ -2029,11 +2035,13 @@ Notes:
       const { indexName } = await this.createEmbeddingIndex(dimension);
 
       const allVectors: number[][] = [];
-      const allMetadata: Array<{
-        message_id: string;
-        thread_id: string | undefined;
-        resource_id: string | undefined;
-      }> = [];
+      const allMetadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      > = [];
 
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
@@ -2112,7 +2120,13 @@ Notes:
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
           embeddings: number[][];
-          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+          metadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          >;
         }> = [];
         let dimension: number | undefined;
 
@@ -2217,11 +2231,13 @@ Notes:
 
           // Flatten all embeddings and metadata into single arrays
           const allVectors: number[][] = [];
-          const allMetadata: Array<{
-            message_id: string;
-            thread_id: string | undefined;
-            resource_id: string | undefined;
-          }> = [];
+          const allMetadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          > = [];
 
           for (const data of embeddingData) {
             allVectors.push(...data.embeddings);
@@ -2583,7 +2599,13 @@ Notes:
 
     const embeddingData: Array<{
       embeddings: number[][];
-      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      metadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      >;
     }> = [];
     let dimension: number | undefined;
 
@@ -2633,11 +2655,13 @@ Notes:
 
       // Flatten all embeddings and metadata into single arrays
       const allVectors: number[][] = [];
-      const allMetadata: Array<{
-        message_id: string;
-        thread_id: string | undefined;
-        resource_id: string | undefined;
-      }> = [];
+      const allMetadata: Array<
+        Record<string, unknown> & {
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }
+      > = [];
 
       for (const data of embeddingData) {
         allVectors.push(...data.embeddings);
