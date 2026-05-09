@@ -208,6 +208,15 @@ describe('Session — surface area (M1)', () => {
     expect([...proto].sort()).toEqual(
       [
         'close',
+        'message',
+        'getCurrentMode',
+        'getCurrentModel',
+        'setMode',
+        'setModel',
+        'getDisplayState',
+        '_assertLive',
+        '_buildToolsets',
+        '_flushUpdate',
         '_markClosed',
         '_markEvicted',
         // Getters land in the prototype as own names too.

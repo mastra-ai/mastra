@@ -16,6 +16,8 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
 import type {
   HarnessStorage,
   PermissionRules,
@@ -57,7 +59,18 @@ export class Harness {
   /** Process-scoped owner id used as the lease holder for all sessions. */
   readonly ownerId: string;
 
-  private readonly _storage?: HarnessStorage;
+  /**
+   * The Mastra instance backing this harness. Either supplied at
+   * construction (`new Harness({ mastra })`), built internally from
+   * inline `agents`/`storage`, or installed by `__registerMastra(parent)`
+   * when the harness is registered as a child of a parent Mastra.
+   *
+   * Reads of agents and storage always go through this. Tools and
+   * primitives that need the harness's Mastra (TUI, server) read it via
+   * `harness.mastra`.
+   */
+  private _mastra?: Mastra;
+  private readonly _storageOverride?: HarnessStorage;
   private readonly _modesById: Map<string, HarnessMode>;
   private readonly _defaultModeId?: string;
   private readonly _liveSessions = new Map<string, Session>();
@@ -66,20 +79,18 @@ export class Harness {
   private _shutdown = false;
 
   constructor(config: HarnessConfig) {
-    this._storage = config.sessions?.storage;
     this.ownerId = `harness-${randomUUID()}`;
     this._leaseTtlMs = DEFAULT_LEASE_TTL_MS;
+    this._storageOverride = config.sessions?.storage;
 
-    // Validate modes against agents and against each other. Construction is
-    // the right place to surface every misconfig — silent-at-runtime is the
-    // worst possible outcome for a config like this.
+    // Validate mode shape (uniqueness, tools/additionalTools mutual
+    // exclusion, transitionsTo resolution) up front. Agent-existence
+    // validation happens once a Mastra is bound — either here (if the
+    // caller supplied one) or in __registerMastra.
     this._modesById = new Map();
     for (const mode of config.modes ?? []) {
       if (this._modesById.has(mode.id)) {
         throw new HarnessConfigError(`modes`, `duplicate mode id "${mode.id}"`);
-      }
-      if (!config.agents || !(mode.agentId in config.agents)) {
-        throw new HarnessConfigError(`modes[${mode.id}].agentId`, `references unknown agent "${mode.agentId}"`);
       }
       if (mode.tools && mode.additionalTools) {
         throw new HarnessConfigError(
@@ -89,7 +100,6 @@ export class Harness {
       }
       this._modesById.set(mode.id, mode);
     }
-    // `transitionsTo` references must resolve once every mode is registered.
     for (const mode of this._modesById.values()) {
       if (mode.transitionsTo && !this._modesById.has(mode.transitionsTo)) {
         throw new HarnessConfigError(
@@ -107,6 +117,96 @@ export class Harness {
     } else if (this._modesById.size > 0) {
       throw new HarnessConfigError(`defaultModeId`, `must be set when "modes" is non-empty`);
     }
+
+    // Resolve the Mastra binding. Three shapes:
+    //   1. Caller passed a pre-built Mastra
+    //   2. Caller passed inline agents (and optionally storage)
+    //   3. Neither — defer; a parent Mastra will install itself via
+    //      __registerMastra during its own construction.
+    if (config.mastra) {
+      this._bindMastra(config.mastra);
+    } else if (config.agents !== undefined || config.storage !== undefined) {
+      const internal = new Mastra({
+        agents: config.agents,
+        storage: config.storage,
+      });
+      this._bindMastra(internal);
+    }
+    // Otherwise: stay unbound. session() will throw HarnessConfigError
+    // with a clear message until the parent Mastra registers.
+  }
+
+  /**
+   * The Mastra instance powering this harness. Throws if the harness has
+   * not been bound to a Mastra yet (i.e., it was constructed with no
+   * `mastra` / `agents` / `storage` and has not been registered onto a
+   * parent Mastra). Once bound, the reference is stable for the harness's
+   * lifetime.
+   */
+  get mastra(): Mastra {
+    if (!this._mastra) {
+      throw new HarnessConfigError(
+        'mastra',
+        'harness is not yet bound to a Mastra — pass `mastra`/`agents`/`storage` at construction or register it on a parent Mastra',
+      );
+    }
+    return this._mastra;
+  }
+
+  /**
+   * @internal — called by `Mastra` during its own construction when this
+   * harness is registered under `harnesses.<name>`. Idempotent for the
+   * same parent; throws if called twice with different parents.
+   */
+  __registerMastra(mastra: Mastra): void {
+    if (this._mastra && this._mastra !== mastra) {
+      throw new HarnessConfigError('mastra', 'harness is already bound to a different Mastra instance');
+    }
+    if (this._mastra === mastra) return;
+    this._bindMastra(mastra);
+  }
+
+  /**
+   * Validate every mode's `agentId` against the Mastra's agent registry
+   * and stash the binding for runtime use.
+   */
+  private _bindMastra(mastra: Mastra): void {
+    for (const mode of this._modesById.values()) {
+      let agent: Agent | undefined;
+      try {
+        agent = mastra.getAgent(mode.agentId as never) as Agent | undefined;
+      } catch {
+        agent = undefined;
+      }
+      if (!agent) {
+        throw new HarnessConfigError(
+          `modes[${mode.id}].agentId`,
+          `references unknown agent "${mode.agentId}" — Mastra has no such agent registered`,
+        );
+      }
+    }
+    this._mastra = mastra;
+  }
+
+  /**
+   * Resolve the backing `Agent` for a mode through the bound Mastra.
+   * Throws if the harness is not yet bound.
+   */
+  getAgentForMode(modeId: string): Agent {
+    const mode = this._modesById.get(modeId);
+    if (!mode) {
+      throw new HarnessConfigError('modeId', `unknown mode "${modeId}"`);
+    }
+    return this.mastra.getAgent(mode.agentId as never) as Agent;
+  }
+
+  /** @internal — Session reads the resolved mode for per-turn overlays. */
+  _getMode(modeId: string): HarnessMode {
+    const mode = this._modesById.get(modeId);
+    if (!mode) {
+      throw new HarnessConfigError('modeId', `unknown mode "${modeId}"`);
+    }
+    return mode;
   }
 
   // -------------------------------------------------------------------------
@@ -498,8 +598,14 @@ export class Harness {
     if (this._shutdown) return;
     this._shutdown = true;
 
-    const storage = this._storage;
-    if (!storage) return;
+    let storage: HarnessStorage;
+    try {
+      storage = this._requireStorage('shutdown()');
+    } catch {
+      // No storage bound — nothing to release. Idempotent.
+      this._liveSessions.clear();
+      return;
+    }
 
     // Release every held lease. We keep the records active in storage —
     // shutdown is not a close.
@@ -542,13 +648,16 @@ export class Harness {
   // -------------------------------------------------------------------------
 
   private _requireStorage(callsite: string): HarnessStorage {
-    if (!this._storage) {
-      throw new HarnessConfigError(
-        'sessions.storage',
-        `required for ${callsite} — pass HarnessConfig.sessions.storage`,
-      );
+    if (this._storageOverride) return this._storageOverride;
+    if (this._mastra) {
+      const composite = this._mastra.getStorage();
+      const harness = composite?.stores?.harness;
+      if (harness) return harness;
     }
-    return this._storage;
+    throw new HarnessConfigError(
+      'sessions.storage',
+      `required for ${callsite} — pass storage in HarnessConfig.storage, HarnessConfig.sessions.storage, or via the Mastra instance backing this harness`,
+    );
   }
 
   private _mintThreadId(): string {
