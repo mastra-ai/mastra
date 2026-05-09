@@ -1,9 +1,8 @@
 /**
  * ClickHouse v-next observability storage domain.
  *
- * Insert-only model: only completed spans stored. Uses ReplacingMergeTree for
- * tracing tables with dedupeKey for retry-idempotency. Append-only MergeTree
- * for metric/log/score/feedback signals.
+ * Insert-only model: Uses ReplacingMergeTree for all signals
+ * with dedupeKey for retry-idempotency.
  *
  * Domain layout follows DuckDB reference: thin class delegating to module functions.
  */
@@ -20,8 +19,13 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetSpansArgs,
+  GetSpansResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateLogsArgs,
@@ -48,6 +52,7 @@ import type {
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
+  ScoreRecord,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -86,6 +91,7 @@ import type { ClickhouseDomainConfig } from '../../../db';
 import {
   ALL_TABLE_DDL,
   ALL_MV_DDL,
+  ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
   MV_DISCOVERY_VALUES,
@@ -103,9 +109,42 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
+import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
+
+function buildSignalMigrationRequiredMessage(args: {
+  store: 'ClickHouse';
+  tables: Array<{ table: string; engine: string }>;
+}): string {
+  const tableList = args.tables.map(table => `  - ${table.table} (${table.engine})`).join('\n');
+
+  return (
+    `\n` +
+    `===========================================================================\n` +
+    `MIGRATION REQUIRED: ${args.store} observability signal tables need signal IDs\n` +
+    `===========================================================================\n` +
+    `\n` +
+    `The following signal tables still use the legacy schema and must be migrated\n` +
+    `before observability storage can initialize:\n` +
+    `\n` +
+    `${tableList}\n` +
+    `\n` +
+    `To fix this, run the manual migration command:\n` +
+    `\n` +
+    `  npx mastra migrate\n` +
+    `\n` +
+    `This command will:\n` +
+    `  1. Create replacement signal tables with signal-ID dedupe keys\n` +
+    `  2. Backfill missing signal IDs for legacy rows\n` +
+    `  3. Swap the migrated tables into place\n` +
+    `\n` +
+    `WARNING: This migration recreates the signal tables and may take significant\n` +
+    `time for large databases. Please ensure you have a backup before proceeding.\n` +
+    `===========================================================================\n`
+  );
+}
 
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
@@ -123,10 +162,28 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   async init(): Promise<void> {
+    const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
+    if (migrationStatus.needsMigration) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATION_REQUIRED', 'SIGNAL_TABLES'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: buildSignalMigrationRequiredMessage({
+          store: 'ClickHouse',
+          tables: migrationStatus.tables.map(({ table, engine }) => ({ table, engine })),
+        }),
+      });
+    }
+
     try {
       // Core tables + incremental MVs (must succeed)
       for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
         await this.#client.command({ query: ddl });
+      }
+
+      // Additive migrations for existing databases (add new columns)
+      for (const migration of ALL_MIGRATIONS) {
+        await this.#client.command({ query: migration });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
@@ -138,12 +195,16 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         }
       }
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      const causeMessage = error instanceof Error ? error.message : String(error);
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'VNEXT_INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to initialize ClickHouse v-next observability tables',
+          text: `Failed to initialize ClickHouse v-next observability tables: ${causeMessage}`,
         },
         error,
       );
@@ -168,6 +229,38 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // Discovery MVs may fail on ClickHouse versions without refreshable MV support.
       // Discovery methods will return empty results until the MVs are created and refreshed.
     }
+  }
+
+  /**
+   * Manually migrate legacy signal tables to the signal-ID ReplacingMergeTree schema.
+   * The public method name is historical; the CLI still calls `migrateSpans()`
+   * for observability migrations even though this now also migrates signal tables.
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: 'Migration already complete. Signal tables already use signal-ID dedupe keys.',
+      };
+    }
+
+    await migrateSignalTables(this.#client, this.logger);
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: 0,
+      message: `Migration complete. Migrated signal tables: ${migrationStatus.tables.map(t => t.table).join(', ')}.`,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -243,6 +336,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
+    try {
+      return await tracingOps.getSpans(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId: args.traceId, count: args.spanIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     try {
       return await traceRootsOps.getRootSpan(this.#client, args);
@@ -277,6 +387,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    try {
+      return await tracingOps.getTraceLight(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_LIGHT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId: args.traceId },
+        },
+        error,
+      );
+    }
+  }
+
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     try {
       return await traceRootsOps.listTraces(this.#client, args);
@@ -285,6 +412,22 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    try {
+      return await tracingOps.listBranches(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_BRANCHES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -402,6 +545,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    try {
+      return await scoresOps.getScoreById(this.#client, scoreId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SCORE_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { scoreId },
         },
         error,
       );

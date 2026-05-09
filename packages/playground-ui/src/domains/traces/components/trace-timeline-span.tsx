@@ -8,6 +8,7 @@ import { TimelineTimingCol } from './timeline-timing-col';
 
 type TraceTimelineSpanProps = {
   span: UISpan;
+  siblings?: UISpan[];
   depth?: number;
   onSpanClick?: (id: string) => void;
   selectedSpanId?: string;
@@ -19,10 +20,12 @@ type TraceTimelineSpanProps = {
   featuredSpanIds?: string[];
   expandedSpanIds?: string[];
   setExpandedSpanIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  chartWidth?: 'wide' | 'default';
 };
 
 export function TraceTimelineSpan({
   span,
+  siblings,
   depth = 0,
   onSpanClick,
   selectedSpanId,
@@ -34,6 +37,7 @@ export function TraceTimelineSpan({
   featuredSpanIds,
   expandedSpanIds,
   setExpandedSpanIds,
+  chartWidth,
 }: TraceTimelineSpanProps) {
   const hasChildren = span.spans && span.spans.length > 0;
   const numOfChildren = span.spans ? span.spans.length : 0;
@@ -60,8 +64,7 @@ export function TraceTimelineSpan({
     if (!setExpandedSpanIds) return;
     setExpandedSpanIds(prev => {
       if (!prev) return prev;
-      const idsToRemove = new Set([span.id, ...allDescendantIds]);
-      return isExpanded ? prev.filter(id => !idsToRemove.has(id)) : [...prev, span.id];
+      return isExpanded ? prev.filter(id => id !== span.id) : [...prev, span.id];
     });
   };
 
@@ -73,7 +76,46 @@ export function TraceTimelineSpan({
     });
   };
 
+  const collapseAllDescendants = () => {
+    if (!setExpandedSpanIds) return;
+    setExpandedSpanIds(prev => {
+      if (!prev) return prev;
+      const idsToRemove = new Set(allDescendantIds);
+      return prev.filter(id => !idsToRemove.has(id));
+    });
+  };
+
+  const collapseAll = () => {
+    if (!setExpandedSpanIds) return;
+    setExpandedSpanIds(prev => {
+      if (!prev) return prev;
+      const idsToRemove = new Set([span.id, ...allDescendantIds]);
+      return prev.filter(id => !idsToRemove.has(id));
+    });
+  };
+
   const allDescendantsExpanded = allDescendantIds.every(id => expandedSpanIds?.includes(id));
+
+  const siblingsWithChildren = (siblings ?? []).filter(s => s.spans && s.spans.length > 0);
+  const siblingsWithChildrenCount = siblingsWithChildren.length;
+  const siblingsAllExpanded =
+    siblingsWithChildrenCount > 0 && siblingsWithChildren.every(s => expandedSpanIds?.includes(s.id));
+
+  const toggleSiblings = () => {
+    if (!setExpandedSpanIds || siblingsWithChildrenCount === 0) return;
+    setExpandedSpanIds(prev => {
+      if (!prev) return prev;
+      if (siblingsAllExpanded) {
+        const idsToRemove = new Set<string>();
+        siblingsWithChildren.forEach(s => {
+          idsToRemove.add(s.id);
+          getSpanDescendantIds(s).forEach(id => idsToRemove.add(id));
+        });
+        return prev.filter(id => !idsToRemove.has(id));
+      }
+      return Array.from(new Set([...prev, ...siblingsWithChildren.map(s => s.id)]));
+    });
+  };
 
   return (
     <>
@@ -94,11 +136,17 @@ export function TraceTimelineSpan({
         isSelected={selectedSpanId === span.id}
         isFaded={isFaded}
         isExpanded={isExpanded}
+        isRootSpan={isRootSpan}
         toggleChildren={toggleChildren}
         expandAllDescendants={expandAllDescendants}
+        collapseAllDescendants={collapseAllDescendants}
+        collapseAll={collapseAll}
         totalDescendants={totalDescendants}
         allDescendantsExpanded={allDescendantsExpanded}
         numOfChildren={numOfChildren}
+        toggleSiblings={toggleSiblings}
+        siblingsAllExpanded={siblingsAllExpanded}
+        siblingsWithChildrenCount={siblingsWithChildrenCount}
       />
 
       <TimelineTimingCol
@@ -108,6 +156,7 @@ export function TraceTimelineSpan({
         overallLatency={overallLatency}
         overallStartTime={overallStartTime}
         color={spanUI?.color}
+        chartWidth={chartWidth}
       />
 
       {hasChildren &&
@@ -119,6 +168,7 @@ export function TraceTimelineSpan({
             <TraceTimelineSpan
               key={childSpan.id}
               span={childSpan}
+              siblings={array}
               depth={depth + 1}
               onSpanClick={onSpanClick}
               selectedSpanId={selectedSpanId}
@@ -130,6 +180,7 @@ export function TraceTimelineSpan({
               expandedSpanIds={expandedSpanIds}
               setExpandedSpanIds={setExpandedSpanIds}
               featuredSpanIds={featuredSpanIds}
+              chartWidth={chartWidth}
             />
           );
         })}

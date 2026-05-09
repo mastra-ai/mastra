@@ -5,7 +5,7 @@ For detailed internal architecture documentation, see the Notion page:
 
 ## High-Level Summary
 
-When you deploy a Studio or Server to Mastra Cloud:
+When you deploy a Studio or Server to Mastra platform:
 
 1. **Deploy** → CLI sends your project to platform services
 2. **Token** → Platform signs a JWT for your deployment

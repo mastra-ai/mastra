@@ -329,7 +329,7 @@ export interface paths {
     };
     /**
      * Get usage activity
-     * @description Aggregated usage metrics for a project. Supports multiple granularities (1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source_category, api_key_id).
+     * @description Aggregated usage metrics for a project. Supports multiple granularities (1m, 5m, 15m, 1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source_category, api_key_id).
      */
     get: operations['getV1GatewayProjectsByIdUsageActivity'];
     put?: never;
@@ -522,6 +522,26 @@ export interface paths {
     get: operations['getV1StudioDeploysById'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/studio/deploys/{id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel studio deploy
+     * @description Cancel a queued or uploading deployment before the pipeline starts.
+     */
+    post: operations['postV1StudioDeploysByIdCancel'];
     delete?: never;
     options?: never;
     head?: never;
@@ -724,6 +744,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/server/projects/{id}/pause': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause server
+     * @description Stop the currently running deploy for a server project. The server will no longer respond to requests until restarted.
+     */
+    post: operations['postV1ServerProjectsByIdPause'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/server/projects/{id}/restart': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Restart server
+     * @description Trigger a new deployment for a stopped, failed, crashed, or cancelled server project.
+     */
+    post: operations['postV1ServerProjectsByIdRestart'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/server/deploys': {
     parameters: {
       query?: never;
@@ -906,6 +966,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -925,6 +987,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -976,6 +1040,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -995,6 +1061,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1045,6 +1113,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1064,6 +1134,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1083,6 +1155,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1131,6 +1205,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1173,6 +1249,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1224,6 +1302,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1270,6 +1350,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1322,6 +1404,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1374,6 +1458,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1393,6 +1479,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1442,6 +1530,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1458,7 +1548,14 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          /** Format: uri */
+          returnTo?: string;
+        };
+      };
+    };
     responses: {
       /** @description Logged out */
       200: {
@@ -1517,6 +1614,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1536,6 +1635,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1583,6 +1684,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1602,6 +1705,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1658,6 +1763,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1677,6 +1784,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1721,6 +1830,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1740,6 +1851,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1784,6 +1897,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1803,6 +1918,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1863,6 +1980,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1882,6 +2001,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -1925,6 +2046,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2012,6 +2135,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2031,6 +2156,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2087,6 +2214,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2106,6 +2235,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2178,6 +2309,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2197,6 +2330,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2271,6 +2406,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2290,6 +2427,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2367,6 +2506,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2400,7 +2541,9 @@ export interface operations {
               studioEnabled: boolean;
               serverEnabled: boolean;
               latestDeployId: string | null;
-              latestDeployStatus: ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'unknown') | null;
+              latestDeployStatus:
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
               latestDeployCreatedAt: string | null;
               latestServerDeployStatus: string | null;
               customServerApiUrl: string | null;
@@ -2424,6 +2567,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2463,7 +2608,9 @@ export interface operations {
               studioEnabled: boolean;
               serverEnabled: boolean;
               latestDeployId: string | null;
-              latestDeployStatus: ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'unknown') | null;
+              latestDeployStatus:
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
               latestDeployCreatedAt: string | null;
               latestServerDeployStatus: string | null;
               customServerApiUrl: string | null;
@@ -2487,6 +2634,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2522,7 +2671,9 @@ export interface operations {
               studioEnabled: boolean;
               serverEnabled: boolean;
               latestDeployId: string | null;
-              latestDeployStatus: ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'unknown') | null;
+              latestDeployStatus:
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
               latestDeployCreatedAt: string | null;
               latestServerDeployStatus: string | null;
               customServerApiUrl: string | null;
@@ -2537,7 +2688,7 @@ export interface operations {
               organizationId: string;
               projectName: string;
               /** @enum {string} */
-              status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'unknown';
+              status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown';
               instanceUrl: string | null;
               error: string | null;
               createdAt: string | null;
@@ -2557,6 +2708,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2601,6 +2754,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2622,7 +2777,16 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': {
+          envVars?: {
+            [key: string]: string;
+          };
+          disablePlatformObservability?: boolean;
+        };
+      };
+    };
     responses: {
       /** @description Deploy queued */
       202: {
@@ -2652,6 +2816,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2696,6 +2862,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2729,7 +2897,7 @@ export interface operations {
               organizationId: string;
               projectName: string;
               /** @enum {string} */
-              status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'unknown';
+              status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown';
               instanceUrl: string | null;
               error: string | null;
               createdAt: string | null;
@@ -2749,6 +2917,76 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  postV1StudioDeploysByIdCancel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deploy cancelled */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            id: string;
+            /** @enum {string} */
+            status: 'queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown';
+          };
+        };
+      };
+      /** @description Deploy cannot be cancelled (not in queued or uploading state) */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Deploy not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2795,6 +3033,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -2836,6 +3076,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -3257,7 +3499,13 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          domain: string;
+        };
+      };
+    };
     responses: {
       /** @description Custom domain added */
       200: {
@@ -3372,6 +3620,108 @@ export interface operations {
       };
     };
   };
+  postV1ServerProjectsByIdPause: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server paused */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+      /** @description Server is not running */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
+  postV1ServerProjectsByIdRestart: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deploy queued */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            id: string;
+            status: string;
+            uploadUrl?: string;
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+      /** @description Server is already running or deploying */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
   postV1ServerDeploys: {
     parameters: {
       query?: never;
@@ -3387,6 +3737,7 @@ export interface operations {
           envVars?: {
             [key: string]: string;
           };
+          disablePlatformObservability?: boolean;
         };
       };
     };
@@ -3603,7 +3954,12 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': {
+            id: string;
+            status: string;
+          };
+        };
       };
       /** @description Deploy not found */
       404: {
@@ -3669,6 +4025,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -3688,6 +4046,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -3707,6 +4067,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;
@@ -3726,6 +4088,8 @@ export interface operations {
             status: number;
             detail?: string;
             instance?: string;
+            /** Format: uri */
+            help_url?: string;
             errors?: {
               field: string;
               message: string;

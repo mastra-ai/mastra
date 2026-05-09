@@ -9,7 +9,7 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -28,6 +28,10 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
+  /** Maximum number of spans per OTEL export batch */
+  flushAt?: number;
+  /** Maximum time in seconds before pending spans are exported */
+  flushInterval?: number;
   /** Langfuse environment tag for traces */
   environment?: string;
   /** Langfuse release tag for traces */
@@ -48,7 +52,7 @@ export class LangfuseExporter extends BaseExporter {
 
     const publicKey = config.publicKey ?? process.env.LANGFUSE_PUBLIC_KEY;
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
-    const baseUrl = (config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL).replace(/\/+$/, '');
+    const baseUrl = stripTrailingSlashes(config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL);
     this.#realtime = config.realtime ?? false;
 
     if (!publicKey || !secretKey) {
@@ -76,6 +80,8 @@ export class LangfuseExporter extends BaseExporter {
       environment: config.environment,
       release: config.release,
       exportMode: this.#realtime ? 'immediate' : 'batched',
+      flushAt: config.flushAt,
+      flushInterval: config.flushInterval,
       // Export all spans — the default filter only passes spans with gen_ai.* attributes
       // or known LLM instrumentation scopes, but Mastra spans use mastra.* attributes.
       shouldExportSpan: () => true,
@@ -140,7 +146,60 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Add a score to a trace via the Langfuse client.
+   * Submit a score to Langfuse. Used by both the new `onScoreEvent` path and the
+   * deprecated `addScoreToTrace` wrapper.
+   */
+  private submitScore(args: {
+    id: string;
+    traceId: string;
+    spanId?: string;
+    name: string;
+    value: number;
+    comment?: string;
+    metadata?: Record<string, unknown>;
+  }): void {
+    if (!this.#client) return;
+
+    const { id, traceId, spanId, name, value, comment, metadata } = args;
+    try {
+      this.#client.score.create({
+        id,
+        traceId,
+        ...(spanId ? { observationId: spanId } : {}),
+        name,
+        value,
+        ...(comment ? { comment } : {}),
+        ...(metadata ? { metadata } : {}),
+        dataType: 'NUMERIC' as const,
+      });
+    } catch (error) {
+      this.logger.error(`${LOG_PREFIX} Error submitting score`, {
+        error,
+        traceId,
+        spanId,
+        name,
+      });
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    const { score } = event;
+    if (!score.traceId) return;
+    this.submitScore({
+      id: score.scoreId,
+      traceId: score.traceId,
+      spanId: score.spanId,
+      name: score.scorerName ?? score.scorerId,
+      value: score.score,
+      comment: score.reason,
+      metadata: score.metadata,
+    });
+  }
+
+  /**
+   * @deprecated Use the observability score event pipeline (`mastra.observability.addScore`)
+   * instead. This method is preserved for backwards compatibility and forwards to the same
+   * underlying client call as `onScoreEvent`.
    */
   async addScoreToTrace({
     traceId,
@@ -157,27 +216,15 @@ export class LangfuseExporter extends BaseExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void> {
-    if (!this.#client) return;
-
-    try {
-      this.#client.score.create({
-        id: `${traceId}-${spanId || ''}-${scorerName}`,
-        traceId,
-        ...(spanId ? { observationId: spanId } : {}),
-        name: scorerName,
-        value: score,
-        ...(reason ? { comment: reason } : {}),
-        ...(metadata ? { metadata } : {}),
-        dataType: 'NUMERIC' as const,
-      });
-    } catch (error) {
-      this.logger.error(`${LOG_PREFIX} Error adding score to trace`, {
-        error,
-        traceId,
-        spanId,
-        scorerName,
-      });
-    }
+    this.submitScore({
+      id: `${traceId}-${spanId || ''}-${scorerName}`,
+      traceId,
+      spanId,
+      name: scorerName,
+      value: score,
+      comment: reason,
+      metadata,
+    });
   }
 
   async flush(): Promise<void> {
@@ -253,6 +300,34 @@ function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environm
     delete attributes['mastra.tags'];
   }
 
+  // Trace name: mastra.metadata.traceName → langfuse.trace.name
+  if (attributes['mastra.metadata.traceName']) {
+    attributes['langfuse.trace.name'] = attributes['mastra.metadata.traceName'];
+    delete attributes['mastra.metadata.traceName'];
+  }
+
+  // Trace version: mastra.metadata.version → langfuse.trace.version
+  if (attributes['mastra.metadata.version']) {
+    attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
+    delete attributes['mastra.metadata.version'];
+  }
+
+  // Observation metadata: map semantic attributes to langfuse.observation.metadata.*
+  // so they become top-level filterable keys on each observation in Langfuse.
+  // @see https://langfuse.com/integrations/native/opentelemetry#how-metadata-mapping-works
+  if (attributes['gen_ai.agent.id']) {
+    attributes['langfuse.observation.metadata.agentId'] = attributes['gen_ai.agent.id'];
+  }
+  if (attributes['gen_ai.agent.name']) {
+    attributes['langfuse.observation.metadata.agentName'] = attributes['gen_ai.agent.name'];
+  }
+  if (attributes['mastra.span.type']) {
+    attributes['langfuse.observation.metadata.spanType'] = attributes['mastra.span.type'];
+  }
+  if (attributes['gen_ai.operation.name']) {
+    attributes['langfuse.observation.metadata.operationName'] = attributes['gen_ai.operation.name'];
+  }
+
   // Input/Output: mastra.*.input/output → langfuse.observation.input/output
   // For gen_ai spans, Langfuse reads gen_ai.input.messages natively.
   // For non-gen_ai spans, we map the first mastra.*.input/output we find.
@@ -272,4 +347,17 @@ function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environm
       }
     }
   }
+}
+
+/**
+ * Remove trailing "/" characters procedurally. Avoids polynomial
+ * backtracking that a greedy regex like `/\/+$/` can exhibit when the
+ * input is attacker-controlled.
+ */
+function stripTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) {
+    end--;
+  }
+  return end === s.length ? s : s.slice(0, end);
 }

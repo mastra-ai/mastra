@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Switch } from './switch';
 import { Label } from '../Label';
+import { Switch } from './switch';
 
 const meta: Meta<typeof Switch> = {
   title: 'Elements/Switch',
@@ -8,7 +8,6 @@ const meta: Meta<typeof Switch> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },

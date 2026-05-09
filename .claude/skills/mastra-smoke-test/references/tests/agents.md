@@ -65,3 +65,44 @@ Type in chat: "What about London?"
 Click: Send button
 Wait: For response
 ```
+
+## Curl / API (for `--skip-browser`)
+
+**`<agentKey>` is the key used in `Mastra({ agents: { weatherAgent } })`, not
+the agent's `id` field.** A template where `agents: { weatherAgent }` and the
+agent's `id: 'weather-agent'` is addressed as `/api/agents/weatherAgent/...`,
+not `/api/agents/weather-agent/...`.
+
+**List agents:**
+
+```bash
+curl -s http://localhost:4111/api/agents
+```
+
+**Generate (single call, no memory):**
+
+```bash
+curl -s -X POST "http://localhost:4111/api/agents/<agentKey>/generate" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What is the weather in Tokyo?"}]}'
+```
+
+**Generate with memory** (see `memory.md` for the two-call persistence check):
+
+```bash
+curl -s -X POST "http://localhost:4111/api/agents/<agentKey>/generate" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"..."}],"memory":{"thread":"<tid>","resource":"<rid>"}}'
+```
+
+**Pass criteria:**
+
+- `/api/agents` returns a JSON object keyed by agent key
+- `/generate` returns HTTP 200 with a `text` field containing a coherent
+  response (and, if the agent has a tool, `toolCalls` / `toolResults` in
+  `steps`)
+
+**Common mistake:** sending `threadId` / `resourceId` at the top level to
+`/generate` — these are silently discarded. Use `memory: { thread, resource }`.
+Top-level `threadId` / `resourceId` are only read by the deprecated
+`/generate-legacy` route.

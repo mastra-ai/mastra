@@ -147,6 +147,18 @@ await run.resume({
 })
 ```
 
+When a [`.foreach()`](/reference/workflows/workflow-methods/foreach) step suspends across multiple iterations, pass `forEachIndex` (zero-based; `0` targets the first iteration) to resume one iteration at a time. Iterations you don't target remain suspended.
+
+```typescript
+await run.resume({
+  step: 'approve',
+  resumeData: { ok: true },
+  forEachIndex: 1, // resumes the second iteration
+})
+```
+
+`forEachIndex` is also supported by `resumeAsync()` and `resumeStream()`.
+
 ### `cancel()`
 
 Cancel a running workflow:
@@ -218,3 +230,52 @@ A workflow run result yields the following:
   },
 ]}
 />
+
+## Schedules
+
+Schedules are declared in code via the `schedule` field on `createWorkflow`. The client SDK exposes read and operational methods for managing them at runtime. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
+
+### `listSchedules()`
+
+List all schedules, optionally filtered by workflow id or status.
+
+```typescript
+const schedules = await mastraClient.listSchedules({
+  workflowId: 'daily-report',
+  status: 'active',
+})
+```
+
+### `getSchedule()`
+
+Fetch a single schedule by id.
+
+```typescript
+const schedule = await mastraClient.getSchedule('daily-report')
+```
+
+### `pauseSchedule()`
+
+Pause a schedule so the scheduler stops firing it. Returns the updated schedule. Idempotent.
+
+```typescript
+await mastraClient.pauseSchedule('daily-report')
+```
+
+### `resumeSchedule()`
+
+Resume a paused schedule. The next fire time is recomputed from now, so a long-paused schedule does not fire a backlog. Returns the updated schedule. Idempotent.
+
+```typescript
+await mastraClient.resumeSchedule('daily-report')
+```
+
+### `listScheduleTriggers()`
+
+List the trigger history for a schedule, including the joined run summary for each fire.
+
+```typescript
+const { triggers } = await mastraClient.listScheduleTriggers('daily-report', {
+  limit: 50,
+})
+```

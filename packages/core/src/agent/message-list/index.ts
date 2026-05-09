@@ -44,8 +44,17 @@ export {
   ensureAnthropicCompatibleMessages,
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
+  hasResponseProviderItemId,
+  getResponseProviderItemIdFromPart,
   findToolCallArgs,
 } from './utils/provider-compat';
+export {
+  getResponseProviderItemId,
+  getResponseProviderItemKey,
+  getResponseProviderItemIds,
+  getResponseProviderItemKeys,
+} from './utils/response-item-metadata';
+export type { ResponseItemIdProvider } from './utils/response-item-metadata';
 export type { ToolResultWithInput } from './utils/provider-compat';
 
 // State management exports

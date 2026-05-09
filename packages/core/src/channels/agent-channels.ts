@@ -343,6 +343,8 @@ async function headContentType(url: string, logger?: IMastraLogger): Promise<str
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
   private chat: Chat | null = null;
+  /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
+  private initPromise: Promise<void> | null = null;
   private agent!: Agent<any, any, any, any>;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
@@ -364,6 +366,8 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
+  /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
+  private externallyManagedPlatforms: Set<string> = new Set();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -412,6 +416,38 @@ export class AgentChannels {
   }
 
   /**
+   * Register an adapter dynamically.
+   * When `managesRoutes` is true, AgentChannels will NOT create webhook routes for this platform
+   * (the ChannelProvider handles routing and calls handleWebhookEvent directly).
+   * @internal
+   */
+  __registerAdapter(
+    platform: string,
+    adapter: Adapter,
+    config?: ChannelAdapterConfig,
+    options?: { managesRoutes?: boolean },
+  ): void {
+    if (this.adapters[platform]) {
+      if (options?.managesRoutes) {
+        this.externallyManagedPlatforms.add(platform);
+      }
+      return;
+    }
+    this.adapters[platform] = adapter;
+    this.adapterConfigs[platform] = config ?? { adapter };
+    if (options?.managesRoutes) {
+      this.externallyManagedPlatforms.add(platform);
+    }
+  }
+
+  /**
+   * Check if an adapter is registered for the given platform.
+   */
+  hasAdapter(platform: string): boolean {
+    return platform in this.adapters;
+  }
+
+  /**
    * Get the underlying Chat SDK instance.
    * Available after Mastra initialization. Use this to register additional
    * event handlers or access adapter-specific methods.
@@ -432,238 +468,254 @@ export class AgentChannels {
    * Called by Mastra.addAgent after the server is ready.
    */
   async initialize(mastra: Mastra): Promise<void> {
-    // Resolve state adapter: custom > Mastra storage > in-memory fallback
-    if (this.customState) {
-      this.stateAdapter = this.customState;
-    } else {
-      const storage = mastra.getStorage();
-      const memoryStore = storage ? await storage.getStore('memory') : undefined;
-      if (!memoryStore) {
-        throw new Error(
-          'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
-        );
-      }
-      this.stateAdapter = new MastraStateAdapter(memoryStore);
-      this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
+    if (this.chat) return;
+    if (this.initPromise) {
+      return this.initPromise;
     }
 
-    const { Chat } = await getChatModule();
-    const chat = new Chat({
-      adapters: this.adapters,
-      state: this.stateAdapter,
-      userName: this.userName,
-      concurrency: { strategy: 'queue' },
-      ...this.chatOptions,
-    });
-
-    // Default handler that routes messages to the agent
-    const defaultHandler = (sdkThread: Thread, message: Message) => this.handleChatMessage(sdkThread, message, mastra);
-
-    // Register handlers with optional overrides
-    const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
-
-    if (onDirectMessage !== false) {
-      chat.onDirectMessage((thread, message) => {
-        if (typeof onDirectMessage === 'function') {
-          return onDirectMessage(thread, message, defaultHandler);
-        }
-        return defaultHandler(thread, message);
-      });
-    }
-
-    if (onMention !== false) {
-      chat.onNewMention((thread, message) => {
-        if (typeof onMention === 'function') {
-          return onMention(thread, message, defaultHandler);
-        }
-        return defaultHandler(thread, message);
-      });
-    }
-
-    if (onSubscribedMessage !== false) {
-      chat.onSubscribedMessage((thread, message) => {
-        if (typeof onSubscribedMessage === 'function') {
-          return onSubscribedMessage(thread, message, defaultHandler);
-        }
-        return defaultHandler(thread, message);
-      });
-    }
-
-    // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
-    chat.onAction(async event => {
-      const { actionId } = event;
-      if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
-      try {
-        const approved = actionId.startsWith('tool_approve:');
-        const toolCallId = actionId.split(':')[1];
-
-        // In Slack DMs, event.thread points to the approval card message rather
-        // than the top-level conversation, which can cause sub-threading.
-        // This is a known Slack adapter limitation.
-        const sdkThread = event.thread as Thread | null;
-        if (!sdkThread) {
-          this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
-          return;
-        }
-        const platform = event.adapter.name;
-        const messageId = event.messageId;
-        const adapter = this.adapters[platform];
-        const adapterConfig = this.adapterConfigs[platform];
-        if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
-
-        // Look up the Mastra thread to find the runId and tool metadata from pending approvals
-        // Note: In Slack DMs, sdkThread.id may point to the card message, not the conversation.
-        // We use sdkThread.channelId as the stable identifier for DMs.
-        const externalThreadId = sdkThread.isDM ? sdkThread.channelId : sdkThread.id;
-        const mastraThread = await this.getOrCreateThread({
-          externalThreadId,
-          channelId: sdkThread.channelId,
-          platform,
-          resourceId: `${platform}:${event.user.userId}`,
-          mastra,
-        });
-
-        // Find the runId from pendingToolApprovals in message history
+    this.initPromise = (async () => {
+      // Resolve state adapter: custom > Mastra storage > in-memory fallback
+      if (this.customState) {
+        this.stateAdapter = this.customState;
+      } else {
         const storage = mastra.getStorage();
         const memoryStore = storage ? await storage.getStore('memory') : undefined;
         if (!memoryStore) {
-          throw new Error('Storage is required for tool approval lookups');
+          throw new Error(
+            'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
+          );
         }
+        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
+      }
 
-        const { messages } = await memoryStore.listMessages({
-          threadId: mastraThread.id,
-          perPage: 50,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
+      const { Chat } = await getChatModule();
+      const chat = new Chat({
+        adapters: this.adapters,
+        state: this.stateAdapter,
+        userName: this.userName,
+        concurrency: { strategy: 'queue' },
+        ...this.chatOptions,
+      });
+
+      // Default handler that routes messages to the agent
+      const defaultHandler = (sdkThread: Thread, message: Message) =>
+        this.handleChatMessage(sdkThread, message, mastra);
+
+      // Register handlers with optional overrides
+      const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
+
+      if (onDirectMessage !== false) {
+        chat.onDirectMessage((thread, message) => {
+          if (typeof onDirectMessage === 'function') {
+            return onDirectMessage(thread, message, defaultHandler);
+          }
+          return defaultHandler(thread, message);
         });
+      }
 
-        // Search for the pendingToolApprovals metadata containing our toolCallId
-        let runId: string | undefined;
-        let toolName: string | undefined;
-        let toolArgs: Record<string, unknown> | undefined;
-        for (const msg of messages) {
-          const pending = msg.content?.metadata?.pendingToolApprovals as
-            | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
-            | undefined;
-          if (pending) {
-            for (const toolData of Object.values(pending)) {
-              if (toolData.toolCallId === toolCallId) {
-                runId = toolData.runId;
-                toolName = toolData.toolName;
-                toolArgs = toolData.args;
-                break;
+      if (onMention !== false) {
+        chat.onNewMention((thread, message) => {
+          if (typeof onMention === 'function') {
+            return onMention(thread, message, defaultHandler);
+          }
+          return defaultHandler(thread, message);
+        });
+      }
+
+      if (onSubscribedMessage !== false) {
+        chat.onSubscribedMessage((thread, message) => {
+          if (typeof onSubscribedMessage === 'function') {
+            return onSubscribedMessage(thread, message, defaultHandler);
+          }
+          return defaultHandler(thread, message);
+        });
+      }
+
+      // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
+      chat.onAction(async event => {
+        const { actionId } = event;
+        if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
+        try {
+          const approved = actionId.startsWith('tool_approve:');
+          const toolCallId = actionId.split(':')[1];
+
+          // In Slack DMs, event.thread points to the approval card message rather
+          // than the top-level conversation, which can cause sub-threading.
+          // This is a known Slack adapter limitation.
+          const sdkThread = event.thread as Thread | null;
+          if (!sdkThread) {
+            this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
+            return;
+          }
+          const platform = event.adapter.name;
+          const messageId = event.messageId;
+          const adapter = this.adapters[platform];
+          const adapterConfig = this.adapterConfigs[platform];
+          if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
+
+          // Look up the Mastra thread to find the runId and tool metadata from pending approvals
+          // Note: In Slack DMs, sdkThread.id may point to the card message, not the conversation.
+          // We use sdkThread.channelId as the stable identifier for DMs.
+          const externalThreadId = sdkThread.isDM ? sdkThread.channelId : sdkThread.id;
+          const mastraThread = await this.getOrCreateThread({
+            externalThreadId,
+            channelId: sdkThread.channelId,
+            platform,
+            resourceId: `${platform}:${event.user.userId}`,
+            mastra,
+          });
+
+          // Find the runId from pendingToolApprovals in message history
+          const storage = mastra.getStorage();
+          const memoryStore = storage ? await storage.getStore('memory') : undefined;
+          if (!memoryStore) {
+            throw new Error('Storage is required for tool approval lookups');
+          }
+
+          const { messages } = await memoryStore.listMessages({
+            threadId: mastraThread.id,
+            perPage: 50,
+            orderBy: { field: 'createdAt', direction: 'DESC' },
+          });
+
+          // Search for the pendingToolApprovals metadata containing our toolCallId
+          let runId: string | undefined;
+          let toolName: string | undefined;
+          let toolArgs: Record<string, unknown> | undefined;
+          for (const msg of messages) {
+            const pending = msg.content?.metadata?.pendingToolApprovals as
+              | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
+              | undefined;
+            if (pending) {
+              for (const toolData of Object.values(pending)) {
+                if (toolData.toolCallId === toolCallId) {
+                  runId = toolData.runId;
+                  toolName = toolData.toolName;
+                  toolArgs = toolData.args;
+                  break;
+                }
               }
+              if (runId) break;
             }
-            if (runId) break;
           }
-        }
 
-        if (!runId) {
-          this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
-          return;
-        }
+          if (!runId) {
+            this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
+            return;
+          }
 
-        // Build the card header with tool name and args
-        const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
-        const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
-        const useCards = adapterConfig?.cards !== false;
+          // Build the card header with tool name and args
+          const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
+          const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
+          const useCards = adapterConfig?.cards !== false;
 
-        if (!approved) {
-          const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+          if (!approved) {
+            const byUser = sdkThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+            try {
+              await adapter.editMessage(
+                sdkThread.id,
+                messageId,
+                formatToolDenied(displayName, argsSummary, byUser, useCards),
+              );
+            } catch (err) {
+              this.log('debug', 'Failed to edit denied card', err);
+            }
+            return;
+          }
+
+          // Immediately edit the card to show "Approved" and remove the buttons
           try {
-            await adapter.editMessage(
-              sdkThread.id,
-              messageId,
-              formatToolDenied(displayName, argsSummary, byUser, useCards),
-            );
+            await adapter.editMessage(sdkThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
           } catch (err) {
-            this.log('debug', 'Failed to edit denied card', err);
+            this.log('debug', 'Failed to edit approved card', err);
           }
-          return;
-        }
 
-        // Immediately edit the card to show "Approved" and remove the buttons
-        try {
-          await adapter.editMessage(sdkThread.id, messageId, formatToolApproved(displayName, argsSummary, useCards));
+          // Build request context for the resumed stream
+          const actionAdapter = this.adapters[platform]!;
+          const actionBotUserId = actionAdapter.botUserId;
+          const actionBotMention = actionBotUserId ? sdkThread.mentionUser(actionBotUserId) : undefined;
+          const requestContext = new RequestContext();
+          requestContext.set('channel', {
+            platform,
+            eventType: 'action',
+            isDM: sdkThread.isDM,
+            threadId: sdkThread.id,
+            channelId: sdkThread.channelId,
+            messageId,
+            userId: event.user.userId,
+            userName: event.user.fullName || event.user.userName,
+            botUserId: actionBotUserId,
+            botUserName: actionAdapter.userName,
+            botMention: actionBotMention,
+          } satisfies ChannelContext);
+          // Resume the agent stream BEFORE editing the card —
+          // if the snapshot is gone (e.g. duplicate click), we bail without mangling the card
+          const resumedStream = await this.agent.approveToolCall({
+            runId,
+            toolCallId,
+            requestContext,
+          });
+
+          await this.consumeAgentStream(
+            resumedStream,
+            sdkThread,
+            platform,
+            toolCallId ? { toolCallId, messageId } : undefined,
+          );
         } catch (err) {
-          this.log('debug', 'Failed to edit approved card', err);
-        }
-
-        // Build request context for the resumed stream
-        const actionAdapter = this.adapters[platform]!;
-        const actionBotUserId = actionAdapter.botUserId;
-        const actionBotMention = actionBotUserId ? sdkThread.mentionUser(actionBotUserId) : undefined;
-        const requestContext = new RequestContext();
-        requestContext.set('channel', {
-          platform,
-          eventType: 'action',
-          isDM: sdkThread.isDM,
-          threadId: sdkThread.id,
-          channelId: sdkThread.channelId,
-          messageId,
-          userId: event.user.userId,
-          userName: event.user.fullName || event.user.userName,
-          botUserId: actionBotUserId,
-          botUserName: actionAdapter.userName,
-          botMention: actionBotMention,
-        } satisfies ChannelContext);
-        // Resume the agent stream BEFORE editing the card —
-        // if the snapshot is gone (e.g. duplicate click), we bail without mangling the card
-        const resumedStream = await this.agent.approveToolCall({
-          runId,
-          toolCallId,
-          requestContext,
-        });
-
-        await this.consumeAgentStream(
-          resumedStream,
-          sdkThread,
-          platform,
-          toolCallId ? { toolCallId, messageId } : undefined,
-        );
-      } catch (err) {
-        const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
-        if (isStaleApproval) {
-          this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
-          return;
-        }
-        this.log('error', 'Error handling tool approval action', err);
-        try {
-          const thread = event.thread;
-          if (thread) {
-            const error = err instanceof Error ? err : new Error(String(err));
-            const adapterConfig = this.adapterConfigs[event.adapter.name];
-            const errorMessage = adapterConfig?.formatError
-              ? adapterConfig.formatError(error)
-              : `❌ Error: ${error.message}`;
-            await thread.post(errorMessage);
+          const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
+          if (isStaleApproval) {
+            this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
+            return;
           }
-        } catch (err) {
-          this.log('debug', 'Failed to post error message for action', err);
+          this.log('error', 'Error handling tool approval action', err);
+          try {
+            const thread = event.thread;
+            if (thread) {
+              const error = err instanceof Error ? err : new Error(String(err));
+              const adapterConfig = this.adapterConfigs[event.adapter.name];
+              const errorMessage = adapterConfig?.formatError
+                ? adapterConfig.formatError(error)
+                : `❌ Error: ${error.message}`;
+              await thread.post(errorMessage);
+            }
+          } catch (err) {
+            this.log('debug', 'Failed to post error message for action', err);
+          }
+        }
+      });
+      await chat.initialize();
+      this.chat = chat;
+
+      // Start gateway listeners for adapters that support it (e.g. Discord)
+      for (const [name, adapter] of Object.entries(this.adapters)) {
+        if (!(this.adapterConfigs[name]?.gateway ?? true)) continue;
+
+        const adapterAny = adapter as unknown as Record<string, unknown>;
+        if (typeof adapterAny.startGatewayListener === 'function') {
+          const startGateway = adapterAny.startGatewayListener.bind(adapter) as (
+            options: { waitUntil: (p: Promise<unknown>) => void },
+            durationMs?: number,
+          ) => Promise<Response>;
+
+          this.startGatewayLoop(name, startGateway);
         }
       }
-    });
-    await chat.initialize();
-    this.chat = chat;
+    })();
 
-    // Start gateway listeners for adapters that support it (e.g. Discord)
-    for (const [name, adapter] of Object.entries(this.adapters)) {
-      if (!(this.adapterConfigs[name]?.gateway ?? true)) continue;
-
-      const adapterAny = adapter as unknown as Record<string, unknown>;
-      if (typeof adapterAny.startGatewayListener === 'function') {
-        const startGateway = adapterAny.startGatewayListener.bind(adapter) as (
-          options: { waitUntil: (p: Promise<unknown>) => void },
-          durationMs?: number,
-        ) => Promise<Response>;
-
-        this.startGatewayLoop(name, startGateway);
-      }
+    try {
+      await this.initPromise;
+    } catch (error) {
+      this.initPromise = null;
+      throw error;
     }
   }
 
   /**
    * Returns API routes for receiving webhook events from each adapter.
    * One POST route per adapter at `/api/agents/{agentId}/channels/{platform}/webhook`.
+   * Skips platforms that are externally managed (e.g., by SlackProvider).
    */
   getWebhookRoutes(): ApiRoute[] {
     if (!this.agent) return [];
@@ -672,13 +724,28 @@ export class AgentChannels {
     const routes: ApiRoute[] = [];
 
     for (const platform of Object.keys(this.adapters)) {
+      // Skip platforms where routes are managed externally (e.g., SlackProvider)
+      if (this.externallyManagedPlatforms.has(platform)) {
+        continue;
+      }
       const self = this;
       routes.push({
         path: `/api/agents/${agentId}/channels/${platform}/webhook`,
         method: 'POST',
         requiresAuth: false,
+        _mastraInternal: true,
         createHandler: async () => {
           return async c => {
+            // Await initialization to handle serverless cold starts where
+            // the first request arrives before initialize() completes.
+            if (self.initPromise) {
+              try {
+                await self.initPromise;
+              } catch {
+                return c.json({ error: 'Chat initialization failed' }, 503);
+              }
+            }
+
             const sdkInstance = self.chat;
             if (!sdkInstance) {
               return c.json({ error: 'Chat not initialized' }, 503);
@@ -688,13 +755,71 @@ export class AgentChannels {
             if (!webhookHandler) {
               return c.json({ error: `No webhook handler for ${platform}` }, 404);
             }
-            return webhookHandler(c.req.raw);
+
+            // Pass platform execution context (e.g. Vercel/Cloudflare waitUntil)
+            // to the Chat SDK so background processing survives serverless responses.
+            // Hono's `executionCtx` getter throws in Node.js when no ExecutionContext exists.
+            let execCtx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            try {
+              execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            } catch {
+              execCtx = undefined;
+            }
+            const waitUntilFn = execCtx?.waitUntil?.bind(execCtx);
+            return webhookHandler(c.req.raw, waitUntilFn ? { waitUntil: waitUntilFn } : undefined);
           };
         },
       });
     }
 
     return routes;
+  }
+
+  /**
+   * Handle a webhook event from an external source (e.g., SlackProvider).
+   * Use this when a ChannelProvider manages its own routes but wants AgentChannels
+   * to process the actual message handling (threading, agent responses, etc.).
+   *
+   * @param platform - The platform name (e.g., 'slack')
+   * @param request - The raw HTTP request
+   * @param options - Optional execution context for serverless environments
+   * @returns The response from the Chat SDK webhook handler
+   */
+  async handleWebhookEvent(
+    platform: string,
+    request: Request,
+    options?: { waitUntil?: (p: Promise<unknown>) => void },
+  ): Promise<Response> {
+    // Ensure initialization is complete
+    if (this.initPromise) {
+      try {
+        await this.initPromise;
+      } catch {
+        return new Response(JSON.stringify({ error: 'Channel initialization failed' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    const sdkInstance = this.chat;
+    if (!sdkInstance) {
+      return new Response(JSON.stringify({ error: 'Chat not initialized' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Access the internal webhook handler from Chat SDK
+    const webhookHandler = (sdkInstance as any).webhooks?.[platform] as Function | undefined;
+    if (!webhookHandler) {
+      return new Response(JSON.stringify({ error: `No webhook handler for ${platform}` }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return webhookHandler(request, options);
   }
 
   /**
@@ -1264,6 +1389,23 @@ export class AgentChannels {
           const approvalMessage = formatToolApproval(displayName, argsSummary, toolCallId, useCards);
 
           await this.editOrPost(adapter, sdkThread, channelMsgId, approvalMessage);
+          continue;
+        }
+
+        // --- Tripwire: a processor blocked the agent; surface the reason to the channel.
+        // Without this branch the chunk is skipped, stream.error stays unset, and the
+        // user sees silence (see #15344).
+        if (chunk.type === 'tripwire') {
+          // retry=true means the agent will retry internally with the tripwire reason as
+          // feedback and produce a new response on this same stream, so nothing to post yet.
+          if (chunk.payload.retry) continue;
+
+          await flushText();
+          const reason = chunk.payload.reason || 'Your message was blocked by a safety check.';
+          const display = chunk.payload.processorId
+            ? `🛡️ Blocked by ${chunk.payload.processorId}: ${reason}`
+            : `🛡️ ${reason}`;
+          await sdkThread.post(display);
           continue;
         }
       }

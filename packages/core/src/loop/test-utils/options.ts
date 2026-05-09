@@ -760,6 +760,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "usage": {
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": undefined,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": undefined,
+                          "totalTokens": 13,
+                        },
                         "totalTokens": 13,
                       },
                       "warnings": [],
@@ -851,6 +858,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "cachedInputTokens": 3,
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": 3,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": 10,
+                          "totalTokens": 23,
+                        },
                         "reasoningTokens": 10,
                         "totalTokens": 23,
                       },
@@ -872,6 +886,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                 },
@@ -1150,6 +1171,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "usage": {
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": undefined,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": undefined,
+                          "totalTokens": 13,
+                        },
                         "totalTokens": 13,
                       },
                       "warnings": [],
@@ -1241,6 +1269,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "cachedInputTokens": 3,
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": 3,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": 10,
+                          "totalTokens": 23,
+                        },
                         "reasoningTokens": 10,
                         "totalTokens": 23,
                       },
@@ -1253,6 +1288,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "cachedInputTokens": 3,
                     "inputTokens": 6,
                     "outputTokens": 20,
+                    "raw": {
+                      "cachedInputTokens": 3,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": 10,
+                      "totalTokens": 23,
+                    },
                     "reasoningTokens": 10,
                     "totalTokens": 36,
                   },
@@ -1484,6 +1526,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "usage": {
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": undefined,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": undefined,
+                          "totalTokens": 13,
+                        },
                         "totalTokens": 13,
                       },
                       "warnings": [],
@@ -1575,6 +1624,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "cachedInputTokens": 3,
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": 3,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": 10,
+                          "totalTokens": 23,
+                        },
                         "reasoningTokens": 10,
                         "totalTokens": 23,
                       },
@@ -1587,6 +1643,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "cachedInputTokens": 3,
                     "inputTokens": 6,
                     "outputTokens": 20,
+                    "raw": {
+                      "cachedInputTokens": 3,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": 10,
+                      "totalTokens": 23,
+                    },
                     "reasoningTokens": 10,
                     "totalTokens": 36,
                   },
@@ -2044,9 +2107,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         it('result.totalUsage should contain total token usage', async () => {
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
+              "cacheCreationInputTokens": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,
+              "raw": {
+                "cachedInputTokens": 3,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": 10,
+                "totalTokens": 23,
+              },
               "reasoningTokens": 10,
               "totalTokens": 36,
             }
@@ -2055,14 +2126,22 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         it('result.usage should contain token usage from final step', async () => {
           expect(await result.totalUsage).toMatchInlineSnapshot(`
-          {
-            "cachedInputTokens": 3,
-            "inputTokens": 6,
-            "outputTokens": 20,
-            "reasoningTokens": 10,
-            "totalTokens": 36,
-          }
-        `);
+            {
+              "cacheCreationInputTokens": undefined,
+              "cachedInputTokens": 3,
+              "inputTokens": 6,
+              "outputTokens": 20,
+              "raw": {
+                "cachedInputTokens": 3,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": 10,
+                "totalTokens": 23,
+              },
+              "reasoningTokens": 10,
+              "totalTokens": 36,
+            }
+          `);
         });
 
         it('result.finishReason should contain finish reason from final step', async () => {
@@ -2675,6 +2754,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -2713,6 +2799,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "cachedInputTokens": 3,
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": 3,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": 10,
+                      "totalTokens": 23,
+                    },
                     "reasoningTokens": 10,
                     "totalTokens": 23,
                   },
@@ -2742,6 +2835,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "format": 2,
                     "metadata": {
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -2762,7 +2856,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       },
                     ],
                   },
-                  "createdAt": 2024-01-01T00:00:00.003Z,
+                  "createdAt": 2024-01-01T00:00:00.000Z,
                   "id": "msg-0",
                   "role": "assistant",
                 },
@@ -2816,6 +2910,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -2854,6 +2955,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "cachedInputTokens": 3,
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": 3,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": 10,
+                      "totalTokens": 23,
+                    },
                     "reasoningTokens": 10,
                     "totalTokens": 23,
                   },
@@ -7458,38 +7566,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "Thinking...",
+                          "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "Hello, ",
+                          "text": "Hello, world!",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "This is ",
+                          "text": "This is a test.",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "I'm thinking...",
-                          "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "aworld!",
-                          "type": "text",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": " test.",
-                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7510,38 +7603,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "Thinking...",
+                          "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "Hello, ",
+                          "text": "Hello, world!",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "This is ",
+                          "text": "This is a test.",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "I'm thinking...",
-                          "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "aworld!",
-                          "type": "text",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": " test.",
-                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7590,38 +7668,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             "content": [
                               {
                                 "providerOptions": undefined,
-                                "text": "Thinking...",
+                                "text": "Thinking...I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "Hello, ",
+                                "text": "Hello, world!",
                                 "type": "text",
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "This is ",
+                                "text": "This is a test.",
                                 "type": "text",
                               },
                               {
                                 "providerOptions": undefined,
                                 "text": "Separate thoughts",
                                 "type": "reasoning",
-                              },
-                              {
-                                "providerOptions": undefined,
-                                "text": "I'm thinking...",
-                                "type": "reasoning",
-                              },
-                              {
-                                "providerOptions": undefined,
-                                "text": "aworld!",
-                                "type": "text",
-                              },
-                              {
-                                "providerOptions": undefined,
-                                "text": " test.",
-                                "type": "text",
                               },
                             ],
                             "role": "assistant",
@@ -7636,6 +7699,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "usage": {
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": undefined,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": undefined,
+                          "totalTokens": 13,
+                        },
                         "totalTokens": 13,
                       },
                       "warnings": [],
@@ -7646,6 +7716,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                 },
@@ -7670,38 +7747,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "Thinking...",
+                          "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "Hello, ",
+                          "text": "Hello, world!",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "This is ",
+                          "text": "This is a test.",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "I'm thinking...",
-                          "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "aworld!",
-                          "type": "text",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": " test.",
-                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7722,38 +7784,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "Thinking...",
+                          "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "Hello, ",
+                          "text": "Hello, world!",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "This is ",
+                          "text": "This is a test.",
                           "type": "text",
                         },
                         {
                           "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "I'm thinking...",
-                          "type": "reasoning",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": "aworld!",
-                          "type": "text",
-                        },
-                        {
-                          "providerOptions": undefined,
-                          "text": " test.",
-                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7802,38 +7849,23 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             "content": [
                               {
                                 "providerOptions": undefined,
-                                "text": "Thinking...",
+                                "text": "Thinking...I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "Hello, ",
+                                "text": "Hello, world!",
                                 "type": "text",
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "This is ",
+                                "text": "This is a test.",
                                 "type": "text",
                               },
                               {
                                 "providerOptions": undefined,
                                 "text": "Separate thoughts",
                                 "type": "reasoning",
-                              },
-                              {
-                                "providerOptions": undefined,
-                                "text": "I'm thinking...",
-                                "type": "reasoning",
-                              },
-                              {
-                                "providerOptions": undefined,
-                                "text": "aworld!",
-                                "type": "text",
-                              },
-                              {
-                                "providerOptions": undefined,
-                                "text": " test.",
-                                "type": "text",
                               },
                             ],
                             "role": "assistant",
@@ -7848,6 +7880,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "usage": {
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": undefined,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": undefined,
+                          "totalTokens": 13,
+                        },
                         "totalTokens": 13,
                       },
                       "warnings": [],
@@ -7858,6 +7897,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                 },
@@ -8588,6 +8634,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "usage": {
                         "inputTokens": 3,
                         "outputTokens": 10,
+                        "raw": {
+                          "cachedInputTokens": undefined,
+                          "inputTokens": 3,
+                          "outputTokens": 10,
+                          "reasoningTokens": undefined,
+                          "totalTokens": 13,
+                        },
                         "totalTokens": 13,
                       },
                       "warnings": [],
@@ -8608,6 +8661,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                 },
@@ -8762,6 +8822,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                 },

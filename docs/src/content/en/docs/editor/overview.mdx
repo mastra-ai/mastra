@@ -215,6 +215,75 @@ curl http://localhost:4111/agents/support-agent?versionId=abc-123
 
 See the [Client SDK agents reference](/reference/client-js/agents#version-management) for API methods.
 
+### Sub-agent versioning
+
+When a [supervisor agent](/docs/agents/supervisor-agents) delegates to sub-agents, version overrides determine which stored version of each sub-agent to use instead of the code-defined default. This lets you iterate on sub-agent prompts and tools through the editor without redeploying the supervisor.
+
+Set version overrides at three levels, with later levels taking priority:
+
+1. **Mastra instance config** — global defaults that apply to every `generate()` and `stream()` call.
+1. **Per-invocation options** — overrides passed directly to `generate()` or `stream()`.
+1. **Server request body** — overrides sent in the `versions` field of an API request.
+
+Resolution order: **per-invocation > request body > Mastra instance defaults > code-defined agent**.
+
+#### Mastra instance config
+
+Set global defaults when creating the `Mastra` instance. Every supervisor call inherits these overrides:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: { supervisor, researchAgent, writerAgent },
+  editor: new MastraEditor(),
+  versions: {
+    agents: {
+      'research-agent': { status: 'published' },
+      'writer-agent': { versionId: 'abc-123' },
+    },
+  },
+})
+```
+
+#### Per-invocation overrides
+
+Override versions for a single call to `generate()` or `stream()`. These take priority over Mastra instance defaults:
+
+```typescript title="src/routes/experiment.ts"
+const result = await supervisor.generate('Research and write an article about AI safety', {
+  versions: {
+    agents: {
+      'research-agent': { versionId: 'draft-456' },
+    },
+  },
+})
+```
+
+#### Server request body
+
+When calling agents through the Mastra server, pass version overrides in the request body:
+
+```bash title="Per-request version overrides via API"
+curl -X POST http://localhost:4111/agents/supervisor/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{ "role": "user", "content": "Research AI safety" }],
+    "versions": {
+      "agents": {
+        "research-agent": { "versionId": "draft-456" }
+      }
+    }
+  }'
+```
+
+#### How propagation works
+
+Version overrides propagate automatically through sub-agent delegation via `requestContext`. When a supervisor delegates to a sub-agent, the framework checks if a version override exists for that sub-agent's ID. If one is found, it resolves the stored version from the editor and uses it instead of the code-defined default.
+
+If version resolution fails (for example, when the editor is not configured or the version ID doesn't exist), the framework logs a warning and falls back to the code-defined agent.
+
 ## Next steps
 
 - Set up [prompts](/docs/editor/prompts) to build reusable instruction templates.

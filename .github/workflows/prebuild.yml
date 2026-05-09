@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   changes:
     name: Detect code changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -39,7 +39,7 @@ jobs:
   prebuild:
     name: Build
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:

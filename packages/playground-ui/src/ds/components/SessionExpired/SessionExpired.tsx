@@ -1,10 +1,10 @@
+import { useMastraClient } from '@mastra/react';
 import { LogIn } from 'lucide-react';
+import { useState, useCallback } from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
-
-import { useSSOLogin } from '@/domains/auth/hooks/use-auth-actions';
 
 export interface SessionExpiredProps {
   /** Custom title override */
@@ -16,18 +16,31 @@ export interface SessionExpiredProps {
 }
 
 export function SessionExpired({ title, description, className }: SessionExpiredProps) {
-  const { mutate: login, isPending } = useSSOLogin();
+  const [isPending, setIsPending] = useState(false);
+  const client = useMastraClient();
 
-  const handleLogin = () => {
-    login(
-      { redirectUri: window.location.href },
-      {
-        onSuccess: data => {
-          window.location.href = data.url;
-        },
-      },
-    );
-  };
+  const handleLogin = useCallback(async () => {
+    try {
+      setIsPending(true);
+      const { baseUrl = '', apiPrefix } = (client as any).options || {};
+      const raw = (apiPrefix || '/api').trim();
+      const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
+      const params = new URLSearchParams({ redirect_uri: window.location.href });
+      const url = `${baseUrl}${prefix}/auth/sso/login?${params}`;
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        window.location.href = data.url;
+      }
+    } finally {
+      setIsPending(false);
+    }
+  }, [client]);
 
   return (
     <EmptyState

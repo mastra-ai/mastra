@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SlashCommand } from '@mariozechner/pi-tui';
-import type { HarnessEventListener, TaskItem } from '@mastra/core/harness';
+import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
@@ -14,6 +14,7 @@ import { ThreadLockError } from '../utils/thread-lock.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
+import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -59,8 +60,8 @@ export function setupKeyboardShortcuts(
       const current = state.editor.getText();
       if (current.length > 0) {
         state.lastClearedText = current;
+        state.editor.setText('');
       }
-      state.editor.setText('');
       state.ui.requestRender();
     }
   });
@@ -153,6 +154,12 @@ export function setupKeyboardShortcuts(
 
   // Enter - submit immediately when idle, queue follow-up input while streaming
   state.editor.onAction('followUp', () => {
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
+      return true;
+    }
+
     if (!state.harness.isRunning()) {
       state.editor.onSubmit?.(state.editor.getExpandedText());
       return true;
@@ -299,6 +306,10 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'browser', description: 'Configure browser automation' },
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
+    { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'observability', description: 'Configure cloud observability' },
+    { name: 'goal', description: 'Set/manage persistent goal (Ralph loop)' },
+    { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -315,6 +326,19 @@ export function setupAutocomplete(state: TUIState): void {
     slashCommands.push({
       name: `/${customCmd.name}`,
       description: customCmd.description || `Custom: ${customCmd.name}`,
+    });
+    if (customCmd.goal) {
+      slashCommands.push({
+        name: `goal/${customCmd.name}`,
+        description: customCmd.description ? `Goal: ${customCmd.description}` : `Goal: ${customCmd.name}`,
+      });
+    }
+  }
+
+  for (const skill of state.goalSkillCommands) {
+    slashCommands.push({
+      name: `goal/${skill.name}`,
+      description: skill.description ? `Goal skill: ${skill.description}` : `Goal skill: ${skill.name}`,
     });
   }
 
@@ -349,6 +373,18 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
     state.customSlashCommands = Array.from(commandMap.values());
   } catch {
     state.customSlashCommands = [];
+  }
+
+  try {
+    const workspace = state.harness.getWorkspace() ?? state.workspace;
+    if (!workspace?.skills) {
+      state.goalSkillCommands = [];
+      return;
+    }
+    const skills = await workspace.skills.list();
+    state.goalSkillCommands = skills.filter(skill => skill.metadata?.goal === true);
+  } catch {
+    state.goalSkillCommands = [];
   }
 }
 
@@ -496,8 +532,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const harnessState = state.harness.getState() as { tasks?: TaskItem[] };
-    const tasks = harnessState.tasks || [];
+    const tasks = state.harness.getDisplayState().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

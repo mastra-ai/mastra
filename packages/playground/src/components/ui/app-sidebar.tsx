@@ -1,19 +1,13 @@
 import {
   AgentIcon,
-  AuthStatus,
+  LogoWithoutText,
+  MainSidebar,
   McpServerIcon,
+  SettingsIcon,
   ToolsIcon,
   WorkflowIcon,
-  MainSidebar,
+  cn,
   useMainSidebar,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  useIsCmsAvailable,
-  useAuthCapabilities,
-  isAuthenticated,
-  usePermissions,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
@@ -26,15 +20,24 @@ import {
   BarChart3Icon,
   LogsIcon,
   DatabaseIcon,
-  TestTubeDiagonalIcon,
-  BeakerIcon,
+  FlaskConical,
+  GaugeIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useLinkComponent } from '@/lib/framework';
+import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
   requiresExperimentalFeatures?: boolean;
+  activePaths?: string[];
 };
 
 type SidebarSection = Omit<NavSection, 'links'> & {
@@ -118,15 +121,15 @@ const mainNavigation: SidebarSection[] = [
     links: [
       {
         name: 'Scorers',
-        url: '/evaluation?tab=scorers',
-        icon: <BeakerIcon />,
+        url: '/scorers',
+        icon: <GaugeIcon />,
         isOnMastraPlatform: true,
         indent: true,
         requiredPermission: 'scorers:read',
       },
       {
         name: 'Datasets',
-        url: '/evaluation?tab=datasets',
+        url: '/datasets',
         icon: <DatabaseIcon />,
         isOnMastraPlatform: true,
         indent: true,
@@ -134,8 +137,8 @@ const mainNavigation: SidebarSection[] = [
       },
       {
         name: 'Experiments',
-        url: '/evaluation?tab=experiments',
-        icon: <TestTubeDiagonalIcon />,
+        url: '/experiments',
+        icon: <FlaskConical />,
         isOnMastraPlatform: true,
         indent: true,
         requiredAnyPermission: ['datasets:read'],
@@ -158,6 +161,7 @@ const mainNavigation: SidebarSection[] = [
       {
         name: 'Traces',
         url: '/observability',
+        activePaths: ['/traces'],
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
         indent: true,
@@ -200,37 +204,16 @@ declare global {
   }
 }
 
-/**
- * Maps evaluation tab values to their corresponding detail route prefixes.
- * e.g. tab=scorers should also be active when at /evaluation/scorers/:id
- */
-const TAB_DETAIL_PREFIX: Record<string, string> = {
-  scorers: '/evaluation/scorers',
-  datasets: '/evaluation/datasets',
-  experiments: '/evaluation/experiments',
-};
-
-function getIsLinkActive(link: SidebarLink, pathname: string, search: string): boolean {
-  if (link.url.includes('?')) {
-    const [linkPath, linkQuery] = link.url.split('?');
-    // Parse the tab param from both the link URL and the current location
-    const linkTab = new URLSearchParams(linkQuery).get('tab');
-    const currentTab = new URLSearchParams(search).get('tab');
-    // Exact tab match on the same base path
-    if (pathname === linkPath && linkTab && linkTab === currentTab) return true;
-    // Detail page match: e.g. /evaluation/scorers/:id while Scorers tab link is active
-    if (linkTab) {
-      const routePrefix = TAB_DETAIL_PREFIX[linkTab];
-      if (routePrefix && (pathname === routePrefix || pathname.startsWith(routePrefix + '/'))) return true;
-    }
-    return false;
-  }
+function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
   // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
-  return pathname === link.url || pathname.startsWith(link.url + '/');
+  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
+  if (matches(link.url)) return true;
+  return link.activePaths?.some(matches) ?? false;
 }
 
 export function AppSidebar() {
-  const { state } = useMainSidebar();
+  const { Link } = useLinkComponent();
+  const { state, isMobile } = useMainSidebar();
 
   const location = useLocation();
   const pathname = location.pathname;
@@ -280,26 +263,38 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
+      <div className="pt-3 mb-4">
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+            <div className="relative grid place-items-center size-9">
+              <LogoWithoutText
+                className={cn(
+                  'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
+                  !isMobile && 'group-hover/sidebar:opacity-0',
+                )}
+              />
+              {!isMobile && (
+                <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+                  <MainSidebar.Trigger />
+                </div>
+              )}
+            </div>
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          // Authenticated: avatar on same row as logo
           <span className="flex items-center justify-between pl-3 pr-2">
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 flex-1 min-w-0">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-serif text-sm">Mastra Studio</span>
+              <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+              {!isMobile && <MainSidebar.Trigger />}
             </span>
             <AuthStatus />
           </span>
         ) : (
-          // Not authenticated: no login button (shown in main content via AuthRequired)
-          <span className="flex items-center gap-2 pl-3">
+          <span className="flex items-center gap-2 pl-3 pr-2">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-serif text-sm">Mastra Studio</span>
+            <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+            {!isMobile && <MainSidebar.Trigger />}
           </span>
         )}
       </div>
@@ -309,13 +304,13 @@ export function AppSidebar() {
           const filteredLinks = section.links.filter(filterSidebarLink);
           const showSeparator = filteredLinks.length > 0 && section?.separator;
 
-          const anySubLinkActive = filteredLinks.some(link => getIsLinkActive(link, pathname, location.search));
+          const anySubLinkActive = filteredLinks.some(link => getIsLinkActive(link, pathname));
           const isHeaderActive = !!(section.href && pathname === section.href && !anySubLinkActive);
 
           return (
             <MainSidebar.NavSection key={section.key}>
               {section?.title ? (
-                <MainSidebar.NavHeader state={state} href={section.href} isActive={isHeaderActive}>
+                <MainSidebar.NavHeader LinkComponent={Link} state={state} href={section.href} isActive={isHeaderActive}>
                   {section.title}
                 </MainSidebar.NavHeader>
               ) : (
@@ -323,8 +318,16 @@ export function AppSidebar() {
               )}
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
-                  const isActive = getIsLinkActive(link, pathname, location.search);
-                  return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
+                  const isActive = getIsLinkActive(link, pathname);
+                  return (
+                    <MainSidebar.NavLink
+                      key={link.name}
+                      LinkComponent={Link}
+                      state={state}
+                      link={link}
+                      isActive={isActive}
+                    />
+                  );
                 })}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
@@ -332,17 +335,13 @@ export function AppSidebar() {
         })}
       </MainSidebar.Nav>
 
-      <MainSidebar.Bottom>
+      <MainSidebar.Bottom className="pb-3">
         {state !== 'collapsed' && (
           <>
             <MainSidebar.NavSeparator />
             <MastraVersionFooter collapsed={false} />
           </>
         )}
-        <MainSidebar.NavSeparator />
-        <div className="flex justify-end pb-3">
-          <MainSidebar.Trigger />
-        </div>
       </MainSidebar.Bottom>
     </MainSidebar>
   );

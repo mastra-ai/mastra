@@ -11,6 +11,7 @@ import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+import type { VectorFilter } from '../vector/filter/base';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -353,6 +354,21 @@ export type SemanticRecall = {
   indexConfig?: VectorIndexConfig;
 
   /**
+   * Metadata filter for semantic search queries.
+   * Allows filtering results by metadata fields using MongoDB-style query syntax.
+   * Works in combination with scope-based filtering (resource_id/thread_id).
+   *
+   * @example
+   * ```typescript
+   * filter: {
+   *   projectId: { $eq: 'project-a' },
+   *   category: { $in: ['work', 'personal'] }
+   * }
+   * ```
+   */
+  filter?: VectorFilter;
+
+  /**
    * Minimum similarity score threshold (0-1).
    * Messages below this threshold will be filtered out from semantic search results.
    *
@@ -380,6 +396,8 @@ export type SemanticRecall = {
  * Uses the same settings as Agent.generate() modelSettings (temperature, maxOutputTokens, topP, etc.).
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
+
+export type ObservationalMemoryActivationTTL = number | string | false;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -489,6 +507,20 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   bufferActivation?: number;
+
+  /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable top-level `activateAfterIdle` for observations.
+   * If unset, top-level `activateAfterIdle` is used for observations.
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * If unset, top-level `activateOnProviderChange` is used for observations.
+   */
+  activateOnProviderChange?: boolean;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -625,6 +657,20 @@ export interface ObservationalMemoryReflectionConfig {
   blockAfter?: number;
 
   /**
+   * Time before buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable idle activation for reflections.
+   * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered reflections when the actor provider/model changes.
+   * Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to enable.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Ratio (0-1) controlling when async reflection buffering starts.
    * When observation tokens reach `observationTokens * bufferActivation`,
    * reflection runs asynchronously in the background. When the full
@@ -727,6 +773,31 @@ export interface ObservationalMemoryOptions {
   scope?: 'resource' | 'thread';
 
   /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observations activate regardless of whether the
+   * token threshold has been reached. Useful to align with prompt cache TTLs.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
+   * opt reflections into idle activation.
+   *
+   * @example 300_000
+   * @example "5m"
+   * @example "1hr"
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * Useful when switching between models that do not share prompt caches.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateOnProviderChange`
+   * to opt reflections into provider-change activation.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Share the token budget between messages and observations.
    * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
@@ -737,6 +808,15 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity. These markers are persisted in memory and also emitted
+   * as inline reminder events for clients that want to render them specially.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers
@@ -912,6 +992,25 @@ type BaseMemoryConfig = {
          */
         instructions?: DynamicArgument<string>;
       };
+
+  /**
+   * Whether to filter out incomplete (suspended) tool calls when sending messages to the LLM.
+   * When true, tool calls in `input-available` state are stripped from the prompt,
+   * preventing the agent from seeing its own suspended tool calls in thread history.
+   *
+   * Set to false to allow the agent to see suspended tool calls in context.
+   * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
+   *
+   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
+   * Anthropic handles incomplete tool calls without issues.
+   *
+   * @default true
+   * @example
+   * ```typescript
+   * filterIncompleteToolCalls: false // Keep suspended tool calls visible in context
+   * ```
+   */
+  filterIncompleteToolCalls?: boolean;
 
   /**
    * Thread management configuration.
@@ -1160,8 +1259,17 @@ export type SerializedObservationalMemoryConfig = {
   /** Memory scope: 'resource' or 'thread' */
   scope?: 'resource' | 'thread';
 
+  /** Inactivity TTL before forcing buffered observation activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /** Force-activate buffered observation activation when the actor model changes */
+  activateOnProviderChange?: boolean;
+
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
+
+  /** Persist inline temporal gap markers for long pauses between messages */
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
@@ -1192,6 +1300,10 @@ export type SerializedObservationalMemoryObservationConfig = {
   bufferTokens?: number | false;
   /** Ratio of buffered observations to activate */
   bufferActivation?: number;
+  /** Inactivity TTL before forcing buffered observation activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+  /** Force-activate buffered observation activation when the actor model changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
   /** Optional token budget for observer context (0 = full truncation, false = disabled) */
@@ -1212,6 +1324,10 @@ export type SerializedObservationalMemoryReflectionConfig = {
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Inactivity TTL before forcing buffered reflection activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+  /** Force-activate buffered reflection activation when the actor model changes */
+  activateOnProviderChange?: boolean;
   /** Ratio for async reflection buffering */
   bufferActivation?: number;
 };

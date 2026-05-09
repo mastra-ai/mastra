@@ -5,12 +5,12 @@
  * Renders between status and editor.
  */
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
 
 export class TaskProgressComponent extends Container {
-  private tasks: TaskItem[] = [];
+  private tasks: TaskItemInput[] = [];
 
   constructor() {
     super();
@@ -19,7 +19,7 @@ export class TaskProgressComponent extends Container {
   /**
    * Replace the entire task list and re-render.
    */
-  updateTasks(tasks: TaskItem[]): void {
+  updateTasks(tasks: TaskItemInput[]): void {
     this.tasks = tasks;
     this.rebuildDisplay();
   }
@@ -27,7 +27,7 @@ export class TaskProgressComponent extends Container {
   /**
    * Get the current task list (read-only copy).
    */
-  getTasks(): TaskItem[] {
+  getTasks(): TaskItemInput[] {
     return [...this.tasks];
   }
 
@@ -55,7 +55,7 @@ export class TaskProgressComponent extends Container {
     }
   }
 
-  private formatTaskLine(task: TaskItem): string {
+  private formatTaskLine(task: TaskItemInput): string {
     const indent = '    ';
 
     switch (task.status) {

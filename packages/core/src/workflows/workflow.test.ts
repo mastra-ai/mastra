@@ -10,10 +10,12 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
+import { PUBSUB_SYMBOL } from './constants';
 import type { Workflow } from './types';
 import { createStep, createWorkflow } from './workflow';
 
@@ -616,6 +618,137 @@ describe('Workflow (Default Engine Specifics)', () => {
       // The tracingContext should exist in the snapshot (may be undefined if no observability was configured)
       // The key is that the field structure is preserved in the snapshot
       expect('tracingContext' in (snapshot ?? {})).toBe(true);
+    });
+  });
+
+  describe('Nested workflow resourceId propagation (issue #15246)', () => {
+    it('persists the parent run resourceId on nested child workflow snapshots', async () => {
+      const storage = new MockStore();
+      const mastra = new Mastra({ logger: false, storage });
+
+      const childStep = createStep({
+        id: 'child-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        execute: async ({ inputData }) => ({ echoed: inputData.value }),
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'nested-resource-id-child',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        steps: [childStep],
+      })
+        .then(childStep)
+        .commit();
+
+      const parentWorkflow = createWorkflow({
+        id: 'nested-resource-id-parent',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        steps: [childWorkflow],
+      })
+        .then(childWorkflow)
+        .commit();
+
+      parentWorkflow.__registerMastra(mastra);
+
+      const run = await parentWorkflow.createRun({ resourceId: 'workspace-1' });
+      const result = await run.start({ inputData: { value: 'hello' } });
+
+      expect(result.status).toBe('success');
+
+      const workflowsStore = await storage.getStore('workflows');
+
+      const parentRuns = await workflowsStore?.listWorkflowRuns({
+        workflowName: 'nested-resource-id-parent',
+        resourceId: 'workspace-1',
+      });
+      expect(parentRuns?.runs.length).toBe(1);
+      expect(parentRuns?.runs[0]?.resourceId).toBe('workspace-1');
+
+      const childRuns = await workflowsStore?.listWorkflowRuns({
+        workflowName: 'nested-resource-id-child',
+      });
+      expect(childRuns?.runs.length).toBe(1);
+      // Regression guard for #15246: child workflow snapshots must inherit the parent's resourceId.
+      expect(childRuns?.runs[0]?.resourceId).toBe('workspace-1');
+    });
+  });
+
+  describe('Nested workflow abort listener cleanup (issue #16125)', () => {
+    it('removes abort listeners after nested workflow execution completes', async () => {
+      const activeAbortListeners = new Map<AbortSignal, Set<EventListenerOrEventListenerObject>>();
+      const originalAddEventListener = AbortSignal.prototype.addEventListener;
+      const originalRemoveEventListener = AbortSignal.prototype.removeEventListener;
+      const addAbortListener = (signal: AbortSignal, listener: EventListenerOrEventListenerObject) => {
+        let listeners = activeAbortListeners.get(signal);
+        if (!listeners) {
+          listeners = new Set();
+          activeAbortListeners.set(signal, listeners);
+        }
+        listeners.add(listener);
+      };
+      const removeAbortListener = (signal: AbortSignal, listener: EventListenerOrEventListenerObject) => {
+        activeAbortListeners.get(signal)?.delete(listener);
+      };
+
+      const addEventListenerSpy = vi.spyOn(AbortSignal.prototype, 'addEventListener').mockImplementation(function (
+        this: AbortSignal,
+        ...args: Parameters<EventTarget['addEventListener']>
+      ) {
+        const [type, listener] = args;
+        if (type === 'abort' && listener) {
+          addAbortListener(this, listener);
+        }
+        return originalAddEventListener.apply(this, args);
+      });
+      const removeEventListenerSpy = vi
+        .spyOn(AbortSignal.prototype, 'removeEventListener')
+        .mockImplementation(function (this: AbortSignal, ...args: Parameters<EventTarget['removeEventListener']>) {
+          const [type, listener] = args;
+          if (type === 'abort' && listener) {
+            removeAbortListener(this, listener);
+          }
+          return originalRemoveEventListener.apply(this, args);
+        });
+
+      try {
+        const childStep = createStep({
+          id: 'abort-cleanup-child-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ echoed: z.string() }),
+          execute: async ({ inputData }) => ({ echoed: inputData.value }),
+        });
+
+        const childWorkflow = createWorkflow({
+          id: 'abort-cleanup-child-workflow',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ echoed: z.string() }),
+          steps: [childStep],
+        })
+          .then(childStep)
+          .commit();
+
+        const result = await (childWorkflow as any).execute({
+          inputData: { value: 'hello' },
+          state: {},
+          setState: vi.fn(),
+          suspend: vi.fn(),
+          [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+          mastra: new Mastra({ logger: false }),
+          abort: vi.fn(),
+          abortSignal: new AbortController().signal,
+          engine: 'default',
+          bail: vi.fn(),
+        });
+
+        expect(result).toEqual({ echoed: 'hello' });
+        expect([...activeAbortListeners.values()].reduce((count, listeners) => count + listeners.size, 0)).toBe(0);
+      } finally {
+        addEventListenerSpy.mockRestore();
+        removeEventListenerSpy.mockRestore();
+      }
     });
   });
 });

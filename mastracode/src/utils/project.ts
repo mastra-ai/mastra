@@ -207,6 +207,18 @@ export function getVectorDatabasePath(): string {
   return path.join(getAppDataDir(), 'mastra-vectors.db');
 }
 
+/**
+ * Get the observability DuckDB database path for mastracode.
+ * Separate from the main DB — DuckDB is used for OLAP-style trace/score/feedback queries.
+ * Can be overridden with the MASTRA_OBSERVABILITY_DB_PATH environment variable.
+ */
+export function getObservabilityDatabasePath(): string {
+  if (process.env.MASTRA_OBSERVABILITY_DB_PATH) {
+    return process.env.MASTRA_OBSERVABILITY_DB_PATH;
+  }
+  return path.join(getAppDataDir(), 'observability.duckdb');
+}
+
 import type { StorageBackend, StorageSettings } from '../onboarding/settings.js';
 
 /**
@@ -393,6 +405,22 @@ export function getUserId(projectDir?: string): string {
   }
 
   // 3. OS username fallback
+  return os.userInfo().username || 'unknown';
+}
+
+/**
+ * Get the current user's display name.
+ *
+ * Priority:
+ *   1. git config user.name
+ *   2. OS username as fallback
+ */
+export function getUserName(projectDir?: string): string {
+  const cwd = projectDir || process.cwd();
+  const name = git('config user.name', cwd);
+  if (name) {
+    return name;
+  }
   return os.userInfo().username || 'unknown';
 }
 

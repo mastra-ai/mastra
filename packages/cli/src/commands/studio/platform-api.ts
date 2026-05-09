@@ -1,4 +1,8 @@
+import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
+import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
+import { getToken } from '../auth/credentials.js';
+import type { DeployDiagnosis, DeployDiagnosisLookup } from '../deploy-suggestions.js';
 
 export interface Project {
   id: string;
@@ -7,6 +11,7 @@ export interface Project {
   organizationId: string;
   latestDeployId: string | null;
   latestDeployStatus: string | null;
+  latestDeployCreatedAt?: string | null;
   instanceUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -65,67 +70,139 @@ export async function fetchDeployStatus(deployId: string, token: string, orgId?:
   return data.deploy;
 }
 
+export async function fetchDeployDiagnosis(
+  deployId: string,
+  token: string,
+  orgId?: string,
+): Promise<DeployDiagnosisLookup> {
+  const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/diagnosis`, {
+    headers: authHeaders(token, orgId),
+  });
+
+  if (resp.status === 204) {
+    return { state: 'healthy' };
+  }
+
+  if (!resp.ok) {
+    let detail: string | undefined;
+    try {
+      const error = (await resp.json()) as { detail?: string };
+      detail = error.detail;
+    } catch {
+      detail = undefined;
+    }
+    throwApiError('Failed to fetch deploy diagnosis', resp.status, detail);
+  }
+
+  const data = (await resp.json()) as { diagnosis: DeployDiagnosis | null };
+  if (!data.diagnosis) {
+    return { state: 'missing' };
+  }
+
+  return { state: 'ready', diagnosis: data.diagnosis };
+}
+
+export async function startDeployDiagnosis(deployId: string, token: string, orgId?: string): Promise<void> {
+  const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/diagnosis`, {
+    method: 'POST',
+    headers: authHeaders(token, orgId),
+  });
+
+  if (resp.status === 201 || resp.status === 304) {
+    return;
+  }
+
+  let detail: string | undefined;
+  try {
+    const error = (await resp.json()) as { detail?: string };
+    detail = error.detail;
+  } catch {
+    detail = undefined;
+  }
+
+  throwApiError('Failed to start deploy diagnosis', resp.status, detail);
+}
+
 export async function uploadDeploy(
   token: string,
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { gitBranch?: string; projectName?: string; envVars?: Record<string, string>; mastraVersion?: string },
+  meta?: {
+    gitBranch?: string;
+    projectName?: string;
+    envVars?: Record<string, string>;
+    mastraVersion?: string;
+    disablePlatformObservability?: boolean;
+  },
 ): Promise<{ id: string; status: string }> {
-  const headers: Record<string, string> = {
-    ...authHeaders(token, orgId),
-    'Content-Type': 'application/json',
-    'x-project-id': projectId,
-  };
-  if (meta?.gitBranch) headers['x-git-branch'] = meta.gitBranch;
-  if (meta?.projectName) headers['x-project-name'] = meta.projectName;
-  if (meta?.mastraVersion) headers['x-mastra-version'] = meta.mastraVersion;
+  const client = createApiClient(token, orgId);
 
-  // Step 1: Create the deploy with optional envVars
-  const createResp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ envVars: meta?.envVars }),
-  });
-  if (!createResp.ok) {
-    const body = (await createResp.json().catch(() => ({}))) as { detail?: string };
-    throwApiError('Deploy failed', createResp.status, body.detail);
-  }
-  const { deploy } = (await createResp.json()) as {
-    deploy: { id: string; status: string; uploadUrl: string };
-  };
-
-  if (deploy.uploadUrl.startsWith('file://')) {
-    // Local FS artifact store — write zip directly to disk
-    const { writeFile } = await import('node:fs/promises');
-    const { fileURLToPath } = await import('node:url');
-    await writeFile(fileURLToPath(deploy.uploadUrl), Buffer.from(zipBuffer));
-  } else {
-    // GCS flow — upload zip directly to GCS via signed URL
-    const uploadResp = await fetch(deploy.uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/zip' },
-      body: new Uint8Array(zipBuffer),
-    });
-    if (!uploadResp.ok) {
-      throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
-    }
-  }
-
-  // Notify API that upload is complete → triggers deploy pipeline
-  const completeResp = await platformFetch(
-    `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deploy.id}/upload-complete`,
-    {
-      method: 'POST',
-      headers: authHeaders(token, orgId),
+  // Step 1: Create the deploy — returns upload URL
+  const { data, error, response } = await client.POST('/v1/studio/deploys', {
+    params: {
+      header: {
+        'x-project-id': projectId,
+        'x-project-name': meta?.projectName,
+        'x-git-branch': meta?.gitBranch,
+        'x-mastra-version': meta?.mastraVersion,
+      },
     },
-  );
-  if (!completeResp.ok) {
-    const body = (await completeResp.json().catch(() => ({}))) as { detail?: string };
-    throwApiError('Upload confirmation failed', completeResp.status, body.detail);
+    body: {
+      envVars: meta?.envVars,
+      ...(meta?.disablePlatformObservability !== undefined
+        ? { disablePlatformObservability: meta.disablePlatformObservability }
+        : {}),
+    },
+  });
+
+  if (error) {
+    throwApiError('Deploy failed', response.status, error.detail);
   }
 
-  return deploy;
+  const { id, status, uploadUrl } = data.deploy;
+
+  if (!uploadUrl) {
+    throw new Error('No upload URL returned');
+  }
+
+  const cancel = (c: ReturnType<typeof createApiClient>) =>
+    bestEffortCancel({
+      postCancel: c2 => c2.POST('/v1/studio/deploys/{id}/cancel', { params: { path: { id } } }),
+      client: c,
+      deployId: id,
+    });
+
+  // Step 2: Upload artifact to the signed URL
+  try {
+    if (uploadUrl.startsWith('file://')) {
+      const { writeFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
+    } else {
+      const uploadResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/zip' },
+        body: new Uint8Array(zipBuffer),
+      });
+      if (!uploadResp.ok) {
+        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+      }
+    }
+  } catch (uploadError) {
+    await cancel(client);
+    throw uploadError;
+  }
+
+  // Step 3: Notify API that upload is complete → triggers build pipeline
+  await confirmUploadWithRetry({
+    postUploadComplete: c => c.POST('/v1/studio/deploys/{id}/upload-complete', { params: { path: { id } } }),
+    cancelDeploy: cancel,
+    client,
+    orgId,
+  });
+
+  return { id, status };
 }
 
 async function streamDeployLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
@@ -183,20 +260,30 @@ export async function pollDeploy(
 ): Promise<DeployStatus> {
   const start = Date.now();
   let lastStatus = '';
+  let currentToken = token;
 
   // Start streaming logs in the background via SSE
   const logAbort = new AbortController();
-  streamDeployLogs(deployId, token, orgId, logAbort.signal).catch(() => {});
+  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
 
-  const client = createApiClient(token, orgId);
+  let client = createApiClient(currentToken, orgId);
 
   try {
     while (Date.now() - start < maxWaitMs) {
-      const { data, error, response } = await client.GET('/v1/studio/deploys/{id}', {
-        params: { path: { id: deployId } },
-      });
+      const result = await withPollingRetries(() =>
+        client.GET('/v1/studio/deploys/{id}', {
+          params: { path: { id: deployId } },
+        }),
+      );
+
+      const { data, error, response } = result;
 
       if (error) {
+        if (response.status === 401) {
+          currentToken = await getToken();
+          client = createApiClient(currentToken, orgId);
+          continue;
+        }
         throwApiError('Poll failed', response.status, error.detail);
       }
 

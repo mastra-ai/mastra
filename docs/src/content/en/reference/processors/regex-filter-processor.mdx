@@ -1,0 +1,186 @@
+---
+title: "Reference: RegexFilterProcessor | Processors"
+description: "API reference for RegexFilterProcessor, a zero-cost regex-based content filter for blocking, redacting, or warning on pattern matches in agent messages."
+packages:
+  - "@mastra/core"
+---
+
+# RegexFilterProcessor
+
+The `RegexFilterProcessor` applies zero-cost regex pattern matching to filter, redact, or block content in agent messages. No LLM calls are made — all detection is regex-based.
+
+Supports built-in presets for common patterns (PII, secrets, URLs) and custom regex rules. Can be applied to input, output, or both phases.
+
+## Usage example
+
+Block PII in input messages:
+
+```typescript
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const filter = new RegexFilterProcessor({
+  presets: ['pii'],
+  strategy: 'block',
+  phase: 'input',
+})
+```
+
+Redact secrets in output:
+
+```typescript
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const filter = new RegexFilterProcessor({
+  presets: ['secrets'],
+  strategy: 'redact',
+  phase: 'output',
+})
+```
+
+Custom rules:
+
+```typescript
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const filter = new RegexFilterProcessor({
+  rules: [{ name: 'internal-id', pattern: /INTERNAL-\d{6}/g, replacement: '[INTERNAL_ID]' }],
+  strategy: 'redact',
+})
+```
+
+Attach to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'openai/gpt-5-nano',
+  processors: {
+    input: [
+      new RegexFilterProcessor({
+        presets: ['pii', 'secrets'],
+        strategy: 'block',
+      }),
+    ],
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'rules',
+    type: 'RegexRule[]',
+    description:
+      'Custom regex rules to apply. Each rule has a name, a regex pattern, and an optional replacement string.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'RegexRule',
+        parameters: [
+          {
+            name: 'name',
+            type: 'string',
+            description: 'Display name for the rule (used in match reports and error messages).',
+            isOptional: false,
+          },
+          {
+            name: 'pattern',
+            type: 'RegExp',
+            description: 'The regex pattern to match against.',
+            isOptional: false,
+          },
+          {
+            name: 'replacement',
+            type: 'string',
+            description: "Replacement string for redact strategy. Defaults to '[REDACTED]'.",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'presets',
+    type: "('pii' | 'secrets' | 'urls')[]",
+    description:
+      "Built-in preset categories. 'pii' matches emails, phone numbers, SSNs, credit cards. 'secrets' matches API keys, bearer tokens, AWS keys. 'urls' matches HTTP/HTTPS URLs.",
+    isOptional: true,
+  },
+  {
+    name: 'strategy',
+    type: "'block' | 'redact' | 'warn'",
+    description:
+      "Strategy when a pattern match is found. 'block' aborts with a TripWire error. 'redact' replaces matched content with replacement text. 'warn' logs a warning but passes content through unchanged.",
+    isOptional: true,
+    defaultValue: "'block'",
+  },
+  {
+    name: 'phase',
+    type: "'input' | 'output' | 'all'",
+    description:
+      "Phases to apply the filter. 'input' filters input messages. 'output' filters output stream and result. 'all' filters both.",
+    isOptional: true,
+    defaultValue: "'all'",
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'regex-filter'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Regex Filter'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: ProcessInputArgs) => ProcessInputResult',
+    description:
+      'Checks input messages against all configured rules. Blocks, redacts, or warns depending on strategy. Skipped when phase is output.',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputStream',
+    type: '(args: ProcessOutputStreamArgs) => Promise<ChunkType | null | undefined>',
+    description: 'Checks streaming text-delta chunks against all configured rules. Skipped when phase is input.',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputResult',
+    type: '(args: ProcessOutputResultArgs) => ProcessorMessageResult',
+    description:
+      'Checks output messages against all configured rules. Blocks, redacts, or warns depending on strategy. Skipped when phase is input.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Error behavior
+
+When the `block` strategy is active (default), `RegexFilterProcessor` throws a `TripWire` error with `retry: false` when any pattern matches. The TripWire metadata includes:
+
+- `processorId`: `'regex-filter'`
+- `matches`: Array of match objects with `rule`, `match` (redacted to `'[REDACTED_MATCH]'`), and `index`
+- `strategy`: `'block'`
+
+## Built-in presets
+
+| Preset | Patterns | Default replacement |
+| - | - | - |
+| `pii` | Emails, phone numbers, SSNs, credit card numbers | `[EMAIL]`, `[PHONE]`, `[SSN]`, `[CREDIT_CARD]` |
+| `secrets` | API keys, bearer tokens, AWS access keys | `[API_KEY]`, `[BEARER_TOKEN]`, `[AWS_KEY]` |
+| `urls` | HTTP/HTTPS URLs | `[URL]` |

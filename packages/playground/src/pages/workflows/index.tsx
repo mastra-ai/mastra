@@ -1,21 +1,23 @@
 import {
+  Button,
   ButtonWithTooltip,
-  WorkflowsList,
-  WorkflowIcon,
-  NoWorkflowsInfo,
+  ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
+  WorkflowIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
-  useWorkflows,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { BookIcon, CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
+import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
+import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
@@ -65,6 +67,10 @@ function Workflows() {
             </PageHeader>
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
+            <Button as={Link} to="/workflows/schedules">
+              <CalendarClockIcon />
+              Schedules
+            </Button>
             <ButtonWithTooltip
               as="a"
               href="https://mastra.ai/en/docs/workflows/overview"

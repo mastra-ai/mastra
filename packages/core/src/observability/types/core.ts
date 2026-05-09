@@ -49,12 +49,15 @@ export interface CorrelationContext {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
+  entityVersionId?: string;
   parentEntityType?: EntityType;
   parentEntityId?: string;
   parentEntityName?: string;
+  parentEntityVersionId?: string;
   rootEntityType?: EntityType;
   rootEntityId?: string;
   rootEntityName?: string;
+  rootEntityVersionId?: string;
   userId?: string;
   organizationId?: string;
   resourceId?: string;
@@ -158,6 +161,33 @@ export interface ObservabilityEventBus<TEvent> {
  */
 export type ObservabilityEvent = TracingEvent | LogEvent | MetricEvent | ScoreEvent | FeedbackEvent;
 
+/** Signal whose event was dropped by the observability exporter pipeline. */
+export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback';
+
+/** Reason an observability event was dropped by the exporter pipeline. */
+export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted';
+
+/** Sanitized error details for observability drop events. */
+export interface ObservabilityDropError {
+  id?: string;
+  domain?: string;
+  message: string;
+}
+
+/**
+ * Structured event emitted when the exporter pipeline drops observability events.
+ */
+export interface ObservabilityDropEvent {
+  type: 'drop';
+  signal: ObservabilityDropSignal;
+  reason: ObservabilityDropReason;
+  count: number;
+  timestamp: Date;
+  exporterName: string;
+  storageName?: string;
+  error?: ObservabilityDropError;
+}
+
 // ============================================================================
 // ObservabilityInstance
 // ============================================================================
@@ -255,6 +285,22 @@ export interface ObservabilityInstance {
    * @param exporter - The exporter to register
    */
   registerExporter?(exporter: ObservabilityExporter): void;
+
+  /**
+   * Returns the deployment environment propagated from the parent Mastra
+   * instance (resolved from `Mastra` config `environment` or `process.env.NODE_ENV`).
+   * Used by spans as a fallback when `metadata.environment` isn't set on a
+   * specific span.
+   */
+  getMastraEnvironment?(): string | undefined;
+
+  /**
+   * Internal hook used by the parent `Observability` entrypoint to push the
+   * resolved Mastra-level environment into this instance during
+   * `setMastraContext`. Implementations should store the value for later reads
+   * via `getMastraEnvironment()`.
+   */
+  __setMastraEnvironment?(environment: string | undefined): void;
 }
 
 // ============================================================================
@@ -488,6 +534,7 @@ export type ConfigSelector = (
 export interface InitExporterOptions {
   mastra?: Mastra;
   config?: ObservabilityInstanceConfig;
+  emitDropEvent?: (event: ObservabilityDropEvent) => void;
 }
 
 export interface InitBridgeOptions {
@@ -513,6 +560,9 @@ export interface ObservabilityEvents {
 
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
+
+  /** Handle exporter pipeline droppedEvent */
+  onDroppedEvent?(event: ObservabilityDropEvent): void | Promise<void>;
 
   /** Export tracing events */
   exportTracingEvent(event: TracingEvent): Promise<void>;

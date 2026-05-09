@@ -50,7 +50,13 @@ export abstract class MemoryStorage extends StorageDomain {
     });
   }
 
-  abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
+  abstract getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 

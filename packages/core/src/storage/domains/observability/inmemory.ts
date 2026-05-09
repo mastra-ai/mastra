@@ -82,15 +82,26 @@ import type {
   GetRootSpanResponse,
   GetSpanArgs,
   GetSpanResponse,
+  GetStructureResponse,
   GetTraceArgs,
   GetTraceResponse,
+  LightSpanRecord,
+  ListBranchesArgs,
+  ListBranchesResponse,
   ListTracesArgs,
   ListTracesResponse,
   SpanRecord,
   UpdateSpanArgs,
 } from './tracing';
 
-import { listTracesArgsSchema, TraceStatus, toTraceSpans } from './tracing';
+import {
+  BRANCH_SPAN_TYPE_SET,
+  listBranchesArgsSchema,
+  listTracesArgsSchema,
+  TraceStatus,
+  toTraceSpan,
+  toTraceSpans,
+} from './tracing';
 
 /**
  * Internal structure for storing a trace with computed properties for efficient filtering
@@ -268,6 +279,44 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
+  async getTraceLight(args: GetTraceArgs): Promise<GetStructureResponse | null> {
+    const { traceId } = args;
+    const traceEntry = this.db.traces.get(traceId);
+    if (!traceEntry) {
+      return null;
+    }
+
+    const spans = Object.values(traceEntry.spans);
+    if (spans.length === 0) {
+      return null;
+    }
+
+    // Sort spans by startedAt
+    spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+
+    return {
+      traceId,
+      spans: spans.map(
+        (span): LightSpanRecord => ({
+          traceId: span.traceId,
+          spanId: span.spanId,
+          parentSpanId: span.parentSpanId,
+          name: span.name,
+          spanType: span.spanType,
+          isEvent: span.isEvent,
+          startedAt: span.startedAt,
+          endedAt: span.endedAt,
+          error: span.error,
+          entityType: span.entityType,
+          entityId: span.entityId,
+          entityName: span.entityName,
+          createdAt: span.createdAt,
+          updatedAt: span.updatedAt,
+        }),
+      ),
+    };
+  }
+
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
@@ -369,6 +418,14 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityName !== undefined && rootSpan.entityName !== filters.entityName) {
       return false;
     }
+    if (filters.entityVersionId !== undefined && rootSpan.entityVersionId !== filters.entityVersionId) {
+      return false;
+    }
+
+    // Experimentation
+    if (filters.experimentId !== undefined && rootSpan.experimentId !== filters.experimentId) {
+      return false;
+    }
 
     // Identity & Tenancy filters
     if (filters.userId !== undefined && rootSpan.userId !== filters.userId) {
@@ -451,6 +508,129 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     // Has child error filter
     if (filters.hasChildError !== undefined && traceEntry.hasChildError !== filters.hasChildError) {
       return false;
+    }
+
+    return true;
+  }
+
+  async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
+    const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
+
+    const allowedSpanTypes = filters?.spanType
+      ? BRANCH_SPAN_TYPE_SET.has(filters.spanType)
+        ? new Set([filters.spanType])
+        : new Set<typeof filters.spanType>()
+      : BRANCH_SPAN_TYPE_SET;
+
+    const matches: SpanRecord[] = [];
+    for (const [, traceEntry] of this.db.traces) {
+      for (const span of Object.values(traceEntry.spans)) {
+        if (!allowedSpanTypes.has(span.spanType)) continue;
+        if (!this.spanMatchesBranchFilters(span, filters)) continue;
+        matches.push(span);
+      }
+    }
+
+    const { field: sortField, direction: sortDirection } = orderBy;
+    matches.sort((a, b) => {
+      if (sortField === 'endedAt') {
+        const aVal = a.endedAt;
+        const bVal = b.endedAt;
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return sortDirection === 'DESC' ? -1 : 1;
+        if (bVal == null) return sortDirection === 'DESC' ? 1 : -1;
+        const diff = aVal.getTime() - bVal.getTime();
+        return sortDirection === 'DESC' ? -diff : diff;
+      }
+      const diff = a.startedAt.getTime() - b.startedAt.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
+    });
+
+    const total = matches.length;
+    const { page, perPage } = pagination;
+    const start = page * perPage;
+    const end = start + perPage;
+    const paged = matches.slice(start, end);
+
+    return {
+      pagination: { total, page, perPage, hasMore: end < total },
+      branches: paged.map(toTraceSpan),
+    };
+  }
+
+  /**
+   * Check if a single anchor span matches all provided branch filters. All
+   * predicates apply to the span itself (not the trace root) -- this is the
+   * key difference from {@link traceMatchesFilters}.
+   */
+  private spanMatchesBranchFilters(span: SpanRecord, filters: ListBranchesArgs['filters']): boolean {
+    if (!filters) return true;
+
+    if (filters.startedAt) {
+      if (filters.startedAt.start && span.startedAt < filters.startedAt.start) return false;
+      if (filters.startedAt.end && span.startedAt > filters.startedAt.end) return false;
+    }
+    if (filters.endedAt) {
+      if (span.endedAt == null) return false;
+      if (filters.endedAt.start && span.endedAt < filters.endedAt.start) return false;
+      if (filters.endedAt.end && span.endedAt > filters.endedAt.end) return false;
+    }
+
+    if (filters.traceId !== undefined && span.traceId !== filters.traceId) return false;
+
+    if (filters.entityType !== undefined && span.entityType !== filters.entityType) return false;
+    if (filters.entityId !== undefined && span.entityId !== filters.entityId) return false;
+    if (filters.entityName !== undefined && span.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && span.entityVersionId !== filters.entityVersionId) return false;
+    if (filters.parentEntityType !== undefined && span.parentEntityType !== filters.parentEntityType) return false;
+    if (filters.parentEntityId !== undefined && span.parentEntityId !== filters.parentEntityId) return false;
+    if (filters.parentEntityName !== undefined && span.parentEntityName !== filters.parentEntityName) return false;
+    if (filters.parentEntityVersionId !== undefined && span.parentEntityVersionId !== filters.parentEntityVersionId)
+      return false;
+    if (filters.rootEntityType !== undefined && span.rootEntityType !== filters.rootEntityType) return false;
+    if (filters.rootEntityId !== undefined && span.rootEntityId !== filters.rootEntityId) return false;
+    if (filters.rootEntityName !== undefined && span.rootEntityName !== filters.rootEntityName) return false;
+    if (filters.rootEntityVersionId !== undefined && span.rootEntityVersionId !== filters.rootEntityVersionId)
+      return false;
+
+    if (filters.experimentId !== undefined && span.experimentId !== filters.experimentId) return false;
+    if (filters.userId !== undefined && span.userId !== filters.userId) return false;
+    if (filters.organizationId !== undefined && span.organizationId !== filters.organizationId) return false;
+    if (filters.resourceId !== undefined && span.resourceId !== filters.resourceId) return false;
+    if (filters.runId !== undefined && span.runId !== filters.runId) return false;
+    if (filters.sessionId !== undefined && span.sessionId !== filters.sessionId) return false;
+    if (filters.threadId !== undefined && span.threadId !== filters.threadId) return false;
+    if (filters.requestId !== undefined && span.requestId !== filters.requestId) return false;
+    if (filters.environment !== undefined && span.environment !== filters.environment) return false;
+    if (filters.source !== undefined && span.source !== filters.source) return false;
+    if (filters.serviceName !== undefined && span.serviceName !== filters.serviceName) return false;
+
+    if (filters.scope != null && span.scope != null) {
+      for (const [key, value] of Object.entries(filters.scope)) {
+        if (!jsonValueEquals(span.scope[key], value)) return false;
+      }
+    } else if (filters.scope != null && span.scope == null) {
+      return false;
+    }
+
+    if (filters.metadata != null && span.metadata != null) {
+      for (const [key, value] of Object.entries(filters.metadata)) {
+        if (!jsonValueEquals(span.metadata[key], value)) return false;
+      }
+    } else if (filters.metadata != null && span.metadata == null) {
+      return false;
+    }
+
+    if (filters.tags != null && filters.tags.length > 0) {
+      if (span.tags == null) return false;
+      for (const tag of filters.tags) {
+        if (!span.tags.includes(tag)) return false;
+      }
+    }
+
+    if (filters.status !== undefined) {
+      const spanStatus = toTraceSpan(span).status;
+      if (spanStatus !== filters.status) return false;
     }
 
     return true;
@@ -554,6 +734,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (filters.costUnit !== undefined && m.costUnit !== filters.costUnit) return false;
       if (filters.entityType !== undefined && m.entityType !== filters.entityType) return false;
       if (filters.entityName !== undefined && m.entityName !== filters.entityName) return false;
+      if (filters.entityVersionId !== undefined && m.entityVersionId !== filters.entityVersionId) return false;
+      if (filters.parentEntityVersionId !== undefined && m.parentEntityVersionId !== filters.parentEntityVersionId)
+        return false;
+      if (filters.rootEntityVersionId !== undefined && m.rootEntityVersionId !== filters.rootEntityVersionId)
+        return false;
       if (filters.userId !== undefined && m.userId !== filters.userId) return false;
       if (filters.organizationId !== undefined && m.organizationId !== filters.organizationId) return false;
       if (filters.resourceId !== undefined && m.resourceId !== filters.resourceId) return false;
@@ -587,7 +772,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private aggregate(values: number[], type: AggregationType, timestamps?: number[]): number | null {
+  private aggregate(
+    values: number[],
+    type: AggregationType,
+    timestamps?: number[],
+    distinctValues?: Array<string | number | null | undefined>,
+  ): number | null {
+    if (type === 'count_distinct') {
+      if (!distinctValues) return 0;
+      const set = new Set<string | number>();
+      for (const v of distinctValues) {
+        if (v === null || v === undefined) continue;
+        set.add(v);
+      }
+      return set.size;
+    }
     if (values.length === 0) return null;
     switch (type) {
       case 'sum':
@@ -621,6 +820,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       default:
         return values.reduce((a, b) => a + b, 0);
     }
+  }
+
+  private extractDistinctValues(
+    records: MetricRecord[],
+    distinctColumn: string | undefined,
+  ): Array<string | number | null | undefined> | undefined {
+    if (!distinctColumn) return undefined;
+    return records.map(r => {
+      const raw = (r as unknown as Record<string, unknown>)[distinctColumn];
+      if (raw === null || raw === undefined) return null;
+      if (typeof raw === 'string' || typeof raw === 'number') return raw;
+      return String(raw);
+    });
   }
 
   private interpolatePercentile(sortedValues: number[], percentile: number): number {
@@ -663,6 +875,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const value = this.aggregate(
       filtered.map(m => m.value),
       args.aggregation,
+      undefined,
+      this.extractDistinctValues(filtered, args.distinctColumn),
     );
     const costSummary = this.summarizeCost(filtered);
 
@@ -695,6 +909,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         const previousValue = this.aggregate(
           prevFiltered.map(m => m.value),
           args.aggregation,
+          undefined,
+          this.extractDistinctValues(prevFiltered, args.distinctColumn),
         );
         const previousCostSummary = this.summarizeCost(prevFiltered);
 
@@ -753,14 +969,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           this.aggregate(
             records.map(record => record.value),
             args.aggregation,
+            undefined,
+            this.extractDistinctValues(records, args.distinctColumn),
           ) ?? 0,
         estimatedCost: costSummary.estimatedCost,
         costUnit: costSummary.costUnit,
       };
     });
-    groups.sort((a, b) => b.value - a.value);
 
-    return { groups };
+    const direction = args.orderDirection === 'ASC' ? 1 : -1;
+    groups.sort((a, b) => (a.value - b.value) * direction);
+
+    const limited = typeof args.limit === 'number' ? groups.slice(0, args.limit) : groups;
+    return { groups: limited };
   }
 
   async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
@@ -797,6 +1018,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                   this.aggregate(
                     records.map(record => record.value),
                     args.aggregation,
+                    undefined,
+                    this.extractDistinctValues(records, args.distinctColumn),
                   ) ?? 0,
                 estimatedCost: this.summarizeCost(records).estimatedCost,
               })),
@@ -827,6 +1050,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                 this.aggregate(
                   records.map(record => record.value),
                   args.aggregation,
+                  undefined,
+                  this.extractDistinctValues(records, args.distinctColumn),
                 ) ?? 0,
               estimatedCost: this.summarizeCost(records).estimatedCost,
             })),
@@ -1036,6 +1261,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.spanId !== undefined && log.spanId !== filters.spanId) return false;
     if (filters.entityType !== undefined && log.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && log.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && log.entityVersionId !== filters.entityVersionId) return false;
+    if (filters.parentEntityVersionId !== undefined && log.parentEntityVersionId !== filters.parentEntityVersionId)
+      return false;
+    if (filters.rootEntityVersionId !== undefined && log.rootEntityVersionId !== filters.rootEntityVersionId)
+      return false;
     if (filters.userId !== undefined && log.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && log.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && log.resourceId !== filters.resourceId) return false;
@@ -1112,6 +1342,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
+  async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    return this.db.scoreRecords.find(score => score.scoreId === scoreId) ?? null;
+  }
+
   private scoreMatchesFilters(score: ScoreRecord, filters?: ListScoresArgs['filters']): boolean {
     if (!filters) return true;
 
@@ -1123,6 +1357,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.spanId !== undefined && score.spanId !== filters.spanId) return false;
     if (filters.entityType !== undefined && score.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && score.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && score.entityVersionId !== filters.entityVersionId) return false;
+    if (filters.parentEntityVersionId !== undefined && score.parentEntityVersionId !== filters.parentEntityVersionId)
+      return false;
+    if (filters.rootEntityVersionId !== undefined && score.rootEntityVersionId !== filters.rootEntityVersionId)
+      return false;
     if (filters.userId !== undefined && score.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && score.resourceId !== filters.resourceId) return false;
@@ -1655,6 +1894,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.spanId !== undefined && fb.spanId !== filters.spanId) return false;
     if (filters.entityType !== undefined && fb.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && fb.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && fb.entityVersionId !== filters.entityVersionId) return false;
+    if (filters.parentEntityVersionId !== undefined && fb.parentEntityVersionId !== filters.parentEntityVersionId)
+      return false;
+    if (filters.rootEntityVersionId !== undefined && fb.rootEntityVersionId !== filters.rootEntityVersionId)
+      return false;
     if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && fb.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && fb.resourceId !== filters.resourceId) return false;
