@@ -29,6 +29,20 @@ function createRecord<T extends z.ZodTypeAny>(valueType: T) {
 }
 
 describe('zodToJsonSchema', () => {
+  describe('zod v4 transform schema conversion', () => {
+    it.skipIf(!isZodV4)('should use input shape for transformed fields in JSON Schema', () => {
+      const schema = z.object({
+        additionalData: z.string().transform(val => JSON.parse(val)),
+      });
+
+      const result = zodToJsonSchema(schema);
+      const additionalDataSchema = result.properties?.additionalData as { type?: unknown } | undefined;
+
+      expect(additionalDataSchema).toBeDefined();
+      expect(additionalDataSchema?.type).toBe('string');
+    });
+  });
+
   describe('z.record() compatibility', () => {
     it('should convert schema with z.record() fields', () => {
       const schema = z.object({
