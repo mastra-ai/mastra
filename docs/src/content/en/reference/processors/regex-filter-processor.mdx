@@ -184,3 +184,27 @@ When the `block` strategy is active (default), `RegexFilterProcessor` throws a `
 | `pii` | Emails, phone numbers, SSNs, credit card numbers | `[EMAIL]`, `[PHONE]`, `[SSN]`, `[CREDIT_CARD]` |
 | `secrets` | API keys, bearer tokens, AWS access keys | `[API_KEY]`, `[BEARER_TOKEN]`, `[AWS_KEY]` |
 | `urls` | HTTP/HTTPS URLs | `[URL]` |
+
+## Using community pattern catalogs
+
+The `rules` parameter accepts arbitrary regex catalogs, including community-curated ones. The example below loads a small set of prompt-injection patterns inspired by Agent Threat Rules (Apache-2.0, https://github.com/Agent-Threat-Rule/agent-threat-rules), an open detection standard for AI agent threats.
+
+```typescript
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const atrRules = [
+  { name: 'instruction-override', pattern: /\b(ignore|disregard|forget)\b[^.]{0,40}\b(previous|prior|above)\b[^.]{0,40}\b(instructions?|rules?)\b/i },
+  { name: 'role-hijack', pattern: /\byou\s+are\s+now\b[^.]{0,60}\b(?:dan|jailbroken|developer\s+mode|root)\b/i },
+  { name: 'system-prompt-extraction', pattern: /\b(repeat|print|reveal|show|output)\b[^.]{0,40}\b(system\s+prompt|initial\s+prompt)\b/i },
+  { name: 'delimiter-injection', pattern: /<\|im_(start|end)\|>|<\/?(system|assistant|user)>|\[\/?INST\]/i },
+  { name: 'tool-exfil', pattern: /\b(send|post|fetch)\b[^.]{0,60}\b(api[_-]?key|secret|token)s?\b/i },
+]
+
+const filter = new RegexFilterProcessor({
+  rules: atrRules,
+  strategy: 'block',
+  phase: 'input',
+})
+```
+
+Pattern-based detection runs in microseconds and is complementary to the LLM-backed [PromptInjectionDetector](/reference/processors/prompt-injection-detector). Use both together for defense in depth: pattern check first as a cheap filter, model-based detection second for nuanced cases.
