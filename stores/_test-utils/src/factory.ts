@@ -9,7 +9,9 @@ import { createDatasetsTests } from './domains/datasets';
 import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
 import { createSchedulesTests } from './domains/schedules';
+import { createHarnessTest } from './domains/harness';
 export * from './domains/memory/data';
+export * from './domains/harness/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
 export * from './domains/observability/data';
@@ -84,6 +86,11 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
         clearList.push(schedulesStorage.dangerouslyClearAll());
       }
 
+      const harnessStorage = await storage.getStore('harness');
+      if (harnessStorage) {
+        clearList.push(harnessStorage.dangerouslyClearAll());
+      }
+
       // Clear all domain data after tests
       await Promise.all(clearList);
     });
@@ -99,5 +106,6 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createExperimentsTests({ storage });
     createBackgroundTasksTests({ storage });
     createSchedulesTests({ storage });
+    createHarnessTest({ storage });
   });
 }

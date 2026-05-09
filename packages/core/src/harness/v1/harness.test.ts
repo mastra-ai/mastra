@@ -387,3 +387,182 @@ describe('Harness v1 — config validation surfaces in resolver', () => {
     await expect(harness.session({ threadId: 't1', resourceId: 'r1' })).rejects.toThrow(HarnessConfigError);
   });
 });
+
+describe('Harness v1 — deterministic-id branch (§5.3)', () => {
+  it('mints a record using the caller-supplied sessionId when none exists', async () => {
+    const harness = makeHarness();
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-explicit-1' });
+    expect(s.id).toBe('sess-explicit-1');
+    expect(s.threadId).toBe('t1');
+  });
+
+  it('returns the existing record when sessionId matches the live instance', async () => {
+    const harness = makeHarness();
+    const a = await harness.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-explicit-2' });
+    const b = await harness.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-explicit-2' });
+    expect(b).toBe(a);
+  });
+
+  it('creates a fresh record when caller-supplied sessionId disagrees with the active one', async () => {
+    const harness = makeHarness();
+    const first = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const second = await harness.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-different' });
+    expect(second.id).toBe('sess-different');
+    expect(second.id).not.toBe(first.id);
+    expect(second.threadId).toBe('t1');
+  });
+});
+
+describe('Harness v1 — deep cascade', () => {
+  it('cascades close through a parent → child → grandchild chain', async () => {
+    const storage = makeStorage();
+    const harness = makeHarness({ sessions: { storage } });
+
+    const parent = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    const grandchild = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: child.id,
+    });
+
+    await parent.close();
+
+    const storedChild = await harness.loadSession({ sessionId: child.id, includeClosed: true });
+    const storedGrand = await harness.loadSession({ sessionId: grandchild.id, includeClosed: true });
+    expect(storedChild?.closedAt).toBeDefined();
+    expect(storedGrand?.closedAt).toBeDefined();
+    expect(harness._internalLiveSessionCount()).toBe(0);
+  });
+});
+
+describe('Harness v1 — crash recovery (lease TTL)', () => {
+  it('lets a fresh harness take over once the prior owner lease has expired', async () => {
+    // Build storage with a db handle we can poke directly to age out the lease.
+    const db = new InMemoryDB();
+    const storage = new InMemoryHarness({ db });
+
+    const a = makeHarness({ sessions: { storage } });
+    const session = await a.session({ threadId: 't1', resourceId: 'r1' });
+    const id = session.id;
+
+    // Simulate process crash: lease still held, no graceful shutdown. Force
+    // expiry by rewriting the lease window into the past directly in the
+    // backing db (saveSession preserves lease metadata so we cannot do this
+    // through the public storage API).
+    const stored = db.harnessSessions.get(id);
+    if (!stored) throw new Error('precondition: session must exist after crash');
+    db.harnessSessions.set(id, { ...stored, leaseExpiresAt: Date.now() - 60_000 });
+
+    const b = makeHarness({ sessions: { storage } });
+    const taken = await b.session({ sessionId: id });
+    expect(taken.id).toBe(id);
+    expect(taken._internalOwnerId).toBe(b.ownerId);
+  });
+});
+
+describe('Harness v1 — concurrent resolver race', () => {
+  // In-flight dedup of parallel session() calls for the same thread is not
+  // yet implemented — the current resolver lets both calls race to
+  // _createFresh. Track the desired behavior here so it surfaces when the
+  // dedup map lands.
+  it.todo('serialises two parallel session() calls for the same thread to a single record');
+
+  it('serialises lease acquisition per session — distinct sessions resolve in parallel', async () => {
+    // A single harness owns its leases; parallel resolves for *different*
+    // threads must not block each other behind a shared mutex. This catches
+    // accidental global locking around _initSession.
+    const harness = makeHarness();
+    const [a, b, c] = await Promise.all([
+      harness.session({ threadId: 't1', resourceId: 'r1' }),
+      harness.session({ threadId: 't2', resourceId: 'r1' }),
+      harness.session({ threadId: 't3', resourceId: 'r1' }),
+    ]);
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
+  });
+
+  it('rejects a deterministic-id collision between two harnesses with HarnessSessionLockedError', async () => {
+    // Two harnesses race to insert the same caller-supplied sessionId. The
+    // loser's saveSession() sees a version mismatch and translates it into
+    // HarnessSessionLockedError — the resolver does not silently downgrade
+    // to "load the existing record" because that would steal the lease.
+    const storage = makeStorage();
+    const a = makeHarness({ sessions: { storage } });
+    const b = makeHarness({ sessions: { storage } });
+
+    await a.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-shared' });
+    await expect(b.session({ threadId: 't1', resourceId: 'r1', sessionId: 'sess-shared' })).rejects.toThrow(
+      HarnessSessionLockedError,
+    );
+  });
+
+  it('exposes holder + expiry fields on HarnessSessionLockedError', async () => {
+    // Holders need to know who owns the lease and when it expires so they
+    // can decide whether to wait, retry, or steal. Assert the error carries
+    // the contract we promise in §4.5.
+    const storage = makeStorage();
+    const a = makeHarness({ sessions: { storage } });
+    const b = makeHarness({ sessions: { storage } });
+
+    const owner = await a.session({ threadId: 't1', resourceId: 'r1' });
+
+    let captured: HarnessSessionLockedError | undefined;
+    try {
+      await b.session({ sessionId: owner.id });
+    } catch (err) {
+      captured = err as HarnessSessionLockedError;
+    }
+    expect(captured).toBeInstanceOf(HarnessSessionLockedError);
+    expect(captured!.sessionId).toBe(owner.id);
+    expect(captured!.currentOwnerId).toBe(a.ownerId);
+    expect(typeof captured!.expiresAt).toBe('number');
+    expect(captured!.expiresAt).toBeGreaterThan(Date.now());
+  });
+});
+
+describe('Session — identity + lifecycle', () => {
+  it('exposes id, threadId, resourceId, createdAt as readonly identity', async () => {
+    const harness = makeHarness();
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    expect(typeof s.id).toBe('string');
+    expect(s.threadId).toBe('t1');
+    expect(s.resourceId).toBe('r1');
+    expect(typeof s.createdAt).toBe('number');
+    expect(s.parentSessionId).toBeUndefined();
+  });
+
+  it('records parentSessionId when spawned as a child', async () => {
+    const harness = makeHarness();
+    const parent = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const child = await harness.session({
+      threadId: { fresh: true },
+      resourceId: 'r1',
+      parentSessionId: parent.id,
+    });
+    expect(child.parentSessionId).toBe(parent.id);
+  });
+
+  it('flips lifecycleState from "live" to "closed" on close()', async () => {
+    const harness = makeHarness();
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    expect(s.lifecycleState).toBe('live');
+    expect(s.isClosed).toBe(false);
+    await s.close();
+    expect(s.lifecycleState).toBe('closed');
+    expect(s.isClosed).toBe(true);
+  });
+
+  it('getRecord() returns a snapshot reflecting the persisted record', async () => {
+    const harness = makeHarness();
+    const s = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    const rec = s.getRecord();
+    expect(rec.id).toBe(s.id);
+    expect(rec.threadId).toBe('t1');
+    expect(rec.resourceId).toBe('r1');
+    expect(rec.closedAt).toBeUndefined();
+  });
+});
