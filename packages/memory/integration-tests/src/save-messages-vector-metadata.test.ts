@@ -1,0 +1,94 @@
+import { randomUUID } from 'node:crypto';
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+/**
+ * memory.saveMessages must persist role, content, and created_at into the
+ * vector store metadata — matching the shape SemanticRecall.processOutputResult
+ * writes via the agent path. Otherwise consumers that build search results
+ * directly from vector metadata (e.g. the built-in `/api/memory/search`
+ * route or external clients) get matches with empty role/content.
+ */
+describe('saveMessages should persist role/content/created_at into vector metadata', () => {
+  let memory: Memory;
+  let storage: LibSQLStore;
+  let vector: LibSQLVector;
+  let threadId: string;
+  const resourceId = `test-resource-${randomUUID()}`;
+
+  beforeEach(async () => {
+    const uniqueId = randomUUID();
+    const dbFile = `file:/tmp/test-${uniqueId}.db`;
+
+    storage = new LibSQLStore({ id: `save-msg-storage-${uniqueId}`, url: dbFile });
+    vector = new LibSQLVector({ id: `save-msg-vector-${uniqueId}`, url: dbFile });
+    await storage.init();
+
+    memory = new Memory({
+      storage,
+      vector,
+      embedder: fastembed,
+      options: {
+        semanticRecall: { topK: 5, messageRange: 0, scope: 'thread' },
+        lastMessages: false,
+      },
+    });
+
+    const thread = await memory.saveThread({
+      thread: {
+        id: randomUUID(),
+        title: 'Save Message Vector Metadata Test',
+        resourceId,
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    threadId = thread.id;
+  });
+
+  afterEach(async () => {
+    try {
+      // @ts-expect-error - accessing internal client for cleanup
+      await storage.client?.close();
+      // @ts-expect-error - accessing internal client for cleanup
+      await vector.turso?.close();
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('writes role, content, and created_at into vector metadata', async () => {
+    const text = 'I prefer morning meetings.';
+    const createdAt = new Date('2026-01-01T12:00:00.000Z');
+    const message = {
+      id: randomUUID(),
+      threadId,
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
+      role: 'user' as const,
+      createdAt,
+      resourceId,
+    };
+
+    await memory.saveMessages({ messages: [message] });
+
+    const vectors = await vector.query({
+      indexName: 'memory_messages_384',
+      queryVector: new Array(384).fill(0.01),
+      topK: 10,
+    });
+
+    const match = vectors.find(v => v.metadata?.message_id === message.id);
+    expect(match).toBeDefined();
+    expect(match!.metadata).toMatchObject({
+      message_id: message.id,
+      thread_id: threadId,
+      resource_id: resourceId,
+      role: 'user',
+      content: text,
+      created_at: createdAt.toISOString(),
+    });
+  });
+});

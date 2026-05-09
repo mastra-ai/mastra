@@ -1141,6 +1141,10 @@ ${workingMemory}`;
                 message_id: message.id,
                 thread_id: message.threadId,
                 resource_id: message.resourceId,
+                role: message.role,
+                content: textForEmbedding,
+                created_at:
+                  message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
               })),
             });
           }),
@@ -2013,6 +2017,9 @@ Notes:
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
+            role: message.role,
+            content: textForEmbedding,
+            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
           })),
         });
       }),
@@ -2158,6 +2165,12 @@ Notes:
                   message_id: message.id,
                   thread_id: existingMessage.threadId,
                   resource_id: existingMessage.resourceId,
+                  role: existingMessage.role,
+                  content: textForEmbedding,
+                  created_at:
+                    existingMessage.createdAt instanceof Date
+                      ? existingMessage.createdAt.toISOString()
+                      : String(existingMessage.createdAt),
                 })),
               });
               messageIdsWithNewEmbeddings.add(message.id);
@@ -2606,6 +2619,9 @@ Notes:
             message_id: message.id,
             thread_id: message.threadId,
             resource_id: message.resourceId,
+            role: message.role,
+            content: textForEmbedding,
+            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
           })),
         });
       }),
