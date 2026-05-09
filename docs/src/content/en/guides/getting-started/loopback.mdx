@@ -12,15 +12,28 @@ In this guide, you'll build a tool-calling AI agent using Mastra and LoopBack 4.
 - You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 - Install Node.js `v22.13.0` or later.
 
-## Start with a LoopBack app
+## Create a new LoopBack app (optional)
 
-Use an existing LoopBack 4 app, or follow the official [LoopBack getting-started guide](https://loopback.io/doc/en/lb4/Getting-started.html) to create one.
+If you already have a LoopBack app, skip to the next step.
+
+Run the following commands to [create a new LoopBack app](https://loopback.io/doc/en/lb4/Getting-started.html):
+
+```bash
+npm install -g @loopback/cli
+lb4 app mastra-loopback
+```
+
+This creates a project called `mastra-loopback`, but you can replace it with any name you want.
 
 ## Initialize Mastra
 
-Inside your LoopBack project directory, run [`mastra init`](/reference/cli/mastra#mastra-init), then continue with adapter registration.
+Navigate to your LoopBack project directory:
 
-When prompted, choose a provider such as OpenAI and enter your key.
+```bash
+cd mastra-loopback
+```
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider such as OpenAI and enter your key:
 
 ```bash
 npx mastra@latest init
@@ -86,18 +99,6 @@ In a separate terminal window, use `curl` to ask the weather agent:
 ```bash
 curl -X POST http://localhost:3000/api/mastra/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
-
-## Resolve LoopBack bindings from Mastra
-
-The adapter injects a LoopBack bridge into Mastra `RequestContext` under the `loopback` key. Use it to resolve request-scoped LoopBack bindings from routes, tools, and agents.
-
-```typescript title="src/mastra/routes/customer.ts"
-const loopback = requestContext.get('loopback')
-const customerService = await loopback.resolve('services.CustomerService')
-const customer = await customerService.findById('customer-1')
-```
-
-This allows Mastra to reuse your existing LoopBack services, repositories, and other DI-managed bindings.
 
 ## Next steps
 

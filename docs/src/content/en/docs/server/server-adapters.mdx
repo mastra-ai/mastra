@@ -76,6 +76,7 @@ Install the adapter for the framework of your choice.
     npm install @mastra/nestjs@latest
     ```
   </TabItem>
+
   <TabItem value="loopback" label="LoopBack">
     ```bash npm2yarn
     npm install @mastra/loopback@latest @loopback/core @loopback/rest
@@ -240,12 +241,12 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     :::info
 
     See the [NestJS Adapter](/reference/server/nestjs-adapter) documentation for full configuration options.
-    
+
     :::
   </TabItem>
 
   <TabItem value="loopback" label="LoopBack">
-    
+    ```typescript title="src/index.ts"
     import { RestApplication } from '@loopback/rest'
     import { LoopbackMastraServer } from '@mastra/loopback'
     import { mastra } from './mastra'
