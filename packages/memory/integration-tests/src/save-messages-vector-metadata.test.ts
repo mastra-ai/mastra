@@ -74,9 +74,13 @@ describe('saveMessages should persist role/content/created_at into vector metada
 
     await memory.saveMessages({ messages: [message] });
 
+    const indexName = (await vector.listIndexes()).find(name => name.startsWith('memory_messages_'));
+    if (!indexName) throw new Error('No memory_messages_* index was created');
+    const { dimension } = await vector.describeIndex({ indexName });
+
     const vectors = await vector.query({
-      indexName: 'memory_messages_384',
-      queryVector: new Array(384).fill(0.01),
+      indexName,
+      queryVector: new Array(dimension).fill(0.01),
       topK: 10,
     });
 
