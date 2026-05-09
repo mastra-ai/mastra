@@ -62,8 +62,8 @@ export interface HarnessMode {
 
   /**
    * Optional plan→build target. When `submit_plan` runs in this mode, the
-   * registered `PendingPlanApproval` freezes this value as
-   * `transitionModeId`. On approval, the session flips to this mode
+   * registered `PendingResume` freezes this value as `transitionModeId`.
+   * On approval, the session flips to this mode
    * idempotently (§5.1, §5.7). If unset, plan approval resumes with no
    * mode change. Must reference another mode's `id`.
    */

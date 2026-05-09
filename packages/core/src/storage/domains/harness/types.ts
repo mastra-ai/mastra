@@ -73,67 +73,61 @@ export interface QueuedItem {
 }
 
 /**
- * Pending tool-approval gate. Model wants to call a tool; the user decides.
+ * Outstanding agent suspension. At most one per session — the agent layer
+ * can only be in one of {approval, suspension, question, plan} at a time, so
+ * the four spec'd shapes collapse into a single tagged record. The actual
+ * paused execution state (tool args, suspend payload, resume schema) lives
+ * in the workflow snapshot under `MastraStorage.workflows` keyed by `runId`;
+ * the harness only persists the pointer needed to call
+ * `agent.resumeStream(resumeData, { runId, toolCallId })` plus a small
+ * amount of UX surface so a fresh subscriber can render the prompt without
+ * re-fetching the snapshot.
+ *
+ * See HARNESS_V1_SPEC.md §5.1 ("Persistence shapes — `pendingResume`").
  */
-export interface PendingApproval {
-  kind: 'tool-approval';
+export interface PendingResume {
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
   runId: string;
   toolCallId: string;
-  toolName: string;
-  toolCategory?: string;
-  input: unknown;
+  /** Populated for tool-approval / tool-suspension; omitted otherwise. */
+  toolName?: string;
   source: 'parent' | 'subagent';
   subagentToolCallId?: string;
   requestedAt: number;
-}
-
-/**
- * Pending tool-suspension. The tool's body called `suspend(...)` and is
- * waiting for an external resume payload.
- */
-export interface PendingToolSuspension {
-  kind: 'tool-suspension';
-  runId: string;
-  toolCallId: string;
-  toolName: string;
-  /** Opaque payload chosen by the tool author. */
-  suspendData: unknown;
-  source: 'parent' | 'subagent';
-  subagentToolCallId?: string;
-  requestedAt: number;
-}
-
-/**
- * Pending user question — the agent called `ask_user(...)`.
- */
-export interface PendingQuestion {
-  kind: 'question';
-  runId: string;
-  toolCallId: string;
-  question: string;
-  options?: { label: string; description?: string }[];
-  selectionMode?: 'single_select' | 'multi_select';
-  source: 'parent' | 'subagent';
-  subagentToolCallId?: string;
-  requestedAt: number;
-}
-
-/**
- * Pending plan approval. Approving a plan may transition the session's mode;
- * see HARNESS_V1_SPEC.md §5.1 for the idempotency markers.
- */
-export interface PendingPlanApproval {
-  kind: 'plan-approval';
-  runId: string;
-  toolCallId: string;
-  title: string;
-  plan: string;
-  source: 'parent' | 'subagent';
-  subagentToolCallId?: string;
-  requestedAt: number;
-  /** Frozen at registration from the submitting mode's `transitionsTo`. */
+  /**
+   * Idempotency marker. Set by the resume helper before calling
+   * `agent.resumeStream(...)` and observed on replay so a crash between
+   * "wrote resumedAt" and "cleared pendingResume" does not double-resume.
+   */
+  resumedAt?: number;
+  /**
+   * Kind-specific UX surface — opaque to the harness, rendered by the UI.
+   * Populated at suspend-capture time from the agent's `suspendPayload`.
+   */
+  payload?: {
+    // tool-approval
+    toolCategory?: string;
+    input?: unknown;
+    // tool-suspension
+    suspendData?: unknown;
+    // question
+    question?: string;
+    options?: { label: string; description?: string }[];
+    selectionMode?: 'single_select' | 'multi_select';
+    // plan-approval
+    title?: string;
+    plan?: string;
+  };
+  /**
+   * Plan-approval only. Frozen at registration from the submitting mode's
+   * `HarnessMode.transitionsTo`. A mode switch while the plan is pending does
+   * not retarget the approval.
+   */
   transitionModeId?: string;
-  /** Idempotency markers for the mode-flip side effect. */
+  /**
+   * Plan-approval only. Idempotency markers for the mode-flip side effect.
+   * See HARNESS_V1_SPEC.md §5.1.
+   */
   approvedTransitionModeId?: string;
   modeTransitionAppliedAt?: number;
 }
@@ -198,12 +192,10 @@ export interface SessionRecord {
   // Counters
   tokenUsage: TokenUsage;
 
-  // In-flight state — resumable across restarts
+  // In-flight state — resumable across restarts.
+  // At most one outstanding agent suspension per session (see PendingResume).
   pendingQueue: QueuedItem[];
-  pendingApproval?: PendingApproval;
-  pendingSuspension?: PendingToolSuspension;
-  pendingQuestion?: PendingQuestion;
-  pendingPlan?: PendingPlanApproval;
+  pendingResume?: PendingResume;
 
   // Observational memory config (per-session override)
   observationalMemory?: {
