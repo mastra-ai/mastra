@@ -169,11 +169,16 @@ function createProcessInputStepArgs(
 
 function extractReminderMarkup(messageList: TestMessageList): string[] {
   return messageList.get.all.db().flatMap(message => {
-    if (message.role === 'signal' && message.content.metadata?.type === 'dynamic-agents-md') {
-      const path = message.content.metadata.path;
-      return typeof path === 'string'
-        ? [`<system-reminder type="dynamic-agents-md" path="${path}">${getMessageText(message)}</system-reminder>`]
-        : [];
+    if (message.role === 'signal') {
+      const signalMetadata = message.content.metadata?.signal as
+        | { attributes?: { type?: string }; metadata?: { path?: unknown } }
+        | undefined;
+      if (signalMetadata?.attributes?.type === 'dynamic-agents-md') {
+        const path = signalMetadata.metadata?.path;
+        return typeof path === 'string'
+          ? [`<system-reminder type="dynamic-agents-md" path="${path}">${getMessageText(message)}</system-reminder>`]
+          : [];
+      }
     }
 
     if (message.role !== 'user') return [];
@@ -224,9 +229,11 @@ describe('AgentsMDInjector', () => {
     expect(injectedReminder?.role).toBe('signal');
     expect(injectedReminder?.content.metadata).toEqual(
       expect.objectContaining({
-        path: '/repo/src/agents/nested/AGENTS.md',
-        type: 'dynamic-agents-md',
-        signal: expect.objectContaining({ type: 'system-reminder' }),
+        signal: expect.objectContaining({
+          type: 'system-reminder',
+          attributes: expect.objectContaining({ type: 'dynamic-agents-md' }),
+          metadata: expect.objectContaining({ path: '/repo/src/agents/nested/AGENTS.md' }),
+        }),
       }),
     );
   });

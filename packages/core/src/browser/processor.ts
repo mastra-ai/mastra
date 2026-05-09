@@ -152,8 +152,16 @@ function hasTrailingBrowserReminder(
     return false;
   }
 
-  const reminder =
-    'systemReminder' in metadata
+  const signal = (
+    metadata as { signal?: { type?: string; attributes?: { type?: string }; metadata?: BrowserReminderMetadata } }
+  ).signal;
+  const reminder = signal
+    ? {
+        type: signal.attributes?.type,
+        url: signal.metadata?.url,
+        title: signal.metadata?.title,
+      }
+    : 'systemReminder' in metadata
       ? (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder
       : (metadata as unknown as BrowserReminderMetadata);
   return reminder?.type === REMINDER_TYPE && reminder.url === url && reminder.title === title;
