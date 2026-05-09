@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.18.0-alpha.10
+
+### Minor Changes
+
+- Added GitHub Copilot OAuth login (`/login` → GitHub Copilot) so anyone with an active Copilot subscription can use Mastra Code without separate OpenAI or Anthropic keys. The flow uses the standard GitHub device code OAuth, supports GitHub Enterprise hosts, and automatically refreshes the short-lived Copilot bearer token. ([#16129](https://github.com/mastra-ai/mastra/pull/16129))
+
+  A new **GitHub Copilot** mode pack is selectable from the onboarding wizard and `/models`. The built-in defaults are:
+  - _plan_: `github-copilot/gemini-2.5-pro`
+  - _build_: `github-copilot/gpt-4.1`
+  - _fast_: `github-copilot/grok-code-fast-1`
+
+  After login, the available Copilot models are fetched live from the `/models` endpoint, filtered to picker-enabled, non-policy-disabled entries, and cached for 10 minutes. Mastra Code now uses the generic OpenAI-compatible AI SDK adapter pointed directly at GitHub Copilot's API instead of rewriting OpenAI provider URLs, and applies Gemini-compatible tool schemas for Copilot Gemini models.
+
+### Patch Changes
+
+- Fixed plan approval so accepting a plan can switch modes after the waiting plan tool resolves, clears stale abort state before starting the approved goal, and injects the goal trigger directly instead of queueing a follow-up. ([#16340](https://github.com/mastra-ai/mastra/pull/16340))
+
+- Delegate gateway sync to `@mastra/core`'s `GatewayRegistry.syncGateways`, removing duplicated provider-fetch, type-generation, and atomic-write logic so mastracode stays in sync with core registry behavior. ([#16332](https://github.com/mastra-ai/mastra/pull/16332))
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`9d71101`](https://github.com/mastra-ai/mastra/commit/9d71101921decb5b8d45734b6a91b6b740c7d465), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`c50ebc3`](https://github.com/mastra-ai/mastra/commit/c50ebc34da71044558315735e69bfb94fcfb74bf), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4), [`33767a0`](https://github.com/mastra-ai/mastra/commit/33767a0e3762beeb33dab03b1608b6d5f405fc94)]:
+  - @mastra/core@1.33.0-alpha.8
+  - @mastra/libsql@1.10.1-alpha.2
+  - @mastra/memory@1.18.0-alpha.3
+  - @mastra/pg@1.10.1-alpha.1
+  - @mastra/schema-compat@1.2.10-alpha.0
+  - @mastra/observability@1.12.0-alpha.2
+  - @mastra/mcp@1.7.0
+
 ## 0.18.0-alpha.9
 
 ### Minor Changes

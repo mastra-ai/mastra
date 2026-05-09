@@ -1,5 +1,119 @@
 # @mastra/core
 
+## 1.33.0-alpha.8
+
+### Minor Changes
+
+- Added target-aware tool payload transforms for display streams and transcript messages. Tool authors can transform tool input, output, errors, approval payloads, and suspension payloads without changing raw runtime behavior or toModelOutput. See https://github.com/mastra-ai/mastra/issues/16054. ([#16103](https://github.com/mastra-ai/mastra/pull/16103))
+
+  Use `transform` on tools, agents, Mastra, or individual generation calls to configure these payload transforms. Runtime callers using the previous `toolPayloadProjection` shape continue to be normalized for compatibility.
+
+  ```ts
+  const lookupCustomer = createTool({
+    execute: async ({ customerId, internalPath }) => lookupCustomerRecord(customerId, internalPath),
+    transform: {
+      display: {
+        input: ({ input }) => ({ customerId: input?.customerId }),
+        output: ({ output }) => ({ displayName: output?.displayName }),
+      },
+      transcript: {
+        input: ({ input }) => ({ customerId: input?.customerId }),
+        output: ({ output }) => ({ displayName: output?.displayName }),
+      },
+    },
+  });
+  ```
+
+- **Added `ResponseCache` input processor** ([#16283](https://github.com/mastra-ai/mastra/pull/16283))
+
+  Cache identical LLM steps to skip the model call and replay a previously cached response. Useful for prompt templates, suggested-prompt buttons, agentic search re-asks, or guardrail LLMs that classify the same input over and over.
+
+  Caching is opt-in: register `ResponseCache` explicitly on `inputProcessors`. There is no agent-level option — this keeps the surface small while we collect feedback on the processor API. Per-call overrides flow through `RequestContext`.
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { InMemoryServerCache } from '@mastra/core/cache';
+  import { ResponseCache } from '@mastra/core/processors';
+
+  const cache = new InMemoryServerCache();
+
+  const agent = new Agent({
+    name: 'Search Agent',
+    instructions: 'You answer questions concisely.',
+    model: 'openai/gpt-5',
+    inputProcessors: [new ResponseCache({ cache, ttl: 600 })],
+  });
+
+  // First call: cache miss → LLM call
+  await agent.generate('What is the capital of France?');
+
+  // Second identical call: cache hit → no LLM call
+  await agent.generate('What is the capital of France?');
+  ```
+
+  Per-call overrides via `RequestContext`:
+
+  ```ts
+  import { ResponseCache } from '@mastra/core/processors';
+  import { RequestContext } from '@mastra/core/request-context';
+
+  // Force a fresh call but still update the cache.
+  await agent.stream(prompt, {
+    requestContext: ResponseCache.context({ bust: true }),
+  });
+
+  // Or merge into an existing context.
+  const ctx = new RequestContext();
+  ResponseCache.applyContext(ctx, { key: 'custom-key' });
+  await agent.stream(prompt, { requestContext: ctx });
+  ```
+
+  Three fields are overridable per call: `key`, `scope`, `bust`. `cache`, `ttl`, and `agentId` stay on the constructor.
+
+  A `key` function receives `{ agentId, scope, model, prompt, stepNumber }` and returns a string (or `Promise<string>`):
+
+  ```ts
+  await agent.stream(prompt, {
+    requestContext: ResponseCache.context({
+      key: ({ model, prompt }) => `qa:${model.modelId}:${JSON.stringify(prompt).slice(-200)}`,
+    }),
+  });
+  ```
+
+  The cache key is derived from the resolved prompt Mastra is about to send to the model — i.e. _after_ memory loading and earlier input processors have run — so cached entries are tenant-isolated and don't leak context across users with shared prompts but different memory state. Each step in an agentic tool loop is independently cached. By default, the cache scope falls back to `MASTRA_RESOURCE_ID_KEY` from the request context for automatic per-user isolation. Failed runs (errors, tripwire activations) are not cached. See [Response caching](https://mastra.ai/en/docs/agents/response-caching) for details.
+
+  Also adds:
+  - `InMemoryServerCache` (in `@mastra/core/cache`) for local development. `ResponseCache` accepts any `MastraServerCache` directly — use `RedisCache` from `@mastra/redis` for production.
+  - `MastraServerCache.set()` now accepts an optional `ttlMs` argument so implementations can override the configured default TTL on a per-entry basis. `InMemoryServerCache` and `RedisCache` (in `@mastra/redis`) both honor this.
+  - New paired processor hooks `processLLMRequest` and `processLLMResponse`. `ProcessLLMRequestResult` may return `{ response }` to short-circuit the LLM call with a cached payload.
+
+### Patch Changes
+
+- Fixed plan approval so accepting a plan can switch modes after the waiting plan tool resolves, clears stale abort state before starting the approved goal, and injects the goal trigger directly instead of queueing a follow-up. ([#16340](https://github.com/mastra-ai/mastra/pull/16340))
+
+- Propagate cache metrics (`cachedInputTokens`, `cacheCreationInputTokens`) through harness token usage. The step-finish handler now extracts `cachedInputTokens` from AI SDK usage and propagates it through `usage_update` events, `getTokenUsage()`, display state, and thread metadata persistence. ([#14746](https://github.com/mastra-ai/mastra/pull/14746))
+
+- Default top-level observational memory early activation settings to observations only, while allowing per-phase overrides under `observation` and `reflection`. ([#16367](https://github.com/mastra-ai/mastra/pull/16367))
+
+- Respect optional `resourceId` in `getThreadById` so scoped thread lookups return `null` when the thread belongs to a different resource. ([#14237](https://github.com/mastra-ai/mastra/pull/14237))
+
+  Example:
+
+  ```typescript
+  const thread = await memory.getThreadById({
+    threadId: 'my-thread-id',
+    resourceId: 'my-user-id',
+  });
+  // Returns null if the thread does not belong to 'my-user-id'.
+  ```
+
+- Fixed assistant message tracking when ObservationalMemory clears step-1 output to memory and step-2 text merges into the same assistant message, so merged text is not lost on the next response clear. ([#15277](https://github.com/mastra-ai/mastra/pull/15277))
+
+- Stop logging auto-recoverable provider cache corruption warnings when `~/.cache/mastra/` contains stale content from another Mastra version. Corrupted cache files are still deleted on read so they cannot propagate into a project's `dist/`, and the next gateway sync rewrites valid files. ([#16332](https://github.com/mastra-ai/mastra/pull/16332))
+
+- Updated dependencies [[`c50ebc3`](https://github.com/mastra-ai/mastra/commit/c50ebc34da71044558315735e69bfb94fcfb74bf)]:
+  - @mastra/schema-compat@1.2.10-alpha.0
+
 ## 1.33.0-alpha.7
 
 ### Minor Changes
