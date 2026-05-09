@@ -1,132 +1,111 @@
-import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
-import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
+import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/core/observability';
+import { Fragment } from 'react';
+import { getTokenUsageView } from './span-token-usage.utils';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { cn } from '@/lib/utils';
 
-// V5 format (AI SDK v5)
-type V5TokenUsage = {
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
-  totalTokens: number;
-  inputDetails?: InputTokenDetails;
-  outputDetails?: OutputTokenDetails;
-};
-
-// Legacy format
-type LegacyTokenUsage = {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-};
-
-export type TokenUsage = V5TokenUsage | LegacyTokenUsage;
+export type TokenUsage = UsageStats;
 
 type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
-type UsageValue = number | TokenDetailsObject | undefined;
-
-function isTokenDetailsObject(value: UsageValue): value is TokenDetailsObject {
-  return typeof value === 'object' && value !== null;
-}
 
 const detailKeyLabels: Record<string, string> = {
   text: 'Text',
-  cacheRead: 'Cache Read',
-  cacheWrite: 'Cache Write',
+  cacheRead: 'Cache read',
+  cacheWrite: 'Cache write',
   audio: 'Audio',
   image: 'Image',
   reasoning: 'Reasoning',
 };
 
 type SpanTokenUsageProps = {
-  usage: TokenUsage;
+  usage: UsageStats;
   className?: string;
 };
 
+const INPUT_COLOR = 'oklch(0.78 0.16 320)';
+const OUTPUT_COLOR = 'oklch(0.55 0.18 320)';
+
 export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
-  if (!usage) return null;
-  const isV5 = 'inputTokens' in usage;
+  const view = getTokenUsageView(usage);
+  if (!view) return null;
 
-  const legacyTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
-    promptTokens: { label: 'Prompt Tokens', icon: <ArrowRightIcon /> },
-    completionTokens: { label: 'Completion Tokens', icon: <ArrowRightToLineIcon /> },
-  };
-
-  const v5TokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
-    inputTokens: { label: 'Input Tokens', icon: <ArrowRightIcon /> },
-    outputTokens: { label: 'Output Tokens', icon: <ArrowRightToLineIcon /> },
-    reasoningTokens: { label: 'Reasoning Tokens', icon: <ArrowRightToLineIcon /> },
-    cachedInputTokens: { label: 'Cached Input Tokens', icon: <ArrowRightToLineIcon /> },
-    inputDetails: { label: 'Input Details', icon: <ArrowRightIcon /> },
-    outputDetails: { label: 'Output Details', icon: <ArrowRightToLineIcon /> },
-  };
-
-  const commonTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
-    totalTokens: { label: 'Total LLM Tokens', icon: <CoinsIcon /> },
-  };
-
-  const tokenPresentations = {
-    ...commonTokenPresentations,
-    ...v5TokenPresentations,
-    ...legacyTokenPresentations,
-  };
-
-  const usageKeyOrder = isV5
-    ? [
-        'totalTokens',
-        'inputTokens',
-        'outputTokens',
-        'reasoningTokens',
-        'cachedInputTokens',
-        'inputDetails',
-        'outputDetails',
-      ]
-    : ['totalTokens', 'promptTokens', 'completionTokens'];
-
-  const usageAsArray = Object.entries(usage)
-    .filter((entry): entry is [string, number | TokenDetailsObject] => {
-      const value = entry[1];
-      return typeof value === 'number' || isTokenDetailsObject(value);
-    })
-    .map(([key, value]) => ({ key, value }))
-    .sort((a, b) => usageKeyOrder.indexOf(a.key) - usageKeyOrder.indexOf(b.key));
+  const { inputValue, outputValue, total, showSplit, inputPct, outputPct, inputDetails, outputDetails } = view;
 
   return (
-    <div className={cn('flex gap-6 flex-wrap', className)}>
-      {usageAsArray.map(({ key, value }) => {
-        const isObject = isTokenDetailsObject(value);
-
-        return (
-          <div className="bg-surface3 p-3 px-4 rounded-lg text-ui-md grow" key={key}>
-            <div
-              className={cn(
-                'grid grid-cols-[1.5rem_1fr_auto] gap-2 items-center',
-                '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em] [&>svg]:opacity-70',
-              )}
-            >
-              {tokenPresentations?.[key]?.icon}
-              <span className="text-ui-md">{tokenPresentations?.[key]?.label}</span>
-              {!isObject && <b className="text-ui-lg">{value}</b>}
-            </div>
-            {isObject && (
-              <div className="text-ui-md mt-2 pl-8">
-                {Object.entries(value).map(([detailKey, detailValue]) => {
-                  if (typeof detailValue !== 'number') return null;
-                  return (
-                    <dl
-                      key={detailKey}
-                      className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 justify-between text-neutral3"
-                    >
-                      <dt>{detailKeyLabels[detailKey] || detailKey}</dt>
-                      <dd>{detailValue}</dd>
-                    </dl>
-                  );
-                })}
-              </div>
-            )}
+    <div
+      className={cn('border-b border-border1 mt-2 mb-8 pb-3 grid grid-cols-1 4xl:grid-cols-2 4xl:gap-12', className)}
+    >
+      {showSplit && (
+        <div className="mb-2">
+          <div className="flex items-baseline text-neutral2 gap-3">
+            <span className="text-ui-md">Tokens Used</span>
+            <span className="text-neutral4 text-ui-md font-semibold">{total.toLocaleString()}</span>
+            <span className="ml-auto text-ui-sm">
+              {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
+            </span>
           </div>
+          <div className="p-1.5 rounded-md bg-surface4 mt-2">
+            <div className="relative w-full h-1.5 rounded-sm overflow-hidden">
+              <div
+                className="absolute h-1.5 top-0 left-0"
+                style={{ width: `${inputPct}%`, backgroundColor: INPUT_COLOR }}
+              />
+              <div
+                className="absolute h-1.5 top-0"
+                style={{ left: `${inputPct}%`, width: `${outputPct}%`, backgroundColor: OUTPUT_COLOR }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-6 grid-cols-2">
+        <UsageColumn label="Input" color={INPUT_COLOR} value={inputValue} details={inputDetails} />
+        <UsageColumn label="Output" color={OUTPUT_COLOR} value={outputValue} details={outputDetails} />
+      </div>
+    </div>
+  );
+}
+
+function UsageColumn({
+  label,
+  color,
+  value,
+  details,
+}: {
+  label: string;
+  color: string;
+  value?: number;
+  details?: TokenDetailsObject;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline text-neutral2 gap-3 mb-2">
+        <span className="text-ui-md">{label}</span>
+        {typeof value === 'number' && (
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-neutral4 text-ui-md font-semibold">{value.toLocaleString()}</span>
+            <span className="size-2 rounded-full self-center" style={{ backgroundColor: color }} />
+          </span>
+        )}
+      </div>
+      {details && <DetailsList details={details} />}
+    </div>
+  );
+}
+
+function DetailsList({ details }: { details: TokenDetailsObject }) {
+  return (
+    <DataKeysAndValues density="dense">
+      {Object.entries(details).map(([detailKey, detailValue]) => {
+        if (typeof detailValue !== 'number') return null;
+        return (
+          <Fragment key={detailKey}>
+            <DataKeysAndValues.Key>{detailKeyLabels[detailKey] || detailKey}</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value className="text-right">{detailValue.toLocaleString()}</DataKeysAndValues.Value>
+          </Fragment>
         );
       })}
-    </div>
+    </DataKeysAndValues>
   );
 }

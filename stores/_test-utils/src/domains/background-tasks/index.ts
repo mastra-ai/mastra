@@ -143,6 +143,37 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(result!.status).toBe('pending');
         expect(result!.error).toBeUndefined();
       });
+
+      it('persists suspendPayload and suspendedAt on suspend and clears them on resume', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'running', startedAt: new Date() });
+        await bgStorage.createTask(task);
+
+        const suspendPayload = { awaiting: 'analyst-approval', topic: 'solana' };
+        const suspendedAt = new Date();
+        await bgStorage.updateTask(task.id, {
+          status: 'suspended',
+          suspendPayload,
+          suspendedAt,
+        });
+
+        const suspended = await bgStorage.getTask(task.id);
+        expect(suspended!.status).toBe('suspended');
+        expect(suspended!.suspendPayload).toEqual(suspendPayload);
+        expect(suspended!.suspendedAt?.getTime()).toBe(suspendedAt.getTime());
+
+        // On resume the manager clears suspendPayload + suspendedAt and flips status back.
+        await bgStorage.updateTask(task.id, {
+          status: 'running',
+          suspendPayload: undefined,
+          suspendedAt: undefined,
+        });
+
+        const resumed = await bgStorage.getTask(task.id);
+        expect(resumed!.status).toBe('running');
+        expect(resumed!.suspendPayload).toBeUndefined();
+        expect(resumed!.suspendedAt).toBeUndefined();
+      });
     });
 
     describe('listTasks', () => {
@@ -198,6 +229,17 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(tasks.length).toBe(1);
       });
 
+      it('filters by toolCallId', async () => {
+        if (!bgStorage) return;
+        const target = createSampleTask({ toolCallId: 'call-target' });
+        await bgStorage.createTask(target);
+        await bgStorage.createTask(createSampleTask({ toolCallId: 'call-other' }));
+
+        const { tasks } = await bgStorage.listTasks({ toolCallId: 'call-target' });
+        expect(tasks.length).toBe(1);
+        expect(tasks[0]!.id).toBe(target.id);
+      });
+
       it('orders by createdAt ascending by default', async () => {
         if (!bgStorage) return;
         const t1 = new Date('2024-01-01');
@@ -240,6 +282,18 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(page1.length).toBe(2);
         expect(page1[0]!.id).toBe('2');
         expect(page1[1]!.id).toBe('3');
+      });
+    });
+
+    describe('deleteTask', () => {
+      it('deletes a single task synchronously', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ id: 'delete-one' });
+        await bgStorage.createTask(task);
+
+        await bgStorage.deleteTask(task.id);
+
+        expect(await bgStorage.getTask(task.id)).toBeNull();
       });
     });
 

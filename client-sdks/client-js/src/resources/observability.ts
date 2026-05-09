@@ -6,6 +6,10 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
   SpanIds,
   PaginationArgs,
   SpanRecord,
@@ -220,6 +224,39 @@ export class Observability extends BaseResource {
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
     return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   *
+   * Each row is a single branch-anchor span (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL),
+   * including ones nested under a different root entity. Use this to list every run of
+   * a given agent/workflow/tool regardless of how it was triggered. Pairs with
+   * {@link getBranch} to expand a single branch into its subtree.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated branch-anchor spans and pagination info
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/branches${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span.
+   *
+   * @param params - Parameters containing trace ID, span ID, and optional depth.
+   *   When `depth` is omitted the full descendant subtree is returned; with a finite
+   *   `depth` only that many levels below the anchor are returned (depth: 0 → only the
+   *   anchor span; depth: 1 → anchor plus immediate children; etc).
+   * @returns Promise containing the branch (anchor span plus descendants)
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    const { traceId, spanId, depth } = params;
+    const queryString = depth !== undefined ? `?depth=${depth}` : '';
+    return this.request(
+      `/observability/traces/${encodeURIComponent(traceId)}/branches/${encodeURIComponent(spanId)}${queryString}`,
+    );
   }
 
   /**

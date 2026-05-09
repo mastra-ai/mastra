@@ -1,0 +1,202 @@
+---
+title: "Reference: ResponseCache | Processors"
+description: "API reference for the ResponseCache input processor that caches LLM responses inside the agentic loop."
+packages:
+  - "@mastra/core"
+---
+
+# ResponseCache
+
+`ResponseCache` is an input processor that caches LLM responses on the request/response boundary inside the agentic loop. It hooks into `processLLMRequest` (cache lookup; short-circuits on hit) and `processLLMResponse` (cache write on completion).
+
+The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. _after_ memory has loaded and earlier input processors have transformed the prompt — so two users with different memory contexts produce different cache keys. Each step in an agentic tool loop is independently cached.
+
+There is no agent-level option for response caching; register `ResponseCache` explicitly on `inputProcessors`. Per-call overrides flow through `RequestContext` via [`ResponseCache.context()`](#static-helpers) and [`ResponseCache.applyContext()`](#static-helpers).
+
+## Usage example
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { InMemoryServerCache } from '@mastra/core/cache'
+import { ResponseCache } from '@mastra/core/processors'
+
+const cache = new InMemoryServerCache()
+
+const agent = new Agent({
+  name: 'Search Agent',
+  instructions: 'You answer questions concisely.',
+  model: 'openai/gpt-5',
+  inputProcessors: [new ResponseCache({ cache, ttl: 600 })],
+})
+
+// First call hits the LLM and writes to the cache.
+await agent.generate('What is the capital of France?')
+
+// Second identical call replays the cached response.
+await agent.generate('What is the capital of France?')
+
+// Force a fresh call but still update the cache.
+await agent.generate('What is the capital of France?', {
+  requestContext: ResponseCache.context({ bust: true }),
+})
+```
+
+See [Response caching](/docs/agents/response-caching) for the conceptual overview, scoping rules, and recommended deployment patterns.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cache',
+    type: 'MastraServerCache',
+    description:
+      'The cache backend. Required. Pass any `MastraServerCache` implementation — `InMemoryServerCache` for local development, `RedisCache` from `@mastra/redis` for production, or your own subclass for a custom backend.',
+    isOptional: false,
+  },
+  {
+    name: 'ttl',
+    type: 'number',
+    description:
+      "Time-to-live (seconds) for entries written by this processor. Defaults to 300 seconds (5 minutes), matching OpenRouter's reference implementation.",
+    isOptional: true,
+    defaultValue: '300',
+  },
+  {
+    name: 'scope',
+    type: 'string | null',
+    description:
+      'Tenant scope appended to the cache key. `null` opts out of scoping. When omitted, the processor falls back to the resource id resolved from the request context (`MASTRA_RESOURCE_ID_KEY`) for automatic per-user isolation.',
+    isOptional: true,
+  },
+  {
+    name: 'key',
+    type: 'string | (inputs: ResponseCacheKeyInputs) => string | Promise<string>',
+    description:
+      'Override the auto-derived cache key. Pass a string to pin a key, or a function that receives `{ agentId, scope, model, prompt, stepNumber }` and returns a key. If the function throws, the processor falls back to the deterministic hash so the call still benefits from caching.',
+    isOptional: true,
+  },
+  {
+    name: 'bust',
+    type: 'boolean',
+    description:
+      'Force a cache miss on every call: skip the read but still write on completion. Useful for explicit refresh paths.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description:
+      "Logical id used in the cache key namespace. Defaults to `'mastra-response-cache'`. Set this to the owning agent's id when you want cache entries scoped per-agent.",
+    isOptional: true,
+    defaultValue: "'mastra-response-cache'",
+  },
+]}
+/>
+
+## Static helpers
+
+`ResponseCache` exposes two static helpers for setting per-call overrides on a `RequestContext`. The helpers keep the underlying context key a private implementation detail — prefer them over reading/writing the raw key.
+
+### `ResponseCache.context(options)`
+
+Build a fresh `RequestContext` preloaded with per-call response cache overrides.
+
+```typescript
+await agent.stream('hello', {
+  requestContext: ResponseCache.context({ key: 'custom', bust: true }),
+})
+```
+
+### `ResponseCache.applyContext(requestContext, options)`
+
+Merge per-call response cache overrides into an existing `RequestContext`. Returns the same context for chaining.
+
+```typescript
+const ctx = new RequestContext()
+ctx.set('caller-meta', { userId: 'u-123' })
+ResponseCache.applyContext(ctx, { bust: true })
+await agent.stream('hello', { requestContext: ctx })
+```
+
+## ResponseCacheContextOptions
+
+The shape passed to `ResponseCache.context()` / `ResponseCache.applyContext()`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'key',
+    type: 'string | (inputs: ResponseCacheKeyInputs) => string | Promise<string>',
+    description: 'Overrides the auto-derived cache key for this request only.',
+    isOptional: true,
+  },
+  {
+    name: 'scope',
+    type: 'string | null',
+    description: 'Overrides the tenant scope for this request only. `null` opts out of scoping.',
+    isOptional: true,
+  },
+  {
+    name: 'bust',
+    type: 'boolean',
+    description: 'Skip the cache read but still write on completion.',
+    isOptional: true,
+  },
+]}
+/>
+
+`cache`, `ttl`, and `agentId` are intentionally not overridable per call — they are instance-level concerns that should not vary per request.
+
+## ResponseCacheKeyInputs
+
+The argument passed to a `key` function (constructor or per-call). All fields contribute to the deterministic hash by default.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'Logical processor id used to namespace the cache key.',
+    isOptional: false,
+  },
+  {
+    name: 'scope',
+    type: 'string | null | undefined',
+    description: 'Resolved scope for this request, or `null` when scoping is disabled.',
+    isOptional: true,
+  },
+  {
+    name: 'model',
+    type: '{ provider?: string; modelId?: string; specVersion?: string }',
+    description: 'Provider/model identity. Different models produce different responses.',
+    isOptional: false,
+  },
+  {
+    name: 'prompt',
+    type: 'LanguageModelV2Prompt',
+    description:
+      'The exact prompt the provider would receive, post memory load and post any prompt-modifying input processors.',
+    isOptional: false,
+  },
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description: '0-indexed step number within the agentic loop. Greater than zero for tool steps.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Helper exports
+
+- `buildResponseCacheKey(inputs)` — the deterministic hash used by default. Re-export it to override individual fields while preserving the rest of the standard key shape.
+- `DEFAULT_RESPONSE_CACHE_TTL_SECONDS` — the default `ttl` (`300`).
+- `RESPONSE_CACHE_CONTEXT_KEY` — the `RequestContext` key the static helpers write to. Exposed for advanced cases (e.g. clearing the override mid-pipeline); prefer the helpers.
+
+## Related
+
+- [Response caching](/docs/agents/response-caching)
+- [Processors](/docs/agents/processors)
+- [Processor interface](/reference/processors/processor-interface)

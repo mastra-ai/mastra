@@ -6,6 +6,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
@@ -18,7 +19,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }
-  state.taskWriteInsertIndex = -1;
+  state.taskToolInsertIndex = -1;
 
   ctx.updateStatusLine();
   state.ui.requestRender();

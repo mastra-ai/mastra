@@ -6,7 +6,7 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
@@ -131,6 +131,45 @@ export class BraintrustExporter extends TrackingExporter<
     } catch (err) {
       this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err });
       this.setDisabled('Failed to initialize Braintrust logger');
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (this.isDisabled) return;
+
+    const { score } = event;
+    const rowId = score.spanId ?? score.traceId;
+    if (!rowId) {
+      this.logger.debug('Braintrust exporter: skipping score with no spanId or traceId', {
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    const logger = this.#useProvidedLogger ? this.#providedLogger : await this.getLocalLogger();
+    if (!logger) return;
+
+    const name = score.scorerName ?? score.scorerId;
+
+    try {
+      logger.logFeedback({
+        id: rowId,
+        scores: { [name]: score.score },
+        ...(score.reason ? { comment: score.reason } : {}),
+        metadata: {
+          scorerId: score.scorerId,
+          ...(score.scoreSource ? { scoreSource: score.scoreSource } : {}),
+          ...(score.metadata ?? {}),
+        },
+        source: 'external',
+      });
+    } catch (err) {
+      this.logger.error('Braintrust exporter: Failed to submit score', {
+        error: err,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
     }
   }
 
@@ -477,6 +516,12 @@ export class BraintrustExporter extends TrackingExporter<
         payload.metadata.provider = modelAttr.provider;
       }
 
+      // Prefer resolved model ID (e.g. "claude-sonnet-4-5-20250929") over
+      // gateway aliases (e.g. "claude-sonnet-4.5") for accurate cost estimation
+      if (modelAttr.responseModel !== undefined) {
+        payload.metadata.model = modelAttr.responseModel;
+      }
+
       // Usage/token info goes to metrics
       payload.metrics = formatUsageMetrics(modelAttr.usage);
 
@@ -493,7 +538,13 @@ export class BraintrustExporter extends TrackingExporter<
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
+      const otherAttributes = omitKeys(attributes, [
+        'model',
+        'responseModel',
+        'usage',
+        'parameters',
+        'completionStartTime',
+      ]);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

@@ -41,6 +41,41 @@ describe('renderTemplate', () => {
     });
   });
 
+  describe('array and object serialization', () => {
+    it('should JSON-stringify an array of objects', () => {
+      const products = [
+        { productKey: 'royal-canin', variant: 'rcv31115' },
+        { productKey: 'zeal-treats', variant: 'dtz0110' },
+      ];
+      const result = renderTemplate('Products: {{products}}', { products });
+      expect(result).toBe(`Products: ${JSON.stringify(products)}`);
+    });
+
+    it('should JSON-stringify a plain object', () => {
+      const config = { theme: 'dark', lang: 'en' };
+      const result = renderTemplate('Config: {{config}}', { config });
+      expect(result).toBe(`Config: ${JSON.stringify(config)}`);
+    });
+
+    it('should JSON-stringify a simple array', () => {
+      const tags = ['urgent', 'bug', 'frontend'];
+      const result = renderTemplate('Tags: {{tags}}', { tags });
+      expect(result).toBe(`Tags: ${JSON.stringify(tags)}`);
+    });
+
+    it('should JSON-stringify a nested object via dot-path', () => {
+      const context = { user: { preferences: { notifications: true, theme: 'dark' } } };
+      const result = renderTemplate('Prefs: {{user.preferences}}', context);
+      expect(result).toBe(`Prefs: ${JSON.stringify(context.user.preferences)}`);
+    });
+
+    it('should JSON-stringify a nested array via dot-path', () => {
+      const context = { cart: { items: [{ id: 1 }, { id: 2 }] } };
+      const result = renderTemplate('Items: {{cart.items}}', context);
+      expect(result).toBe(`Items: ${JSON.stringify(context.cart.items)}`);
+    });
+  });
+
   describe('nested path resolution', () => {
     it('should resolve a nested path', () => {
       const context = { user: { name: 'Alice' } };

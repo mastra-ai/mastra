@@ -4,7 +4,6 @@ import './index.css';
 export * from './ds/components/Threads';
 
 // DS Components - Existing
-export * from './ds/components/Alert';
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Breadcrumb/index';
@@ -26,6 +25,7 @@ export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
+export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
 export * from './ds/components/Dialog';
@@ -33,7 +33,6 @@ export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
-export * from './ds/components/IconButton';
 export * from './ds/components/Input';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';
@@ -51,6 +50,8 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/BrandLoader';
 export * from './ds/components/Switch';
+export * from './ds/components/ThemeProvider';
+export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
 
@@ -61,17 +62,16 @@ export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
-export * from './ds/components/CombinedButtons';
 export * from './ds/components/DateTimePicker';
 export * from './ds/components/EntryList';
-export * from './ds/components/FormFields';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
-export * from './ds/components/Notification';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
+export * from './ds/components/SectionCard';
 export * from './ds/components/SelectElement';
+export * from './ds/components/SettingsRow';
 export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
@@ -143,7 +143,7 @@ export * from './lib/file';
 export * from './lib/template';
 
 // Store
-export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store/playground-store';
+export { usePlaygroundStore } from './store/playground-store';
 
 // Domains
 export * from './domains/metrics';

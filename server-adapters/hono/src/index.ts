@@ -7,6 +7,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -135,6 +136,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => c.req.header(name),
+      });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
@@ -286,6 +291,15 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        response.header(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
@@ -383,7 +397,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       ...middlewares,
       async (c: Context) => {
         // Check route-level authentication/authorization
-        const authError = await this.checkRouteAuth(route, {
+        const authResult = await this.checkRouteAuth(route, {
           path: c.req.path,
           method: c.req.method,
           getHeader: name => c.req.header(name),
@@ -393,8 +407,18 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           buildAuthorizeContext: () => c,
         });
 
-        if (authError) {
-          return c.json({ error: authError.error }, authError.status as any);
+        if (authResult) {
+          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+          if (authResult.headers) {
+            for (const [key, value] of Object.entries(authResult.headers)) {
+              c.header(key, value as string);
+            }
+          }
+
+          // If this is an auth error (not just a success-with-headers), return error response
+          if (authResult.error) {
+            return c.json({ error: authResult.error }, authResult.status as any);
+          }
         }
 
         const params = await this.getParams(route, c.req);
@@ -509,6 +533,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, route, c.get('requestContext'), {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+        }
+
         try {
           const result = await route.handler(handlerParams);
           return this.sendResponse(route, c, result, prefix);
@@ -570,6 +604,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         responseType: 'json',
         handler: async () => {},
         requiresAuth: route.requiresAuth,
+        requiresPermission: route.requiresPermission,
+        fga: route.fga,
       };
 
       const routeHandler: MiddlewareHandler = async (c: Context) => {
@@ -585,7 +621,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         });
 
         if (authError) {
-          return c.json({ error: authError.error }, authError.status as any);
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              c.header(key, value as string);
+            }
+          }
+          if (authError.error) {
+            return c.json({ error: authError.error }, authError.status as any);
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;
@@ -601,6 +644,37 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               );
             }
           }
+        }
+
+        // Check FGA authorization (EE feature)
+        let bodyParams: Record<string, unknown> = {};
+        const contentType = c.req.header('content-type');
+        if (contentType?.includes('application/json')) {
+          try {
+            const body = (await c.req.raw.clone().json()) as unknown;
+            if (body && typeof body === 'object' && !Array.isArray(body)) {
+              bodyParams = body as Record<string, unknown>;
+            }
+          } catch {
+            bodyParams = {};
+          }
+        } else if (
+          contentType?.includes('application/x-www-form-urlencoded') ||
+          contentType?.includes('multipart/form-data')
+        ) {
+          try {
+            bodyParams = Object.fromEntries(await c.req.raw.clone().formData());
+          } catch {
+            bodyParams = {};
+          }
+        }
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
+          ...c.req.param(),
+          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+          ...bodyParams,
+        });
+        if (fgaError) {
+          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
         }
 
         const reqHeaders: Record<string, string | string[] | undefined> = {};

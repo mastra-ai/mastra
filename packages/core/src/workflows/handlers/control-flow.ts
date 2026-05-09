@@ -601,13 +601,32 @@ export async function executeLoop(
   let isTrue = true;
   const prevIterationCount = stepResults[step.id]?.metadata?.iterationCount;
   let iteration = prevIterationCount ? prevIterationCount - 1 : 0;
-  const prevPayload = stepResults[step.id]?.payload;
-  let result = { status: 'success', output: prevPayload ?? prevOutput } as unknown as StepResult<any, any, any, any>;
+  const prevStepResult = stepResults[step.id];
+  const loopInput =
+    prevStepResult && Object.prototype.hasOwnProperty.call(prevStepResult, 'payload')
+      ? prevStepResult.payload
+      : prevOutput;
+  let result = { status: 'success', output: loopInput } as unknown as StepResult<any, any, any, any>;
   let currentResume = resume;
   let currentRestart = restart;
   let currentTimeTravel = timeTravel;
 
   do {
+    // Honor cancellation between iterations so long-running loops (e.g. dountil
+    // with delays inside the step) terminate when the run is cancelled.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration,
+          },
+        },
+      });
+      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+    }
+
     const stepExecResult = await engine.executeStep({
       workflowId,
       runId,
@@ -655,6 +674,22 @@ export async function executeLoop(
         },
       });
       return result;
+    }
+
+    // If the step finished but the run was cancelled while it was running
+    // (e.g. user step ignored abortSignal), surface cancellation now instead
+    // of evaluating the loop condition and starting another iteration.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration + 1,
+          },
+        },
+      });
+      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
     }
 
     const evalSpan = await engine.createChildSpan({
@@ -720,6 +755,23 @@ export async function executeLoop(
     });
 
     iteration++;
+
+    // Honor cancellation triggered during condition evaluation (the condition
+    // context exposes `abort()`, and the run can be cancelled externally while
+    // the condition is awaiting). Without this check a condition that returns
+    // a terminal value after aborting would let the loop exit as 'success'.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration,
+          },
+        },
+      });
+      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+    }
   } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
   await engine.endChildSpan({
@@ -856,6 +908,24 @@ export async function executeForeach(
   let completedCount = 0;
 
   for (let i = 0; i < prevOutput.length; i += concurrency) {
+    // Honor cancellation between concurrency chunks so cancelling a long
+    // foreach (large list / slow steps) terminates without dispatching more work.
+    if (abortController?.signal?.aborted) {
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          output: results,
+        },
+      });
+      return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
+        any,
+        any,
+        any,
+        any
+      >;
+    }
+
     const items = prevOutput.slice(i, i + concurrency);
     const itemsResults = await Promise.all(
       items.map(async (item: any, j: number) => {
@@ -1050,6 +1120,26 @@ export async function executeForeach(
         },
       } as StepSuspended<any, any, any>;
     }
+  }
+
+  // Honor cancellation that landed during the final concurrency chunk. Without
+  // this check, a foreach whose steps ignore abortSignal would still emit a
+  // 'success' workflow-step-result and persist a successful step result, even
+  // though the run was cancelled.
+  if (abortController?.signal?.aborted) {
+    await engine.endChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
+      endOptions: {
+        output: results,
+      },
+    });
+    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
+      any,
+      any,
+      any,
+      any
+    >;
   }
 
   await pubsub.publish(`workflow.events.v2.${runId}`, {

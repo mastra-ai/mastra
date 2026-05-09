@@ -1,5 +1,6 @@
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MastraBase } from '../../base';
+import { attachModelStreamTransport, readModelStreamTransport } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
 /**
@@ -59,10 +60,12 @@ export abstract class MastraModelInput extends MastraBase {
   initialize({ runId, createStream, onResult }: { createStream: CreateStream; runId: string; onResult: OnResult }) {
     const self = this;
 
-    const stream = new ReadableStream<ChunkType>({
+    let outputStream: ReadableStream<ChunkType>;
+    outputStream = new ReadableStream<ChunkType>({
       async start(controller) {
         try {
           const stream = await createStream();
+          attachModelStreamTransport(outputStream, readModelStreamTransport(stream));
 
           onResult({
             warnings: stream.warnings,
@@ -83,6 +86,6 @@ export abstract class MastraModelInput extends MastraBase {
       },
     });
 
-    return stream;
+    return outputStream;
   }
 }

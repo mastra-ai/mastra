@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "1.2.1",
+  "version": "1.2.2-alpha.1",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose ps | grep mssql && break || sleep 1; done) && (for i in $(seq 1 30); do docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q mssql) | grep healthy && break || sleep 2; done)",
+    "pretest": "docker compose up -d --wait",
     "test": "vitest run",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",

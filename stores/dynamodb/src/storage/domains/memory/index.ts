@@ -129,12 +129,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }) as StorageThreadType[];
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    this.logger.debug('Getting thread by ID', { threadId });
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
+    this.logger.debug('Getting thread by ID', { threadId, resourceId });
     try {
       const result = await this.service.entities.thread.get({ entity: 'thread', id: threadId }).go();
 
-      if (!result.data) {
+      if (!result.data || (resourceId !== undefined && result.data.resourceId !== resourceId)) {
         return null;
       }
 
@@ -170,7 +176,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       entity: 'thread',
       id: thread.id,
       resourceId: thread.resourceId,
-      title: thread.title || `Thread ${thread.id}`,
+      title: thread.title ?? `Thread ${thread.id}`,
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,

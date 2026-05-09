@@ -9,6 +9,7 @@ import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
 // Heartbeat Handlers
@@ -114,6 +115,23 @@ export interface HarnessSubagent {
    * tools are visible.
    */
   allowedWorkspaceTools?: string[];
+
+  /**
+   * Default "forked" mode for this subagent type. When `true`, invocations
+   * inherit the parent agent's conversation context: the parent thread is
+   * cloned and the subagent runs on the fork with the parent agent's
+   * instructions and tools, preserving prompt-cache prefix.
+   *
+   * The parent's `instructions`, `tools`, `allowedHarnessTools`,
+   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
+   * are ignored when a run is forked — the parent agent is used as-is.
+   *
+   * Callers can override per-invocation by passing `forked` in the tool
+   * input. Forked subagents require memory to be configured on the Harness.
+   *
+   * @default false
+   */
+  forked?: boolean;
 }
 
 /**
@@ -127,7 +145,14 @@ export type HarnessStateSchema<T> = T;
 /**
  * Identifiers for the built-in harness tools that can be selectively disabled.
  */
-export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
+export type BuiltinToolId =
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
@@ -236,7 +261,8 @@ export interface HarnessConfig<TState = {}> {
   /**
    * Built-in tool IDs to disable.
    * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
-   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
+   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_update',
+   * 'task_complete', 'task_check', 'subagent'.
    */
   disableBuiltinTools?: BuiltinToolId[];
 
@@ -406,6 +432,21 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  raw?: unknown;
+}
+
+/** Creates a zero-initialized TokenUsage object. */
+export function createEmptyTokenUsage(): TokenUsage {
+  return {
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  };
 }
 
 // =============================================================================
@@ -482,6 +523,7 @@ export interface ActiveSubagentState {
   agentType: string;
   task: string;
   modelId?: string;
+  forked?: boolean;
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
@@ -601,19 +643,11 @@ export interface HarnessDisplayState {
   modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
 
   // ── Tasks ────────────────────────────────────────────────────────────
-  /** Current task list (from task_write tool) */
-  tasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  /** Current task list (from task tools) */
+  tasks: TaskItemSnapshot[];
 
   /** Previous task list snapshot (for diff detection) */
-  previousTasks: Array<{
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
+  previousTasks: TaskItemSnapshot[];
 }
 
 /**
@@ -623,7 +657,7 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
-    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
@@ -820,7 +854,7 @@ export type HarnessEvent =
       plan: string;
     }
   | { type: 'plan_approved' }
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
+  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
       type: 'subagent_tool_start';
@@ -848,11 +882,7 @@ export type HarnessEvent =
   | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
   | {
       type: 'task_updated';
-      tasks: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        activeForm: string;
-      }>;
+      tasks: TaskItemSnapshot[];
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
@@ -860,6 +890,27 @@ export type HarnessEvent =
  * Listener function for harness events.
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
+
+/**
+ * Listener function for coalesced harness display state snapshots.
+ */
+export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
+
+export interface HarnessDisplayStateSubscriptionOptions {
+  /**
+   * Minimum quiet window before non-critical display state callbacks.
+   *
+   * @default 250
+   */
+  windowMs?: number;
+
+  /**
+   * Maximum time a pending display state snapshot may wait while updates continue.
+   *
+   * @default 500
+   */
+  maxWaitMs?: number;
+}
 
 // =============================================================================
 // Messages
@@ -892,6 +943,8 @@ export type HarnessMessageContent =
       gapText?: string;
       gapMs?: number;
       timestamp?: string;
+      goalMaxTurns?: number;
+      judgeModelId?: string;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
@@ -938,6 +991,21 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Update harness state */
   setState: (updates: Partial<TState>) => Promise<void>;
+
+  /** Update harness state from the latest state snapshot in a serialized transaction */
+  updateState?: <TResult>(
+    updater: (state: Readonly<TState>) =>
+      | {
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }
+      | Promise<{
+          updates?: Partial<TState>;
+          events?: HarnessEvent[];
+          result: TResult;
+        }>,
+  ) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;

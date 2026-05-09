@@ -13,36 +13,22 @@ export interface TokenUsageByAgentRow {
 
 export function useTokenUsageByAgentMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { filters, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'token-usage-by-agent', datePreset, customRange],
+    queryKey: ['metrics', 'token-usage-by-agent', filterKey],
     queryFn: async (): Promise<TokenUsageByAgentRow[]> => {
+      const breakdownBase = {
+        groupBy: ['entityName'],
+        aggregation: 'sum' as const,
+        orderDirection: 'DESC' as const,
+        filters,
+      };
       const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all([
-        client.getMetricBreakdown({
-          name: ['mastra_model_total_input_tokens'],
-          groupBy: ['entityName'],
-          aggregation: 'sum',
-          filters: { timestamp },
-        }),
-        client.getMetricBreakdown({
-          name: ['mastra_model_total_output_tokens'],
-          groupBy: ['entityName'],
-          aggregation: 'sum',
-          filters: { timestamp },
-        }),
-        client.getMetricBreakdown({
-          name: ['mastra_model_input_cache_read_tokens'],
-          groupBy: ['entityName'],
-          aggregation: 'sum',
-          filters: { timestamp },
-        }),
-        client.getMetricBreakdown({
-          name: ['mastra_model_input_cache_write_tokens'],
-          groupBy: ['entityName'],
-          aggregation: 'sum',
-          filters: { timestamp },
-        }),
+        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_input_tokens'] }),
+        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_output_tokens'] }),
+        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_read_tokens'] }),
+        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_write_tokens'] }),
       ]);
 
       type AgentEntry = { input: number; output: number; cost: number | null; costUnit: string | null };

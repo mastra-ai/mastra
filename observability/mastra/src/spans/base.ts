@@ -1,3 +1,4 @@
+import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type {
   Span,
   SpanTypeMap,
@@ -14,10 +15,10 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  TracingPolicy,
   CorrelationContext,
 } from '@mastra/core/observability';
 
-import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
@@ -58,6 +59,7 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
     // Model-related spans
     case SpanType.MODEL_GENERATION:
     case SpanType.MODEL_STEP:
+    case SpanType.MODEL_INFERENCE:
     case SpanType.MODEL_CHUNK:
       return (flags & InternalSpans.MODEL) !== 0;
 
@@ -120,6 +122,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public endTime?: Date;
   public isEvent: boolean;
   public isInternal: boolean;
+  public tracingPolicy?: TracingPolicy;
   public observabilityInstance: ObservabilityInstance;
   public input?: any;
   public output?: any;
@@ -207,6 +210,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
+    this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
@@ -360,7 +364,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       sessionId: getMetadataString('sessionId'),
       threadId: getMetadataString('threadId'),
       requestId: getMetadataString('requestId'),
-      environment: getMetadataString('environment'),
+      environment: getMetadataString('environment') ?? this.observabilityInstance.getMastraEnvironment?.(),
       source: getMetadataString('source'),
       serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
       experimentId: getMetadataString('experimentId'),
@@ -411,7 +415,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContext) {
-      return bridge.executeInContext(this.id, fn);
+      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      return bridge.executeInContext(bridgeContextSpan?.id ?? this.id, fn);
     }
 
     return fn();
@@ -425,7 +430,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContextSync) {
-      return bridge.executeInContextSync(this.id, fn);
+      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      return bridge.executeInContextSync(bridgeContextSpan?.id ?? this.id, fn);
     }
 
     return fn();
