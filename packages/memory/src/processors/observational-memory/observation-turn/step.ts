@@ -117,12 +117,14 @@ export class ObservationStep {
         getLatestStepParts(getMessageListPartsForToolScan(msg) as MastraDBMessage['content']['parts']),
       ),
     ];
-    const hasIncompleteToolCalls = latestStepParts.some(
-      part =>
-        part?.type === 'tool-invocation' &&
-        ((part as { toolInvocation?: { state?: string } }).toolInvocation?.state === 'call' ||
-          (part as { toolInvocation?: { state?: string } }).toolInvocation?.state === 'partial-call'),
-    );
+    const hasIncompleteToolCalls = latestStepParts.some(part => {
+      const type = part?.type;
+      if (type === 'tool-invocation') {
+        const state = (part as { toolInvocation?: { state?: string } }).toolInvocation?.state;
+        return state === 'call' || state === 'partial-call';
+      }
+      return type === 'tool-call';
+    });
     omDebug(
       `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
     );

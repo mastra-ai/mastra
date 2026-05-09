@@ -26,15 +26,25 @@ function accumulateToolInvocationPart(
   withCallOrPartial: Set<string>,
   withResultLike: Set<string>,
 ): void {
-  if (part?.type !== 'tool-invocation') return;
+  const type = part?.type;
+  if (type !== 'tool-invocation' && type !== 'tool-call' && type !== 'tool-result') return;
+
   const toolCallId = part.toolInvocation?.toolCallId ?? part.toolCallId;
   if (!toolCallId) return;
-  const state = part.toolInvocation?.state;
-  if (state === 'call' || state === 'partial-call') {
-    withCallOrPartial.add(toolCallId);
+
+  if (type === 'tool-invocation') {
+    const state = part.toolInvocation?.state;
+    if (state === 'call' || state === 'partial-call') {
+      withCallOrPartial.add(toolCallId);
+    } else if (state && TOOL_RESULT_LIKE_STATES.has(state)) {
+      withResultLike.add(toolCallId);
+    }
     return;
   }
-  if (state && TOOL_RESULT_LIKE_STATES.has(state)) {
+
+  if (type === 'tool-call') {
+    withCallOrPartial.add(toolCallId);
+  } else if (type === 'tool-result') {
     withResultLike.add(toolCallId);
   }
 }
@@ -63,10 +73,16 @@ function messageHasToolCallForId(msg: MastraDBMessage, toolCallId: string): bool
   const parts = getMessageListPartsForToolScan(msg);
   for (const raw of parts) {
     const part = raw as ToolInvocationPart;
-    if (part?.type !== 'tool-invocation') continue;
-    const id = part.toolInvocation?.toolCallId ?? part.toolCallId;
-    const state = part.toolInvocation?.state;
-    if (id === toolCallId && (state === 'call' || state === 'partial-call')) return true;
+    const type = part?.type;
+    const id = part?.toolInvocation?.toolCallId ?? part?.toolCallId;
+    if (id !== toolCallId) continue;
+
+    if (type === 'tool-invocation') {
+      const state = part.toolInvocation?.state;
+      if (state === 'call' || state === 'partial-call') return true;
+    } else if (type === 'tool-call') {
+      return true;
+    }
   }
   return false;
 }
@@ -75,10 +91,16 @@ function messageHasToolResultLikeForId(msg: MastraDBMessage, toolCallId: string)
   const parts = getMessageListPartsForToolScan(msg);
   for (const raw of parts) {
     const part = raw as ToolInvocationPart;
-    if (part?.type !== 'tool-invocation') continue;
-    const id = part.toolInvocation?.toolCallId ?? part.toolCallId;
-    const state = part.toolInvocation?.state;
-    if (id === toolCallId && state && TOOL_RESULT_LIKE_STATES.has(state)) return true;
+    const type = part?.type;
+    const id = part?.toolInvocation?.toolCallId ?? part?.toolCallId;
+    if (id !== toolCallId) continue;
+
+    if (type === 'tool-invocation') {
+      const state = part.toolInvocation?.state;
+      if (state && TOOL_RESULT_LIKE_STATES.has(state)) return true;
+    } else if (type === 'tool-result') {
+      return true;
+    }
   }
   return false;
 }
