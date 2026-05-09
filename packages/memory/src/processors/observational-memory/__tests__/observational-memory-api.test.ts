@@ -186,6 +186,18 @@ describe('getStatus()', () => {
     expect(status.canActivate).toBe(false);
   });
 
+  it('should use a pre-fetched record when provided', async () => {
+    await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+    const record = await om.getOrCreateRecord(threadId);
+    const getOrCreateRecordSpy = vi.spyOn(om, 'getOrCreateRecord');
+
+    const status = await om.getStatus({ threadId, record });
+
+    expect(getOrCreateRecordSpy).not.toHaveBeenCalled();
+    expect(status.record).toBe(record);
+    expect(status.shouldObserve).toBe(true);
+  });
+
   it('should report shouldObserve=true when messages exceed threshold', async () => {
     await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
 

@@ -126,6 +126,7 @@ export class ObservationStep {
       threadId,
       resourceId,
       messages: messageList.get.all.db(),
+      record: this.turn.record,
     });
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
@@ -237,11 +238,15 @@ export class ObservationStep {
         }
       }
 
-      // Re-fetch status after observation/cleanup for the snapshot
+      // Re-check status using the latest record after any operation that may mutate it.
+      if (buffered) {
+        await this.turn.refreshRecord();
+      }
       statusSnapshot = await om.getStatus({
         threadId,
         resourceId,
         messages: messageList.get.all.db(),
+        record: this.turn.record,
       });
     }
 
@@ -308,11 +313,13 @@ export class ObservationStep {
     // Wait for any in-flight buffering to settle
     await om.waitForBuffering(threadId, resourceId);
 
-    // Re-check status with fresh state
+    // Re-check status with fresh state after any in-flight buffering settles.
+    await this.turn.refreshRecord();
     const freshStatus = await om.getStatus({
       threadId,
       resourceId,
       messages: messageList.get.all.db(),
+      record: this.turn.record,
     });
 
     if (!freshStatus.shouldObserve) {

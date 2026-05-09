@@ -2645,7 +2645,16 @@ ${formattedMessages}
    * }
    * ```
    */
-  async getStatus(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+  async getStatus(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    /**
+     * @internal Pre-fetched OM record. If provided, skips the initial getOrCreateRecord
+     * call and uses this instead. Used by ObservationTurn to dedupe per-step lookups.
+     */
+    record?: ObservationalMemoryRecord;
+  }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
@@ -2662,7 +2671,7 @@ ${formattedMessages}
     scope: 'resource' | 'thread';
   }> {
     const { threadId, resourceId } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
     // Use provided messages or load from storage
