@@ -395,72 +395,140 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
 // Resume — rejection cases
 // ---------------------------------------------------------------------------
 
-describe('Session — respond* rejection paths', () => {
-  it('respondToolApproval throws HarnessValidationError when nothing is pending', async () => {
+// One descriptor per responder so the four rejection paths can be
+// exercised uniformly by every public entry point.
+type Kind = 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+
+interface Responder {
+  /** Kind that, when pending, this responder is the *correct* one to call. */
+  kind: Kind;
+  /** Suspend chunk that produces a pendingResume of this kind. */
+  enqueueSuspend: (agent: FakeAgent) => void;
+  /** Call the public method on Session with kind-shaped resumeData. */
+  call: (s: any) => Promise<unknown>;
+  label: string;
+}
+
+const responders: Responder[] = [
+  {
+    kind: 'tool-approval',
+    label: 'respondToolApproval',
+    enqueueSuspend: agent =>
+      agent.enqueueRun({
+        finishReason: 'suspended',
+        runId: 'run-A',
+        suspendPayload: { toolCallId: 'tc', toolName: 'shell', args: {} },
+      }),
+    call: s => s.respondToolApproval({ approved: true }),
+  },
+  {
+    kind: 'tool-suspension',
+    label: 'respondToolSuspension',
+    enqueueSuspend: agent =>
+      agent.enqueueRun({
+        finishReason: 'suspended',
+        runId: 'run-S',
+        suspendPayload: {
+          toolCallId: 'tc',
+          toolName: 'long',
+          args: {},
+          suspendPayload: { step: 'A' },
+        },
+      }),
+    call: s => s.respondToolSuspension({ resumeData: { ok: true } }),
+  },
+  {
+    kind: 'question',
+    label: 'respondToolQuestion',
+    enqueueSuspend: agent =>
+      agent.enqueueRun({
+        finishReason: 'suspended',
+        runId: 'run-Q',
+        suspendPayload: { toolCallId: 'tc', toolName: 'ask_user', args: { question: 'pick' } },
+      }),
+    call: s => s.respondToolQuestion({ answer: 'red' }),
+  },
+  {
+    kind: 'plan-approval',
+    label: 'respondPlanApproval',
+    enqueueSuspend: agent =>
+      agent.enqueueRun({
+        finishReason: 'suspended',
+        runId: 'run-P',
+        suspendPayload: { toolCallId: 'tc', toolName: 'submit_plan', args: { title: 't', plan: 'p' } },
+      }),
+    call: s => s.respondPlanApproval({ approved: true }),
+  },
+];
+
+describe('Session — respond* rejection paths (all responders)', () => {
+  it.each(responders)('$label rejects when nothing is pending', async ({ call }) => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
 
-    await expect(session.respondToolApproval({ approved: true })).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(call(session)).rejects.toBeInstanceOf(HarnessValidationError);
   });
 
-  it('rejects when pending kind does not match the called responder', async () => {
+  // Build every (pending-kind, responder) pair where pending != responder.kind
+  // so wrong-kind is exercised on all four responders.
+  const wrongKindMatrix = responders.flatMap(responder =>
+    responders.filter(p => p.kind !== responder.kind).map(pending => ({ responder, pending })),
+  );
+
+  it.each(wrongKindMatrix)(
+    '$responder.label rejects when pending kind is "$pending.kind"',
+    async ({ responder, pending }) => {
+      const { harness, agent } = setup();
+      pending.enqueueSuspend(agent);
+      const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+      await session.message({ content: 'go' });
+
+      await expect(responder.call(session)).rejects.toBeInstanceOf(HarnessValidationError);
+      // Pending record is left untouched so the correct responder can still resolve it.
+      expect(session.getRecord().pendingResume!.kind).toBe(pending.kind);
+      expect(agent.resumeCalls).toHaveLength(0);
+    },
+  );
+
+  it.each(responders)(
+    '$label rejects when pendingResume.resumedAt is already set (in-flight)',
+    async ({ enqueueSuspend, call }) => {
+      const { harness, agent, storage } = setup();
+      enqueueSuspend(agent);
+      const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+      await session.message({ content: 'go' });
+
+      // Simulate a crash mid-resume by poking resumedAt directly into storage.
+      const rec = (await storage.loadSession({ sessionId: session.id }))!;
+      await storage.saveSession(
+        {
+          ...rec,
+          pendingResume: { ...rec.pendingResume!, resumedAt: Date.now() },
+        },
+        { ownerId: session._internalOwnerId, ifVersion: rec.version },
+      );
+      // Re-hydrate so the next call sees the persisted marker.
+      await harness.shutdown();
+      const harness2 = new Harness({
+        agents: { default: agent } as any,
+        modes: [{ id: 'default', agentId: 'default' }],
+        defaultModeId: 'default',
+        sessions: { storage },
+      });
+      const session2 = await harness2.session({ sessionId: session.id, resourceId: 'u' });
+
+      await expect(call(session2)).rejects.toBeInstanceOf(HarnessValidationError);
+      expect(agent.resumeCalls).toHaveLength(0);
+    },
+  );
+
+  it.each(responders)('$label rejects on a closed session', async ({ enqueueSuspend, call }) => {
     const { harness, agent } = setup();
-    agent.enqueueRun({
-      finishReason: 'suspended',
-      runId: 'run-Q',
-      suspendPayload: { toolCallId: 'tc', toolName: 'ask_user', args: {} },
-    });
-    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
-    await session.message({ content: 'go' });
-
-    await expect(session.respondToolApproval({ approved: true })).rejects.toBeInstanceOf(HarnessValidationError);
-    // Untouched.
-    expect(session.getRecord().pendingResume!.kind).toBe('question');
-  });
-
-  it('rejects when pendingResume.resumedAt is already set (in-flight)', async () => {
-    const { harness, agent, storage } = setup();
-    agent.enqueueRun({
-      finishReason: 'suspended',
-      runId: 'run-1',
-      suspendPayload: { toolCallId: 'tc', toolName: 'shell', args: {} },
-    });
-    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
-    await session.message({ content: 'go' });
-
-    // Simulate a crash mid-resume by poking resumedAt directly into storage.
-    const rec = (await storage.loadSession({ sessionId: session.id }))!;
-    await storage.saveSession(
-      {
-        ...rec,
-        pendingResume: { ...rec.pendingResume!, resumedAt: Date.now() },
-      },
-      { ownerId: session._internalOwnerId, ifVersion: rec.version },
-    );
-    // Re-hydrate the in-memory cache so the next call sees the marker.
-    await harness.shutdown();
-    const harness2 = new Harness({
-      agents: { default: agent } as any,
-      modes: [{ id: 'default', agentId: 'default' }],
-      defaultModeId: 'default',
-      sessions: { storage },
-    });
-    const session2 = await harness2.session({ sessionId: session.id, resourceId: 'u' });
-
-    await expect(session2.respondToolApproval({ approved: true })).rejects.toBeInstanceOf(HarnessValidationError);
-  });
-
-  it('rejects respond* on a closed session', async () => {
-    const { harness, agent } = setup();
-    agent.enqueueRun({
-      finishReason: 'suspended',
-      runId: 'run-1',
-      suspendPayload: { toolCallId: 'tc', toolName: 'shell', args: {} },
-    });
+    enqueueSuspend(agent);
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
     await session.message({ content: 'go' });
     await session.close();
 
-    await expect(session.respondToolApproval({ approved: true })).rejects.toThrow(/closed/);
+    await expect(call(session)).rejects.toThrow(/closed/);
   });
 });
