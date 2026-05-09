@@ -65,6 +65,22 @@ export class HarnessSessionLockedError extends Error {
 }
 
 /**
+ * Caller passed an option that violates a runtime contract — e.g.
+ * `respondToolApproval` while no `tool-approval` is pending, or while a
+ * different `kind` of resume is pending. Throws synchronously before any
+ * agent or storage work happens.
+ */
+export class HarnessValidationError extends Error {
+  readonly name = 'HarnessValidationError';
+  constructor(
+    public readonly field: string,
+    public readonly reason: string,
+  ) {
+    super(`HarnessValidationError at ${field}: ${reason}`);
+  }
+}
+
+/**
  * Durable write rejected by the storage adapter — exhausted the harness's
  * one transparent retry. `cause` carries the underlying storage error.
  */

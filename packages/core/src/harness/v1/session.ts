@@ -22,10 +22,10 @@ import type { z } from 'zod';
 
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { ToolsInput } from '../../agent/types';
-import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import type { HarnessStorage, PendingResume, SessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
-import { HarnessConfigError } from './errors';
+import { HarnessConfigError, HarnessValidationError } from './errors';
 import type { Harness } from './harness';
 import type {
   AgentResult,
@@ -36,6 +36,14 @@ import type {
   MessageOptionsStream,
   MessageOptionsStructured,
 } from './types';
+
+/**
+ * Tool names that the harness translates from `tool-call-approval` /
+ * `tool-call-suspended` events into question / plan-approval `kind`s.
+ * Built-in convention from spec §7.3 (`ask_user`, `submit_plan`).
+ */
+const ASK_USER_TOOL_NAME = 'ask_user';
+const SUBMIT_PLAN_TOOL_NAME = 'submit_plan';
 
 export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
 
@@ -201,18 +209,104 @@ export class Session {
         ...baseExecOptions,
         structuredOutput: { schema: opts.output as never },
       });
-      return (result as FullOutput<unknown>).object;
+      const full = result as FullOutput<unknown>;
+      await this._maybeCaptureSuspend(full);
+      return full.object;
     }
 
-    // Streaming path: hand the live MastraModelOutput back.
+    // Streaming path: hand the live MastraModelOutput back. The caller drains
+    // the stream; we attach a best-effort capture so a suspend that surfaces
+    // mid-stream is persisted as `pendingResume` before the next `respond*`
+    // call. Errors are swallowed — the caller already owns the stream.
     if (opts.stream === true) {
       const out = await agent.stream(opts.content, baseExecOptions);
+      out
+        .getFullOutput()
+        .then(full => this._maybeCaptureSuspend(full as FullOutput<unknown>))
+        .catch(() => {});
       return out as MastraModelOutput<unknown>;
     }
 
     // Default path: stream + getFullOutput so we get a fully-resolved bundle.
     const out = await agent.stream(opts.content, baseExecOptions);
-    return await out.getFullOutput();
+    const full = await out.getFullOutput();
+    await this._maybeCaptureSuspend(full);
+    return full;
+  }
+
+  /**
+   * If the agent run finished suspended, persist a `PendingResume` pointer
+   * derived from `FullOutput.suspendPayload` + `runId`. Subsequent calls to
+   * `respondTool*` use this pointer to call `agent.resumeStream(...)`.
+   *
+   * Maps the agent's `tool-call-approval` / `tool-call-suspended` chunks to
+   * the four harness-layer kinds:
+   *   - tool name `ask_user`     → 'question'
+   *   - tool name `submit_plan`  → 'plan-approval'
+   *   - payload has `suspendPayload` → 'tool-suspension'
+   *   - else                          → 'tool-approval'
+   *
+   * No-op when the run did not suspend.
+   */
+  private async _maybeCaptureSuspend(full: FullOutput<unknown>): Promise<void> {
+    if (full.finishReason !== 'suspended') return;
+    const payload = full.suspendPayload as
+      | { toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown }
+      | undefined;
+    if (!payload || !full.runId) return;
+
+    const kind = this._classifyResumeKind(payload);
+    const pending: PendingResume = {
+      kind,
+      runId: full.runId,
+      toolCallId: payload.toolCallId,
+      toolName: payload.toolName,
+      source: 'parent',
+      requestedAt: Date.now(),
+      payload: this._buildResumePayload(kind, payload),
+    };
+
+    if (kind === 'plan-approval') {
+      const mode = this._harness._getMode(this._record.modeId);
+      if (mode.transitionsTo) pending.transitionModeId = mode.transitionsTo;
+    }
+
+    await this._flushUpdate(prev => ({ ...prev, pendingResume: pending }));
+  }
+
+  private _classifyResumeKind(payload: { toolName: string; suspendPayload?: unknown }): PendingResume['kind'] {
+    if (payload.toolName === ASK_USER_TOOL_NAME) return 'question';
+    if (payload.toolName === SUBMIT_PLAN_TOOL_NAME) return 'plan-approval';
+    if ('suspendPayload' in payload && payload.suspendPayload !== undefined) return 'tool-suspension';
+    return 'tool-approval';
+  }
+
+  private _buildResumePayload(
+    kind: PendingResume['kind'],
+    payload: { args?: unknown; suspendPayload?: unknown },
+  ): PendingResume['payload'] {
+    switch (kind) {
+      case 'tool-approval':
+        return { input: payload.args };
+      case 'tool-suspension':
+        return { input: payload.args, suspendData: payload.suspendPayload };
+      case 'question': {
+        const args = (payload.args ?? {}) as {
+          question?: string;
+          options?: { label: string; description?: string }[];
+          selectionMode?: 'single_select' | 'multi_select';
+        };
+        return {
+          question: args.question,
+          options: args.options,
+          selectionMode: args.selectionMode,
+        };
+      }
+      case 'plan-approval': {
+        const args = (payload.args ?? {}) as { title?: string; plan?: string };
+        return { title: args.title, plan: args.plan };
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -283,6 +377,118 @@ export class Session {
       goal: rec.goal,
       lastActivityAt: rec.lastActivityAt,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Suspend / resume — §4.2.
+  //
+  // When `message()` (or a queued turn) finishes with `finishReason
+  // === 'suspended'`, the harness persists a `PendingResume` record holding
+  // the agent's `runId` + `toolCallId` + UX-facing payload. Callers respond
+  // through one of four typed entry points; all funnel into `_resume(...)`,
+  // which is the single place that calls `agent.resumeStream(...)`.
+  //
+  // `pendingResume.resumedAt` is set under the lease before the agent call so
+  // a crash between "marked resumed" and "cleared pending" replays as a no-op
+  // on rehydration (idempotent at-least-once).
+  // -------------------------------------------------------------------------
+
+  /** Resume a pending tool-approval. `approved: false` rejects the call. */
+  async respondToolApproval(opts: { approved: boolean }): Promise<AgentResult> {
+    return this._resume('tool-approval', { approved: opts.approved });
+  }
+
+  /** Resume a pending tool-suspension. `resumeData` is forwarded to the tool. */
+  async respondToolSuspension(opts: { resumeData: unknown }): Promise<AgentResult> {
+    return this._resume('tool-suspension', opts.resumeData);
+  }
+
+  /** Resume a pending `ask_user` question. */
+  async respondToolQuestion(opts: { answer: unknown }): Promise<AgentResult> {
+    return this._resume('question', { answer: opts.answer });
+  }
+
+  /**
+   * Resume a pending `submit_plan` approval. On `approved: true` the harness
+   * also flips the active mode if the submitting mode declared `transitionsTo`,
+   * recording the flip via `approvedTransitionModeId` /
+   * `modeTransitionAppliedAt` for idempotent replay.
+   */
+  async respondPlanApproval(opts: { approved: boolean; feedback?: string }): Promise<AgentResult> {
+    return this._resume('plan-approval', { approved: opts.approved, feedback: opts.feedback });
+  }
+
+  private async _resume(expectedKind: PendingResume['kind'], resumeData: unknown): Promise<AgentResult> {
+    this._assertLive(`respond[${expectedKind}]`);
+
+    const pending = this._record.pendingResume;
+    if (!pending) {
+      throw new HarnessValidationError(`respond[${expectedKind}]`, 'no pending resume on this session');
+    }
+    if (pending.kind !== expectedKind) {
+      throw new HarnessValidationError(
+        `respond[${expectedKind}]`,
+        `pending resume is "${pending.kind}", not "${expectedKind}"`,
+      );
+    }
+
+    // Idempotency: a crash between "marked resumed" and "cleared pending"
+    // surfaces here on the next call. We do not replay the agent — the prior
+    // resumeStream() either landed (and cleared pending in a later flush we
+    // lost) or is being completed by a sibling caller. Either way, the safe
+    // move is to surface the suspended state to the caller and let them
+    // re-fetch via getDisplayState / listMessages.
+    if (pending.resumedAt !== undefined) {
+      throw new HarnessValidationError(
+        `respond[${expectedKind}]`,
+        'pending resume already responded; awaiting agent confirmation',
+      );
+    }
+
+    // Mark resumed under the lease BEFORE calling the agent (idempotency
+    // marker per §5.4 / §5.7). On crash here, the next caller observes
+    // resumedAt set and rejects rather than double-resuming.
+    const resumedAt = Date.now();
+    await this._flushUpdate(prev => ({
+      ...prev,
+      pendingResume: prev.pendingResume ? { ...prev.pendingResume, resumedAt } : prev.pendingResume,
+    }));
+
+    // For plan-approval, flip the active mode atomically with clearing the
+    // pending record. Done inside the same _flushUpdate below so the mode
+    // change and pending-clear land in one CAS write.
+    let modeFlipTarget: string | undefined;
+    if (expectedKind === 'plan-approval') {
+      const data = resumeData as { approved: boolean };
+      if (data.approved && pending.transitionModeId && pending.transitionModeId !== this._record.modeId) {
+        // Validate the target mode exists before we hand off to the agent.
+        this._harness._getMode(pending.transitionModeId);
+        modeFlipTarget = pending.transitionModeId;
+      }
+    }
+
+    const agent = this._harness.getAgentForMode(this._record.modeId);
+    const out = await agent.resumeStream(resumeData, {
+      runId: pending.runId,
+      toolCallId: pending.toolCallId,
+    });
+    const full = (await out.getFullOutput()) as FullOutput<unknown>;
+
+    // Clear pending + apply mode flip in a single CAS write. The mode flip
+    // and pending-clear must land together so a replay does not see
+    // "pending cleared, mode not yet flipped" or vice versa.
+    await this._flushUpdate(prev => {
+      const next: SessionRecord = { ...prev };
+      delete next.pendingResume;
+      if (modeFlipTarget) next.modeId = modeFlipTarget;
+      return next;
+    });
+
+    // The resumed run can itself suspend again (multi-step approval chains).
+    // Mirror message()'s post-run hook so the next respond* call sees the
+    // new pending record.
+    await this._maybeCaptureSuspend(full);
+    return full as AgentResult;
   }
 
   // -------------------------------------------------------------------------
