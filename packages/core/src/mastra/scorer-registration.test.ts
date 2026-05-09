@@ -238,6 +238,43 @@ describe('Scorer Registration', () => {
     expect(mastra.getScorerById('workflow-step-scorer')).toBe(workflowScorer);
   });
 
+  it('should register a shared workflow step scorer once by id', () => {
+    const workflowScorer = createTestScorer('shared-workflow-step-scorer');
+    const firstStep = createStep({
+      id: 'first-scored-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: {
+        shared: { scorer: workflowScorer },
+      },
+      execute: async ({ inputData }) => inputData,
+    });
+    const secondStep = createStep({
+      id: 'second-scored-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: {
+        shared: { scorer: workflowScorer },
+      },
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow({
+      id: 'shared-scorer-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(firstStep)
+      .then(secondStep)
+      .commit();
+
+    const mastra = new Mastra({ logger: false });
+    mastra.addWorkflow(workflow);
+
+    const allScorers = mastra.listScorers();
+    expect(Object.keys(allScorers || {})).toEqual(['shared-workflow-step-scorer']);
+    expect(mastra.getScorerById('shared-workflow-step-scorer')).toBe(workflowScorer);
+  });
+
   it('should register dynamic workflow step scorers before running them', async () => {
     const workflowScorer = createTestScorer('dynamic-workflow-step-scorer');
     const mastra = new Mastra({ logger: false });

@@ -2447,7 +2447,8 @@ export class Mastra<
    * This method allows dynamic registration of scorers after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a scorer with the same key already exists
+   * If a scorer with the same key already exists, this method leaves the existing
+   * scorer registered and returns.
    *
    * @example
    * ```typescript
