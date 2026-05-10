@@ -157,14 +157,32 @@ export interface ToolStartEvent extends HarnessEventBase {
 /**
  * Tool progress (§10.2). Long-running tools (shell, downloads, codegen)
  * publish incremental `partialResult`s between `tool_start` and `tool_end`.
- * This event type is reserved here so subscribers can pattern-match it,
- * but the harness does not emit it directly — it is published by tools
- * via `ctx.emitEvent` in M5/M6 once the built-in tool surface lands.
+ *
+ * The harness never emits this itself — tools publish it via
+ * `ctx.emitEvent({ type: 'tool_update', toolCallId, partialResult })`.
+ * `tool_update` is the one harness-owned event type explicitly whitelisted
+ * for `ctx.emitEvent` (spec §6.2), provided `toolCallId` matches an
+ * `activeTools` entry on the session and `partialResult` is JSON-
+ * serializable.
  */
 export interface ToolUpdateEvent extends HarnessEventBase {
   type: 'tool_update';
   toolCallId: string;
   partialResult: unknown;
+}
+
+/**
+ * Streaming shell output (§10.2). Tools that wrap a child process publish
+ * stdout/stderr chunks via
+ * `ctx.emitEvent({ type: 'shell_output', toolCallId, output, stream })`.
+ * Like `tool_update`, this is harness-owned but whitelisted for tool emit.
+ * `toolCallId` must match an active tool and `output` must be a string.
+ */
+export interface ShellOutputEvent extends HarnessEventBase {
+  type: 'shell_output';
+  toolCallId: string;
+  output: string;
+  stream: 'stdout' | 'stderr';
 }
 
 export interface ToolEndEvent extends HarnessEventBase {
@@ -293,6 +311,7 @@ export type HarnessEvent =
   | ToolInputEndEvent
   | ToolStartEvent
   | ToolUpdateEvent
+  | ShellOutputEvent
   | ToolEndEvent
   | AgentEndEvent
   | SuspensionRequiredEvent
@@ -472,6 +491,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_input_end',
   'tool_start',
   'tool_update',
+  'shell_output',
   'tool_end',
   'suspension_required',
   'suspension_resolved',

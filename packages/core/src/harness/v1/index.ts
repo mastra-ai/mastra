@@ -27,13 +27,14 @@ export type {
   StateChangedEvent,
   SuspensionRequiredEvent,
   SuspensionResolvedEvent,
-  TextDeltaEvent,
+  ShellOutputEvent,
   ThreadClonedEvent,
   ThreadCreatedEvent,
   ThreadDeletedEvent,
   ThreadRenamedEvent,
   ToolEndEvent,
   ToolStartEvent,
+  ToolUpdateEvent,
 } from './events';
 
 export {
@@ -43,6 +44,7 @@ export {
   HarnessSessionNotFoundError,
   HarnessStorageError,
   HarnessThreadNotFoundError,
+  HarnessToolEmitError,
 } from './errors';
 
 /**

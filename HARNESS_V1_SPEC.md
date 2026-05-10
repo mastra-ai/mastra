@@ -1785,7 +1785,8 @@ type SetStateFn<TState> = {
 
 **Events.**
 - `emitEvent(event)` forwards an event to subscribers of this session. The harness does not schema-check publisher-specific fields, but two things are validated eagerly and throw before any subscriber sees the event: (1) `type` must be dotted and must not be a reserved harness prefix (§10.3) — failure raises `HarnessValidationError`; (2) the payload must be JSON-serializable — failure raises `HarnessEventSerializationError` (`field: 'event.data'`, with the offending path). The serialization rule keeps in-process listeners and remote/SSE subscribers on the same contract — what a local listener sees is exactly what crosses the wire in §13.3, modulo transport.
-- Tools **must not** synthesize harness-owned event types: `agent_start`, `agent_end`, `message_start`, `message_update`, `message_end`, `tool_start`, `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_update`, `tool_end`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `goal_*`. Emitting one is a `HarnessValidationError`. Use a custom dotted prefix (e.g. `myorg.tool.progress`) for tool-level signals.
+- Tools **must not** synthesize harness-owned event types: `agent_start`, `agent_end`, `message_start`, `message_update`, `message_end`, `tool_start`, `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_end`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `goal_*`. Emitting one is a `HarnessValidationError`. Use a custom dotted prefix (e.g. `myorg.tool.progress`) for tool-level signals.
+- **Two harness-owned event types are explicitly whitelisted for tool emit**: `tool_update` (`{ toolCallId, partialResult }`) and `shell_output` (`{ toolCallId, output: string, stream: 'stdout' | 'stderr' }`). The harness never produces them itself, but long-running tools (shells, downloads, codegen) need a typed progress channel that subscribers can pattern-match on. When a tool calls `emitEvent({ type: 'tool_update', … })` or `emitEvent({ type: 'shell_output', … })`, the harness validates synchronously that `toolCallId` references an active tool on the session (i.e. `tool_start` has fired and `tool_end` has not). A missing or stale `toolCallId` raises `HarnessToolEmitError` and the event is dropped. `shell_output` additionally requires a string `output` and `stream: 'stdout' | 'stderr'` — shape violations raise `HarnessValidationError`. Both still go through the JSON-serialization check.
 - `registerQuestion` / `registerPlanApproval` are how `ask_user` and `submit_plan` (and any custom suspending tools you write) hand control back to the user. The harness pairs the registration with a Mastra workflow suspension — see §5.7 for the resume story.
 
 **Subagent linkage.**
@@ -2342,16 +2343,21 @@ type QueueLifecycleEvent =
 // chunk in one shot skip the streaming triplet entirely — clients must
 // tolerate either shape.
 //
-// `tool_update` is emitted by long-running tools that want to stream
-// progress (shell stdout, downloads, codegen). It carries the
-// publisher-defined `partialResult`; the harness performs the same JSON-
-// serializability check as `ctx.emitEvent` (§10.3).
+// `tool_update` and `shell_output` are the two harness-owned event types
+// explicitly whitelisted for tool emit (see §6.2). Long-running tools call
+// `ctx.emitEvent({ type: 'tool_update', toolCallId, partialResult })` to
+// stream incremental results; shell-wrapping tools call
+// `ctx.emitEvent({ type: 'shell_output', toolCallId, output, stream })` to
+// stream stdout/stderr chunks. Both require `toolCallId` to reference an
+// active tool on the session — emit between `tool_start` and `tool_end` or
+// the harness raises `HarnessToolEmitError`.
 type ToolEvent =
   | { type: 'tool_input_start'; runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end';   runId: string; signalId?: string; queuedItemId?: string; toolCallId: string }
   | { type: 'tool_start';       runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; input: unknown }
   | { type: 'tool_update';      runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; partialResult: unknown }
+  | { type: 'shell_output';     runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'tool_end';         runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; output: unknown; isError: boolean };
 
 // Subagent activity (session-scoped — emitted on the *parent* session's subscriber).

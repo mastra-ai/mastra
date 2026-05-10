@@ -31,7 +31,7 @@ import { convertStoredMessageToHarnessMessage } from '../_shared/message-convers
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import type { HarnessMessage } from '../types';
 
-import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError } from './errors';
+import { HarnessConfigError, HarnessQueueFullError, HarnessToolEmitError, HarnessValidationError } from './errors';
 import { EventEmitter, assertCustomEventType, assertJsonSerializable } from './events';
 import type { EmitInput, HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { Harness } from './harness';
@@ -259,6 +259,37 @@ export class Session {
       return this._emitter.emit({ ...event, queuedItemId: this._currentQueuedItemId } as EmitInput);
     }
     return this._emitter.emit(event);
+  }
+
+  /**
+   * Validate shape + scope of a `tool_update` / `shell_output` event emitted
+   * via `ctx.emitEvent` (§6.2). The two types are harness-owned but
+   * whitelisted for tool emit; we enforce the contract here so subscribers
+   * can rely on:
+   *   - `toolCallId` is a non-empty string and matches an active tool on
+   *     this session (between its `tool_start` and `tool_end`).
+   *   - `shell_output.output` is a string; `shell_output.stream` is
+   *     'stdout' | 'stderr'.
+   *
+   * Throws `HarnessValidationError` on shape failures and
+   * `HarnessToolEmitError` when no matching active tool exists.
+   */
+  private _validateToolProgressEvent(event: EmitInput): void {
+    const e = event as { type: string; toolCallId?: unknown; output?: unknown; stream?: unknown };
+    if (typeof e.toolCallId !== 'string' || e.toolCallId.length === 0) {
+      throw new HarnessValidationError(`event.toolCallId`, `${e.type} requires a non-empty toolCallId string`);
+    }
+    if (!this._activeTools.has(e.toolCallId)) {
+      throw new HarnessToolEmitError(this.id, e.type, e.toolCallId);
+    }
+    if (e.type === 'shell_output') {
+      if (typeof e.output !== 'string') {
+        throw new HarnessValidationError('event.output', `shell_output.output must be a string`);
+      }
+      if (e.stream !== 'stdout' && e.stream !== 'stderr') {
+        throw new HarnessValidationError('event.stream', `shell_output.stream must be "stdout" or "stderr"`);
+      }
+    }
   }
 
   /** @internal — number of registered listeners (for tests). */
@@ -1417,7 +1448,17 @@ export class Session {
       emitEvent: (event: EmitInput) => {
         // Reserved-type + JSON-serialization guard runs synchronously before
         // any subscriber observes the event (§6.2).
-        assertCustomEventType(event.type);
+        //
+        // `tool_update` and `shell_output` are the two harness-owned event
+        // types explicitly whitelisted for tool emit. The harness never
+        // emits them itself, but tools wrapping long-running operations
+        // (shells, downloads, codegen) need a typed channel for progress.
+        // We validate payload shape here so subscribers can rely on it.
+        if (event.type === 'tool_update' || event.type === 'shell_output') {
+          session._validateToolProgressEvent(event);
+        } else {
+          assertCustomEventType(event.type);
+        }
         assertJsonSerializable(event.type, session.id, event);
         session._emitTurnEvent(event);
       },

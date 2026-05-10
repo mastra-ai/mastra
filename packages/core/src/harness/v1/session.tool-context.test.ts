@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { setupHarness } from './__test-utils__/setup';
+import type { Session } from './session';
 import type { HarnessRequestContext } from './types';
 
 function getHarnessSlot(streamCalls: any[]): HarnessRequestContext {
@@ -184,6 +185,108 @@ describe('HarnessRequestContext — emitEvent', () => {
     const a: any = {};
     a.self = a;
     expect(() => slot.emitEvent({ type: 'myorg.bad', payload: a } as any)).toThrow(/not JSON-serializable/);
+  });
+});
+
+describe('HarnessRequestContext — tool-progress whitelist (tool_update / shell_output)', () => {
+  /**
+   * Run an agent turn that yields a `tool-call` chunk but no matching
+   * `tool-result`. `_activeTools` keeps the entry until the hold releases,
+   * so the slot captured via `streamCalls` can synchronously emit a
+   * `tool_update` / `shell_output` against an active tool.
+   */
+  async function runWithActiveTool(): Promise<{
+    session: Session;
+    slot: HarnessRequestContext;
+    release: () => void;
+    done: Promise<unknown>;
+  }> {
+    const { harness, agent } = setupHarness();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    let release!: () => void;
+    const hold = new Promise<void>(r => {
+      release = r;
+    });
+    agent.enqueueRun({
+      chunks: [
+        {
+          type: 'tool-call',
+          payload: { toolCallId: 'tc-1', toolName: 'sh', args: { cmd: 'ls' } },
+        },
+      ],
+      holdUntil: hold,
+    });
+    const done = session.message({ content: 'go' });
+    // Let the stream pump start so the slot exists and the tool-call chunk
+    // has flowed through _drainStreamToEvents.
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
+    const slot = getHarnessSlot(agent.streamCalls);
+    return { session, slot, release, done };
+  }
+
+  it('emits tool_update via ctx.emitEvent and delivers to subscribers', async () => {
+    const { session, slot, release, done } = await runWithActiveTool();
+    const seen: any[] = [];
+    session.subscribe(ev => {
+      if (ev.type === 'tool_update') seen.push(ev);
+    });
+    slot.emitEvent({ type: 'tool_update', toolCallId: 'tc-1', partialResult: { lines: 12 } } as any);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].toolCallId).toBe('tc-1');
+    expect(seen[0].partialResult).toEqual({ lines: 12 });
+    release();
+    await done;
+  });
+
+  it('emits shell_output via ctx.emitEvent and delivers to subscribers', async () => {
+    const { session, slot, release, done } = await runWithActiveTool();
+    const seen: any[] = [];
+    session.subscribe(ev => {
+      if (ev.type === 'shell_output') seen.push(ev);
+    });
+    slot.emitEvent({ type: 'shell_output', toolCallId: 'tc-1', output: 'hello\n', stream: 'stdout' } as any);
+    slot.emitEvent({ type: 'shell_output', toolCallId: 'tc-1', output: 'oops\n', stream: 'stderr' } as any);
+    expect(seen.map(e => e.stream)).toEqual(['stdout', 'stderr']);
+    expect(seen.map(e => e.output)).toEqual(['hello\n', 'oops\n']);
+    release();
+    await done;
+  });
+
+  it('rejects tool_update with an unknown toolCallId (no active tool)', async () => {
+    const { slot, release, done } = await runWithActiveTool();
+    expect(() =>
+      slot.emitEvent({ type: 'tool_update', toolCallId: 'tc-other', partialResult: { x: 1 } } as any),
+    ).toThrow(/tc-other/);
+    release();
+    await done;
+  });
+
+  it('rejects shell_output when output is not a string', async () => {
+    const { slot, release, done } = await runWithActiveTool();
+    expect(() =>
+      slot.emitEvent({ type: 'shell_output', toolCallId: 'tc-1', output: 123, stream: 'stdout' } as any),
+    ).toThrow(/output must be a string/);
+    release();
+    await done;
+  });
+
+  it('rejects shell_output when stream is not "stdout" | "stderr"', async () => {
+    const { slot, release, done } = await runWithActiveTool();
+    expect(() =>
+      slot.emitEvent({ type: 'shell_output', toolCallId: 'tc-1', output: 'x', stream: 'other' } as any),
+    ).toThrow(/stdout.*stderr/);
+    release();
+    await done;
+  });
+
+  it('still rejects non-JSON-serializable partialResult on tool_update', async () => {
+    const { slot, release, done } = await runWithActiveTool();
+    expect(() =>
+      slot.emitEvent({ type: 'tool_update', toolCallId: 'tc-1', partialResult: { fn: () => 1 } } as any),
+    ).toThrow(/not JSON-serializable/);
+    release();
+    await done;
   });
 });
 
