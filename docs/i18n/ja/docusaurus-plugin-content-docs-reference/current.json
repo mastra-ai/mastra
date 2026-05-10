@@ -879,9 +879,9 @@
     "message": "Arize Phoenix",
     "description": "サイドバー「referenceSidebar」内のドキュメント項目「Arize Phoenix」のラベル。ドキュメント observability/otel-tracing/providers/arize-phoenix へのリンク"
   },
-  "sidebar.referenceSidebar.doc.Keywords AI": {
-    "message": "Keywords AI",
-    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Keywords AI」のラベル。ドキュメント observability/otel-tracing/providers/keywordsai へのリンク。"
+  "sidebar.referenceSidebar.doc.Respan": {
+    "message": "Respan",
+    "description": "サイドバー「referenceSidebar」内のドキュメント項目「Respan」のラベル。ドキュメント observability/otel-tracing/providers/respan へのリンク。"
   },
   "sidebar.referenceSidebar.doc.KeywordCoverageMetric": {
     "message": "KeywordCoverageMetric",

@@ -779,8 +779,8 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "observability/otel-tracing/providers/keywordsai",
-                  label: "Keywords AI",
+                  id: "observability/otel-tracing/providers/respan",
+                  label: "Respan",
                 },
               ],
             },

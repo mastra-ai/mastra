@@ -1,0 +1,93 @@
+---
+title: "リファレンス: Respan 連携 | Mastra オブザーバビリティ ドキュメント"
+description: Mastra と Respan（LLM アプリケーション向けのオブザーバビリティ プラットフォーム）を統合するためのドキュメント。
+---
+
+<div id="respan">
+  ## Respan
+</div>
+
+[Respan](https://www.respan.ai/docs/documentation/get-started/overview)（旧 Keywords AI）は、開発者やPMが信頼性の高いAIプロダクトをより迅速に構築できるよう支援するフルスタックのLLMエンジニアリングプラットフォームです。共有ワークスペース上で、プロダクトチームはAIのパフォーマンスを構築・監視・改善できます。
+
+このチュートリアルでは、[Mastra](https://mastra.ai/) と組み合わせて Respan のトレーシングを設定し、AI搭載アプリケーションを監視・トレースする方法を紹介します。
+
+すぐに始められるよう、あらかじめ用意されたサンプルを提供しています。コードは [GitHub](https://github.com/respanai/respan-example-projects/tree/main/typescript/tracing/mastra) で確認できます。
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+これは、Mastra Weather Agent のサンプルに関するチュートリアルです。
+
+<div id="1-install-dependencies">
+  ### 1. 依存関係のインストール
+</div>
+
+```bash copy
+pnpm install
+```
+
+
+<div id="2-environment-variables">
+  ### 2. 環境変数
+</div>
+
+サンプルの環境ファイルをコピーし、API キーを追加します：
+
+```bash copy
+cp .env.local.example .env.local
+```
+
+.env.local をあなたのクレデンシャルで更新してください:
+
+```bash .env.local copy
+OPENAI_API_KEY=your-openai-api-key
+RESPAN_API_KEY=your-respan-api-key
+RESPAN_BASE_URL=https://api.respan.ai
+```
+
+
+<div id="3-setup-mastra-client-with-respan-tracing">
+  ### 3. Respan のトレーシングを使って Mastra クライアントをセットアップする
+</div>
+
+`src/mastra/index.ts` で Respan のテレメトリーを構成します：
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+
+import { Mastra } from "@mastra/core/mastra";
+import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
+
+telemetry: {
+  serviceName: "respan-mastra-example",
+  enabled: true,
+  export: {
+    type: "custom",
+    exporter: new KeywordsAIExporter({
+      apiKey: process.env.RESPAN_API_KEY,
+      baseUrl: process.env.RESPAN_BASE_URL,
+      debug: true,
+    })
+  }
+}
+```
+
+> 注: npm パッケージとエクスポータークラスは引き続き従来の `@keywordsai/exporter-vercel` / `KeywordsAIExporter` という名前を使用しています。パッケージ自体は変更されていません。ブランド名とドキュメントの URL のみが更新されています。
+
+
+<div id="3-run-the-project">
+  ### 3. プロジェクトを実行
+</div>
+
+```bash copy
+mastra dev
+```
+
+これで、天気エージェントとやり取りできる Mastra Playground が開きます。
+
+
+<div id="observability">
+  ## オブザーバビリティ
+</div>
+
+設定が完了すると、[Respan プラットフォーム](https://platform.respan.ai/platform/traces)でトレースとアナリティクスを表示できます。

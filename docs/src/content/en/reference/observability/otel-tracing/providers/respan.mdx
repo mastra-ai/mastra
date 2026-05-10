@@ -1,0 +1,75 @@
+---
+title: "Reference: Respan Integration | Mastra Observability Docs"
+description: Documentation for integrating Respan (an observability platform for LLM applications) with Mastra.
+---
+
+## Respan
+
+[Respan](https://www.respan.ai/docs/documentation/get-started/overview) (formerly Keywords AI) is a full-stack LLM engineering platform that helps developers and PMs build reliable AI products faster. In a shared workspace, product teams can build, monitor, and improve AI performance.
+
+This tutorial shows how to set up Respan tracing with [Mastra](https://mastra.ai/) to monitor and trace your AI-powered applications.
+
+To help you get started quickly, we’ve provided a pre-built example. You can find the code [on GitHub](https://github.com/respanai/respan-example-projects/tree/main/typescript/tracing/mastra).
+
+## Setup
+
+Here's the tutorial about the Mastra Weather Agent example.
+
+### 1. Install Dependencies
+
+```bash copy
+pnpm install
+```
+
+### 2. Environment Variables
+
+Copy the example environment file and add your API keys:
+
+```bash copy
+cp .env.local.example .env.local
+```
+
+Update .env.local with your credentials:
+
+```bash .env.local copy
+OPENAI_API_KEY=your-openai-api-key
+RESPAN_API_KEY=your-respan-api-key
+RESPAN_BASE_URL=https://api.respan.ai
+```
+
+### 3. Setup Mastra client with Respan tracing
+
+Configure with Respan telemetry in `src/mastra/index.ts`:
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+
+import { Mastra } from "@mastra/core/mastra";
+import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
+
+telemetry: {
+  serviceName: "respan-mastra-example",
+  enabled: true,
+  export: {
+    type: "custom",
+    exporter: new KeywordsAIExporter({
+      apiKey: process.env.RESPAN_API_KEY,
+      baseUrl: process.env.RESPAN_BASE_URL,
+      debug: true,
+    })
+  }
+}
+```
+
+> Note: the npm package and exporter class still use the legacy `@keywordsai/exporter-vercel` / `KeywordsAIExporter` names. The package itself is unchanged; only the brand and docs URLs have been updated.
+
+### 3. Run the Project
+
+```bash copy
+mastra dev
+```
+
+This opens Studio where you can interact with the weather agent.
+
+## Observability
+
+Once configured, you can view your traces and analytics in the [Respan platform](https://platform.respan.ai/platform/traces).
