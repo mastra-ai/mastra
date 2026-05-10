@@ -59,25 +59,82 @@ const SUBMIT_PLAN_TOOL_NAME = 'submit_plan';
 export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
 
 /**
+ * Active-tool tracking for `SessionDisplayState.activeTools`. One entry per
+ * `tool_start` that has not yet been settled by a matching `tool_end`. Drops
+ * out on `tool_end` regardless of `isError`.
+ */
+export interface ActiveToolState {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  startedAt: number;
+  /** Set when this tool call came from a spawned subagent, not the parent. */
+  subagentSessionId?: string;
+}
+
+/**
+ * Active-subagent tracking for `SessionDisplayState.activeSubagents`. Keyed
+ * on the parent's `spawn_subagent` tool call id. Dropped on subagent close.
+ */
+export interface ActiveSubagentState {
+  subagentSessionId: string;
+  agentType: string;
+  task: string;
+  parentToolCallId: string;
+  startedAt: number;
+}
+
+/** Cumulative token usage for the session's thread. */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/**
  * Point-in-time snapshot returned by `getDisplayState()` (§4.2). Reads off
- * the in-memory `SessionRecord`; safe to call frequently from a UI event
- * loop. Pending interrupts are summarized as booleans — call the
- * dedicated `respond*` paths to inspect or resolve them.
+ * the in-memory `SessionRecord` plus a few transient run-only fields.
+ *
+ * Persistent thread-level aggregates (task lists, modified-file ledgers, OM
+ * progress) deliberately live in `session.state`, not here — see the
+ * `getDisplayState()` doc-comment for the split rationale. All `Record<>`
+ * collections returned here are fresh on every call; do not mutate them.
  */
 export interface SessionDisplayState {
+  // Identity
   sessionId: string;
   threadId: string;
   resourceId: string;
+  parentSessionId?: string;
   lifecycleState: SessionLifecycleState;
   modeId: string;
   modelId: string;
-  queueDepth: number;
-  hasPendingApproval: boolean;
-  hasPendingSuspension: boolean;
-  hasPendingQuestion: boolean;
-  hasPendingPlan: boolean;
-  goal?: SessionRecord['goal'];
+  createdAt: number;
   lastActivityAt: number;
+
+  // Run
+  isRunning: boolean;
+  currentRunId?: string;
+  currentMessageId?: string;
+  currentTraceId?: string;
+
+  // Activity
+  activeTools: Record<string, ActiveToolState>;
+  toolInputBuffers: Record<string, { toolName: string; text: string }>;
+  activeSubagents: Record<string, ActiveSubagentState>;
+
+  // Tokens
+  tokenUsage: TokenUsage;
+
+  // Pending interrupt (full payload, not just a boolean — UIs need the args)
+  pending: SessionRecord['pendingResume'] | null;
+
+  // Queue
+  queueDepth: number;
+  currentQueuedItemId?: string;
+
+  // Goal
+  goal?: SessionRecord['goal'];
 }
 
 /**
@@ -132,6 +189,20 @@ export class Session {
    * powers `session.isRunning()` — non-undefined means a turn is in-flight.
    */
   private _currentTurnAbortController?: AbortController;
+  /**
+   * Transient per-turn tracking surfaced via `getDisplayState()`. Reset at
+   * the start of every turn (in `_beginTurn` via `_resetTurnTracking`) and
+   * mutated from `_drainStreamToEvents`, `_maybeCaptureSuspend`, and the
+   * `_resume` path. Not persisted — these are run-only fields.
+   */
+  private _currentRunId?: string;
+  private _currentMessageId?: string;
+  private _currentTraceId?: string;
+  private readonly _activeTools = new Map<string, ActiveToolState>();
+  private readonly _toolInputBuffers = new Map<string, { toolName: string; text: string }>();
+  private readonly _activeSubagents = new Map<string, ActiveSubagentState>();
+  /** Cumulative usage for the session's thread. Updated on `agent_end`. */
+  private _tokenUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   /**
    * In-process serialization for `_flushUpdate`. Concurrent setters chain
    * onto this so each CAS write reads the latest in-memory version. Without
@@ -216,16 +287,65 @@ export class Session {
       }
     }
     this._currentTurnAbortController = controller;
+    this._resetTurnTracking();
     return controller;
   }
 
   /**
+   * Clear per-turn transient display-state fields. Cumulative aggregates
+   * (`_tokenUsage`) intentionally persist across turns within a session.
+   */
+  private _resetTurnTracking(): void {
+    this._currentRunId = undefined;
+    this._currentMessageId = undefined;
+    this._currentTraceId = undefined;
+    this._activeTools.clear();
+    this._toolInputBuffers.clear();
+    // `_activeSubagents` is keyed by parent tool call id and naturally drops
+    // entries on subagent close; do not clear here so a long-running subagent
+    // spanning multiple parent turns still renders.
+  }
+
+  /**
    * Clear the in-flight turn marker so `isRunning()` reports false and the
-   * next `session.abort()` is a no-op.
+   * next `session.abort()` is a no-op. Run-only display fields (`currentRunId`,
+   * active-tool map, input buffers) clear too so an idle session reports
+   * idle state. Cumulative aggregates (`_tokenUsage`) are preserved.
    */
   private _endTurn(controller: AbortController): void {
     if (this._currentTurnAbortController === controller) {
       this._currentTurnAbortController = undefined;
+      this._currentRunId = undefined;
+      this._currentMessageId = undefined;
+      this._currentTraceId = undefined;
+      this._activeTools.clear();
+      this._toolInputBuffers.clear();
+    }
+  }
+
+  /**
+   * Fold the `FullOutput` from a completed (or suspended) agent run into the
+   * session's transient display state: capture `runId` if not yet set and
+   * accumulate token usage. Called from every site that has the full output.
+   */
+  private _recordTurnCompletion(full: FullOutput<unknown>): void {
+    if (full.runId && this._currentRunId === undefined) {
+      this._currentRunId = full.runId;
+    }
+    const usage = (full as { totalUsage?: unknown; usage?: unknown }).totalUsage ?? (full as { usage?: unknown }).usage;
+    if (usage && typeof usage === 'object') {
+      const u = usage as {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+        inputTokens?: number;
+        outputTokens?: number;
+      };
+      const prompt = u.promptTokens ?? u.inputTokens;
+      const completion = u.completionTokens ?? u.outputTokens;
+      if (typeof prompt === 'number') this._tokenUsage.promptTokens += prompt;
+      if (typeof completion === 'number') this._tokenUsage.completionTokens += completion;
+      if (typeof u.totalTokens === 'number') this._tokenUsage.totalTokens += u.totalTokens;
     }
   }
 
@@ -371,6 +491,7 @@ export class Session {
           structuredOutput: { schema: opts.output as never },
         });
         const full = result as FullOutput<unknown>;
+        this._recordTurnCompletion(full);
         await this._maybeCaptureSuspend(full);
         this._emitTurnEvent({
           type: 'agent_end',
@@ -410,6 +531,7 @@ export class Session {
       const out = await agent.stream(opts.content, baseExecOptions);
       await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
       const full = await out.getFullOutput();
+      this._recordTurnCompletion(full);
       await this._maybeCaptureSuspend(full);
       this._emitTurnEvent({
         type: 'agent_end',
@@ -441,6 +563,12 @@ export class Session {
   private async _drainStreamToEvents(out: MastraModelOutput<unknown>): Promise<void> {
     try {
       for await (const chunk of out.fullStream) {
+        // Capture run identity from the first chunk that carries it so
+        // `getDisplayState().currentRunId` is populated for the in-flight turn.
+        const runId = (chunk as { runId?: string }).runId;
+        if (runId && this._currentRunId === undefined) {
+          this._currentRunId = runId;
+        }
         switch (chunk.type) {
           case 'text-delta': {
             const payload = chunk.payload as { text?: string };
@@ -451,6 +579,13 @@ export class Session {
           }
           case 'tool-call': {
             const payload = chunk.payload as { toolCallId: string; toolName: string; args: unknown };
+            this._activeTools.set(payload.toolCallId, {
+              toolCallId: payload.toolCallId,
+              toolName: payload.toolName,
+              args: payload.args,
+              startedAt: Date.now(),
+            });
+            this._toolInputBuffers.delete(payload.toolCallId);
             this._emitTurnEvent({
               type: 'tool_start',
               toolCallId: payload.toolCallId,
@@ -461,6 +596,7 @@ export class Session {
           }
           case 'tool-result': {
             const payload = chunk.payload as { toolCallId: string; result: unknown; isError?: boolean };
+            this._activeTools.delete(payload.toolCallId);
             this._emitTurnEvent({
               type: 'tool_end',
               toolCallId: payload.toolCallId,
@@ -471,6 +607,7 @@ export class Session {
           }
           case 'tool-error': {
             const payload = chunk.payload as { toolCallId: string; error: unknown };
+            this._activeTools.delete(payload.toolCallId);
             this._emitTurnEvent({
               type: 'tool_end',
               toolCallId: payload.toolCallId,
@@ -662,30 +799,55 @@ export class Session {
   // -------------------------------------------------------------------------
   // getDisplayState — §4.2.
   //
-  // A point-in-time snapshot used by TUIs / Studio. Reads off the Session
-  // record; doesn't touch storage. Pending interrupts are summarized as
-  // simple booleans so downstream code can render badges without paging
-  // the full pending payload.
+  // Point-in-time snapshot used by TUIs / Studio. Reads off the in-memory
+  // `SessionRecord` plus transient per-turn tracking (`_currentRunId`,
+  // `_activeTools`, `_toolInputBuffers`, `_activeSubagents`, `_tokenUsage`).
+  // Doesn't touch storage. Returned Record/Map projections are fresh on
+  // every call — do not mutate them.
+  //
+  // Persistent thread-level aggregates (task lists, modified-file ledgers,
+  // OM progress) live in `session.state`, not here — see the spec doc-comment
+  // in §4.2 for the split rationale.
   // -------------------------------------------------------------------------
 
   getDisplayState(): SessionDisplayState {
     this._assertLive('getDisplayState()');
     const rec = this._record;
-    return {
+    const snapshot: SessionDisplayState = {
+      // Identity
       sessionId: this.id,
       threadId: this.threadId,
       resourceId: this.resourceId,
       lifecycleState: this._state,
       modeId: rec.modeId,
       modelId: rec.modelId,
-      queueDepth: rec.pendingQueue.length,
-      hasPendingApproval: rec.pendingResume?.kind === 'tool-approval',
-      hasPendingSuspension: rec.pendingResume?.kind === 'tool-suspension',
-      hasPendingQuestion: rec.pendingResume?.kind === 'question',
-      hasPendingPlan: rec.pendingResume?.kind === 'plan-approval',
-      goal: rec.goal,
+      createdAt: this.createdAt,
       lastActivityAt: rec.lastActivityAt,
+
+      // Run
+      isRunning: this.isRunning(),
+
+      // Activity — fresh projections so callers can't mutate internal maps
+      activeTools: Object.fromEntries(this._activeTools.entries()),
+      toolInputBuffers: Object.fromEntries(this._toolInputBuffers.entries()),
+      activeSubagents: Object.fromEntries(this._activeSubagents.entries()),
+
+      // Tokens — copy so the caller can't mutate the running aggregate
+      tokenUsage: { ...this._tokenUsage },
+
+      // Pending interrupt — full payload, single field (see §5.1)
+      pending: rec.pendingResume ?? null,
+
+      // Queue
+      queueDepth: rec.pendingQueue.length,
     };
+    if (this.parentSessionId !== undefined) snapshot.parentSessionId = this.parentSessionId;
+    if (this._currentRunId !== undefined) snapshot.currentRunId = this._currentRunId;
+    if (this._currentMessageId !== undefined) snapshot.currentMessageId = this._currentMessageId;
+    if (this._currentTraceId !== undefined) snapshot.currentTraceId = this._currentTraceId;
+    if (this._currentQueuedItemId !== undefined) snapshot.currentQueuedItemId = this._currentQueuedItemId;
+    if (rec.goal !== undefined) snapshot.goal = rec.goal;
+    return snapshot;
   }
 
   // -------------------------------------------------------------------------
@@ -832,6 +994,7 @@ export class Session {
         abortSignal: turnAbortController.signal,
       });
       full = (await out.getFullOutput()) as FullOutput<unknown>;
+      this._recordTurnCompletion(full);
     } catch (err) {
       this._endTurn(turnAbortController);
       throw err;
@@ -1061,6 +1224,7 @@ export class Session {
       const out = await agent.stream(item.content, baseExecOptions);
       await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
       const full = await out.getFullOutput();
+      this._recordTurnCompletion(full);
       await this._maybeCaptureSuspend(full);
       this._emitTurnEvent({
         type: 'agent_end',

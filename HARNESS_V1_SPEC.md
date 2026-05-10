@@ -435,12 +435,36 @@ class Session<TState = Record<string, unknown>> {
   setThreadSetting(opts: { key: string; value: unknown }): Promise<void>;
 
   // Display state
-  getDisplayState(): Readonly<HarnessDisplayState>;
-  subscribe(listener: HarnessListener): () => void;
-  subscribeDisplayState(
-    listener: (state: HarnessDisplayState) => void,
-    opts?: { windowMs?: number },
-  ): () => void;
+  //
+  // `getDisplayState()` returns a **point-in-time snapshot** of everything
+  // the UI needs to render the chrome around the conversation: identity,
+  // whether a turn is in flight, what tools are currently running, what
+  // (if anything) is blocking on a user response, queue depth, and the
+  // active goal. The shape is documented below as `SessionDisplayState`.
+  //
+  // What is **not** in `SessionDisplayState`:
+  //   - Persisted thread-level aggregates like task lists, modified-file
+  //     ledgers, or observational-memory progress. Those live in
+  //     `session.state` — tools write them via `ctx.setState({ ... })`
+  //     and UIs read them via `session.getState()`. This keeps display
+  //     state focused on the run, not on persistent thread data.
+  //   - The message stream itself. Use `listMessages()` for history and
+  //     `subscribe()` for live `text_delta` / `tool_*` events.
+  //
+  // The snapshot is safe to call frequently from a UI event loop: it
+  // shallow-copies the in-memory `SessionRecord` plus transient run-only
+  // fields. Returned `Record<>` objects are fresh on every call — no
+  // mutation hooks (legacy `getDisplayState().modifiedFiles.clear()`
+  // patterns are gone; rewrite via `session.setState`).
+  //
+  // For incremental UI updates, subscribe to specific events
+  // (`agent_start`, `tool_start`, `tool_end`, etc.) and re-read
+  // `getDisplayState()` rather than diffing the snapshot yourself.
+  //
+  // `RemoteSafeSession` widens this read to `Promise<SessionDisplayState>`
+  // so the same call site works against `RemoteSession` over the wire.
+  getDisplayState(): Readonly<SessionDisplayState>;
+  subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe;
 
   // Question / plan / tool resolution. Each `respond...` method asserts
   // the `pendingResume.kind` matches the typed entry point, then funnels
@@ -654,6 +678,112 @@ type FileAttachment =
 // context builders) only need a recent-N readback.
 interface ListMessagesOptions {
   limit?: number;
+}
+
+// Point-in-time snapshot returned by `Session.getDisplayState()` (§4.2).
+// Reads off the in-memory `SessionRecord` plus a few transient run-only
+// fields. Persistent thread-level aggregates (task lists, modified-file
+// ledgers, OM progress) deliberately live in `session.state`, not here —
+// see the `getDisplayState()` doc-comment in §4.2 for the split rationale.
+//
+// All `Record<>` collections returned here are fresh on every call. Do
+// not mutate them; use `session.setState` for persistent writes and
+// `session.subscribe` for event-driven updates.
+interface SessionDisplayState {
+  // ── Identity ────────────────────────────────────────────────────────
+  sessionId: string;
+  threadId: string;
+  resourceId: string;
+  parentSessionId?: string;
+  lifecycleState: SessionLifecycleState; // 'live' | 'closed' | 'evicted'
+  modeId: string;
+  modelId: string;
+  createdAt: number;
+  lastActivityAt: number;
+
+  // ── Run ─────────────────────────────────────────────────────────────
+  // `isRunning` is true iff a turn (message or queued) is currently in
+  // flight. `currentRunId` is the agent-layer run id for that turn; it
+  // is reported by the agent at `agent_start` and held here until the
+  // run reaches a terminal boundary (complete / aborted / error /
+  // suspended). `currentMessageId` is the assistant message currently
+  // being streamed (set on `message_start`, cleared on `message_end`).
+  // `currentTraceId` mirrors the active OTLP trace id when tracing is
+  // enabled. All four are `undefined` when idle.
+  isRunning: boolean;
+  currentRunId?: string;
+  currentMessageId?: string;
+  currentTraceId?: string;
+
+  // ── Activity ────────────────────────────────────────────────────────
+  // `activeTools` is keyed by `toolCallId` and tracks tools that have
+  // started but not yet emitted `tool_end`. `toolInputBuffers` holds the
+  // accumulated streaming argument JSON for tools whose inputs are being
+  // delta-streamed (typically rendered as a live preview). Both clear on
+  // `agent_start` for the next turn.
+  activeTools: Record<string, ActiveToolState>;
+  toolInputBuffers: Record<string, { toolName: string; text: string }>;
+
+  // `activeSubagents` is keyed by the *parent* tool call id (the
+  // `spawn_subagent` call that started the child). Each entry tracks the
+  // child session id and the agent type. Closed children drop out of the
+  // map; cascade closes also clear them.
+  activeSubagents: Record<string, ActiveSubagentState>;
+
+  // ── Tokens ──────────────────────────────────────────────────────────
+  // Cumulative usage for the session's thread. Updated when the agent
+  // reports usage at `agent_end` (and `step_finish` for partial
+  // accounting). Resets when the thread is cleared, not when the session
+  // is closed.
+  tokenUsage: TokenUsage;
+
+  // ── Pending interrupt ───────────────────────────────────────────────
+  // At most one of the four `kind`s can be set per turn. The full pending
+  // payload is exposed here so UIs can render question text, plan body,
+  // tool-call args, etc. without a second round-trip. Resolve via the
+  // matching `respond*` method.
+  pending: PendingResume | null;
+
+  // ── Queue ───────────────────────────────────────────────────────────
+  // `queueDepth` is the count of items in `SessionRecord.pendingQueue`,
+  // including the currently-running queued item (if any).
+  // `currentQueuedItemId` is the id of the queued item that is currently
+  // running (or suspended pending an interrupt); `undefined` when the
+  // current turn was started by `message()` or when no turn is running.
+  queueDepth: number;
+  currentQueuedItemId?: string;
+
+  // ── Goal ────────────────────────────────────────────────────────────
+  // Active goal loop state, if `session.setGoal(...)` was called. See
+  // §4.7. `undefined` when no goal is set.
+  goal?: GoalState;
+}
+
+interface ActiveToolState {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  startedAt: number;
+  /** Set when this tool call came from a spawned subagent, not the parent. */
+  subagentSessionId?: string;
+}
+
+interface ActiveSubagentState {
+  /** The session created for this subagent run. */
+  subagentSessionId: string;
+  /** The registered agent type from `HarnessConfig.subagents.types`. */
+  agentType: string;
+  /** The task string the parent passed to `spawn_subagent`. */
+  task: string;
+  /** The `spawn_subagent` tool call id on the parent. */
+  parentToolCallId: string;
+  startedAt: number;
+}
+
+interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 ```
 

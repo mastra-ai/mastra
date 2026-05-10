@@ -41,7 +41,7 @@ interface RunSpec {
 
 interface ResumeCall {
   resumeData: unknown;
-  options: { runId?: string; toolCallId?: string };
+  options: { runId?: string; toolCallId?: string; abortSignal?: AbortSignal };
 }
 
 class FakeAgent extends Agent<any, any, any> {
@@ -156,7 +156,7 @@ describe('Session — suspend capture on message()', () => {
     expect(pending!.toolCallId).toBe('tc-1');
     expect(pending!.toolName).toBe('shell');
     expect(pending!.payload).toEqual({ input: { cmd: 'rm -rf /' } });
-    expect(session.getDisplayState().hasPendingApproval).toBe(true);
+    expect(session.getDisplayState().pending?.kind).toBe('tool-approval');
   });
 
   it('classifies as "tool-suspension" when the chunk carries a suspendPayload field', async () => {
@@ -178,7 +178,7 @@ describe('Session — suspend capture on message()', () => {
     const pending = session.getRecord().pendingResume!;
     expect(pending.kind).toBe('tool-suspension');
     expect(pending.payload).toEqual({ input: { x: 1 }, suspendData: { progress: 42 } });
-    expect(session.getDisplayState().hasPendingSuspension).toBe(true);
+    expect(session.getDisplayState().pending?.kind).toBe('tool-suspension');
   });
 
   it('classifies as "question" when the tool name is ask_user', async () => {
@@ -207,7 +207,7 @@ describe('Session — suspend capture on message()', () => {
       options: [{ label: 'red' }, { label: 'blue' }],
       selectionMode: 'single_select',
     });
-    expect(session.getDisplayState().hasPendingQuestion).toBe(true);
+    expect(session.getDisplayState().pending?.kind).toBe('question');
   });
 
   it('classifies as "plan-approval" when the tool name is submit_plan, freezing transitionsTo', async () => {
@@ -233,7 +233,7 @@ describe('Session — suspend capture on message()', () => {
     expect(pending.kind).toBe('plan-approval');
     expect(pending.payload).toEqual({ title: 'Refactor X', plan: 'do A then B' });
     expect(pending.transitionModeId).toBe('builder');
-    expect(session.getDisplayState().hasPendingPlan).toBe(true);
+    expect(session.getDisplayState().pending?.kind).toBe('plan-approval');
   });
 
   it('does not write pendingResume when finishReason is not "suspended"', async () => {
@@ -273,7 +273,7 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(agent.resumeCalls[0]!.options).toMatchObject({ runId: 'run-A', toolCallId: 'tc-1' });
     expect(agent.resumeCalls[0]!.options.abortSignal).toBeInstanceOf(AbortSignal);
     expect(session.getRecord().pendingResume).toBeUndefined();
-    expect(session.getDisplayState().hasPendingApproval).toBe(false);
+    expect(session.getDisplayState().pending).toBeNull();
   });
 
   it('respondToToolSuspension forwards opaque resumeData', async () => {

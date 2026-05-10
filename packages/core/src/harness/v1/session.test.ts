@@ -245,6 +245,8 @@ describe('Session — surface area (M1)', () => {
         '_markEvicted',
         '_maybeCaptureSuspend',
         '_maybeDrainQueue',
+        '_recordTurnCompletion',
+        '_resetTurnTracking',
         '_resume',
         '_runQueuedTurn',
         // Getters land in the prototype as own names too.

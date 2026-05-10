@@ -98,9 +98,12 @@ describe('Session.getDisplayState', () => {
     expect(ds.lifecycleState).toBe('live');
     expect(ds.modeId).toBe('modeA');
     expect(ds.queueDepth).toBe(0);
-    expect(ds.hasPendingApproval).toBe(false);
-    expect(ds.hasPendingSuspension).toBe(false);
-    expect(ds.hasPendingQuestion).toBe(false);
-    expect(ds.hasPendingPlan).toBe(false);
+    expect(ds.pending).toBeNull();
+    expect(ds.isRunning).toBe(false);
+    expect(ds.currentRunId).toBeUndefined();
+    expect(ds.activeTools).toEqual({});
+    expect(ds.toolInputBuffers).toEqual({});
+    expect(ds.activeSubagents).toEqual({});
+    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
   });
 });
