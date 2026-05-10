@@ -909,3 +909,70 @@ describe('streaming behavior', () => {
     expect(chunks).toHaveLength(1);
   });
 });
+
+describe('processChatResponse_vNext: resume streams', () => {
+  const mockClientOptions = {
+    baseUrl: 'http://localhost:4111',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-key',
+      'x-mastra-client-type': 'js',
+    },
+  };
+
+  function makeStream(chunks: unknown[]): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+        controller.close();
+      },
+    });
+  }
+
+  it('should tolerate a tool-result as the first chunk (approve-tool-call / decline-tool-call resume)', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const updates: any[] = [];
+    const stream = makeStream([
+      { type: 'tool-result', payload: { toolCallId: 'call_abc', toolName: 'createPlan', result: { ok: true } } },
+      { type: 'finish' },
+    ]);
+
+    await expect(
+      (agent as any).processChatResponse_vNext({
+        stream,
+        update: (update: any) => updates.push(update),
+        lastMessage: undefined,
+      }),
+    ).resolves.toBeUndefined();
+
+    const last = updates[updates.length - 1].message;
+    expect(last.toolInvocations).toEqual([
+      expect.objectContaining({
+        state: 'result',
+        toolCallId: 'call_abc',
+        toolName: 'createPlan',
+        result: { ok: true },
+      }),
+    ]);
+  });
+
+  it('should still throw on mid-stream desync (tool-result without matching tool-call after another tool-call)', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const updates: any[] = [];
+    const stream = makeStream([
+      { type: 'tool-call', payload: { toolCallId: 'call_a', toolName: 'fooTool', args: {} } },
+      { type: 'tool-result', payload: { toolCallId: 'call_b', toolName: 'barTool', result: {} } },
+    ]);
+
+    await expect(
+      (agent as any).processChatResponse_vNext({
+        stream,
+        update: (update: any) => updates.push(update),
+        lastMessage: undefined,
+      }),
+    ).rejects.toThrow('tool_result must be preceded by a tool_call with the same toolCallId');
+  });
+});

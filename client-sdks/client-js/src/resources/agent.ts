@@ -849,27 +849,35 @@ export class Agent extends BaseResource {
         }
       },
       onToolResultPart(value) {
-        const toolInvocations = message.toolInvocations;
-
-        if (toolInvocations == null) {
-          throw new Error('tool_result must be preceded by a tool_call');
+        // Resume streams (approve-tool-call, decline-tool-call, resume-stream)
+        // emit a tool-result whose matching tool-call was sent in a prior
+        // turn and is therefore absent from this stream's in-memory buffer.
+        // Tolerate that case (synthesize a result-only invocation); preserve
+        // strict desync detection once a tool-call has populated the buffer.
+        const noPriorToolCalls = message.toolInvocations == null;
+        if (noPriorToolCalls) {
+          message.toolInvocations = [];
         }
+        const toolInvocations = message.toolInvocations!;
 
         // find if there is any tool invocation with the same toolCallId
         // and replace it with the result
         const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
 
-        if (toolInvocationIndex === -1) {
+        if (toolInvocationIndex === -1 && !noPriorToolCalls) {
           throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
         }
 
-        const invocation = {
-          ...toolInvocations[toolInvocationIndex],
-          state: 'result' as const,
-          ...value,
-        } as const;
+        const invocation =
+          toolInvocationIndex === -1
+            ? ({ state: 'result' as const, step, ...value } as const)
+            : ({ ...toolInvocations[toolInvocationIndex], state: 'result' as const, ...value } as const);
 
-        toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
+        if (toolInvocationIndex === -1) {
+          toolInvocations.push(invocation as ToolInvocation);
+        } else {
+          toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
+        }
 
         updateToolInvocationPart(value.toolCallId, invocation as ToolInvocation);
 
@@ -1254,11 +1262,17 @@ export class Agent extends BaseResource {
           }
 
           case 'tool-result': {
-            const toolInvocations = message.toolInvocations;
-
-            if (toolInvocations == null) {
-              throw new Error('tool_result must be preceded by a tool_call');
+            // Resume streams (approve-tool-call, decline-tool-call,
+            // resume-stream) emit a tool-result whose matching tool-call was
+            // sent in a prior turn and is therefore absent from this stream's
+            // in-memory buffer. Tolerate that case (synthesize a result-only
+            // invocation); preserve strict desync detection once a tool-call
+            // has populated the buffer.
+            const noPriorToolCalls = message.toolInvocations == null;
+            if (noPriorToolCalls) {
+              message.toolInvocations = [];
             }
+            const toolInvocations = message.toolInvocations!;
 
             // find if there is any tool invocation with the same toolCallId
             // and replace it with the result
@@ -1266,17 +1280,20 @@ export class Agent extends BaseResource {
               invocation => invocation.toolCallId === chunk.payload.toolCallId,
             );
 
-            if (toolInvocationIndex === -1) {
+            if (toolInvocationIndex === -1 && !noPriorToolCalls) {
               throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
             }
 
-            const invocation = {
-              ...toolInvocations[toolInvocationIndex],
-              state: 'result' as const,
-              ...chunk.payload,
-            } as const;
+            const invocation =
+              toolInvocationIndex === -1
+                ? ({ state: 'result' as const, step, ...chunk.payload } as const)
+                : ({ ...toolInvocations[toolInvocationIndex], state: 'result' as const, ...chunk.payload } as const);
 
-            toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
+            if (toolInvocationIndex === -1) {
+              toolInvocations.push(invocation as ToolInvocation);
+            } else {
+              toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
+            }
 
             updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
 
