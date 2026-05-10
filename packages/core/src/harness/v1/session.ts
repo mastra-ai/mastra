@@ -121,6 +121,13 @@ export class Session {
   /** True while `_maybeDrainQueue` is running so re-entrant kicks are no-ops. */
   private _draining = false;
   /**
+   * Tracks the AbortController for the currently-running turn (message or
+   * queued). Set when a turn begins, cleared on terminal completion or
+   * suspension. `session.abort()` calls `abort()` on this controller. Also
+   * powers `session.isRunning()` — non-undefined means a turn is in-flight.
+   */
+  private _currentTurnAbortController?: AbortController;
+  /**
    * In-process serialization for `_flushUpdate`. Concurrent setters chain
    * onto this so each CAS write reads the latest in-memory version. Without
    * this, two parallel callers both observe `version=N`, both attempt
@@ -181,6 +188,61 @@ export class Session {
   /** @internal — number of registered listeners (for tests). */
   get _internalListenerCount(): number {
     return this._emitter.listenerCount;
+  }
+
+  /**
+   * Mark a turn as in-flight and mint the AbortController the agent run will
+   * use. `session.abort()` aborts this controller. If the caller supplied
+   * their own `AbortSignal`, we forward it into the session controller so a
+   * single signal reaches the agent.
+   *
+   * Returns the controller so the calling path can hand `controller.signal`
+   * to `agent.stream` / `agent.generate` / `agent.resumeStream`.
+   */
+  private _beginTurn(callerSignal: AbortSignal | undefined): AbortController {
+    const controller = new AbortController();
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        controller.abort((callerSignal as { reason?: unknown }).reason);
+      } else {
+        callerSignal.addEventListener('abort', () => controller.abort((callerSignal as { reason?: unknown }).reason), {
+          once: true,
+        });
+      }
+    }
+    this._currentTurnAbortController = controller;
+    return controller;
+  }
+
+  /**
+   * Clear the in-flight turn marker so `isRunning()` reports false and the
+   * next `session.abort()` is a no-op.
+   */
+  private _endTurn(controller: AbortController): void {
+    if (this._currentTurnAbortController === controller) {
+      this._currentTurnAbortController = undefined;
+    }
+  }
+
+  /**
+   * True while a turn (message or queued) is in flight against the agent.
+   * Goes back to false on terminal completion, suspension, or abort.
+   * Subscribers should drive UI affordances (e.g. spinner, ESC-to-cancel)
+   * from this signal in combination with `lifecycleState`.
+   */
+  isRunning(): boolean {
+    return this._currentTurnAbortController !== undefined;
+  }
+
+  /**
+   * Cancel the in-flight turn (if any). The agent receives the abort signal
+   * and unwinds. No-op when no turn is running. The optional `reason` is
+   * forwarded as the `AbortSignal.reason` so tools can branch on it.
+   */
+  abort(opts?: { reason?: string }): void {
+    const controller = this._currentTurnAbortController;
+    if (!controller) return;
+    controller.abort(opts?.reason ?? 'session_aborted');
   }
 
   /** @internal — emitter epoch (for tests). */
@@ -272,11 +334,12 @@ export class Session {
     // Per-turn additionalTools merge with the mode's surface, never replace.
     const toolsets = this._buildToolsets(mode, opts.additionalTools);
 
-    // The abortSignal we hand to the agent is also surfaced on the
-    // HarnessRequestContext slot below. When the caller didn't supply one,
-    // we mint a fresh controller so the slot's `abortSignal` is non-null.
-    const turnAbortController = opts.abortSignal ? undefined : new AbortController();
-    const turnAbortSignal = opts.abortSignal ?? turnAbortController!.signal;
+    // Every turn runs under a session-owned AbortController so
+    // `session.abort()` can cancel the in-flight run. If the caller passes
+    // their own AbortSignal, we forward it into the session controller so
+    // both paths converge on a single signal handed to the agent.
+    const turnAbortController = this._beginTurn(opts.abortSignal);
+    const turnAbortSignal = turnAbortController.signal;
     const requestContext = this._buildRequestContext({
       modeId: effectiveModeId,
       abortSignal: turnAbortSignal,
@@ -297,43 +360,61 @@ export class Session {
 
     // Structured + sync path: agent.generate with structuredOutput.
     if (opts.output !== undefined && opts.sync === true) {
-      const result = await agent.generate(opts.content, {
-        ...baseExecOptions,
-        structuredOutput: { schema: opts.output as never },
-      });
-      const full = result as FullOutput<unknown>;
-      await this._maybeCaptureSuspend(full);
-      this._emitTurnEvent({
-        type: 'agent_end',
-        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-        runId: full.runId,
-      });
-      return full.object;
+      try {
+        const result = await agent.generate(opts.content, {
+          ...baseExecOptions,
+          structuredOutput: { schema: opts.output as never },
+        });
+        const full = result as FullOutput<unknown>;
+        await this._maybeCaptureSuspend(full);
+        this._emitTurnEvent({
+          type: 'agent_end',
+          reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+          runId: full.runId,
+        });
+        return full.object;
+      } finally {
+        this._endTurn(turnAbortController);
+      }
     }
 
     // Streaming path: hand the live MastraModelOutput back. We drain the
     // stream ourselves to emit harness events; the caller's
     // `getFullOutput()` is independent (each `fullStream` call returns a
     // fresh evented stream). Errors during drain are swallowed — the
-    // caller already owns the visible stream.
+    // caller already owns the visible stream. The turn stays in-flight
+    // until the drain settles so `isRunning()` stays true while the model
+    // is still producing chunks.
     if (opts.stream === true) {
-      const out = await agent.stream(opts.content, baseExecOptions);
-      void this._drainStreamToEvents(out as MastraModelOutput<unknown>);
-      return out as MastraModelOutput<unknown>;
+      try {
+        const out = await agent.stream(opts.content, baseExecOptions);
+        const drain = this._drainStreamToEvents(out as MastraModelOutput<unknown>);
+        void drain.finally(() => this._endTurn(turnAbortController));
+        return out as MastraModelOutput<unknown>;
+      } catch (err) {
+        // agent.stream() itself rejected before we had a stream to drain —
+        // make sure the turn marker doesn't leak.
+        this._endTurn(turnAbortController);
+        throw err;
+      }
     }
 
     // Default path: drain the stream for events, then resolve via
     // getFullOutput to surface the bundled result.
-    const out = await agent.stream(opts.content, baseExecOptions);
-    await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
-    const full = await out.getFullOutput();
-    await this._maybeCaptureSuspend(full);
-    this._emitTurnEvent({
-      type: 'agent_end',
-      reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-      runId: full.runId,
-    });
-    return full;
+    try {
+      const out = await agent.stream(opts.content, baseExecOptions);
+      await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
+      const full = await out.getFullOutput();
+      await this._maybeCaptureSuspend(full);
+      this._emitTurnEvent({
+        type: 'agent_end',
+        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+        runId: full.runId,
+      });
+      return full;
+    } finally {
+      this._endTurn(turnAbortController);
+    }
   }
 
   /**
@@ -690,12 +771,23 @@ export class Session {
       }
     }
 
+    // Resumed runs run under a session-owned AbortController too, so
+    // `session.abort()` can cancel an in-flight resume (e.g. ESC after the
+    // user approved a tool that's now grinding through a long workflow).
+    const turnAbortController = this._beginTurn(undefined);
     const agent = this._harness.getAgentForMode(this._record.modeId);
-    const out = await agent.resumeStream(resumeData, {
-      runId: pending.runId,
-      toolCallId: pending.toolCallId,
-    });
-    const full = (await out.getFullOutput()) as FullOutput<unknown>;
+    let full: FullOutput<unknown>;
+    try {
+      const out = await agent.resumeStream(resumeData, {
+        runId: pending.runId,
+        toolCallId: pending.toolCallId,
+        abortSignal: turnAbortController.signal,
+      });
+      full = (await out.getFullOutput()) as FullOutput<unknown>;
+    } catch (err) {
+      this._endTurn(turnAbortController);
+      throw err;
+    }
 
     // Clear pending + apply mode flip in a single CAS write. The mode flip
     // and pending-clear must land together so a replay does not see
@@ -745,6 +837,7 @@ export class Session {
         await this._completeQueuedTurn(this._currentQueuedItemId, full as AgentResult);
       }
     }
+    this._endTurn(turnAbortController);
     return full as AgentResult;
   }
 
@@ -899,9 +992,9 @@ export class Session {
     const agent = this._harness.getAgentForMode(effectiveModeId);
 
     const toolsets = this._buildToolsets(mode);
-    // Queued turns have no caller-supplied abort signal — mint one so the
-    // request-context slot still exposes a usable signal to tools.
-    const turnAbortController = new AbortController();
+    // Queued turns run under a session-owned AbortController so
+    // `session.abort()` can cancel an in-flight queued run too.
+    const turnAbortController = this._beginTurn(undefined);
     const requestContext = this._buildRequestContext({
       modeId: effectiveModeId,
       abortSignal: turnAbortController.signal,
@@ -916,16 +1009,20 @@ export class Session {
 
     this._emitTurnEvent({ type: 'agent_start' });
 
-    const out = await agent.stream(item.content, baseExecOptions);
-    await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
-    const full = await out.getFullOutput();
-    await this._maybeCaptureSuspend(full);
-    this._emitTurnEvent({
-      type: 'agent_end',
-      reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
-      runId: full.runId,
-    });
-    return full;
+    try {
+      const out = await agent.stream(item.content, baseExecOptions);
+      await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
+      const full = await out.getFullOutput();
+      await this._maybeCaptureSuspend(full);
+      this._emitTurnEvent({
+        type: 'agent_end',
+        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+        runId: full.runId,
+      });
+      return full;
+    } finally {
+      this._endTurn(turnAbortController);
+    }
   }
 
   /**

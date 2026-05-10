@@ -207,7 +207,9 @@ describe('Session — surface area (M1)', () => {
     // Sorted for stability across edits.
     expect([...proto].sort()).toEqual(
       [
+        'abort',
         'close',
+        'isRunning',
         'message',
         'queue',
         'getCurrentMode',
@@ -223,6 +225,7 @@ describe('Session — surface area (M1)', () => {
         'respondToPlanApproval',
         'subscribe',
         '_assertLive',
+        '_beginTurn',
         '_buildToolsets',
         '_buildRequestContext',
         '_buildResumePayload',
@@ -231,6 +234,7 @@ describe('Session — surface area (M1)', () => {
         '_drainStreamToEvents',
         '_emit',
         '_emitTurnEvent',
+        '_endTurn',
         '_failQueuedTurn',
         '_flushUpdate',
         '_internalEmitterEpoch',

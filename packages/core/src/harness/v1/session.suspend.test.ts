@@ -270,7 +270,8 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(result.finishReason).toBe('stop');
     expect(agent.resumeCalls).toHaveLength(1);
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ approved: true });
-    expect(agent.resumeCalls[0]!.options).toEqual({ runId: 'run-A', toolCallId: 'tc-1' });
+    expect(agent.resumeCalls[0]!.options).toMatchObject({ runId: 'run-A', toolCallId: 'tc-1' });
+    expect(agent.resumeCalls[0]!.options.abortSignal).toBeInstanceOf(AbortSignal);
     expect(session.getRecord().pendingResume).toBeUndefined();
     expect(session.getDisplayState().hasPendingApproval).toBe(false);
   });

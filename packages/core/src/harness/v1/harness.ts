@@ -263,6 +263,26 @@ export class Harness {
     return mode;
   }
 
+  /**
+   * Enumerate every mode registered on this harness, in declaration order.
+   *
+   * Returned array is a fresh copy — callers may sort or filter without
+   * affecting harness state. Used by TUIs to render a mode picker and by
+   * scripts that need to discover what modes exist before opening a session.
+   */
+  listModes(): HarnessMode[] {
+    return Array.from(this._modesById.values());
+  }
+
+  /**
+   * Look up a single mode by id. Returns `undefined` if no mode with that id
+   * is registered. For the throwing variant used during request resolution,
+   * see the internal `_getMode` helper.
+   */
+  getMode(modeId: string): HarnessMode | undefined {
+    return this._modesById.get(modeId);
+  }
+
   // -------------------------------------------------------------------------
   // Session resolver — §4.1, §5.3.
   // -------------------------------------------------------------------------
