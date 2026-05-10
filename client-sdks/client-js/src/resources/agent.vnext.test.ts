@@ -196,6 +196,75 @@ describe('Agent vNext', () => {
     expect(executeSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('resumeStream: still runs client tools when the resume cycle starts with a tool-result (post-suspend)', async () => {
+    // Repro of the deeper bug fixed by tolerating tool-result as the first
+    // chunk of a resume stream:
+    //
+    // 1. The suspended tool's result is the first chunk emitted on resume
+    //    (matching tool-call was sent in the prior turn, before the suspend).
+    // 2. The agent then emits a tool-call for a client-side tool.
+    // 3. finishReason is `tool-calls`, which should trigger the recursive
+    //    client-tool execution path in processStreamResponse.
+    //
+    // Pre-fix: the first chunk (tool-result) tripped
+    // `tool_result must be preceded by a tool_call` inside
+    // processChatResponse_vNext, the outer .catch fired, and onFinish never
+    // ran — so the client tool's execute was never called.
+    const suspendedToolCallId = 'call_suspended';
+    const clientToolCallId = 'call_client';
+
+    const resumeCycle = [
+      {
+        type: 'tool-result',
+        payload: { toolCallId: suspendedToolCallId, toolName: 'serverApprovedTool', result: { ok: true } },
+      },
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: clientToolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const recursiveCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(resumeCycle))
+      .mockResolvedValueOnce(sseResponse(recursiveCycle));
+
+    const executeSpy = vi.fn(async () => ({ temperature: 72, condition: 'sunny' }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number(), condition: z.string() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.resumeStream({ approved: true }, {
+      runId: 'run-1',
+      messages: [{ role: 'user', content: 'Original prompt before suspension' }],
+      clientTools: { weatherTool },
+    } as any);
+
+    await resp.processDataStream({
+      onChunk: async () => {},
+    });
+
+    // The recursive call only fires if processChatResponse_vNext successfully
+    // observes finishReason=tool-calls — i.e., did NOT throw on the leading
+    // tool-result. Two fetches confirm the recursion happened.
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(executeSpy).toHaveBeenCalledWith({ location: 'NYC' }, expect.anything());
+  });
+
   it('stream: receives chunks from both initial and recursive requests', async () => {
     const toolCallId = 'call_1';
 
