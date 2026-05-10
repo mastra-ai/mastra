@@ -1,12 +1,13 @@
 import { bdclient } from '@brightdata/sdk';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getBrightDataClient } from '../client.js';
+import { closeClient, getBrightDataClient } from '../client.js';
 
 vi.mock('@brightdata/sdk', () => ({
   bdclient: vi.fn(function () {
     return {
       search: { google: vi.fn(), bing: vi.fn(), yandex: vi.fn() },
       scrapeUrl: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
     };
   }),
 }));
@@ -62,5 +63,27 @@ describe('getBrightDataClient', () => {
     expect(client).toBeDefined();
     expect(client.search).toBeDefined();
     expect(client.scrapeUrl).toBeDefined();
+  });
+});
+
+describe('closeClient', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should call close() on the client', async () => {
+    const client = getBrightDataClient({ apiKey: 'a' }) as unknown as {
+      close: ReturnType<typeof vi.fn>;
+    };
+
+    await closeClient(client as any);
+
+    expect(client.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('should be a no-op when the client has no close method', async () => {
+    const client = { search: {}, scrapeUrl: vi.fn() };
+
+    await expect(closeClient(client as any)).resolves.toBeUndefined();
   });
 });

@@ -1,8 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { getBrightDataClient } from './client.js';
-import type { BrightDataClient, BrightDataClientOptions } from './client.js';
+import { closeClient, getBrightDataClient } from './client.js';
+import type { BrightDataClientOptions } from './client.js';
 
 const inputSchema = z.object({
   url: z.string().url().describe('The URL to fetch'),
@@ -14,15 +14,6 @@ const outputSchema = z.object({
 });
 
 export function createBrightDataFetchTool(config?: BrightDataClientOptions) {
-  let client: BrightDataClient | null = null;
-
-  function getClient(): BrightDataClient {
-    if (!client) {
-      client = getBrightDataClient(config);
-    }
-    return client;
-  }
-
   return createTool({
     id: 'web-fetch',
     description:
@@ -30,16 +21,19 @@ export function createBrightDataFetchTool(config?: BrightDataClientOptions) {
     inputSchema,
     outputSchema,
     execute: async input => {
-      const brightDataClient = getClient();
+      const client = getBrightDataClient(config);
+      try {
+        const content = (await client.scrapeUrl(input.url, {
+          dataFormat: 'markdown',
+        })) as string;
 
-      const content = (await brightDataClient.scrapeUrl(input.url, {
-        dataFormat: 'markdown',
-      })) as string;
-
-      return {
-        url: input.url,
-        content,
-      };
+        return {
+          url: input.url,
+          content,
+        };
+      } finally {
+        await closeClient(client);
+      }
     },
   });
 }

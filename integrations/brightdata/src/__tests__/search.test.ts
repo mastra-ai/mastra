@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGoogle = vi.fn();
+const mockClose = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@brightdata/sdk', () => ({
   bdclient: vi.fn(function () {
     return {
       search: { google: mockGoogle, bing: vi.fn(), yandex: vi.fn() },
       scrapeUrl: vi.fn(),
+      close: mockClose,
     };
   }),
 }));
@@ -145,5 +147,22 @@ describe('createBrightDataSearchTool', () => {
       { link: 'https://from.string', title: 'Stringified', description: 'ok' },
     ]);
     expect(result.currentPage).toBe(3);
+  });
+
+  it('should close the client after a successful execute', async () => {
+    const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
+
+    await tool.execute!({ query: 'test' }, {} as any);
+
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should close the client even when execute throws', async () => {
+    mockGoogle.mockRejectedValue(new Error('boom'));
+    const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
+
+    await expect(tool.execute!({ query: 'test' }, {} as any)).rejects.toThrow('boom');
+
+    expect(mockClose).toHaveBeenCalledTimes(1);
   });
 });

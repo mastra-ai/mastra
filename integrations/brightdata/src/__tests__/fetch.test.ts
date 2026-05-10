@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockScrapeUrl = vi.fn();
+const mockClose = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@brightdata/sdk', () => ({
   bdclient: vi.fn(function () {
     return {
       search: { google: vi.fn(), bing: vi.fn(), yandex: vi.fn() },
       scrapeUrl: mockScrapeUrl,
+      close: mockClose,
     };
   }),
 }));
@@ -55,5 +57,22 @@ describe('createBrightDataFetchTool', () => {
     await expect(tool.execute!({ url: 'https://example.com' }, {} as any)).rejects.toThrow(
       'Network unreachable',
     );
+  });
+
+  it('should close the client after a successful execute', async () => {
+    const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
+
+    await tool.execute!({ url: 'https://example.com' }, {} as any);
+
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should close the client even when execute throws', async () => {
+    mockScrapeUrl.mockRejectedValue(new Error('boom'));
+    const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
+
+    await expect(tool.execute!({ url: 'https://example.com' }, {} as any)).rejects.toThrow('boom');
+
+    expect(mockClose).toHaveBeenCalledTimes(1);
   });
 });

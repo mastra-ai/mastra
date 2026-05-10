@@ -12,3 +12,10 @@ export function getBrightDataClient(config?: BrightDataClientOptions): BrightDat
   }
   return new bdclient({ ...config, apiKey });
 }
+
+export async function closeClient(client: BrightDataClient): Promise<void> {
+  const close = (client as { close?: () => Promise<void> | void }).close;
+  if (typeof close === 'function') {
+    await close.call(client);
+  }
+}

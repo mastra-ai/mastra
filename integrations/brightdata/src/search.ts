@@ -1,8 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { getBrightDataClient } from './client.js';
-import type { BrightDataClient, BrightDataClientOptions } from './client.js';
+import { closeClient, getBrightDataClient } from './client.js';
+import type { BrightDataClientOptions } from './client.js';
 
 const inputSchema = z.object({
   query: z.string().describe('The search query'),
@@ -32,15 +32,6 @@ const outputSchema = z.object({
 });
 
 export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
-  let client: BrightDataClient | null = null;
-
-  function getClient(): BrightDataClient {
-    if (!client) {
-      client = getBrightDataClient(config);
-    }
-    return client;
-  }
-
   return createTool({
     id: 'web-search',
     description:
@@ -48,36 +39,39 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
     inputSchema,
     outputSchema,
     execute: async input => {
-      const brightDataClient = getClient();
+      const client = getBrightDataClient(config);
+      try {
+        const rawResponse = await client.search.google(input.query, {
+          country: input.country,
+          start: input.start,
+        });
 
-      const rawResponse = await brightDataClient.search.google(input.query, {
-        country: input.country,
-        start: input.start,
-      });
+        const response: { organic?: unknown; current_page?: unknown } =
+          typeof rawResponse === 'string' ? JSON.parse(rawResponse) : rawResponse;
 
-      const response: { organic?: unknown; current_page?: unknown } =
-        typeof rawResponse === 'string' ? JSON.parse(rawResponse) : rawResponse;
+        const organic = Array.isArray(response.organic) ? response.organic : [];
+        const results = organic
+          .map((entry: any) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const link = typeof entry.link === 'string' ? entry.link.trim() : '';
+            const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+            const description = typeof entry.description === 'string' ? entry.description.trim() : '';
+            if (!link || !title) return null;
+            return { link, title, description };
+          })
+          .filter((r): r is { link: string; title: string; description: string } => r !== null);
 
-      const organic = Array.isArray(response.organic) ? response.organic : [];
-      const results = organic
-        .map((entry: any) => {
-          if (!entry || typeof entry !== 'object') return null;
-          const link = typeof entry.link === 'string' ? entry.link.trim() : '';
-          const title = typeof entry.title === 'string' ? entry.title.trim() : '';
-          const description = typeof entry.description === 'string' ? entry.description.trim() : '';
-          if (!link || !title) return null;
-          return { link, title, description };
-        })
-        .filter((r): r is { link: string; title: string; description: string } => r !== null);
+        const parsedPage = Number(response.current_page);
+        const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
-      const parsedPage = Number(response.current_page);
-      const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-
-      return {
-        query: input.query,
-        results,
-        currentPage,
-      };
+        return {
+          query: input.query,
+          results,
+          currentPage,
+        };
+      } finally {
+        await closeClient(client);
+      }
     },
   });
 }
