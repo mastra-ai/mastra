@@ -50,10 +50,13 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
     execute: async input => {
       const brightDataClient = getClient();
 
-      const response = (await brightDataClient.search.google(input.query, {
+      const rawResponse = await brightDataClient.search.google(input.query, {
         country: input.country,
         start: input.start,
-      })) as { organic?: unknown; current_page?: unknown };
+      });
+
+      const response: { organic?: unknown; current_page?: unknown } =
+        typeof rawResponse === 'string' ? JSON.parse(rawResponse) : rawResponse;
 
       const organic = Array.isArray(response.organic) ? response.organic : [];
       const results = organic

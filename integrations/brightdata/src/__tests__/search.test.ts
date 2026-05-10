@@ -127,4 +127,23 @@ describe('createBrightDataSearchTool', () => {
       'API rate limit exceeded',
     );
   });
+
+  it('should parse string responses (SDK returns JSON-encoded text)', async () => {
+    mockGoogle.mockResolvedValue(
+      JSON.stringify({
+        organic: [
+          { link: 'https://from.string', title: 'Stringified', description: 'ok' },
+        ],
+        current_page: 3,
+      }),
+    );
+
+    const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
+    const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
+
+    expect(result.results).toEqual([
+      { link: 'https://from.string', title: 'Stringified', description: 'ok' },
+    ]);
+    expect(result.currentPage).toBe(3);
+  });
 });
