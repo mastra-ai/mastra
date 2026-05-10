@@ -249,7 +249,7 @@ export class Session {
   }
 
   /**
-   * Emit an event that belongs to a turn (agent_*, text_delta, tool_*,
+   * Emit an event that belongs to a turn (agent_*, message_*, tool_*,
    * suspension_*). Auto-stamps `queuedItemId` from `_currentQueuedItemId`
    * when a queued turn is running so subscribers can correlate every event
    * back to its `queue()` item.
@@ -549,10 +549,15 @@ export class Session {
    * harness events as chunks arrive. Returns when the stream completes.
    *
    * Chunks observed → events emitted:
-   *   - `text-delta`           → `text_delta`
-   *   - `tool-call`            → `tool_start`
-   *   - `tool-result`          → `tool_end` (isError: false)
-   *   - `tool-error`           → `tool_end` (isError: true)
+   *   - `text-start`                          → `message_start`
+   *   - `text-delta`                          → `message_update`
+   *   - `text-end`                            → `message_end`
+   *   - `tool-call-input-streaming-start`     → `tool_input_start`
+   *   - `tool-call-delta`                     → `tool_input_delta`
+   *   - `tool-call-input-streaming-end`       → `tool_input_end`
+   *   - `tool-call`                           → `tool_start`
+   *   - `tool-result`                         → `tool_end` (isError: false)
+   *   - `tool-error`                          → `tool_end` (isError: true)
    *
    * Approval / suspension chunks are intentionally NOT mapped here. The
    * harness uses `_maybeCaptureSuspend` after `getFullOutput()` to persist
@@ -570,11 +575,63 @@ export class Session {
           this._currentRunId = runId;
         }
         switch (chunk.type) {
+          case 'text-start': {
+            const payload = chunk.payload as { id: string };
+            this._currentMessageId = payload.id;
+            this._emitTurnEvent({ type: 'message_start', messageId: payload.id });
+            break;
+          }
           case 'text-delta': {
-            const payload = chunk.payload as { text?: string };
+            const payload = chunk.payload as { id: string; text?: string };
             if (typeof payload?.text === 'string' && payload.text.length > 0) {
-              this._emitTurnEvent({ type: 'text_delta', delta: payload.text });
+              this._emitTurnEvent({
+                type: 'message_update',
+                messageId: payload.id,
+                delta: payload.text,
+              });
             }
+            break;
+          }
+          case 'text-end': {
+            const payload = chunk.payload as { id: string };
+            this._emitTurnEvent({ type: 'message_end', messageId: payload.id });
+            if (this._currentMessageId === payload.id) {
+              this._currentMessageId = undefined;
+            }
+            break;
+          }
+          case 'tool-call-input-streaming-start': {
+            const payload = chunk.payload as { toolCallId: string; toolName: string };
+            this._toolInputBuffers.set(payload.toolCallId, { toolName: payload.toolName, text: '' });
+            this._emitTurnEvent({
+              type: 'tool_input_start',
+              toolCallId: payload.toolCallId,
+              toolName: payload.toolName,
+            });
+            break;
+          }
+          case 'tool-call-delta': {
+            const payload = chunk.payload as { toolCallId: string; argsTextDelta: string; toolName?: string };
+            const prev = this._toolInputBuffers.get(payload.toolCallId);
+            const toolName = prev?.toolName ?? payload.toolName ?? '';
+            this._toolInputBuffers.set(payload.toolCallId, {
+              toolName,
+              text: (prev?.text ?? '') + payload.argsTextDelta,
+            });
+            this._emitTurnEvent({
+              type: 'tool_input_delta',
+              toolCallId: payload.toolCallId,
+              argsTextDelta: payload.argsTextDelta,
+              toolName: payload.toolName,
+            });
+            break;
+          }
+          case 'tool-call-input-streaming-end': {
+            const payload = chunk.payload as { toolCallId: string };
+            this._emitTurnEvent({
+              type: 'tool_input_end',
+              toolCallId: payload.toolCallId,
+            });
             break;
           }
           case 'tool-call': {
@@ -618,9 +675,9 @@ export class Session {
           }
           default:
             // All other chunk types (start/finish, reasoning, source, file,
-            // tool-call-input-streaming-*, abort, raw, …) are intentionally
-            // ignored at the harness event layer for v1. UIs that need them
-            // can subscribe to the agent's stream directly via stream:true.
+            // abort, raw, …) are intentionally ignored at the harness event
+            // layer for v1. UIs that need them can subscribe to the agent's
+            // stream directly via stream:true.
             break;
         }
       }
@@ -1065,7 +1122,7 @@ export class Session {
   //   1. `queue()` admits → flush record → register resolver → kick drain.
   //   2. Drain pulls head item, emits `queue_item_started`, runs the turn
   //      via the same code path as `message()` default (so `agent_start`,
-  //      `text_delta`, `tool_*`, `suspension_*`, `agent_end` all flow with
+  //      `message_*`, `tool_*`, `suspension_*`, `agent_end` all flow with
   //      `queuedItemId` stamped automatically by `_emitTurnEvent`).
   //   3. If the turn suspends, the head item stays in `pendingQueue` and
   //      `_currentQueuedItemId` stays set. The next `respondTo*` call calls

@@ -5,8 +5,8 @@
  *   - subscribers receive events emitted after subscribe() returns
  *   - unsubscribe stops delivery
  *   - mode_changed / model_changed / session_closed lifecycle events
- *   - agent_start / text_delta / tool_start / tool_end / agent_end produced
- *     while draining a streaming agent's fullStream
+ *   - agent_start / message_* / tool_input_* / tool_start / tool_end /
+ *     agent_end produced while draining a streaming agent's fullStream
  *   - suspension_required / suspension_resolved on suspend/resume round-trip
  *   - throwing subscriber is isolated; other subscribers still see events
  *   - harness-level subscribers see session_created and forwarded session events
@@ -205,11 +205,13 @@ describe('Session.subscribe()', () => {
 });
 
 describe('Session events — fullStream drain', () => {
-  it('emits text_delta for each text-delta chunk', async () => {
+  it('emits message_start / message_update / message_end around a text stream', async () => {
     const { harness, agent } = setup();
     agent.chunks = [
-      { type: 'text-delta', payload: { text: 'hel' }, runId: 'fake-run' },
-      { type: 'text-delta', payload: { text: 'lo' }, runId: 'fake-run' },
+      { type: 'text-start', payload: { id: 'msg-1' }, runId: 'fake-run' },
+      { type: 'text-delta', payload: { id: 'msg-1', text: 'hel' }, runId: 'fake-run' },
+      { type: 'text-delta', payload: { id: 'msg-1', text: 'lo' }, runId: 'fake-run' },
+      { type: 'text-end', payload: { id: 'msg-1' }, runId: 'fake-run' },
     ];
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
 
@@ -219,8 +221,18 @@ describe('Session events — fullStream drain', () => {
     });
     await session.message({ content: 'hi' });
 
-    const deltas = events.filter(e => e.type === 'text_delta');
-    expect(deltas.map((e: any) => e.delta)).toEqual(['hel', 'lo']);
+    const messageEvents = events.filter(
+      e => e.type === 'message_start' || e.type === 'message_update' || e.type === 'message_end',
+    );
+    expect(messageEvents.map(e => e.type)).toEqual([
+      'message_start',
+      'message_update',
+      'message_update',
+      'message_end',
+    ]);
+    expect((messageEvents[0] as any).messageId).toBe('msg-1');
+    expect(messageEvents.slice(1, 3).map((e: any) => e.delta)).toEqual(['hel', 'lo']);
+    expect((messageEvents[3] as any).messageId).toBe('msg-1');
   });
 
   it('emits tool_start and tool_end around a tool-call/tool-result pair', async () => {

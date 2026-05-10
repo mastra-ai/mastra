@@ -449,7 +449,7 @@ class Session<TState = Record<string, unknown>> {
   //     and UIs read them via `session.getState()`. This keeps display
   //     state focused on the run, not on persistent thread data.
   //   - The message stream itself. Use `listMessages()` for history and
-  //     `subscribe()` for live `text_delta` / `tool_*` events.
+  //     `subscribe()` for live `message_*` / `tool_*` events.
   //
   // The snapshot is safe to call frequently from a UI event loop: it
   // shallow-copies the in-memory `SessionRecord` plus transient run-only
@@ -1785,7 +1785,7 @@ type SetStateFn<TState> = {
 
 **Events.**
 - `emitEvent(event)` forwards an event to subscribers of this session. The harness does not schema-check publisher-specific fields, but two things are validated eagerly and throw before any subscriber sees the event: (1) `type` must be dotted and must not be a reserved harness prefix (§10.3) — failure raises `HarnessValidationError`; (2) the payload must be JSON-serializable — failure raises `HarnessEventSerializationError` (`field: 'event.data'`, with the offending path). The serialization rule keeps in-process listeners and remote/SSE subscribers on the same contract — what a local listener sees is exactly what crosses the wire in §13.3, modulo transport.
-- Tools **must not** synthesize harness-owned event types: `agent_start`, `agent_end`, `text_delta`, `tool_start`, `tool_end`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `goal_*`. Emitting one is a `HarnessValidationError`. Use a custom dotted prefix (e.g. `myorg.tool.progress`) for tool-level signals.
+- Tools **must not** synthesize harness-owned event types: `agent_start`, `agent_end`, `message_start`, `message_update`, `message_end`, `tool_start`, `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_update`, `tool_end`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `goal_*`. Emitting one is a `HarnessValidationError`. Use a custom dotted prefix (e.g. `myorg.tool.progress`) for tool-level signals.
 - `registerQuestion` / `registerPlanApproval` are how `ask_user` and `submit_plan` (and any custom suspending tools you write) hand control back to the user. The harness pairs the registration with a Mastra workflow suspension — see §5.7 for the resume story.
 
 **Subagent linkage.**
@@ -2291,9 +2291,21 @@ type StateEvent =
 // At most one of `signalId` / `queuedItemId` is populated for a given event.
 // Events that are not attributable to any single caller (e.g. interval-
 // driven goal continuations) carry neither.
+// Assistant message lifecycle. The agent layer streams text under a stable
+// `messageId` (the ai-sdk text-stream id). Subscribers see exactly one
+// `message_start` per assistant message, zero or more `message_update`
+// events with text deltas, and exactly one `message_end` when the message
+// closes. A turn can produce multiple messages (e.g. a model that opens
+// a second text block after a tool call); each gets its own
+// start/update/end sequence.
+//
+// `text_delta` from earlier drafts has been removed — `message_update` is
+// the only text-streaming event in v1.
 type TurnEvent =
   | { type: 'agent_start';        runId: string; signalId?: string; queuedItemId?: string; overrides?: HarnessOverrides }
-  | { type: 'text_delta';         runId: string; signalId?: string; queuedItemId?: string; delta: string }
+  | { type: 'message_start';      runId: string; signalId?: string; queuedItemId?: string; messageId: string }
+  | { type: 'message_update';     runId: string; signalId?: string; queuedItemId?: string; messageId: string; delta: string }
+  | { type: 'message_end';        runId: string; signalId?: string; queuedItemId?: string; messageId: string }
   | { type: 'agent_end';          runId: string; signalId?: string; queuedItemId?: string; finishReason: string; usage: TokenUsage }
   | { type: 'error';              runId?: string; signalId?: string; queuedItemId?: string; error: { code: string; message: string } };
 
@@ -2321,9 +2333,26 @@ type QueueLifecycleEvent =
 // Tool calls (session-scoped). Carry the same correlation fields as
 // `TurnEvent` so a client filtering by `signalId` / `queuedItemId` sees
 // the full turn (text + tool calls), not just the model output.
+//
+// Tool-input streaming (`tool_input_start` / `tool_input_delta` /
+// `tool_input_end`) surfaces the model's incremental construction of a
+// tool's arguments before the call is dispatched, so a UI can render
+// arguments as they arrive. `tool_input_end` is followed by `tool_start`
+// once the harness commits the call. Models that emit a complete `tool-call`
+// chunk in one shot skip the streaming triplet entirely — clients must
+// tolerate either shape.
+//
+// `tool_update` is emitted by long-running tools that want to stream
+// progress (shell stdout, downloads, codegen). It carries the
+// publisher-defined `partialResult`; the harness performs the same JSON-
+// serializability check as `ctx.emitEvent` (§10.3).
 type ToolEvent =
-  | { type: 'tool_start';    runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; input: unknown }
-  | { type: 'tool_end';      runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; output: unknown; isError: boolean };
+  | { type: 'tool_input_start'; runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string }
+  | { type: 'tool_input_delta'; runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; argsTextDelta: string; toolName?: string }
+  | { type: 'tool_input_end';   runId: string; signalId?: string; queuedItemId?: string; toolCallId: string }
+  | { type: 'tool_start';       runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; input: unknown }
+  | { type: 'tool_update';      runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; partialResult: unknown }
+  | { type: 'tool_end';         runId: string; signalId?: string; queuedItemId?: string; toolCallId: string; toolName: string; output: unknown; isError: boolean };
 
 // Subagent activity (session-scoped — emitted on the *parent* session's subscriber).
 // `subagentSessionId` is the child session's ID and is stable across the subagent's
@@ -2391,14 +2420,14 @@ Tools call `requestContext.get('harness').emitEvent(event)` to surface tool-leve
 - **Type must use a dotted prefix.** `myorg.tool.progress`, `acme.scan.matched`, etc. The leading segment should identify the publisher; the trailing segments are the publisher's choice. Type strings that don't match `^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$` are rejected with `HarnessValidationError` (`field: 'event.type'`).
 - **Payloads must be JSON-serializable.** The harness does not schema-check publisher-specific fields, but the same event stream feeds in-process subscribers and the SSE wire format in §13.3, so payloads must round-trip through `JSON.stringify` / `JSON.parse` without loss. Concretely: only plain objects, arrays, strings, finite numbers, booleans, and `null`. Functions, class instances, `Map`, `Set`, `Date`, `BigInt`, typed arrays, `undefined` values, symbols, and circular references are not allowed. `emitEvent(...)` validates the payload eagerly and throws `HarnessEventSerializationError` (`field: 'event.data'`, with the offending path) before the event reaches any subscriber. This keeps in-process and remote subscribers on the same contract — an event that an in-process listener sees is exactly an event that the SSE consumer sees, modulo transport.
 - **The harness fills in the base fields** (`id`, `sessionId`, `timestamp`). Tools must not set those themselves; supplying any of them is a `HarnessValidationError`.
-- **Built-in types are reserved.** Emitting any of `agent_*`, `text_delta`, `tool_*`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `token_usage_changed`, `tool_approval_required`, `tool_suspension_required`, `question_pending`, `plan_approval_required`, `attachment_*`, `storage_error`, `goal_*`, or `error` from a tool is rejected with `HarnessValidationError` (`field: 'event.type'`, `reason: 'reserved'`).
+- **Built-in types are reserved.** Emitting any of `agent_*`, `message_*`, `tool_*`, `subagent_*`, `queue_*`, `state_changed`, `mode_changed`, `model_changed`, `session_*`, `token_usage_changed`, `tool_approval_required`, `tool_suspension_required`, `question_pending`, `plan_approval_required`, `attachment_*`, `storage_error`, `goal_*`, or `error` from a tool is rejected with `HarnessValidationError` (`field: 'event.type'`, `reason: 'reserved'`).
 
 Custom events go through the same base-field, ordering, and replay rules as built-in events. Subscribers should narrow by `type` and tolerate unknown types (forward-compatibility).
 
 ### 10.4 Ordering guarantees
 
 - **Per-session FIFO.** Within a single session, events are delivered to every subscriber in the order the harness emitted them. Subscribers added later still receive future events in order from the moment they subscribe; they do *not* automatically replay past events (use the SSE replay path in §10.5 for that).
-- **Per-turn coherence.** For a given `runId`: `agent_start` is the first event, `agent_end` (or `error`) is the last. Between them, `text_delta`, `tool_start`/`tool_end`, and any `subagent_*` events for tools running in that turn appear in the order the agent layer produced them. Suspension events (`*_required`, `question_pending`) interleave with text/tool events at the point the suspension occurred and are followed by either a `tool_end` (after resume) or an `agent_end` (after abort).
+- **Per-turn coherence.** For a given `runId`: `agent_start` is the first event, `agent_end` (or `error`) is the last. Between them, message events (`message_start` / `message_update` / `message_end`), tool-input streaming events (`tool_input_start` / `tool_input_delta` / `tool_input_end`), tool-call events (`tool_start` / `tool_update` / `tool_end`), and any `subagent_*` events appear in the order the agent layer produced them. Per `messageId`, exactly one `message_start` precedes any `message_update`s and one `message_end`. Per `toolCallId`, the streaming triplet (when present) precedes `tool_start`, which precedes any `tool_update`s, which precede `tool_end`. Suspension events (`*_required`, `question_pending`) interleave with text/tool events at the point the suspension occurred and are followed by either a `tool_end` (after resume) or an `agent_end` (after abort).
 - **Queue lifecycle events.** For a given `queuedItemId`: `queue_item_started` is emitted as soon as the item drains and the run is opened, immediately before `agent_start` for that run, and carries the same `runId`. A `queue_item_replayed` event (when present) precedes both `queue_item_started` and `agent_start` for the replay attempt — it is the first thing observers see for the replay. `queue_item_failed` is terminal for the queued item and is never followed by an `agent_start` for the same `queuedItemId`. A queued item that runs successfully has no `queue_item_failed` event; the run's `agent_end` is the terminal signal. All three queue lifecycle events propagate `queuedItemId` onto the subsequent turn events (`agent_*`, `text_delta`, `tool_*`) so a remote client can filter the SSE stream by `queuedItemId`.
 - **Cross-session.** No ordering is guaranteed across different sessions. Two sessions running in parallel emit independently; subscribers that observe both should sort by `(sessionId, id)` if they need a stable rendering.
 - **Listener delivery.** Listeners are invoked synchronously in registration order. Throwing from a listener does not stop other listeners and does not abort the turn — the exception is caught and logged. Listener errors are intentionally not re-emitted as events (that would invite feedback loops); subscribers that need visibility on their own failures should wrap their handler bodies.

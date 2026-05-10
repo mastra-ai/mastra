@@ -97,9 +97,54 @@ export interface AgentStartEvent extends HarnessEventBase {
   type: 'agent_start';
 }
 
-export interface TextDeltaEvent extends HarnessEventBase {
-  type: 'text_delta';
+/**
+ * Assistant message lifecycle (§10.2).
+ *
+ * Each assistant message produced inside a turn gets exactly one
+ * `message_start`, zero or more `message_update` (text deltas), and one
+ * `message_end`. `messageId` is stable across the trio and matches the
+ * ai-sdk text-stream id, so a UI can address an in-flight message slot
+ * directly.
+ */
+export interface MessageStartEvent extends HarnessEventBase {
+  type: 'message_start';
+  messageId: string;
+}
+
+export interface MessageUpdateEvent extends HarnessEventBase {
+  type: 'message_update';
+  messageId: string;
   delta: string;
+}
+
+export interface MessageEndEvent extends HarnessEventBase {
+  type: 'message_end';
+  messageId: string;
+}
+
+/**
+ * Tool-input streaming (§10.2). Models that build arguments incrementally
+ * surface a `tool_input_start` → N × `tool_input_delta` → `tool_input_end`
+ * sequence before the actual `tool_start`. Models that emit a complete
+ * `tool-call` chunk in one shot skip the triplet entirely; clients must
+ * tolerate either shape.
+ */
+export interface ToolInputStartEvent extends HarnessEventBase {
+  type: 'tool_input_start';
+  toolCallId: string;
+  toolName: string;
+}
+
+export interface ToolInputDeltaEvent extends HarnessEventBase {
+  type: 'tool_input_delta';
+  toolCallId: string;
+  argsTextDelta: string;
+  toolName?: string;
+}
+
+export interface ToolInputEndEvent extends HarnessEventBase {
+  type: 'tool_input_end';
+  toolCallId: string;
 }
 
 export interface ToolStartEvent extends HarnessEventBase {
@@ -107,6 +152,19 @@ export interface ToolStartEvent extends HarnessEventBase {
   toolCallId: string;
   toolName: string;
   args: unknown;
+}
+
+/**
+ * Tool progress (§10.2). Long-running tools (shell, downloads, codegen)
+ * publish incremental `partialResult`s between `tool_start` and `tool_end`.
+ * This event type is reserved here so subscribers can pattern-match it,
+ * but the harness does not emit it directly — it is published by tools
+ * via `ctx.emitEvent` in M5/M6 once the built-in tool surface lands.
+ */
+export interface ToolUpdateEvent extends HarnessEventBase {
+  type: 'tool_update';
+  toolCallId: string;
+  partialResult: unknown;
 }
 
 export interface ToolEndEvent extends HarnessEventBase {
@@ -227,8 +285,14 @@ export type HarnessEvent =
   | ModelChangedEvent
   | StateChangedEvent
   | AgentStartEvent
-  | TextDeltaEvent
+  | MessageStartEvent
+  | MessageUpdateEvent
+  | MessageEndEvent
+  | ToolInputStartEvent
+  | ToolInputDeltaEvent
+  | ToolInputEndEvent
   | ToolStartEvent
+  | ToolUpdateEvent
   | ToolEndEvent
   | AgentEndEvent
   | SuspensionRequiredEvent
@@ -400,8 +464,14 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'state_changed',
   'agent_start',
   'agent_end',
-  'text_delta',
+  'message_start',
+  'message_update',
+  'message_end',
+  'tool_input_start',
+  'tool_input_delta',
+  'tool_input_end',
   'tool_start',
+  'tool_update',
   'tool_end',
   'suspension_required',
   'suspension_resolved',

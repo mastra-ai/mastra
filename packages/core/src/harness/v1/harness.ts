@@ -223,8 +223,10 @@ export class Harness {
    * Subscribe to harness-scoped events. Includes lifecycle events for every
    * live session (session_created, session_closed, session_evicted) and any
    * harness-level custom events. Per-session turn events (agent_start,
-   * text_delta, tool_*, suspension_*, mode_changed, model_changed) are
+   * message_*, tool_*, suspension_*, mode_changed, model_changed) are
    * forwarded here so a single subscriber can render the whole harness.
+   * Per-turn events also include `message_*` (assistant text streaming) and
+   * `tool_input_*` (model-side argument streaming) — see §10.2.
    *
    * Listeners see only future events.
    */
