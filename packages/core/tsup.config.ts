@@ -51,6 +51,7 @@ export default defineConfig({
     'src/*/index.ts',
     'src/observability/context-storage.ts',
     'src/tools/is-vercel-tool.ts',
+    'src/tools/builtin/index.ts',
     'src/workflows/constants.ts',
     'src/storage/constants.ts',
     'src/workflows/evented/index.ts',

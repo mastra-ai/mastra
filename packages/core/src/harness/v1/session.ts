@@ -27,6 +27,7 @@ import { RequestContext } from '../../request-context';
 import type { HarnessStorage, PendingResume, QueuedItem, SessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
+import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID } from '../../tools/builtin';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import type { HarnessMessage } from '../types';
@@ -49,12 +50,13 @@ import type {
 } from './types';
 
 /**
- * Tool names that the harness translates from `tool-call-approval` /
- * `tool-call-suspended` events into question / plan-approval `kind`s.
- * Built-in convention from spec §7.3 (`ask_user`, `submit_plan`).
+ * Tool IDs the harness translates from `tool-call-approval` /
+ * `tool-call-suspended` events into `question` / `plan-approval` `kind`s.
+ * Shared with the built-in `askUser` / `submitPlan` tools so the contract
+ * lives in a single place (`packages/core/src/tools/builtin`).
  */
-const ASK_USER_TOOL_NAME = 'ask_user';
-const SUBMIT_PLAN_TOOL_NAME = 'submit_plan';
+const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
+const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 
 export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
 
@@ -1011,13 +1013,33 @@ export class Session {
   }
 
   /**
-   * Resume a pending `submit_plan` approval. On `approved: true` the harness
-   * also flips the active mode if the submitting mode declared `transitionsTo`,
-   * recording the flip via `approvedTransitionModeId` /
-   * `modeTransitionAppliedAt` for idempotent replay.
+   * Resume a pending `submit_plan` approval.
+   *
+   * On `approved: true` the harness flips the active mode to:
+   *   - `opts.transitionToMode` when supplied (overrides mode-declared default), OR
+   *   - the submitting mode's declared `transitionsTo` when set, OR
+   *   - no-op (stays in the submitting mode).
+   *
+   * `revision` is free-form reviewer feedback forwarded to the tool as
+   * `resumeData.revision` (see `submitPlan` resume schema). It is independent
+   * of approval — the reviewer can approve with a revision note or reject
+   * with revision guidance.
    */
-  async respondToPlanApproval(opts: { approved: boolean; feedback?: string }): Promise<AgentResult> {
-    return this._resume('plan-approval', { approved: opts.approved, feedback: opts.feedback });
+  async respondToPlanApproval(opts: {
+    approved: boolean;
+    revision?: string;
+    transitionToMode?: string;
+  }): Promise<AgentResult> {
+    if (opts.transitionToMode !== undefined) {
+      // Validate eagerly so callers see a clean error rather than a CAS-time
+      // throw from inside the resume flow.
+      this._harness._getMode(opts.transitionToMode);
+    }
+    return this._resume('plan-approval', {
+      approved: opts.approved,
+      revision: opts.revision,
+      transitionToMode: opts.transitionToMode,
+    });
   }
 
   private async _resume(expectedKind: PendingResume['kind'], resumeData: unknown): Promise<AgentResult> {
@@ -1059,13 +1081,24 @@ export class Session {
     // For plan-approval, flip the active mode atomically with clearing the
     // pending record. Done inside the same _flushUpdate below so the mode
     // change and pending-clear land in one CAS write.
+    //
+    // Resolution order on approval:
+    //   1. Caller-supplied `transitionToMode` overrides everything.
+    //   2. Falls back to the submitting mode's declared `transitionsTo`
+    //      (captured into `pending.transitionModeId` at suspend time).
+    //   3. Otherwise no flip.
     let modeFlipTarget: string | undefined;
     if (expectedKind === 'plan-approval') {
-      const data = resumeData as { approved: boolean };
-      if (data.approved && pending.transitionModeId && pending.transitionModeId !== this._record.modeId) {
-        // Validate the target mode exists before we hand off to the agent.
-        this._harness._getMode(pending.transitionModeId);
-        modeFlipTarget = pending.transitionModeId;
+      const data = resumeData as { approved: boolean; transitionToMode?: string };
+      if (data.approved) {
+        const candidate = data.transitionToMode ?? pending.transitionModeId;
+        if (candidate && candidate !== this._record.modeId) {
+          // Validate the target mode exists before we hand off to the agent.
+          // (Caller-supplied `transitionToMode` is also validated up-front in
+          // `respondToPlanApproval`; this catches the pending-record path.)
+          this._harness._getMode(candidate);
+          modeFlipTarget = candidate;
+        }
       }
     }
 

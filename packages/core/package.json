@@ -441,6 +441,16 @@
         "default": "./dist/tools/index.cjs"
       }
     },
+    "./tools/builtin": {
+      "import": {
+        "types": "./dist/tools/builtin/index.d.ts",
+        "default": "./dist/tools/builtin/index.js"
+      },
+      "require": {
+        "types": "./dist/tools/builtin/index.d.ts",
+        "default": "./dist/tools/builtin/index.cjs"
+      }
+    },
     "./tts": {
       "import": {
         "types": "./dist/tts/index.d.ts",
