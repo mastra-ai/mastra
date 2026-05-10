@@ -3,6 +3,7 @@ import type {
   Tool,
   ToolV5,
   FlexibleSchema,
+  InferFlexibleSchema,
   ToolCallOptions,
   ToolExecutionOptions,
   Schema,
@@ -17,11 +18,22 @@ import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { PublicSchema } from '../schema';
+import type { InferPublicSchema, PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
+
+/** Same shapes `asSchema()` accepts at runtime, plus Mastra JSON Schema / Standard Schema. */
+export type ToolSchema<T = unknown> = PublicSchema<T> | FlexibleSchema<T>;
+
+export type InferToolSchema<T extends ToolSchema<any> | undefined> = [T] extends [undefined]
+  ? unknown
+  : T extends PublicSchema<any>
+    ? InferPublicSchema<T>
+    : T extends FlexibleSchema<any>
+      ? InferFlexibleSchema<T>
+      : unknown;
 
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
@@ -436,10 +448,10 @@ export interface ToolAction<
 > {
   id: TId;
   description: string;
-  inputSchema?: PublicSchema<TSchemaIn>;
-  outputSchema?: PublicSchema<TSchemaOut>;
-  suspendSchema?: PublicSchema<TSuspend>;
-  resumeSchema?: PublicSchema<TResume>;
+  inputSchema?: ToolSchema<TSchemaIn>;
+  outputSchema?: ToolSchema<TSchemaOut>;
+  suspendSchema?: ToolSchema<TSuspend>;
+  resumeSchema?: ToolSchema<TResume>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.

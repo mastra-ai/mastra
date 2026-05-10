@@ -1,5 +1,10 @@
 export type { Tool, ToolExecutionOptions, Schema } from 'ai';
-export type { Tool as ToolV5, ToolCallOptions, FlexibleSchema } from '@ai-sdk/provider-utils';
+export type {
+  Tool as ToolV5,
+  ToolCallOptions,
+  FlexibleSchema,
+  InferSchema as InferFlexibleSchema,
+} from '@ai-sdk/provider-utils';
 
 /**
  * Structural type to accept provider-defined tools from external packages.

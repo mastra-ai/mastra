@@ -1,9 +1,19 @@
+import { asSchema } from '@internal/ai-sdk-v5';
+import type { FlexibleSchema } from '@internal/external-types';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
-import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext, ToolPayloadTransform } from './types';
+import type {
+  InferToolSchema,
+  McpMetadata,
+  MCPToolProperties,
+  ToolAction,
+  ToolExecutionContext,
+  ToolPayloadTransform,
+  ToolSchema,
+} from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -14,6 +24,13 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
  * Follows the naming convention: <org>.<product>.<category>.<className>
  */
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
+
+function normalizeToolSchema<T>(schema: ToolSchema<T>): PublicSchema<T> {
+  if (typeof schema === 'function') {
+    return asSchema(schema as FlexibleSchema<T>) as unknown as PublicSchema<T>;
+  }
+  return schema as PublicSchema<T>;
+}
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -253,10 +270,10 @@ export class Tool<
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
-    this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
-    this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
-    this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
-    this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
+    this.inputSchema = opts.inputSchema ? toStandardSchema(normalizeToolSchema(opts.inputSchema)) : undefined;
+    this.outputSchema = opts.outputSchema ? toStandardSchema(normalizeToolSchema(opts.outputSchema)) : undefined;
+    this.suspendSchema = opts.suspendSchema ? toStandardSchema(normalizeToolSchema(opts.suspendSchema)) : undefined;
+    this.resumeSchema = opts.resumeSchema ? toStandardSchema(normalizeToolSchema(opts.resumeSchema)) : undefined;
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
@@ -509,8 +526,8 @@ export class Tool<
  * });
  * ```
  */
-type SchemaLike = PublicSchema<any> | undefined;
-type InferSchema<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+type SchemaLike = ToolSchema<any> | undefined;
+type InferSchema<T extends SchemaLike> = InferToolSchema<T>;
 
 type CreateToolOpts<
   TId extends string,
