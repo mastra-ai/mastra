@@ -308,12 +308,11 @@ class Session<TState = Record<string, unknown>> {
   setState(updater: (prev: Readonly<TState>) => TState): Promise<void>;
 
   // Mode
-  getCurrentModeId(): string;
   getCurrentMode(): HarnessMode;
   switchMode(opts: { mode: string }): Promise<void>;
 
   // Model
-  getCurrentModelId(): string;
+  getCurrentModel(): string;
   hasModelSelected(): boolean;
   getCurrentModelAuthStatus(): Promise<ModelAuthStatus>;
   switchModel(opts: { model: string }): Promise<void>;
@@ -2382,8 +2381,8 @@ The table below maps each method on the legacy `Harness` to its new `Harness` + 
 | `harness.switchObserverModel(...)` | `session.om.switchObserverModel(...)` |
 | `harness.registerHeartbeat(...)` | `harness.onInterval(...)` (returns unsubscribe) |
 | `harness.removeHeartbeat({ id })` | call the unsubscribe function returned by `onInterval` |
-| `harness.getModelName()` | *removed* — `session.getCurrentModelId().split('/').pop()` |
-| `harness.getFullModelId()` | *removed* — duplicate of `getCurrentModelId()` |
+| `harness.getModelName()` | *removed* — `session.getCurrentModel().split('/').pop()` |
+| `harness.getFullModelId()` | *removed* — duplicate of `getCurrentModel()` |
 | `harness.getResolvedObserverModel()` | *removed* — trivial composition |
 | `harness.getSession()` | *removed* — name collides with new `Session` |
 | `harness.selectOrCreateThread()` | *removed* — use `harness.session({ resourceId })` |

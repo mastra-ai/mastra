@@ -66,7 +66,7 @@ export class HarnessSessionLockedError extends Error {
 
 /**
  * Caller passed an option that violates a runtime contract — e.g.
- * `respondToolApproval` while no `tool-approval` is pending, or while a
+ * `respondToToolApproval` while no `tool-approval` is pending, or while a
  * different `kind` of resume is pending. Throws synchronously before any
  * agent or storage work happens.
  */
@@ -77,6 +77,22 @@ export class HarnessValidationError extends Error {
     public readonly reason: string,
   ) {
     super(`HarnessValidationError at ${field}: ${reason}`);
+  }
+}
+
+/**
+ * `session.queue(...)` rejected at admission because `pendingQueue` has
+ * already reached `sessions.maxQueueDepth` (default 100). The capacity check
+ * and durable append are atomic per session, so two concurrent `queue()`
+ * calls cannot both observe available space and commit past the cap.
+ */
+export class HarnessQueueFullError extends Error {
+  readonly name = 'HarnessQueueFullError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly maxQueueDepth: number,
+  ) {
+    super(`Queue for session "${sessionId}" is full (max ${maxQueueDepth})`);
   }
 }
 
@@ -92,5 +108,57 @@ export class HarnessStorageError extends Error {
     public readonly cause: unknown,
   ) {
     super(`Harness storage ${operation} failed for session "${sessionId}"`);
+  }
+}
+
+/**
+ * Thread CRUD operation targeted a thread that does not exist, or that
+ * belongs to a different resource than the caller. Cross-resource existence
+ * is never leaked — both cases produce the same error.
+ */
+export class HarnessThreadNotFoundError extends Error {
+  readonly name = 'HarnessThreadNotFoundError';
+  constructor(
+    public readonly resourceId: string,
+    public readonly threadId: string,
+  ) {
+    super(`Thread "${threadId}" not found for resource "${resourceId}"`);
+  }
+}
+
+/**
+ * `ctx.emitEvent(...)` (or any other harness-event publish path) received a
+ * payload that is not JSON-serializable. The check runs synchronously before
+ * any subscriber observes the event, so in-process listeners and remote/SSE
+ * subscribers see the same contract.
+ *
+ * `path` is the dotted location of the offending value (e.g. `event.foo.bar`).
+ * `reason` is a typed description of why the value was rejected.
+ */
+export type EventSerializationReason =
+  | 'function'
+  | 'symbol'
+  | 'bigint'
+  | 'undefined'
+  | 'class-instance'
+  | 'map'
+  | 'set'
+  | 'date'
+  | 'typed-array'
+  | 'cyclic'
+  | 'unknown';
+
+export class HarnessEventSerializationError extends Error {
+  readonly name = 'HarnessEventSerializationError';
+  constructor(
+    public readonly sessionId: string | undefined,
+    public readonly eventType: string,
+    public readonly path: string,
+    public readonly reason: EventSerializationReason,
+  ) {
+    super(
+      `Event "${eventType}" is not JSON-serializable at ${path}: ${reason}` +
+        (sessionId ? ` (session: ${sessionId})` : ''),
+    );
   }
 }

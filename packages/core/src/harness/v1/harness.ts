@@ -32,13 +32,17 @@ import {
   HarnessStorageVersionConflictError,
 } from '../../storage/domains/harness';
 
+import { InMemoryStore } from '../../storage/mock';
 import {
   HarnessConfigError,
   HarnessSessionClosedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
   HarnessStorageError,
+  HarnessThreadNotFoundError,
 } from './errors';
+import { EventEmitter } from './events';
+import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import { Session } from './session';
 import type {
   AttachmentDeleteOptions,
@@ -50,10 +54,19 @@ import type {
   SessionLoadByIdOptions,
   SessionResolveOptions,
   ShutdownOptions,
+  ThreadCloneOptions,
+  ThreadCreateOptions,
   ThreadDeleteOptions,
+  ThreadGetOptions,
+  ThreadListOptions,
+  ThreadListResult,
+  ThreadRecord,
+  ThreadRenameOptions,
+  ThreadSelectOrCreateOptions,
 } from './types';
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
+const DEFAULT_MAX_QUEUE_DEPTH = 100;
 
 export class Harness {
   /** Process-scoped owner id used as the lease holder for all sessions. */
@@ -75,6 +88,10 @@ export class Harness {
   private readonly _defaultModeId?: string;
   private readonly _liveSessions = new Map<string, Session>();
   private readonly _leaseTtlMs: number;
+  private readonly _maxQueueDepth: number;
+  private readonly _emitter = new EventEmitter();
+  /** Per-session unsubscribers so harness-level subscribers see session events too. */
+  private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
 
   private _shutdown = false;
 
@@ -82,6 +99,10 @@ export class Harness {
     this.ownerId = `harness-${randomUUID()}`;
     this._leaseTtlMs = DEFAULT_LEASE_TTL_MS;
     this._storageOverride = config.sessions?.storage;
+    this._maxQueueDepth = config.sessions?.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
+    if (this._maxQueueDepth < 1) {
+      throw new HarnessConfigError('sessions.maxQueueDepth', 'must be a positive integer');
+    }
 
     // Validate mode shape (uniqueness, tools/additionalTools mutual
     // exclusion, transitionsTo resolution) up front. Agent-existence
@@ -120,15 +141,21 @@ export class Harness {
 
     // Resolve the Mastra binding. Three shapes:
     //   1. Caller passed a pre-built Mastra
-    //   2. Caller passed inline agents (and optionally storage)
+    //   2. Caller passed inline agents (and optionally storage) — we build
+    //      our own Mastra so the harness is fully self-contained. If no
+    //      storage was supplied we default to InMemoryStore so that both
+    //      the harness storage domain *and* the memory domain (used by
+    //      thread CRUD) are available without the caller having to wire
+    //      a composite by hand.
     //   3. Neither — defer; a parent Mastra will install itself via
     //      __registerMastra during its own construction.
     if (config.mastra) {
       this._bindMastra(config.mastra);
     } else if (config.agents !== undefined || config.storage !== undefined) {
+      const storage = config.storage ?? new InMemoryStore();
       const internal = new Mastra({
         agents: config.agents,
-        storage: config.storage,
+        storage,
       });
       this._bindMastra(internal);
     }
@@ -186,6 +213,33 @@ export class Harness {
       }
     }
     this._mastra = mastra;
+  }
+
+  // -------------------------------------------------------------------------
+  // Events — §10.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Subscribe to harness-scoped events. Includes lifecycle events for every
+   * live session (session_created, session_closed, session_evicted) and any
+   * harness-level custom events. Per-session turn events (agent_start,
+   * text_delta, tool_*, suspension_*, mode_changed, model_changed) are
+   * forwarded here so a single subscriber can render the whole harness.
+   *
+   * Listeners see only future events.
+   */
+  subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
+    return this._emitter.subscribe(listener);
+  }
+
+  /** @internal — listener count for tests. */
+  _internalListenerCount(): number {
+    return this._emitter.listenerCount;
+  }
+
+  /** @internal — emit a harness-level event. Used by tests and helpers. */
+  _emit(event: Parameters<EventEmitter['emit']>[0], overrides?: Parameters<EventEmitter['emit']>[1]): HarnessEvent {
+    return this._emitter.emit(event, overrides);
   }
 
   /**
@@ -416,7 +470,7 @@ export class Harness {
       sessionGrants: emptySessionGrants(),
       tokenUsage: zeroTokenUsage(),
       pendingQueue: [],
-      state: undefined,
+      state: {},
       createdAt: now,
       lastActivityAt: now,
       version: 0,
@@ -466,6 +520,36 @@ export class Harness {
       leaseExpiresAt: record.leaseExpiresAt ?? Date.now() + this._leaseTtlMs,
     });
     this._liveSessions.set(record.id, session);
+
+    // Bridge the session's events onto the harness-level emitter so a single
+    // harness.subscribe() sees every session's turn activity. Forwarded
+    // events keep their original id/timestamp/sessionId.
+    const bridge = session.subscribe(event => this._emitter.forward(event));
+    this._sessionEventBridges.set(record.id, bridge);
+
+    // Surface session creation to harness-level subscribers AFTER the bridge
+    // is wired. Stamps `sessionId` via the override so harness emitter
+    // (no scope) can carry it.
+    this._emitter.emit(
+      {
+        type: 'session_created',
+        resourceId: record.resourceId,
+        threadId: record.threadId,
+        ...(record.parentSessionId !== undefined && { parentSessionId: record.parentSessionId }),
+        modeId: record.modeId,
+        modelId: record.modelId,
+      },
+      { sessionId: record.id },
+    );
+
+    // If the hydrated record has queued items waiting and no live
+    // suspension blocking them, kick the drain. Items recovered this way
+    // emit `queue_item_replayed` instead of `queue_item_started` because
+    // the original `queue()` caller's resolver is gone.
+    if ((record.pendingQueue?.length ?? 0) > 0 && record.pendingResume === undefined) {
+      void session._kickQueueDrain();
+    }
+
     return session;
   }
 
@@ -561,6 +645,18 @@ export class Harness {
     }
 
     session._markClosed(closed);
+
+    // Emit session_closed BEFORE we tear down the per-session bridge so
+    // harness-level subscribers see the lifecycle event for this session.
+    // The session's own emitter is still wired and will publish to the
+    // bridge before the unsubscribe lands.
+    session._emit({ type: 'session_closed', reason: 'requested' });
+
+    const bridge = this._sessionEventBridges.get(session.id);
+    if (bridge) {
+      bridge();
+      this._sessionEventBridges.delete(session.id);
+    }
     this._liveSessions.delete(session.id);
   }
 
@@ -619,18 +715,188 @@ export class Harness {
       } catch {
         // Best-effort: leases TTL out anyway.
       }
+
+      // Surface eviction to harness-level subscribers BEFORE we tear down
+      // the bridge so the event still propagates.
+      session._emit({ type: 'session_evicted', reason: 'shutdown' });
+
+      const bridge = this._sessionEventBridges.get(session.id);
+      if (bridge) {
+        bridge();
+        this._sessionEventBridges.delete(session.id);
+      }
     }
     this._liveSessions.clear();
   }
 
   // -------------------------------------------------------------------------
-  // Stub surfaces — kept so downstream callers compile while we land the
-  // real implementations in subsequent slices.
+  // Thread API (sidebar surface). See HARNESS_V1_SPEC.md §4.4 + §5.2.
+  //
+  // Threads are the durable artifact (message log + title), distinct from
+  // the runtime Session. Every operation is resource-scoped — cross-resource
+  // existence is never leaked. `delete` cascades to the live session via
+  // `_closeSession` so the lease is released and child sessions are torn
+  // down before the thread + messages are removed.
   // -------------------------------------------------------------------------
 
   threads = {
-    delete: async (_opts: ThreadDeleteOptions): Promise<void> => {
-      throw new Error('Harness.threads.delete: not implemented');
+    create: async (opts: ThreadCreateOptions): Promise<ThreadRecord> => {
+      const memory = await this._requireMemoryStorage('threads.create()');
+      const now = new Date();
+      const thread = await memory.saveThread({
+        thread: {
+          id: opts.threadId ?? this._mintThreadId(),
+          resourceId: opts.resourceId,
+          title: opts.title,
+          createdAt: now,
+          updatedAt: now,
+          metadata: opts.metadata as Record<string, unknown> | undefined,
+        },
+      });
+      const record = toThreadRecord(thread);
+      this._emitter.emit({
+        type: 'thread_created',
+        threadId: record.id,
+        resourceId: record.resourceId,
+        title: record.title,
+      });
+      return record;
+    },
+
+    list: async (opts: ThreadListOptions): Promise<ThreadListResult> => {
+      const memory = await this._requireMemoryStorage('threads.list()');
+      const out = await memory.listThreads({
+        perPage: opts.perPage ?? 100,
+        page: opts.page ?? 0,
+        orderBy: opts.orderBy,
+        filter: {
+          resourceId: opts.resourceId,
+          metadata: opts.metadata as Record<string, unknown> | undefined,
+        },
+      });
+      return {
+        threads: out.threads.map(toThreadRecord),
+        total: out.total,
+        perPage: out.perPage,
+        page: out.page,
+        hasMore: out.hasMore,
+      };
+    },
+
+    get: async (opts: ThreadGetOptions): Promise<ThreadRecord | null> => {
+      const memory = await this._requireMemoryStorage('threads.get()');
+      const thread = await memory.getThreadById({ threadId: opts.threadId });
+      if (!thread || thread.resourceId !== opts.resourceId) return null;
+      return toThreadRecord(thread);
+    },
+
+    rename: async (opts: ThreadRenameOptions): Promise<ThreadRecord> => {
+      const memory = await this._requireMemoryStorage('threads.rename()');
+      const existing = await memory.getThreadById({ threadId: opts.threadId });
+      if (!existing || existing.resourceId !== opts.resourceId) {
+        throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
+      }
+      const previousTitle = existing.title;
+      const merged: Record<string, unknown> = {
+        ...((existing.metadata as Record<string, unknown> | undefined) ?? {}),
+        ...((opts.metadata as Record<string, unknown> | undefined) ?? {}),
+      };
+      const updated = await memory.updateThread({
+        id: opts.threadId,
+        title: opts.title,
+        metadata: merged,
+      });
+      const record = toThreadRecord(updated);
+      this._emitter.emit({
+        type: 'thread_renamed',
+        threadId: record.id,
+        resourceId: record.resourceId,
+        title: opts.title,
+        previousTitle,
+      });
+      return record;
+    },
+
+    clone: async (opts: ThreadCloneOptions): Promise<ThreadRecord> => {
+      const memory = await this._requireMemoryStorage('threads.clone()');
+      const source = await memory.getThreadById({ threadId: opts.threadId });
+      if (!source || source.resourceId !== opts.resourceId) {
+        throw new HarnessThreadNotFoundError(opts.resourceId, opts.threadId);
+      }
+      const cloned = await memory.cloneThread({
+        sourceThreadId: opts.threadId,
+        newThreadId: opts.newThreadId,
+        resourceId: opts.resourceId,
+        title: opts.title,
+        metadata: opts.metadata as Record<string, unknown> | undefined,
+        options: opts.messageLimit !== undefined ? { messageLimit: opts.messageLimit } : undefined,
+      });
+      const record = toThreadRecord(cloned.thread);
+      this._emitter.emit({
+        type: 'thread_cloned',
+        threadId: record.id,
+        resourceId: record.resourceId,
+        sourceThreadId: opts.threadId,
+        title: record.title,
+      });
+      return record;
+    },
+
+    selectOrCreate: async (opts: ThreadSelectOrCreateOptions): Promise<ThreadRecord> => {
+      if (opts.threadId) {
+        const existing = await this.threads.get({
+          resourceId: opts.resourceId,
+          threadId: opts.threadId,
+        });
+        if (existing) return existing;
+        // Fall through and create a fresh thread with the requested id so the
+        // caller can pin a stable URL without breaking resource isolation.
+        return this.threads.create({
+          resourceId: opts.resourceId,
+          threadId: opts.threadId,
+          title: opts.title,
+          metadata: opts.metadata,
+        });
+      }
+      return this.threads.create({
+        resourceId: opts.resourceId,
+        title: opts.title,
+        metadata: opts.metadata,
+      });
+    },
+
+    delete: async (opts: ThreadDeleteOptions): Promise<void> => {
+      const memory = await this._requireMemoryStorage('threads.delete()');
+      const existing = await memory.getThreadById({ threadId: opts.threadId });
+      if (!existing || existing.resourceId !== opts.resourceId) {
+        // Idempotent: deleting a missing or foreign-owned thread is a no-op
+        // from the caller's perspective. Cross-resource existence is never
+        // leaked.
+        return;
+      }
+
+      // Cascade: close the live session (if any) before deleting the thread
+      // so the lease is released and any child sessions are torn down.
+      const storage = this._requireStorage('threads.delete()');
+      let cascaded = false;
+      const stored = await storage.loadSessionByThread({
+        threadId: opts.threadId,
+        resourceId: opts.resourceId,
+      });
+      if (stored) {
+        cascaded = true;
+        const live = this._liveSessions.get(stored.id);
+        const session = live ?? (await this._hydrate(storage, stored));
+        await this._closeSession(session);
+      }
+
+      await memory.deleteThread({ threadId: opts.threadId });
+      this._emitter.emit({
+        type: 'thread_deleted',
+        threadId: opts.threadId,
+        resourceId: opts.resourceId,
+        cascadedSessionClose: cascaded,
+      });
     },
   };
 
@@ -651,6 +917,12 @@ export class Harness {
     if (this._storageOverride) return this._storageOverride;
     if (this._mastra) {
       const composite = this._mastra.getStorage();
+      // Domain access goes through getStore() everywhere else in the codebase
+      // — keep this consistent so adapters that override the accessor (e.g.
+      // to add caching or lazy init) plug in transparently. Synchronously
+      // available because all current adapters resolve domains eagerly, but
+      // we still resolve via the accessor rather than poking `.stores.harness`
+      // directly.
       const harness = composite?.stores?.harness;
       if (harness) return harness;
     }
@@ -658,6 +930,36 @@ export class Harness {
       'sessions.storage',
       `required for ${callsite} — pass storage in HarnessConfig.storage, HarnessConfig.sessions.storage, or via the Mastra instance backing this harness`,
     );
+  }
+
+  /**
+   * Thread CRUD is owned by Mastra's memory storage domain, not by the
+   * harness storage domain. We resolve it lazily through the bound Mastra
+   * instance via `getStore('memory')` — the harness never persists threads
+   * itself.
+   */
+  private async _requireMemoryStorage(callsite: string) {
+    if (!this._mastra) {
+      throw new HarnessConfigError(
+        'mastra',
+        `required for ${callsite} — thread CRUD needs a Mastra instance bound to this harness so we can access the memory storage domain`,
+      );
+    }
+    const composite = this._mastra.getStorage();
+    if (!composite) {
+      throw new HarnessConfigError(
+        'storage',
+        `required for ${callsite} — the bound Mastra instance has no storage configured`,
+      );
+    }
+    const memory = await composite.getStore('memory');
+    if (!memory) {
+      throw new HarnessConfigError(
+        'storage.memory',
+        `required for ${callsite} — the bound Mastra storage has no memory domain registered`,
+      );
+    }
+    return memory;
   }
 
   private _mintThreadId(): string {
@@ -668,6 +970,29 @@ export class Harness {
   _internalLiveSessionCount(): number {
     return this._liveSessions.size;
   }
+
+  /** @internal — accessor for `Session.queue()` admission caps. */
+  get _internalMaxQueueDepth(): number {
+    return this._maxQueueDepth;
+  }
+}
+
+function toThreadRecord(thread: {
+  id: string;
+  resourceId: string;
+  title?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: Record<string, unknown>;
+}): ThreadRecord {
+  return {
+    id: thread.id,
+    resourceId: thread.resourceId,
+    title: thread.title,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    metadata: thread.metadata,
+  };
 }
 
 function emptyPermissionRules(): PermissionRules {

@@ -1,5 +1,5 @@
 /**
- * Harness v1 — Session.getCurrentMode/getCurrentModel/setMode/setModel +
+ * Harness v1 — Session.getCurrentMode/getCurrentModel/switchMode/switchModel +
  * getDisplayState. Mode/model setters CAS-write through storage, so we
  * verify both the in-memory state and the stored record.
  */
@@ -49,11 +49,11 @@ describe('Session.getCurrentMode / getCurrentModel', () => {
   });
 });
 
-describe('Session.setMode', () => {
+describe('Session.switchMode', () => {
   it('flips the active mode and persists', async () => {
     const { harness, storage } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.setMode('modeB');
+    await session.switchMode({ mode: 'modeB' });
     expect(session.getCurrentMode().id).toBe('modeB');
 
     const stored = await storage.loadSession({ sessionId: session.id });
@@ -63,23 +63,23 @@ describe('Session.setMode', () => {
   it('rejects unknown modes', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await expect(session.setMode('does-not-exist')).rejects.toThrow(/unknown mode/);
+    await expect(session.switchMode({ mode: 'does-not-exist' })).rejects.toThrow(/unknown mode/);
   });
 
   it('is a no-op when set to the current mode (no version bump)', async () => {
     const { harness } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
     const v = session._internalRecordVersion;
-    await session.setMode('modeA');
+    await session.switchMode({ mode: 'modeA' });
     expect(session._internalRecordVersion).toBe(v);
   });
 });
 
-describe('Session.setModel', () => {
+describe('Session.switchModel', () => {
   it('persists the new model id', async () => {
     const { harness, storage } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
-    await session.setModel('gpt-5');
+    await session.switchModel({ model: 'gpt-5' });
     expect(session.getCurrentModel()).toBe('gpt-5');
 
     const stored = await storage.loadSession({ sessionId: session.id });

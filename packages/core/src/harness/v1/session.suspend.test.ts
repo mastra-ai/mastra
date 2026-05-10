@@ -225,7 +225,7 @@ describe('Session — suspend capture on message()', () => {
       },
     });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
-    await session.setMode('planner');
+    await session.switchMode({ mode: 'planner' });
 
     await session.message({ content: 'plan it' });
 
@@ -251,8 +251,8 @@ describe('Session — suspend capture on message()', () => {
 // Resume — happy path
 // ---------------------------------------------------------------------------
 
-describe('Session — respondToolApproval / Suspension / Question / PlanApproval', () => {
-  it('respondToolApproval calls agent.resumeStream and clears pendingResume', async () => {
+describe('Session — respondToToolApproval / Suspension / Question / PlanApproval', () => {
+  it('respondToToolApproval calls agent.resumeStream and clears pendingResume', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({
       finishReason: 'suspended',
@@ -264,7 +264,7 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
 
     agent.enqueueRun({ finishReason: 'stop', runId: 'run-A', text: 'done' });
 
-    const result = await session.respondToolApproval({ approved: true });
+    const result = await session.respondToToolApproval({ approved: true });
 
     expect(result.text).toBe('done');
     expect(result.finishReason).toBe('stop');
@@ -275,7 +275,7 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
     expect(session.getDisplayState().hasPendingApproval).toBe(false);
   });
 
-  it('respondToolSuspension forwards opaque resumeData', async () => {
+  it('respondToToolSuspension forwards opaque resumeData', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({
       finishReason: 'suspended',
@@ -291,13 +291,13 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
     await session.message({ content: 'go' });
 
     agent.enqueueRun({ finishReason: 'stop', runId: 'run-S' });
-    await session.respondToolSuspension({ resumeData: { result: 'ok' } });
+    await session.respondToToolSuspension({ resumeData: { result: 'ok' } });
 
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ result: 'ok' });
     expect(session.getRecord().pendingResume).toBeUndefined();
   });
 
-  it('respondToolQuestion forwards { answer }', async () => {
+  it('respondToQuestion forwards { answer }', async () => {
     const { harness, agent } = setup();
     agent.enqueueRun({
       finishReason: 'suspended',
@@ -312,12 +312,12 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
     await session.message({ content: 'go' });
 
     agent.enqueueRun({ finishReason: 'stop', runId: 'run-Q' });
-    await session.respondToolQuestion({ answer: 'red' });
+    await session.respondToQuestion({ answer: 'red' });
 
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ answer: 'red' });
   });
 
-  it('respondPlanApproval flips active mode atomically when approved + transitionsTo set', async () => {
+  it('respondToPlanApproval flips active mode atomically when approved + transitionsTo set', async () => {
     const { harness, agent } = setup([
       { id: 'planner', agentId: 'default', transitionsTo: 'builder' },
       { id: 'builder', agentId: 'default' },
@@ -328,19 +328,19 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
       suspendPayload: { toolCallId: 'tc-P', toolName: 'submit_plan', args: { title: 't', plan: 'p' } },
     });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
-    await session.setMode('planner');
+    await session.switchMode({ mode: 'planner' });
     await session.message({ content: 'plan' });
 
     expect(session.getCurrentMode().id).toBe('planner');
 
     agent.enqueueRun({ finishReason: 'stop', runId: 'run-P' });
-    await session.respondPlanApproval({ approved: true });
+    await session.respondToPlanApproval({ approved: true });
 
     expect(session.getCurrentMode().id).toBe('builder');
     expect(session.getRecord().pendingResume).toBeUndefined();
   });
 
-  it('respondPlanApproval does NOT flip mode when rejected', async () => {
+  it('respondToPlanApproval does NOT flip mode when rejected', async () => {
     const { harness, agent } = setup([
       { id: 'planner', agentId: 'default', transitionsTo: 'builder' },
       { id: 'builder', agentId: 'default' },
@@ -351,11 +351,11 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
       suspendPayload: { toolCallId: 'tc-P', toolName: 'submit_plan', args: { title: 't', plan: 'p' } },
     });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
-    await session.setMode('planner');
+    await session.switchMode({ mode: 'planner' });
     await session.message({ content: 'plan' });
 
     agent.enqueueRun({ finishReason: 'stop', runId: 'run-P' });
-    await session.respondPlanApproval({ approved: false });
+    await session.respondToPlanApproval({ approved: false });
 
     expect(session.getCurrentMode().id).toBe('planner');
   });
@@ -376,7 +376,7 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
       runId: 'run-1',
       suspendPayload: { toolCallId: 'tc-2', toolName: 'shell', args: {} },
     });
-    const result = await session.respondToolApproval({ approved: true });
+    const result = await session.respondToToolApproval({ approved: true });
 
     expect(result.finishReason).toBe('suspended');
     const pending = session.getRecord().pendingResume!;
@@ -385,7 +385,7 @@ describe('Session — respondToolApproval / Suspension / Question / PlanApproval
 
     // Second respond resolves cleanly.
     agent.enqueueRun({ finishReason: 'stop', runId: 'run-1' });
-    await session.respondToolApproval({ approved: true });
+    await session.respondToToolApproval({ approved: true });
     expect(session.getRecord().pendingResume).toBeUndefined();
     expect(agent.resumeCalls).toHaveLength(2);
   });
@@ -412,18 +412,18 @@ interface Responder {
 const responders: Responder[] = [
   {
     kind: 'tool-approval',
-    label: 'respondToolApproval',
+    label: 'respondToToolApproval',
     enqueueSuspend: agent =>
       agent.enqueueRun({
         finishReason: 'suspended',
         runId: 'run-A',
         suspendPayload: { toolCallId: 'tc', toolName: 'shell', args: {} },
       }),
-    call: s => s.respondToolApproval({ approved: true }),
+    call: s => s.respondToToolApproval({ approved: true }),
   },
   {
     kind: 'tool-suspension',
-    label: 'respondToolSuspension',
+    label: 'respondToToolSuspension',
     enqueueSuspend: agent =>
       agent.enqueueRun({
         finishReason: 'suspended',
@@ -435,29 +435,29 @@ const responders: Responder[] = [
           suspendPayload: { step: 'A' },
         },
       }),
-    call: s => s.respondToolSuspension({ resumeData: { ok: true } }),
+    call: s => s.respondToToolSuspension({ resumeData: { ok: true } }),
   },
   {
     kind: 'question',
-    label: 'respondToolQuestion',
+    label: 'respondToQuestion',
     enqueueSuspend: agent =>
       agent.enqueueRun({
         finishReason: 'suspended',
         runId: 'run-Q',
         suspendPayload: { toolCallId: 'tc', toolName: 'ask_user', args: { question: 'pick' } },
       }),
-    call: s => s.respondToolQuestion({ answer: 'red' }),
+    call: s => s.respondToQuestion({ answer: 'red' }),
   },
   {
     kind: 'plan-approval',
-    label: 'respondPlanApproval',
+    label: 'respondToPlanApproval',
     enqueueSuspend: agent =>
       agent.enqueueRun({
         finishReason: 'suspended',
         runId: 'run-P',
         suspendPayload: { toolCallId: 'tc', toolName: 'submit_plan', args: { title: 't', plan: 'p' } },
       }),
-    call: s => s.respondPlanApproval({ approved: true }),
+    call: s => s.respondToPlanApproval({ approved: true }),
   },
 ];
 

@@ -17,6 +17,8 @@ import type { MastraCompositeStore } from '../../storage/base';
 import type { HarnessStorage, SessionRecord as StoredSessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
+import type { EmitInput } from './events';
+
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).
 //
@@ -194,6 +196,13 @@ export interface HarnessConfigCommon {
      * different store than the rest of the Mastra app.
      */
     storage?: HarnessStorage;
+
+    /**
+     * Maximum number of items allowed to wait in `pendingQueue` per session.
+     * `session.queue(...)` rejects with `HarnessQueueFullError` when full.
+     * Capacity check + durable append are atomic per session. Defaults to 100.
+     */
+    maxQueueDepth?: number;
   };
 
   // Remaining fields (workspace, subagents, skills, goals, files,
@@ -270,9 +279,89 @@ export type SessionResolveOptions =
 // Sub-namespace option shapes for the Harness class.
 // ---------------------------------------------------------------------------
 
-export interface ThreadDeleteOptions {
-  threadId: string;
+/**
+ * Public thread record returned by `harness.threads.*`. A thin façade over
+ * the storage layer's `StorageThreadType` so the harness owns the shape its
+ * callers see (and so we can swap the backing storage without breaking the
+ * sidebar API).
+ */
+export interface ThreadRecord {
+  id: string;
   resourceId: string;
+  title?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ThreadCreateOptions {
+  resourceId: string;
+  /** Optional explicit id. Useful for deterministic tests. Otherwise minted. */
+  threadId?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ThreadListOptions {
+  resourceId: string;
+  /** Number of items per page, or `false` for no limit. Defaults to 100. */
+  perPage?: number | false;
+  /** Zero-indexed page. Defaults to 0. */
+  page?: number;
+  /** Sort order — `'createdAt' | 'updatedAt'` × `'ASC' | 'DESC'`. Adapter-defined default. */
+  orderBy?: { column: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+  /** AND-matched metadata filter. */
+  metadata?: Record<string, unknown>;
+}
+
+export interface ThreadListResult {
+  threads: ThreadRecord[];
+  total: number;
+  /** Echoes the requested page size; `false` indicates unbounded (no limit). */
+  perPage: number | false;
+  page: number;
+  hasMore: boolean;
+}
+
+export interface ThreadGetOptions {
+  resourceId: string;
+  threadId: string;
+}
+
+export interface ThreadRenameOptions {
+  resourceId: string;
+  threadId: string;
+  title: string;
+  /** Optional metadata patch applied at the same time. Shallow-merged. */
+  metadata?: Record<string, unknown>;
+}
+
+export interface ThreadCloneOptions {
+  resourceId: string;
+  /** Thread to copy from. Must belong to `resourceId`. */
+  threadId: string;
+  /** Optional explicit id for the new thread. */
+  newThreadId?: string;
+  /** Title for the new thread. Defaults to source title with a "(clone)" suffix. */
+  title?: string;
+  /** Metadata merged on top of `ThreadCloneMetadata` written by storage. */
+  metadata?: Record<string, unknown>;
+  /** Forwarded to the storage adapter for message-copy filtering. */
+  messageLimit?: number;
+}
+
+export interface ThreadSelectOrCreateOptions {
+  resourceId: string;
+  /** If supplied and owned by `resourceId`, returned as-is. Otherwise create. */
+  threadId?: string;
+  /** Used only when creating. */
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ThreadDeleteOptions {
+  resourceId: string;
+  threadId: string;
 }
 
 export interface SessionListOptions {
@@ -393,9 +482,150 @@ export type AgentResult<OUTPUT = undefined> = FullOutput<OUTPUT>;
 /** Shorthand for the streaming return type. */
 export type AgentStream<OUTPUT = undefined> = MastraModelOutput<OUTPUT>;
 
+// ---------------------------------------------------------------------------
+// queue() — wait-for-idle FIFO turn queue (spec §4.2 / §6).
+//
+// Semantics summary:
+//   * Items append to `pendingQueue` (durable, ordered, capped by
+//     `sessions.maxQueueDepth`). Capacity check + append are atomic.
+//   * `additionalTools` is intentionally absent — closures can't survive
+//     persistence, and per-turn tool surfaces work via `mode` overrides.
+//   * Drain runs head-of-line when the session reaches a clean idle
+//     boundary; each item runs as a fresh turn with its overrides applied.
+//   * Promise resolves with the eventual `AgentResult` (success or failure)
+//     once the head turn fully ends — including any suspend → resume cycles.
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-turn overrides that survive persistence (a strict subset of
+ * `MessageOverrides`).
+ */
+export interface QueueOverrides {
+  /** Override the model id for this queued turn. Falls back to session model. */
+  model?: string;
+  /** Override the active mode for this queued turn. Must be a known mode id. */
+  mode?: string;
+  /**
+   * If `true`, auto-grant any tool-approval interrupts raised during this
+   * queued turn. Mirrors `HarnessOverrides.yolo`. Persisted on the queued
+   * item so it survives crash replay.
+   */
+  yolo?: boolean;
+}
+
+/** Options accepted by `Session.queue(...)`. */
+export interface QueueOptions extends QueueOverrides {
+  /** Free-form user content. The only required field. */
+  content: string;
+
+  /** Optional pre-uploaded attachments to include with the user message. */
+  attachments?: AttachmentRef[];
+}
+
 /**
  * Pass-through of the agent's own execution options for the rare case a
  * caller needs to drop down to the raw surface. Most callers should stay on
  * `MessageOptions`.
  */
 export type RawAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT>;
+
+// ---------------------------------------------------------------------------
+// HarnessRequestContext (§6.1).
+//
+// Tools authored for the harness reach this slot via:
+//   const ctx = context.requestContext.get('harness') as HarnessRequestContext;
+// Spec §6 is the contract for the slot.
+// ---------------------------------------------------------------------------
+
+/**
+ * `setState` is overloaded:
+ *  - Object form does a shallow merge into the current state.
+ *  - Function form runs an atomic read-modify-write — the harness reads the
+ *    live state at call time, passes it to the updater, persists the return.
+ *    The updater MUST be synchronous; async work should happen first, then
+ *    the resolved value goes into a fresh setState call.
+ */
+export type SetStateFn<TState> = {
+  (updates: Partial<TState>): Promise<void>;
+  (updater: (prev: TState) => TState): Promise<void>;
+};
+
+/** Parameters accepted by `ctx.registerQuestion(...)` from a suspending tool. */
+export interface RegisterQuestionParams {
+  questionId: string;
+  question: string;
+  options?: Array<{ label: string; description?: string }>;
+  selectionMode?: 'single_select' | 'multi_select';
+}
+
+/** Parameters accepted by `ctx.registerPlanApproval(...)` from a suspending tool. */
+export interface RegisterPlanApprovalParams {
+  planId: string;
+  title: string;
+  plan: string;
+}
+
+/**
+ * Harness-specific context surfaced on the agent's `RequestContext` under
+ * the `'harness'` key. See spec §6 for the full contract.
+ *
+ * For the parent session: `subagentDepth: 0`, `source: 'parent'`,
+ * `parentSessionId` and `subagentToolCallId` undefined.
+ * For a subagent: depth ≥ 1, `source: 'subagent'`, parent linkage populated.
+ */
+export interface HarnessRequestContext<TState = unknown> {
+  /** Harness instance id. Useful for log correlation across processes. */
+  harnessId: string;
+  /** The session this tool invocation runs against. Stable for the call's lifetime. */
+  sessionId: string;
+  /** The thread the session is bound to. Stable for the call's lifetime. */
+  threadId: string;
+  /** The resource the session is scoped to. Stable for the call's lifetime. */
+  resourceId: string;
+
+  /** Resolved mode id for this turn (with any per-turn overrides applied). */
+  modeId: string;
+
+  /** Snapshot of session state at slot construction. Live reads use `getState`. */
+  state: TState;
+  /** Returns the live state object, reflecting writes from earlier in the same turn. */
+  getState: () => TState;
+  /** Persisted shallow merge (object form) or atomic read-modify-write (functional form). */
+  setState: SetStateFn<TState>;
+
+  /** Turn abort signal. Fires for the four reasons enumerated in §4.5. */
+  abortSignal: AbortSignal;
+
+  /**
+   * Forward a custom event to subscribers of this session. Reserved harness
+   * types (`agent_*`, `tool_*`, etc.) are rejected with `HarnessValidationError`.
+   * Non-JSON-serializable payloads are rejected with `HarnessEventSerializationError`.
+   */
+  emitEvent: (event: EmitInput) => void;
+
+  /** Register a pending question (used by `ask_user` and custom suspending tools). */
+  registerQuestion: (params: RegisterQuestionParams) => void;
+  /** Register a pending plan approval (used by `submit_plan` and custom suspending tools). */
+  registerPlanApproval: (params: RegisterPlanApprovalParams) => void;
+
+  /** Depth of the session in the subagent tree. `0` for the parent. */
+  subagentDepth: number;
+  /** `'parent'` for the top session, `'subagent'` for any descendant. */
+  source: 'parent' | 'subagent';
+  /** Parent session id when `source === 'subagent'`. */
+  parentSessionId?: string;
+  /** Tool call id of the subagent invocation when `source === 'subagent'`. */
+  subagentToolCallId?: string;
+
+  /**
+   * Subagent model resolver — returns the configured model id for a given
+   * agent type, or `null` to fall back to the session's default model.
+   */
+  getSubagentModel: (params?: { agentType?: string }) => string | null;
+
+  /**
+   * Workspace handle. Only present when the harness is configured with a
+   * workspace. Tools should null-check before use.
+   */
+  workspace?: unknown;
+}

@@ -9,7 +9,32 @@
 
 export { Harness } from './harness';
 export { Session } from './session';
-export type { SessionLifecycleState } from './session';
+export type { SessionLifecycleState, SessionDisplayState } from './session';
+
+export type {
+  AgentEndEvent,
+  AgentStartEvent,
+  CustomEvent as HarnessCustomEvent,
+  HarnessEvent,
+  HarnessEventBase,
+  HarnessEventListener,
+  HarnessEventUnsubscribe,
+  ModeChangedEvent,
+  ModelChangedEvent,
+  SessionClosedEvent,
+  SessionCreatedEvent,
+  SessionEvictedEvent,
+  StateChangedEvent,
+  SuspensionRequiredEvent,
+  SuspensionResolvedEvent,
+  TextDeltaEvent,
+  ThreadClonedEvent,
+  ThreadCreatedEvent,
+  ThreadDeletedEvent,
+  ThreadRenamedEvent,
+  ToolEndEvent,
+  ToolStartEvent,
+} from './events';
 
 export {
   HarnessConfigError,
@@ -17,6 +42,7 @@ export {
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
   HarnessStorageError,
+  HarnessThreadNotFoundError,
 } from './errors';
 
 export type {
@@ -34,5 +60,13 @@ export type {
   SessionResolveByThread,
   SessionResolveOptions,
   ShutdownOptions,
+  ThreadCloneOptions,
+  ThreadCreateOptions,
   ThreadDeleteOptions,
+  ThreadGetOptions,
+  ThreadListOptions,
+  ThreadListResult,
+  ThreadRecord,
+  ThreadRenameOptions,
+  ThreadSelectOrCreateOptions,
 } from './types';

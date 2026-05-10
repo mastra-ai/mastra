@@ -378,13 +378,28 @@ describe('Harness v1 — lease + write concurrency', () => {
 });
 
 describe('Harness v1 — config validation surfaces in resolver', () => {
-  it('throws when storage is missing and a session is requested', async () => {
+  it('throws when no agents/storage/mastra are supplied and a session is requested', async () => {
+    // Three-shape constructor: passing nothing keeps the harness deferred-bound,
+    // expecting a parent Mastra to call __registerMastra. If neither happens,
+    // session() must surface the misconfiguration with a clear error.
+    const harness = new Harness({
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+    });
+    await expect(harness.session({ threadId: 't1', resourceId: 'r1' })).rejects.toThrow(HarnessConfigError);
+  });
+
+  it('defaults to InMemoryStore when agents are supplied without storage', async () => {
+    // Standalone construction with agents-only must still work end-to-end —
+    // both the harness storage domain and the memory storage domain (used by
+    // thread CRUD) are provided by the default InMemoryStore.
     const harness = new Harness({
       agents: { default: makeAgent() },
       modes: [{ id: 'default', agentId: 'default' }],
       defaultModeId: 'default',
     });
-    await expect(harness.session({ threadId: 't1', resourceId: 'r1' })).rejects.toThrow(HarnessConfigError);
+    const session = await harness.session({ threadId: 't1', resourceId: 'r1' });
+    expect(session.id).toMatch(/^sess-/);
   });
 });
 

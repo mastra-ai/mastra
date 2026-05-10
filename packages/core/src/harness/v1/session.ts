@@ -18,23 +18,29 @@
  * Callers must re-resolve via `harness.session(...)` to get a fresh instance.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { ToolsInput } from '../../agent/types';
-import type { HarnessStorage, PendingResume, SessionRecord } from '../../storage/domains/harness';
+import { RequestContext } from '../../request-context';
+import type { HarnessStorage, PendingResume, QueuedItem, SessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
-import { HarnessConfigError, HarnessValidationError } from './errors';
+import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError } from './errors';
+import { EventEmitter, assertCustomEventType, assertJsonSerializable } from './events';
+import type { EmitInput, HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { Harness } from './harness';
 import type {
   AgentResult,
   AgentStream,
   HarnessMode,
+  HarnessRequestContext,
   MessageOptions,
   MessageOptionsDefault,
   MessageOptionsStream,
   MessageOptionsStructured,
+  QueueOptions,
 } from './types';
 
 /**
@@ -97,6 +103,30 @@ export class Session {
   private readonly _harness: Harness;
   private readonly _storage: HarnessStorage;
   private readonly _ownerId: string;
+  private readonly _emitter: EventEmitter;
+
+  /**
+   * Queue resolvers indexed by `queuedItem.id`. Set in `queue()` so the
+   * caller's promise settles when the head turn completes (or rejects on
+   * permanent failure). Cleared after settle. Items recovered from
+   * `pendingQueue` on hydration have no resolver — `queue_item_replayed` is
+   * emitted instead and the turn runs purely for its side-effects.
+   */
+  private readonly _queueResolvers = new Map<
+    string,
+    { resolve: (result: AgentResult) => void; reject: (err: unknown) => void }
+  >();
+  /** `queuedItem.id` of the turn currently running (live or suspended). */
+  private _currentQueuedItemId?: string;
+  /** True while `_maybeDrainQueue` is running so re-entrant kicks are no-ops. */
+  private _draining = false;
+  /**
+   * In-process serialization for `_flushUpdate`. Concurrent setters chain
+   * onto this so each CAS write reads the latest in-memory version. Without
+   * this, two parallel callers both observe `version=N`, both attempt
+   * `ifVersion: N`, and the loser hits a `HarnessStorageVersionConflictError`.
+   */
+  private _flushChain: Promise<void> = Promise.resolve();
 
   /** @internal — constructed by the Harness, not directly. */
   constructor(internals: SessionInternals) {
@@ -110,6 +140,52 @@ export class Session {
     this._harness = internals.harness;
     this._storage = internals.storage;
     this._ownerId = internals.ownerId;
+    this._emitter = new EventEmitter({ sessionId: this.id });
+  }
+
+  // -------------------------------------------------------------------------
+  // Events — §10.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Subscribe to events emitted on this session. Returns an unsubscribe
+   * function. Listeners see only events emitted after `subscribe()` returns;
+   * there is no automatic backfill (use `listMessages()` for history).
+   *
+   * Listener exceptions and rejected promises are isolated — they will not
+   * disrupt the producer or other listeners.
+   */
+  subscribe(listener: HarnessEventListener): HarnessEventUnsubscribe {
+    this._assertLive('subscribe()');
+    return this._emitter.subscribe(listener);
+  }
+
+  /** @internal — used by the Harness to publish events on this session's emitter. */
+  _emit(event: EmitInput): HarnessEvent {
+    return this._emitter.emit(event);
+  }
+
+  /**
+   * Emit an event that belongs to a turn (agent_*, text_delta, tool_*,
+   * suspension_*). Auto-stamps `queuedItemId` from `_currentQueuedItemId`
+   * when a queued turn is running so subscribers can correlate every event
+   * back to its `queue()` item.
+   */
+  private _emitTurnEvent(event: EmitInput): HarnessEvent {
+    if (this._currentQueuedItemId !== undefined && (event as { queuedItemId?: string }).queuedItemId === undefined) {
+      return this._emitter.emit({ ...event, queuedItemId: this._currentQueuedItemId } as EmitInput);
+    }
+    return this._emitter.emit(event);
+  }
+
+  /** @internal — number of registered listeners (for tests). */
+  get _internalListenerCount(): number {
+    return this._emitter.listenerCount;
+  }
+
+  /** @internal — emitter epoch (for tests). */
+  get _internalEmitterEpoch(): string {
+    return this._emitter.epochId;
   }
 
   // -------------------------------------------------------------------------
@@ -196,12 +272,28 @@ export class Session {
     // Per-turn additionalTools merge with the mode's surface, never replace.
     const toolsets = this._buildToolsets(mode, opts.additionalTools);
 
+    // The abortSignal we hand to the agent is also surfaced on the
+    // HarnessRequestContext slot below. When the caller didn't supply one,
+    // we mint a fresh controller so the slot's `abortSignal` is non-null.
+    const turnAbortController = opts.abortSignal ? undefined : new AbortController();
+    const turnAbortSignal = opts.abortSignal ?? turnAbortController!.signal;
+    const requestContext = this._buildRequestContext({
+      modeId: effectiveModeId,
+      abortSignal: turnAbortSignal,
+    });
+
     const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
       memory: { thread: this.threadId, resource: this.resourceId },
-      abortSignal: opts.abortSignal,
+      abortSignal: turnAbortSignal,
+      requestContext,
       ...(toolsets ? { toolsets } : {}),
       ...(mode.instructions ? { instructions: mode.instructions } : {}),
     };
+
+    // agent_start signals the turn has begun. Subscribers can latch their
+    // accumulators here. Emitted before either agent.stream() or
+    // agent.generate() so structured/sync paths still see the boundary.
+    this._emitTurnEvent({ type: 'agent_start' });
 
     // Structured + sync path: agent.generate with structuredOutput.
     if (opts.output !== undefined && opts.sync === true) {
@@ -211,27 +303,108 @@ export class Session {
       });
       const full = result as FullOutput<unknown>;
       await this._maybeCaptureSuspend(full);
+      this._emitTurnEvent({
+        type: 'agent_end',
+        reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+        runId: full.runId,
+      });
       return full.object;
     }
 
-    // Streaming path: hand the live MastraModelOutput back. The caller drains
-    // the stream; we attach a best-effort capture so a suspend that surfaces
-    // mid-stream is persisted as `pendingResume` before the next `respond*`
-    // call. Errors are swallowed — the caller already owns the stream.
+    // Streaming path: hand the live MastraModelOutput back. We drain the
+    // stream ourselves to emit harness events; the caller's
+    // `getFullOutput()` is independent (each `fullStream` call returns a
+    // fresh evented stream). Errors during drain are swallowed — the
+    // caller already owns the visible stream.
     if (opts.stream === true) {
       const out = await agent.stream(opts.content, baseExecOptions);
-      out
-        .getFullOutput()
-        .then(full => this._maybeCaptureSuspend(full as FullOutput<unknown>))
-        .catch(() => {});
+      void this._drainStreamToEvents(out as MastraModelOutput<unknown>);
       return out as MastraModelOutput<unknown>;
     }
 
-    // Default path: stream + getFullOutput so we get a fully-resolved bundle.
+    // Default path: drain the stream for events, then resolve via
+    // getFullOutput to surface the bundled result.
     const out = await agent.stream(opts.content, baseExecOptions);
+    await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
     const full = await out.getFullOutput();
     await this._maybeCaptureSuspend(full);
+    this._emitTurnEvent({
+      type: 'agent_end',
+      reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+      runId: full.runId,
+    });
     return full;
+  }
+
+  /**
+   * Drain a `MastraModelOutput.fullStream` once, emitting the corresponding
+   * harness events as chunks arrive. Returns when the stream completes.
+   *
+   * Chunks observed → events emitted:
+   *   - `text-delta`           → `text_delta`
+   *   - `tool-call`            → `tool_start`
+   *   - `tool-result`          → `tool_end` (isError: false)
+   *   - `tool-error`           → `tool_end` (isError: true)
+   *
+   * Approval / suspension chunks are intentionally NOT mapped here. The
+   * harness uses `_maybeCaptureSuspend` after `getFullOutput()` to persist
+   * the pending record under the lease and emit `suspension_required` after
+   * the durable-parking barrier. Emitting events from the streaming path
+   * would race with that commit.
+   */
+  private async _drainStreamToEvents(out: MastraModelOutput<unknown>): Promise<void> {
+    try {
+      for await (const chunk of out.fullStream) {
+        switch (chunk.type) {
+          case 'text-delta': {
+            const payload = chunk.payload as { text?: string };
+            if (typeof payload?.text === 'string' && payload.text.length > 0) {
+              this._emitTurnEvent({ type: 'text_delta', delta: payload.text });
+            }
+            break;
+          }
+          case 'tool-call': {
+            const payload = chunk.payload as { toolCallId: string; toolName: string; args: unknown };
+            this._emitTurnEvent({
+              type: 'tool_start',
+              toolCallId: payload.toolCallId,
+              toolName: payload.toolName,
+              args: payload.args,
+            });
+            break;
+          }
+          case 'tool-result': {
+            const payload = chunk.payload as { toolCallId: string; result: unknown; isError?: boolean };
+            this._emitTurnEvent({
+              type: 'tool_end',
+              toolCallId: payload.toolCallId,
+              result: payload.result,
+              isError: payload.isError ?? false,
+            });
+            break;
+          }
+          case 'tool-error': {
+            const payload = chunk.payload as { toolCallId: string; error: unknown };
+            this._emitTurnEvent({
+              type: 'tool_end',
+              toolCallId: payload.toolCallId,
+              result: payload.error,
+              isError: true,
+            });
+            break;
+          }
+          default:
+            // All other chunk types (start/finish, reasoning, source, file,
+            // tool-call-input-streaming-*, abort, raw, …) are intentionally
+            // ignored at the harness event layer for v1. UIs that need them
+            // can subscribe to the agent's stream directly via stream:true.
+            break;
+        }
+      }
+    } catch {
+      // The caller still owns the visible promise — keep the drain best-
+      // effort so a stream-level error doesn't surface twice.
+    }
   }
 
   /**
@@ -272,6 +445,17 @@ export class Session {
     }
 
     await this._flushUpdate(prev => ({ ...prev, pendingResume: pending }));
+
+    // Emit suspension_required AFTER the durable-parking barrier (§5.4) so
+    // any subscriber observing this event can reconstruct the pending state
+    // from storage.
+    this._emitTurnEvent({
+      type: 'suspension_required',
+      kind,
+      toolCallId: pending.toolCallId,
+      toolName: pending.toolName,
+      runId: pending.runId,
+    });
   }
 
   private _classifyResumeKind(payload: { toolName: string; suspendPayload?: unknown }): PendingResume['kind'] {
@@ -335,19 +519,58 @@ export class Session {
    * with the next `message()`/`queue()` call. Throws if the mode id is
    * unknown.
    */
-  async setMode(modeId: string): Promise<void> {
-    this._assertLive('setMode()');
+  async switchMode(opts: { mode: string }): Promise<void> {
+    this._assertLive('switchMode()');
     // Validates and throws on unknown id.
-    this._harness._getMode(modeId);
-    if (this._record.modeId === modeId) return;
-    await this._flushUpdate(prev => ({ ...prev, modeId }));
+    this._harness._getMode(opts.mode);
+    const previousModeId = this._record.modeId;
+    if (previousModeId === opts.mode) return;
+    await this._flushUpdate(prev => ({ ...prev, modeId: opts.mode }));
+    this._emitter.emit({ type: 'mode_changed', modeId: opts.mode, previousModeId });
   }
 
   /** Switch the active model id. Free-form string — validated by the agent layer. */
-  async setModel(modelId: string): Promise<void> {
-    this._assertLive('setModel()');
-    if (this._record.modelId === modelId) return;
-    await this._flushUpdate(prev => ({ ...prev, modelId }));
+  async switchModel(opts: { model: string }): Promise<void> {
+    this._assertLive('switchModel()');
+    const previousModelId = this._record.modelId;
+    if (previousModelId === opts.model) return;
+    await this._flushUpdate(prev => ({ ...prev, modelId: opts.model }));
+    this._emitter.emit({ type: 'model_changed', modelId: opts.model, previousModelId });
+  }
+
+  // -------------------------------------------------------------------------
+  // Custom state (§4.2 / §6.1).
+  //
+  // The session holds an opaque typed state blob persisted alongside the
+  // SessionRecord. The two write forms are equivalent surfaces, but the
+  // functional form gives tools an atomic read-modify-write that doesn't
+  // stomp concurrent writes from earlier in the same turn.
+  // -------------------------------------------------------------------------
+
+  /** Returns the current state. Always resolves with the latest persisted value. */
+  async getState<TState = unknown>(): Promise<TState> {
+    this._assertLive('getState()');
+    return (this._record.state ?? {}) as TState;
+  }
+
+  /**
+   * Replace or merge the session state. The object form does a shallow merge;
+   * the functional form atomically reads the current state, runs the updater,
+   * and writes the result. The functional form is the right choice for tools
+   * that bump counters or otherwise depend on the previous value.
+   */
+  setState<TState = unknown>(updates: Partial<TState>): Promise<void>;
+  setState<TState = unknown>(updater: (prev: TState) => TState): Promise<void>;
+  async setState<TState = unknown>(updatesOrUpdater: Partial<TState> | ((prev: TState) => TState)): Promise<void> {
+    this._assertLive('setState()');
+    await this._flushUpdate(prev => {
+      const current = (prev.state ?? {}) as TState;
+      const next =
+        typeof updatesOrUpdater === 'function'
+          ? (updatesOrUpdater as (prev: TState) => TState)(current)
+          : ({ ...(current as object), ...(updatesOrUpdater as object) } as TState);
+      return { ...prev, state: next };
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -394,17 +617,17 @@ export class Session {
   // -------------------------------------------------------------------------
 
   /** Resume a pending tool-approval. `approved: false` rejects the call. */
-  async respondToolApproval(opts: { approved: boolean }): Promise<AgentResult> {
+  async respondToToolApproval(opts: { approved: boolean }): Promise<AgentResult> {
     return this._resume('tool-approval', { approved: opts.approved });
   }
 
   /** Resume a pending tool-suspension. `resumeData` is forwarded to the tool. */
-  async respondToolSuspension(opts: { resumeData: unknown }): Promise<AgentResult> {
+  async respondToToolSuspension(opts: { resumeData: unknown }): Promise<AgentResult> {
     return this._resume('tool-suspension', opts.resumeData);
   }
 
   /** Resume a pending `ask_user` question. */
-  async respondToolQuestion(opts: { answer: unknown }): Promise<AgentResult> {
+  async respondToQuestion(opts: { answer: unknown }): Promise<AgentResult> {
     return this._resume('question', { answer: opts.answer });
   }
 
@@ -414,7 +637,7 @@ export class Session {
    * recording the flip via `approvedTransitionModeId` /
    * `modeTransitionAppliedAt` for idempotent replay.
    */
-  async respondPlanApproval(opts: { approved: boolean; feedback?: string }): Promise<AgentResult> {
+  async respondToPlanApproval(opts: { approved: boolean; feedback?: string }): Promise<AgentResult> {
     return this._resume('plan-approval', { approved: opts.approved, feedback: opts.feedback });
   }
 
@@ -477,6 +700,7 @@ export class Session {
     // Clear pending + apply mode flip in a single CAS write. The mode flip
     // and pending-clear must land together so a replay does not see
     // "pending cleared, mode not yet flipped" or vice versa.
+    const previousModeId = this._record.modeId;
     await this._flushUpdate(prev => {
       const next: SessionRecord = { ...prev };
       delete next.pendingResume;
@@ -484,11 +708,265 @@ export class Session {
       return next;
     });
 
+    // Pending resolved — emit before the (optional) re-suspension capture
+    // so subscribers see ordering: resolved → (mode_changed?) → required?.
+    this._emitTurnEvent({
+      type: 'suspension_resolved',
+      kind: expectedKind,
+      toolCallId: pending.toolCallId,
+      runId: pending.runId,
+    });
+    if (modeFlipTarget && modeFlipTarget !== previousModeId) {
+      this._emitter.emit({
+        type: 'mode_changed',
+        modeId: modeFlipTarget,
+        previousModeId,
+      });
+    }
+
     // The resumed run can itself suspend again (multi-step approval chains).
     // Mirror message()'s post-run hook so the next respond* call sees the
     // new pending record.
     await this._maybeCaptureSuspend(full);
+
+    // If the resumed run did NOT suspend again, the turn is complete from
+    // the harness's perspective. Surface that to subscribers via agent_end.
+    if (full.finishReason !== 'suspended') {
+      this._emitTurnEvent({
+        type: 'agent_end',
+        reason: full.finishReason === 'error' ? 'error' : 'complete',
+        runId: full.runId,
+      });
+
+      // If this was the terminal completion of a queued turn, settle the
+      // resolver, remove the head item, clear current, then kick the drain
+      // for the next item.
+      if (this._currentQueuedItemId !== undefined) {
+        await this._completeQueuedTurn(this._currentQueuedItemId, full as AgentResult);
+      }
+    }
     return full as AgentResult;
+  }
+
+  // -------------------------------------------------------------------------
+  // queue() — wait-for-idle FIFO turn queue (§4.2 / §6).
+  //
+  // Append-then-drain. The capacity check + durable append are atomic per
+  // session: two concurrent `queue()` calls on the same Session instance
+  // race on the in-process `_flushUpdate` lock, so neither can both observe
+  // available space and commit past the cap. Cross-instance contention is
+  // covered by the lease + version CAS on the underlying record.
+  //
+  // Drain semantics:
+  //   1. `queue()` admits → flush record → register resolver → kick drain.
+  //   2. Drain pulls head item, emits `queue_item_started`, runs the turn
+  //      via the same code path as `message()` default (so `agent_start`,
+  //      `text_delta`, `tool_*`, `suspension_*`, `agent_end` all flow with
+  //      `queuedItemId` stamped automatically by `_emitTurnEvent`).
+  //   3. If the turn suspends, the head item stays in `pendingQueue` and
+  //      `_currentQueuedItemId` stays set. The next `respondTo*` call calls
+  //      into `_resume`; on terminal completion the resume path settles the
+  //      resolver + removes the head + kicks drain again.
+  //   4. If the turn completes without suspending, the message() default
+  //      path settles the same way (post-`agent_end` hook below).
+  //
+  // Promise resolution: the eventual `AgentResult` once the turn fully ends
+  // (including any suspend → resume cycles). Rejection only for "never got
+  // to run" cases (closed session before drain reached the item, or a
+  // permanent storage failure during admission).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Append a turn to the durable queue. Resolves with the eventual
+   * `AgentResult` once the turn fully completes — including any
+   * suspend → resume cycles.
+   *
+   * Rejects synchronously with:
+   *   - `HarnessConfigError` if the session is not live, or `mode` is unknown.
+   *   - `HarnessValidationError` if `content` is empty.
+   *   - `HarnessQueueFullError` if `pendingQueue.length` is already at
+   *     `sessions.maxQueueDepth`.
+   */
+  async queue(opts: QueueOptions): Promise<AgentResult> {
+    this._assertLive('queue()');
+    if (typeof opts.content !== 'string' || opts.content.length === 0) {
+      throw new HarnessValidationError('queue().content', 'must be a non-empty string');
+    }
+    if (opts.mode !== undefined) {
+      // Validates and throws on unknown id.
+      this._harness._getMode(opts.mode);
+    }
+
+    const cap = this._harness._internalMaxQueueDepth;
+    if ((this._record.pendingQueue?.length ?? 0) >= cap) {
+      throw new HarnessQueueFullError(this.id, cap);
+    }
+
+    const item: QueuedItem = {
+      id: `q-${randomUUID()}`,
+      enqueuedAt: Date.now(),
+      content: opts.content,
+      attachments: [],
+      ...(opts.model !== undefined ? { model: opts.model } : {}),
+      ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+      ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
+    };
+
+    // Atomic check + append: re-check capacity inside the updater so a
+    // concurrent in-process `queue()` cannot push us past the cap.
+    let admitted = true;
+    await this._flushUpdate(prev => {
+      if ((prev.pendingQueue?.length ?? 0) >= cap) {
+        admitted = false;
+        return prev;
+      }
+      return { ...prev, pendingQueue: [...(prev.pendingQueue ?? []), item] };
+    });
+    if (!admitted) {
+      throw new HarnessQueueFullError(this.id, cap);
+    }
+
+    return new Promise<AgentResult>((resolve, reject) => {
+      this._queueResolvers.set(item.id, { resolve, reject });
+      // Kick the drain — fire-and-forget. Drain handles its own errors and
+      // settles the resolver via `_completeQueuedTurn` / `_failQueuedTurn`.
+      void this._maybeDrainQueue();
+    });
+  }
+
+  /**
+   * Drain pending queue items head-of-line. No-op while another drain is
+   * running, the session is suspended (`pendingResume` set), or the queue
+   * is empty. Each item runs as a fresh turn; if the turn suspends, drain
+   * exits early and resumes from `_resume()` once the user responds.
+   */
+  private async _maybeDrainQueue(): Promise<void> {
+    if (this._draining) return;
+    if (this._state !== 'live') return;
+    // A live suspension means a previous queued turn is awaiting a
+    // `respondTo*` call — drain stays parked until that resolves.
+    if (this._record.pendingResume !== undefined) return;
+    if (this._currentQueuedItemId !== undefined) return;
+
+    this._draining = true;
+    try {
+      while (this._state === 'live' && (this._record.pendingQueue?.length ?? 0) > 0) {
+        // Bail if a previous iteration left the session suspended.
+        if (this._record.pendingResume !== undefined) return;
+
+        const head = this._record.pendingQueue?.[0];
+        if (!head) return;
+        this._currentQueuedItemId = head.id;
+        const isReplay = !this._queueResolvers.has(head.id);
+        this._emitter.emit(
+          isReplay
+            ? { type: 'queue_item_replayed', queuedItemId: head.id }
+            : { type: 'queue_item_started', queuedItemId: head.id },
+        );
+
+        let suspended = false;
+        try {
+          const full = await this._runQueuedTurn(head);
+          suspended = full.finishReason === 'suspended';
+          if (!suspended) {
+            await this._completeQueuedTurn(head.id, full as AgentResult);
+          }
+        } catch (err) {
+          // Permanent failure during the turn — reject the resolver and
+          // remove the item so we don't replay it forever.
+          await this._failQueuedTurn(head.id, err);
+        }
+
+        if (suspended) {
+          // Stop draining; `_resume()` will re-kick when the user responds.
+          return;
+        }
+      }
+    } finally {
+      this._draining = false;
+    }
+  }
+
+  /**
+   * Run a single queued item as a turn. Mirrors `message()`'s default path
+   * but pulls overrides off the queued item rather than per-call options.
+   * Returns the `FullOutput` so the drain loop can decide whether the head
+   * stays in place (suspended) or is removed (complete / error).
+   */
+  private async _runQueuedTurn(item: QueuedItem): Promise<FullOutput<unknown>> {
+    const effectiveModeId = item.mode ?? this._record.modeId;
+    const mode = this._harness._getMode(effectiveModeId);
+    const agent = this._harness.getAgentForMode(effectiveModeId);
+
+    const toolsets = this._buildToolsets(mode);
+    // Queued turns have no caller-supplied abort signal — mint one so the
+    // request-context slot still exposes a usable signal to tools.
+    const turnAbortController = new AbortController();
+    const requestContext = this._buildRequestContext({
+      modeId: effectiveModeId,
+      abortSignal: turnAbortController.signal,
+    });
+    const baseExecOptions: AgentExecutionOptionsBase<unknown> = {
+      memory: { thread: this.threadId, resource: this.resourceId },
+      abortSignal: turnAbortController.signal,
+      requestContext,
+      ...(toolsets ? { toolsets } : {}),
+      ...(mode.instructions ? { instructions: mode.instructions } : {}),
+    };
+
+    this._emitTurnEvent({ type: 'agent_start' });
+
+    const out = await agent.stream(item.content, baseExecOptions);
+    await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
+    const full = await out.getFullOutput();
+    await this._maybeCaptureSuspend(full);
+    this._emitTurnEvent({
+      type: 'agent_end',
+      reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
+      runId: full.runId,
+    });
+    return full;
+  }
+
+  /**
+   * Settle a queued item's resolver with success and remove it from the
+   * head of `pendingQueue`. The CAS write here is the durable record that
+   * the item ran exactly once. Crash recovery uses `pendingQueue[0]` and
+   * the absence of `pendingResume` to decide whether to replay.
+   */
+  private async _completeQueuedTurn(itemId: string, result: AgentResult): Promise<void> {
+    await this._flushUpdate(prev => ({
+      ...prev,
+      pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
+    }));
+    this._currentQueuedItemId = undefined;
+    const resolver = this._queueResolvers.get(itemId);
+    if (resolver) {
+      this._queueResolvers.delete(itemId);
+      resolver.resolve(result);
+    }
+    // Kick the drain again — there may be more items waiting.
+    void this._maybeDrainQueue();
+  }
+
+  /** Same as `_completeQueuedTurn` but rejects the resolver with `err`. */
+  private async _failQueuedTurn(itemId: string, err: unknown): Promise<void> {
+    await this._flushUpdate(prev => ({
+      ...prev,
+      pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
+    }));
+    this._currentQueuedItemId = undefined;
+    const resolver = this._queueResolvers.get(itemId);
+    if (resolver) {
+      this._queueResolvers.delete(itemId);
+      resolver.reject(err);
+    }
+    void this._maybeDrainQueue();
+  }
+
+  /** @internal — used by the Harness on hydration to start replay drain. */
+  async _kickQueueDrain(): Promise<void> {
+    return this._maybeDrainQueue();
   }
 
   // -------------------------------------------------------------------------
@@ -506,16 +984,24 @@ export class Session {
    * adopt the returned version. Single point of truth so every setter
    * stays consistent with the lease + version contract (§5.8).
    */
-  private async _flushUpdate(update: (prev: SessionRecord) => SessionRecord): Promise<void> {
-    const next: SessionRecord = {
-      ...update(this._record),
-      lastActivityAt: Date.now(),
+  private _flushUpdate(update: (prev: SessionRecord) => SessionRecord): Promise<void> {
+    const run = async (): Promise<void> => {
+      const next: SessionRecord = {
+        ...update(this._record),
+        lastActivityAt: Date.now(),
+      };
+      const saved = await this._storage.saveSession(next, {
+        ownerId: this._ownerId,
+        ifVersion: this._record.version,
+      });
+      this._record = { ...next, version: saved.version };
     };
-    const saved = await this._storage.saveSession(next, {
-      ownerId: this._ownerId,
-      ifVersion: this._record.version,
-    });
-    this._record = { ...next, version: saved.version };
+    // Chain so concurrent callers serialize against the latest in-memory
+    // version. Swallow chain-link errors so one caller's failure doesn't
+    // poison subsequent flushes.
+    const next = this._flushChain.then(run, run);
+    this._flushChain = next.catch(() => {});
+    return next;
   }
 
   /**
@@ -532,6 +1018,55 @@ export class Session {
     if (mode.additionalTools) toolsets[`mode:${mode.id}:add`] = mode.additionalTools;
     if (callAdditional) toolsets[`call:additional`] = callAdditional;
     return Object.keys(toolsets).length === 0 ? undefined : toolsets;
+  }
+
+  /**
+   * Build the per-turn `RequestContext` that the agent passes to tools. The
+   * `'harness'` slot exposes `HarnessRequestContext` (§6.1). Tools read it
+   * with `context.requestContext.get('harness')`.
+   *
+   * The slot is constructed fresh per turn so identity reads, the state
+   * snapshot, abort plumbing, and event emission all see the current state
+   * of the session. Functional `setState` updates serialize through the
+   * same `_flushUpdate` chain that backs `Session.setState`.
+   */
+  private _buildRequestContext(turn: { modeId: string; abortSignal: AbortSignal }): RequestContext {
+    const session = this;
+    const stateSnapshot = (this._record.state ?? {}) as unknown;
+    const harnessSlot: HarnessRequestContext<unknown> = {
+      harnessId: this._harness.ownerId,
+      sessionId: this.id,
+      threadId: this.threadId,
+      resourceId: this.resourceId,
+      modeId: turn.modeId,
+      state: stateSnapshot,
+      getState: () => (session._record.state ?? {}) as unknown,
+      setState: ((updatesOrUpdater: unknown) => {
+        if (typeof updatesOrUpdater === 'function') {
+          return session.setState(updatesOrUpdater as (prev: unknown) => unknown);
+        }
+        return session.setState(updatesOrUpdater as Partial<unknown>);
+      }) as HarnessRequestContext<unknown>['setState'],
+      abortSignal: turn.abortSignal,
+      emitEvent: (event: EmitInput) => {
+        // Reserved-type + JSON-serialization guard runs synchronously before
+        // any subscriber observes the event (§6.2).
+        assertCustomEventType(event.type);
+        assertJsonSerializable(event.type, session.id, event);
+        session._emitTurnEvent(event);
+      },
+      registerQuestion: () => {
+        throw new HarnessConfigError('ctx.registerQuestion', 'not implemented in this milestone');
+      },
+      registerPlanApproval: () => {
+        throw new HarnessConfigError('ctx.registerPlanApproval', 'not implemented in this milestone');
+      },
+      // Subagent linkage — base session has no parent.
+      subagentDepth: 0,
+      source: 'parent',
+      getSubagentModel: () => null,
+    };
+    return new RequestContext([['harness', harnessSlot]]);
   }
 
   /**
