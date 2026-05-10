@@ -50,13 +50,13 @@ describe('createBrightDataSearchTool', () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
     const result = await tool.execute!(
-      { query: 'pizza restaurants', country: 'us', cursor: 'abc' },
+      { query: 'pizza restaurants', country: 'us', start: 10 },
       {} as any,
     );
 
     expect(mockGoogle).toHaveBeenCalledWith('pizza restaurants', {
       country: 'us',
-      cursor: 'abc',
+      start: 10,
     });
 
     expect(result).toEqual({
@@ -76,7 +76,7 @@ describe('createBrightDataSearchTool', () => {
 
     expect(mockGoogle).toHaveBeenCalledWith('simple search', {
       country: undefined,
-      cursor: undefined,
+      start: undefined,
     });
   });
 

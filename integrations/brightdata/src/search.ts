@@ -11,10 +11,12 @@ const inputSchema = z.object({
     .length(2)
     .optional()
     .describe('2-letter country code for geo-targeted results (e.g., "us", "gb")'),
-  cursor: z
-    .string()
+  start: z
+    .number()
+    .int()
+    .nonnegative()
     .optional()
-    .describe('Pagination cursor for the next page of results'),
+    .describe('Result offset for pagination (e.g. 10 to get the second page of 10 results)'),
 });
 
 const outputSchema = z.object({
@@ -42,7 +44,7 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
   return createTool({
     id: 'web-search',
     description:
-      "Search Google and get back parsed organic results (link, title, description). Uses Bright Data's SERP API which bypasses bot detection. Supports country targeting and pagination.",
+      "Search Google and get back parsed organic results (link, title, description). Uses Bright Data's SERP API which bypasses bot detection. Supports country targeting and pagination via result offset.",
     inputSchema,
     outputSchema,
     execute: async input => {
@@ -50,7 +52,7 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
 
       const response = (await brightDataClient.search.google(input.query, {
         country: input.country,
-        cursor: input.cursor,
+        start: input.start,
       })) as { organic?: unknown; current_page?: unknown };
 
       const organic = Array.isArray(response.organic) ? response.organic : [];
