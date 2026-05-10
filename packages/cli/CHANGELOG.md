@@ -1,5 +1,7 @@
 # mastra
 
+## 1.9.0-alpha.10
+
 ## 1.9.0-alpha.9
 
 ### Patch Changes
