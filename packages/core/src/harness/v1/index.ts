@@ -45,12 +45,21 @@ export {
   HarnessThreadNotFoundError,
 } from './errors';
 
+/**
+ * `HarnessMessage` and `HarnessMessageContent` are stable cross-version
+ * interfaces (spec §11.1). They are re-exported from v1 and back the same
+ * underlying definitions used by the legacy `Harness`, so renderers can
+ * import from either entry point and consume the same shape.
+ */
+export type { HarnessMessage, HarnessMessageContent } from '../types';
+
 export type {
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
   HarnessConfig,
   HarnessMode,
+  ListMessagesOptions,
   SessionListOptions,
   SessionLoadByIdOptions,
   SessionRecord,

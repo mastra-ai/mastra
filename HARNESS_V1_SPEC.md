@@ -417,6 +417,20 @@ class Session<TState = Record<string, unknown>> {
   getCurrentTraceId(): string | null;
 
   // Messages
+  //
+  // `listMessages(opts?)` returns the persisted history for this session's
+  // thread, oldest-first, mapped from the underlying memory storage into the
+  // `HarnessMessage` shape defined in §11.1. `opts.limit` caps the result to
+  // the most recent N messages (still returned oldest-first within that
+  // window); omitted/undefined returns the full history.
+  //
+  // Messages live on the thread, not the session — closing the session does
+  // not delete them, and reopening a thread reads the same history. Sessions
+  // bound to a fresh ad-hoc thread (`threadId: { fresh: true }`) without
+  // persistence return `[]`.
+  //
+  // Cursor-based pagination, role/tool filters, and content-type partitioning
+  // are deferred to v1.x; see §14.
   listMessages(opts?: ListMessagesOptions): Promise<HarnessMessage[]>;
   setThreadSetting(opts: { key: string; value: unknown }): Promise<void>;
 
@@ -630,6 +644,17 @@ type FileAttachment =
       mimeType: string;
       attachmentId: string;            // reference to a previously-stored attachment
     };
+
+// History readback options for `Session.listMessages` (§4.2). Returns the
+// most recent `limit` messages from the session's thread, oldest-first
+// within that window. Omitting `limit` returns the full thread history.
+//
+// Cursor pagination, role filters, and content-type partitioning are
+// deferred to v1.x (see §14) — current consumers (TUI history reload, eval
+// context builders) only need a recent-N readback.
+interface ListMessagesOptions {
+  limit?: number;
+}
 ```
 
 Inline attachments larger than `HarnessConfig.files.maxInlineBytes` (default 10 MiB; see §9) are rejected at the entry point. The cap applies only to the *inline* form (`{ kind: 'inline', bytes }`) — the path that ships the file as part of a `message()` / `queue()` body. Larger files take one of the other two paths: pre-upload via the file route (bounded by `files.maxUploadBytes`, default 100 MiB) and reference by `attachmentId`, or host externally and send as `kind: 'url'`. The pre-upload path exists precisely so large *local* files do not have to be hosted externally.

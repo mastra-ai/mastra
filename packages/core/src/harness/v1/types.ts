@@ -523,6 +523,20 @@ export interface QueueOptions extends QueueOverrides {
 }
 
 /**
+ * Options accepted by `Session.listMessages(...)` (spec §4.2, §4.4).
+ *
+ * `limit` caps the result to the most recent N messages, still returned
+ * oldest-first within that window. Omitting `limit` returns the full
+ * thread history.
+ *
+ * Cursor pagination, role filters, and content-type partitioning are
+ * deferred to v1.x — current consumers only need a recent-N readback.
+ */
+export interface ListMessagesOptions {
+  limit?: number;
+}
+
+/**
  * Pass-through of the agent's own execution options for the rare case a
  * caller needs to drop down to the raw surface. Most callers should stay on
  * `MessageOptions`.

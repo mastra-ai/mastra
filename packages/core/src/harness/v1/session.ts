@@ -27,6 +27,10 @@ import { RequestContext } from '../../request-context';
 import type { HarnessStorage, PendingResume, QueuedItem, SessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
+import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
+import type { StoredMessageRow } from '../_shared/message-conversion';
+import type { HarnessMessage } from '../types';
+
 import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError } from './errors';
 import { EventEmitter, assertCustomEventType, assertJsonSerializable } from './events';
 import type { EmitInput, HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
@@ -36,6 +40,7 @@ import type {
   AgentStream,
   HarnessMode,
   HarnessRequestContext,
+  ListMessagesOptions,
   MessageOptions,
   MessageOptionsDefault,
   MessageOptionsStream,
@@ -681,6 +686,49 @@ export class Session {
       goal: rec.goal,
       lastActivityAt: rec.lastActivityAt,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // listMessages — §4.2, §4.4.
+  //
+  // Read-only history readback for this session's thread, returned
+  // oldest-first. Delegates to the memory storage domain on the bound Mastra
+  // instance and maps each row into the public `HarnessMessage` partition
+  // (spec §11.1) via the shared converter.
+  //
+  // Returns `[]` when memory storage is not configured (e.g. ad-hoc threads,
+  // tests with no storage wired). Throws if the session is no longer live.
+  // -------------------------------------------------------------------------
+
+  async listMessages(opts?: ListMessagesOptions): Promise<HarnessMessage[]> {
+    this._assertLive('listMessages()');
+    const memory = await this._harness._internalTryGetMemoryStorage();
+    if (!memory) return [];
+
+    const limit = opts?.limit;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 0 || !Number.isInteger(limit))) {
+      throw new HarnessValidationError('limit', `\`limit\` must be a non-negative integer; received ${String(limit)}`);
+    }
+    if (limit === 0) return [];
+
+    // When `limit` is set, fetch the most recent N (DESC) and reverse to
+    // restore chronological order. Otherwise fetch the full thread history
+    // in natural order — mirrors the legacy harness's two-path behaviour.
+    if (limit !== undefined) {
+      const result = await memory.listMessages({
+        threadId: this.threadId,
+        perPage: limit,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      return result.messages
+        .slice()
+        .reverse()
+        .map(msg => convertStoredMessageToHarnessMessage(msg as unknown as StoredMessageRow));
+    }
+
+    const result = await memory.listMessages({ threadId: this.threadId, perPage: false });
+    return result.messages.map(msg => convertStoredMessageToHarnessMessage(msg as unknown as StoredMessageRow));
   }
 
   // -------------------------------------------------------------------------

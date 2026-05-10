@@ -210,6 +210,7 @@ describe('Session — surface area (M1)', () => {
         'abort',
         'close',
         'isRunning',
+        'listMessages',
         'message',
         'queue',
         'getCurrentMode',

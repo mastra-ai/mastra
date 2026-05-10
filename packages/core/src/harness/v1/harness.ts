@@ -982,6 +982,20 @@ export class Harness {
     return memory;
   }
 
+  /**
+   * @internal — Session-facing soft variant of `_requireMemoryStorage`. Returns
+   * `null` when memory storage is not configured instead of throwing, so
+   * read-only consumers (e.g. `Session.listMessages`) can gracefully return an
+   * empty history for ad-hoc threads without crashing.
+   */
+  async _internalTryGetMemoryStorage() {
+    if (!this._mastra) return null;
+    const composite = this._mastra.getStorage();
+    if (!composite) return null;
+    const memory = await composite.getStore('memory');
+    return memory ?? null;
+  }
+
   private _mintThreadId(): string {
     return `thread-${randomUUID()}`;
   }
