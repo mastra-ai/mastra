@@ -1,7 +1,11 @@
 import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { IconButton } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
-import { useEffect, useMemo } from 'react';
+import { SlidersHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAgentSettings } from '../context/agent-context';
+import { AgentChatSettingsDialog } from './agent-chat-settings-dialog';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { Thread } from '@/lib/ai-ui/thread';
@@ -26,8 +30,15 @@ export const AgentChat = ({
   isNewThread?: boolean;
   hideModelSwitcher?: boolean;
 }) => {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { settings } = useAgentSettings();
+  const { settings: tracingSettings } = useTracingSettings();
   const requestContext = useMergedRequestContext();
+  const hasSettingsOverride = Boolean(
+    (settings?.modelSettings && Object.keys(settings.modelSettings).length > 0) ||
+    (tracingSettings && Object.keys(tracingSettings).length > 0) ||
+    (requestContext && Object.keys(requestContext).length > 0),
+  );
 
   const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,
@@ -55,6 +66,7 @@ export const AgentChat = ({
   // Stable empty array per thread: stays the same reference across re-renders
   // (preventing useChat from wiping streamed messages), but changes when threadId
   // changes (allowing useChat to reset when switching threads).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- changing this reference when threadId changes resets useChat state.
   const emptyMessages = useMemo(() => [] as never[], [threadId]);
 
   const messages = data?.messages ?? emptyMessages;
@@ -82,7 +94,19 @@ export const AgentChat = ({
         threadId={threadId}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
+        composerControls={
+          <IconButton
+            tooltip={hasSettingsOverride ? 'Chat Settings (overridden)' : 'Chat Settings'}
+            size="sm"
+            variant={hasSettingsOverride ? 'outline' : 'ghost'}
+            onClick={() => setIsSettingsOpen(true)}
+            aria-label="Chat Settings"
+          >
+            <SlidersHorizontal />
+          </IconButton>
+        }
       />
+      <AgentChatSettingsDialog agentId={agentId} open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </MastraRuntimeProvider>
   );
 };

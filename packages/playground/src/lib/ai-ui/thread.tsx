@@ -23,9 +23,18 @@ export interface ThreadProps {
   hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
+  composerControls?: React.ReactNode;
 }
 
-export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
+export const Thread = ({
+  agentName,
+  agentId,
+  threadId,
+  hasMemory,
+  hasModelList,
+  hideModelSwitcher,
+  composerControls,
+}: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
@@ -78,6 +87,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
         agentId={agentId}
         hasModelList={hasModelList}
         hideModelSwitcher={hideModelSwitcher}
+        controls={composerControls}
       />
     </ThreadWrapper>
   );
@@ -112,9 +122,10 @@ interface ComposerProps {
   agentId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
+  controls?: React.ReactNode;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher, controls }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Track IME composition state to prevent Enter from submitting during CJK input.
@@ -196,6 +207,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
           <div className="flex items-center justify-between gap-2">
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
             <div className="flex items-center gap-2 ml-auto">
+              {controls}
               {canExecuteAgent && <SpeechInput agentId={agentId} />}
               <ComposerAction canExecute={canExecuteAgent} />
             </div>

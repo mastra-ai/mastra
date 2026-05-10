@@ -47,13 +47,11 @@ test.describe('agent panels', () => {
   test.describe('model settings', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/agents/weather-agent/chat/new');
-      await page.click('text=Model settings');
+      await page.getByLabel('Chat Settings').click();
     });
 
     test('model trigger modes', async ({ page }) => {
       const generateRadio = page.getByLabel('Generate');
-      await page.click('text=Model settings');
-
       await expect(generateRadio).toBeVisible();
       await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
       const streamRadio = page.getByLabel('Stream');
@@ -78,7 +76,7 @@ test.describe('agent panels', () => {
 
       // Act
       await page.reload();
-      await page.click('text=Model settings');
+      await page.getByLabel('Chat Settings').click();
       await page.click('text=Advanced Settings');
 
       // Assert
