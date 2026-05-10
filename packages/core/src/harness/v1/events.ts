@@ -19,6 +19,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { PendingResume, SessionRecord } from '../../storage/domains/harness';
+import type { TaskItem } from '../../tools/builtin/shared';
 
 import { HarnessEventSerializationError, HarnessValidationError } from './errors';
 import type { EventSerializationReason } from './errors';
@@ -185,6 +186,26 @@ export interface ShellOutputEvent extends HarnessEventBase {
   stream: 'stdout' | 'stderr';
 }
 
+/**
+ * Task list update (§10.2). Surfaces a new task list to subscribers
+ * (TUI progress widget, sidebar, observers).
+ *
+ * Source of truth is the `data-task-updated` chunk that tools write via
+ * `ctx.writer?.custom({ type: 'data-task-updated', data: { tasks } })` —
+ * the same call works outside a Harness, where consumers read the chunk
+ * directly from `agent.stream().fullStream`. Inside a Harness,
+ * `_drainStreamToEvents` recognizes the whitelisted `data-task-updated`
+ * chunk type and bridges it into this typed event so subscribers can
+ * switch on `event.type === 'task_updated'`.
+ *
+ * The harness owns this event type — tools must not synthesize it through
+ * `ctx.emitEvent`. Use `writer.custom` instead.
+ */
+export interface TaskUpdatedEvent extends HarnessEventBase {
+  type: 'task_updated';
+  tasks: TaskItem[];
+}
+
 export interface ToolEndEvent extends HarnessEventBase {
   type: 'tool_end';
   toolCallId: string;
@@ -312,6 +333,7 @@ export type HarnessEvent =
   | ToolStartEvent
   | ToolUpdateEvent
   | ShellOutputEvent
+  | TaskUpdatedEvent
   | ToolEndEvent
   | AgentEndEvent
   | SuspensionRequiredEvent
@@ -492,6 +514,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_start',
   'tool_update',
   'shell_output',
+  'task_updated',
   'tool_end',
   'suspension_required',
   'suspension_resolved',

@@ -34,7 +34,13 @@ import type { HarnessMessage } from '../types';
 
 import { HarnessConfigError, HarnessQueueFullError, HarnessToolEmitError, HarnessValidationError } from './errors';
 import { EventEmitter, assertCustomEventType, assertJsonSerializable } from './events';
-import type { EmitInput, HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
+import type {
+  EmitInput,
+  HarnessEvent,
+  HarnessEventListener,
+  HarnessEventUnsubscribe,
+  TaskUpdatedEvent,
+} from './events';
 import type { Harness } from './harness';
 import type {
   AgentResult,
@@ -707,6 +713,23 @@ export class Session {
             break;
           }
           default:
+            // Bridge whitelisted `data-*` writer chunks (§10.2) into typed
+            // harness events so subscribers can switch on a stable type.
+            // Tools publish via `ctx.writer?.custom({ type: 'data-foo',
+            // data: {...} })` — the same call works outside Harness, where
+            // consumers read the chunk straight from `fullStream`.
+            //
+            // Only known data types are bridged; unknown `data-*` chunks
+            // pass silently (consumers needing them can stream:true).
+            if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
+              const data = (chunk as { data?: unknown }).data;
+              if (chunk.type === 'data-task-updated') {
+                const tasks = (data as { tasks?: unknown })?.tasks;
+                if (Array.isArray(tasks)) {
+                  this._emitTurnEvent({ type: 'task_updated', tasks: tasks as TaskUpdatedEvent['tasks'] });
+                }
+              }
+            }
             // All other chunk types (start/finish, reasoning, source, file,
             // abort, raw, …) are intentionally ignored at the harness event
             // layer for v1. UIs that need them can subscribe to the agent's

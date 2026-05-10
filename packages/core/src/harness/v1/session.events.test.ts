@@ -262,6 +262,49 @@ describe('Session events — fullStream drain', () => {
     expect(start).toMatchObject({ type: 'tool_start', toolCallId: 'tc1', toolName: 'lookup' });
     expect(end).toMatchObject({ type: 'tool_end', toolCallId: 'tc1', isError: false });
   });
+
+  it('bridges a data-task-updated writer chunk into a task_updated event', async () => {
+    // Round-trips the taskWrite tool's emission path: tools publish via
+    // `ctx.writer?.custom({ type: 'data-task-updated', data: { tasks } })`
+    // and the harness translates that into a typed `task_updated` event.
+    const { harness, agent } = setup();
+    const tasks = [
+      { content: 'A', activeForm: 'Doing A', status: 'pending' as const },
+      { content: 'B', activeForm: 'Doing B', status: 'completed' as const },
+    ];
+    agent.chunks = [{ type: 'data-task-updated', data: { tasks }, runId: 'fake-run' }];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'do it' });
+
+    const updated = events.find(e => e.type === 'task_updated');
+    expect(updated).toBeDefined();
+    expect(updated).toMatchObject({ type: 'task_updated', tasks });
+    expect((updated as any).sessionId).toBe(session.id);
+  });
+
+  it('ignores a data-task-updated chunk whose payload is missing a tasks array', async () => {
+    // The bridge only fires for well-formed payloads — malformed `data-*`
+    // chunks pass silently rather than emitting a half-typed event.
+    const { harness, agent } = setup();
+    agent.chunks = [
+      { type: 'data-task-updated', data: { tasks: 'not-an-array' }, runId: 'fake-run' },
+      { type: 'data-task-updated', data: undefined, runId: 'fake-run' },
+    ];
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(e => {
+      events.push(e);
+    });
+    await session.message({ content: 'hi' });
+
+    expect(events.find(e => e.type === 'task_updated')).toBeUndefined();
+  });
 });
 
 describe('Session events — suspension round-trip', () => {

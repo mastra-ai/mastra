@@ -55,6 +55,16 @@ export const taskWrite = createTool({
     const tasks = input.tasks ?? [];
     const counts = summarize(tasks);
 
+    // Notify observers that the task list has changed via the agent stream's
+    // `data-*` channel. This works in both worlds:
+    //   - Outside Harness: consumers reading `agent.stream().fullStream` see
+    //     a `data-task-updated` chunk.
+    //   - Inside Harness: `_drainStreamToEvents` bridges the chunk to a
+    //     typed `task_updated` event, so `session.subscribe(...)` fires.
+    // Emit before persist so UIs update immediately even if storage is slow
+    // or absent.
+    await ctx.writer?.custom({ type: 'data-task-updated', data: { tasks } });
+
     const threadId = ctx.agent?.threadId;
     const storage = ctx.mastra?.getStorage?.();
 
