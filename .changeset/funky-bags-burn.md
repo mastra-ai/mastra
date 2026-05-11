@@ -1,10 +1,12 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
 Improved `ScrollArea` to use Base UI internally and added a richer mask API. Edges now fade by default based on `orientation` (top/bottom for vertical, left/right for horizontal, all four for both), so most scrollers get the polished fade-out automatically.
 
-The new `mask` prop replaces `showMask` and accepts either a boolean (`false` disables fading entirely) or an object to override individual sides. The `x` and `y` keys are shorthands for the matching axis.
+**Heads up — default behavior change:** `ScrollArea` previously rendered without any edge fade unless `showMask` was passed. It now fades the edges that match `orientation` by default. Pass `mask={false}` on the callsites where you want to keep the old hard edges.
+
+**New `mask` prop.** Accepts a boolean (`false` disables the fade entirely) or an object to override individual sides. The `x` and `y` keys are shorthands for the matching axis.
 
 ```tsx
 // Default — fades follow `orientation`
@@ -18,4 +20,16 @@ The new `mask` prop replaces `showMask` and accepts either a boolean (`false` di
 
 // Vertical fades only on a two-axis scroller
 <ScrollArea orientation="both" mask={{ x: false }}>...</ScrollArea>
+```
+
+**Migrating from `showMask`.** The `showMask` boolean is now deprecated but still works — `mask` wins when both are set.
+
+```tsx
+// Before
+<ScrollArea showMask>...</ScrollArea>
+<ScrollArea showMask={false}>...</ScrollArea>
+
+// After
+<ScrollArea>...</ScrollArea>             // default fade matches orientation
+<ScrollArea mask={false}>...</ScrollArea> // explicitly disable
 ```

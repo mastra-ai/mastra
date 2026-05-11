@@ -31,6 +31,8 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPr
   orientation?: Orientation;
   /** Fade content at the edges where it's clipped by overflow. Defaults to the axes matching `orientation`. */
   mask?: ScrollAreaMask;
+  /** @deprecated Use `mask` instead. Retained for backward compatibility. */
+  showMask?: boolean;
 };
 
 type ResolvedMask = { top: boolean; bottom: boolean; left: boolean; right: boolean };
@@ -71,13 +73,24 @@ function maskClasses(sides: ResolvedMask) {
 
 const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
   (
-    { className, children, viewPortClassName, maxHeight, autoScroll = false, orientation = 'vertical', mask, ...props },
+    {
+      className,
+      children,
+      viewPortClassName,
+      maxHeight,
+      autoScroll = false,
+      orientation = 'vertical',
+      mask,
+      showMask,
+      ...props
+    },
     ref,
   ) => {
     const areaRef = React.useRef<HTMLDivElement>(null);
     useAutoscroll(areaRef, { enabled: autoScroll });
 
-    const sides = resolveMask(mask, orientation);
+    const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
+    const sides = resolveMask(effectiveMask, orientation);
 
     return (
       <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
