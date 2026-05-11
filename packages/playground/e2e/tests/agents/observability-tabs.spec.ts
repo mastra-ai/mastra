@@ -52,8 +52,12 @@ test('requests agent traces when runtime observability is available without pack
   await expect(page.getByRole('tab', { name: 'Review' })).toBeVisible();
   await page.getByRole('tab', { name: 'Traces' }).click();
 
-  await expect(page).toHaveURL(/\/agents\/weather-agent\/traces$/);
-  await expect(page.getByText('No traces yet.')).toBeVisible();
+  // The traces tab navigates to /agents/:id/traces; the page then enriches the URL
+  // with scope filter params, so we assert the path without anchoring on $.
+  await expect(page).toHaveURL(/\/agents\/weather-agent\/traces(\?|$)/);
+  // With the scope filters pre-applied the empty-state copy comes from the list
+  // view ("filters applied" variant), not the standalone NoTracesInfo screen.
+  await expect(page.getByText(/No traces found for applied filters/i)).toBeVisible();
   expect(tracesUrl?.searchParams.get('entityId')).toBe('weather-agent');
   expect(tracesUrl?.searchParams.get('entityType')).toBe('agent');
 });
