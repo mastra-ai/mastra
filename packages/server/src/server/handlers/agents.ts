@@ -1696,29 +1696,38 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         threadId: effectiveThreadId,
       });
 
+      let cleanedUp = false;
+      const cleanup = (closeController?: ReadableStreamDefaultController) => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        subscription.abort();
+        subscription.unsubscribe();
+        if (closeController) {
+          try {
+            closeController.close();
+          } catch {}
+        }
+      };
+
       return new ReadableStream({
         async start(controller) {
-          const cleanup = () => {
-            subscription.abort();
-            subscription.unsubscribe();
-            try {
-              controller.close();
-            } catch {}
-          };
-
-          abortSignal?.addEventListener('abort', cleanup, { once: true });
+          const abortCleanup = () => cleanup(controller);
+          abortSignal?.addEventListener('abort', abortCleanup, { once: true });
 
           try {
             for await (const part of subscription.stream) {
               controller.enqueue(part);
             }
+            cleanup(controller);
           } catch (error) {
+            cleanup();
             controller.error(error);
+          } finally {
+            abortSignal?.removeEventListener('abort', abortCleanup);
           }
         },
         cancel() {
-          subscription.abort();
-          subscription.unsubscribe();
+          cleanup();
         },
       });
     } catch (error) {
