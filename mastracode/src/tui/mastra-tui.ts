@@ -594,6 +594,7 @@ export class MastraTUI {
       cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+      'github-copilot': accessLevel('github-copilot'),
     };
     // Gateway covers all providers
     const mgKey =
@@ -782,8 +783,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      startGoal: (objective, cancelMessage) =>
-        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      startGoal: (objective, cancelMessage, options) =>
+        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => renderExistingMessages(this.state),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>

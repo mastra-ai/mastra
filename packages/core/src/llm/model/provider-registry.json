@@ -1376,6 +1376,15 @@
       "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models",
       "gateway": "models.dev"
     },
+    "firepass": {
+      "url": "https://api.fireworks.ai/inference/v1/",
+      "apiKeyEnvVar": "FIREPASS_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Fireworks (Firepass)",
+      "models": ["accounts/fireworks/routers/kimi-k2p6-turbo"],
+      "docUrl": "https://docs.fireworks.ai/firepass",
+      "gateway": "models.dev"
+    },
     "minimax-cn-coding-plan": {
       "url": "https://api.minimaxi.com/anthropic/v1",
       "apiKeyEnvVar": "MINIMAX_API_KEY",
@@ -2510,7 +2519,6 @@
         "gpt-5.4-pro",
         "gpt-5.5",
         "gpt-5.5-pro",
-        "hy3-preview-free",
         "kimi-k2.5",
         "kimi-k2.6",
         "minimax-m2.5",
@@ -2518,7 +2526,8 @@
         "minimax-m2.7",
         "nemotron-3-super-free",
         "qwen3.5-plus",
-        "qwen3.6-plus"
+        "qwen3.6-plus",
+        "ring-2.6-1t-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -3356,29 +3365,6 @@
       "gateway": "models.dev",
       "npm": "@ai-sdk/openai"
     },
-    "kiro": {
-      "url": "https://q.us-east-1.amazonaws.com",
-      "apiKeyEnvVar": "KIRO_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "Kiro",
-      "models": [
-        "auto",
-        "claude-haiku-4.5",
-        "claude-opus-4.5",
-        "claude-opus-4.6",
-        "claude-opus-4.7",
-        "claude-sonnet-4",
-        "claude-sonnet-4.5",
-        "claude-sonnet-4.6",
-        "deepseek-3.2",
-        "minimax-m2.1",
-        "minimax-m2.5",
-        "qwen3-coder-next"
-      ],
-      "docUrl": "https://kiro.dev",
-      "gateway": "models.dev",
-      "npm": "kiro-acp-ai-provider"
-    },
     "requesty": {
       "url": "https://router.requesty.ai/v1",
       "apiKeyEnvVar": "REQUESTY_API_KEY",
@@ -3837,6 +3823,7 @@
         "google/gemini-3-pro-image",
         "google/gemini-3-pro-preview",
         "google/gemini-3.1-flash-image-preview",
+        "google/gemini-3.1-flash-lite",
         "google/gemini-3.1-flash-lite-preview",
         "google/gemini-3.1-pro-preview",
         "google/gemini-embedding-001",
@@ -4388,7 +4375,7 @@
         "gemma-4-26b-a4b-it",
         "gemma-4-31b-it"
       ],
-      "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "docUrl": "https://ai.google.dev/gemini-api/docs/models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/google"
     },
@@ -6050,6 +6037,7 @@
       "siliconflow/deepseek-v3.2",
       "tongyi-intent-detect-v3"
     ],
+    "firepass": ["accounts/fireworks/routers/kimi-k2p6-turbo"],
     "minimax-cn-coding-plan": [
       "MiniMax-M2",
       "MiniMax-M2.1",
@@ -7032,7 +7020,6 @@
       "gpt-5.4-pro",
       "gpt-5.5",
       "gpt-5.5-pro",
-      "hy3-preview-free",
       "kimi-k2.5",
       "kimi-k2.6",
       "minimax-m2.5",
@@ -7040,7 +7027,8 @@
       "minimax-m2.7",
       "nemotron-3-super-free",
       "qwen3.5-plus",
-      "qwen3.6-plus"
+      "qwen3.6-plus",
+      "ring-2.6-1t-free"
     ],
     "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
     "nebius": [
@@ -7661,20 +7649,6 @@
       "text-embedding-3-small",
       "text-embedding-ada-002"
     ],
-    "kiro": [
-      "auto",
-      "claude-haiku-4.5",
-      "claude-opus-4.5",
-      "claude-opus-4.6",
-      "claude-opus-4.7",
-      "claude-sonnet-4",
-      "claude-sonnet-4.5",
-      "claude-sonnet-4.6",
-      "deepseek-3.2",
-      "minimax-m2.1",
-      "minimax-m2.5",
-      "qwen3-coder-next"
-    ],
     "requesty": [
       "anthropic/claude-3-7-sonnet",
       "anthropic/claude-haiku-4-5",
@@ -8058,6 +8032,7 @@
       "google/gemini-3-pro-image",
       "google/gemini-3-pro-preview",
       "google/gemini-3.1-flash-image-preview",
+      "google/gemini-3.1-flash-lite",
       "google/gemini-3.1-flash-lite-preview",
       "google/gemini-3.1-pro-preview",
       "google/gemini-embedding-001",

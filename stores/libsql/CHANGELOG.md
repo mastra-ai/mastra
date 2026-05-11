@@ -1,5 +1,26 @@
 # @mastra/libsql
 
+## 1.10.1-alpha.2
+
+### Patch Changes
+
+- **Fixed** Workflow run snapshots no longer lose fields when serialized for storage. The libsql `safeStringify` cycle-detection treated any object that appeared more than once in a snapshot as a circular reference and dropped it. Because `snapshot.result` and the final step's `context[step].output` share the same reference on success, `snapshot.result` was being silently stripped on every persist. This caused `listWorkflowRuns` to return runs with `snapshot.result === undefined` and broke workflow resume when suspended-state fields were shared elsewhere in the snapshot. ([#16368](https://github.com/mastra-ai/mastra/pull/16368))
+
+- Respect optional `resourceId` in `getThreadById` so scoped thread lookups return `null` when the thread belongs to a different resource. ([#14237](https://github.com/mastra-ai/mastra/pull/14237))
+
+  Example:
+
+  ```typescript
+  const thread = await memory.getThreadById({
+    threadId: 'my-thread-id',
+    resourceId: 'my-user-id',
+  });
+  // Returns null if the thread does not belong to 'my-user-id'.
+  ```
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4)]:
+  - @mastra/core@1.33.0-alpha.8
+
 ## 1.10.1-alpha.1
 
 ### Patch Changes

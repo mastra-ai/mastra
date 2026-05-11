@@ -1746,6 +1746,256 @@
       }
     },
     {
+      "hash": "f17d934747e060b6",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "[{\"type\":\"text\",\"text\":\"Hello, world!\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773176161180
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601a1683f23f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:17 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "658",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999870",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_1eaea3c2b5b8465dba720ca9ef1799be"
+        },
+        "body": {
+          "id": "resp_0dafcd72231efb6c0069e8f75c709881949d52f277ab10db0e",
+          "object": "response",
+          "created_at": 1776875356,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875356,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0dafcd72231efb6c0069e8f75cd7bc81948e88f0814fb3db62",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Greeting the world with a simple hello"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 110,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 8,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 118
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "df59f821798ce287",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "[{\"type\":\"text\",\"text\":\"Hello, world!\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773176161180
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601a1683f23f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:17 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "658",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999870",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_1eaea3c2b5b8465dba720ca9ef1799be"
+        },
+        "body": {
+          "id": "resp_0dafcd72231efb6c0069e8f75c709881949d52f277ab10db0e",
+          "object": "response",
+          "created_at": 1776875356,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875356,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0dafcd72231efb6c0069e8f75cd7bc81948e88f0814fb3db62",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Greeting the world with a simple hello"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 110,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 8,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 118
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
       "hash": "0115e44990b4ce2e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
@@ -3211,6 +3461,131 @@
       }
     },
     {
+      "hash": "e904ed03584b5892",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "[{\"type\":\"text\",\"text\":\"What is the weather in London?\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773176161880
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601cd0ca623f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:24 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "925",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999867",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_372f246307784ffc8a5f091185ef6174"
+        },
+        "body": {
+          "id": "resp_073542cec7833d1a0069e8f76369a88194880cbe48e7667f36",
+          "object": "response",
+          "created_at": 1776875363,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875364,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_073542cec7833d1a0069e8f7641a90819489334958776e5d5e",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Current Weather in London Inquiry"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 113,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 6,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 119
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
       "hash": "4973435069e5ed88",
       "request": {
         "url": "https://api.openai.com/v1/responses",
@@ -3422,6 +3797,131 @@
     },
     {
       "hash": "17497618c6e9059d",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "[{\"type\":\"text\",\"text\":\"What was the tool you just used?\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176161880}}}]"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773176160000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0601d4b8de23f4-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:29:25 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "621",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999867",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_13c084d8282b447e84f6f506e509972f"
+        },
+        "body": {
+          "id": "resp_01f58b91fd5e92470069e8f764a4d08190aefc199e91ccca47",
+          "object": "response",
+          "created_at": 1776875364,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1776875365,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_01f58b91fd5e92470069e8f76511e88190a5827fc515bc4d34",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Inquiring about the recently used tool"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 114,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 8,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 122
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0aac89e8a6ddb8b5",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -6233,9 +6733,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -6252,9 +6750,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -6356,9 +6852,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": true
@@ -6375,9 +6869,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false
               },
               "strict": true

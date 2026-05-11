@@ -4,7 +4,7 @@ import { EntityType, SpanType } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 import { Observability } from './default';
-import { DefaultExporter } from './exporters/default';
+import { MastraStorageExporter } from './exporters/mastra-storage';
 import { hydrateRecordedTrace } from './recorded';
 
 describe('RecordedTrace', () => {
@@ -29,7 +29,7 @@ describe('RecordedTrace', () => {
         configs: {
           default: {
             serviceName: 'test-service',
-            exporters: [new DefaultExporter(), mirrorExporter],
+            exporters: [new MastraStorageExporter(), mirrorExporter],
           },
         },
       }),
@@ -201,7 +201,7 @@ describe('RecordedTrace', () => {
         configs: {
           default: {
             serviceName: 'test-service',
-            exporters: [new DefaultExporter(), mirrorExporter],
+            exporters: [new MastraStorageExporter(), mirrorExporter],
           },
         },
       }),
@@ -358,7 +358,7 @@ describe('RecordedTrace', () => {
         configs: {
           default: {
             serviceName: 'test-service',
-            exporters: [new DefaultExporter(), mirrorExporter],
+            exporters: [new MastraStorageExporter(), mirrorExporter],
           },
         },
       }),
@@ -492,7 +492,7 @@ describe('RecordedTrace', () => {
         configs: {
           default: {
             serviceName: 'test-service',
-            exporters: [new DefaultExporter()],
+            exporters: [new MastraStorageExporter()],
           },
         },
       }),
