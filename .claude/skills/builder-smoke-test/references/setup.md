@@ -92,8 +92,8 @@ curl -s $BASE/editor/builder/settings | jq .
 **Verify:**
 
 - [ ] Response contains `configuration.agent.workspace` with `type: "id"` and a `workspaceId`
-- [ ] Response contains `features` object (check for `skills: true`)
-- [ ] Response contains `models` or `modelPolicy` (allowed providers/models)
+- [ ] Response contains `features.agent.skills: true` (the `features` block is namespaced under `agent` — there is no top-level `features.skills`)
+- [ ] Response contains **both** `configuration.agent.models.{allowed,default}` and a top-level `modelPolicy.{active, pickerVisible, allowed, default}`. They mirror each other; Model Policy assertions later in the suite key off `modelPolicy` specifically.
 
 Record the `workspaceId` — this is the **builder workspace ID** used in all subsequent tests.
 
@@ -101,15 +101,17 @@ Record the `workspaceId` — this is the **builder workspace ID** used in all su
 
 Record what already exists:
 
+List endpoints return a paginated envelope: `{ hasMore, page, perPage, total, workspaces|agents|skills }`. The arrays live under the named key; use `.<key> | length` for the page count and `.total` for the full count.
+
 ```bash
 # Workspaces
-curl -s $BASE/stored/workspaces | jq '.workspaces | length'
+curl -s $BASE/stored/workspaces | jq '{ page: (.workspaces | length), total: .total }'
 
 # Agents
-curl -s $BASE/stored/agents | jq '.agents | length'
+curl -s $BASE/stored/agents | jq '{ page: (.agents | length), total: .total }'
 
 # Skills
-curl -s $BASE/stored/skills | jq '.skills | length'
+curl -s $BASE/stored/skills | jq '{ page: (.skills | length), total: .total }'
 ```
 
 Note these counts — they help distinguish pre-existing entities from test-created ones.
@@ -124,13 +126,19 @@ echo "WORKSPACE_ID=$WORKSPACE_ID"
 curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
-**Verify:**
+**Verify on the detail GET:**
 
 - [ ] Workspace exists in DB (not 404)
 - [ ] `metadata.source` is `"builder"`
-- [ ] `runtimeRegistered` is `true`
-- [ ] `status` is `"draft"` or `"active"`
-- [ ] `filesystem` config is present (has `provider` and `config.basePath`)
+- [ ] `status` is `"draft"` or `"active"` (boot leaves the builder workspace in `"draft"`; treat that as expected)
+- [ ] `filesystem.provider` and `filesystem.config.basePath` are present
+- [ ] Detail GET also returns `filesystem.config.contained: true`, a `sandbox` block (e.g. `{ provider: "daytona", config: {} }`), and a `resolvedVersionId` UUID — these are informational, not assertions, but worth recording.
+
+> `runtimeRegistered` is **list-only**: it appears on entries of `GET /stored/workspaces` but is **not** included on the detail response above. Verify it via the list:
+> ```bash
+> curl -s $BASE/stored/workspaces | jq '.workspaces[] | select(.id == "'"$WORKSPACE_ID"'") | .runtimeRegistered'
+> # → true
+> ```
 
 If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't run — check that the `Workspace` instance is registered in the Mastra constructor in `examples/agent/src/mastra/index.ts`.
 
@@ -140,6 +148,6 @@ If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't 
 - [ ] Port `:4111` is free, or the zombie has been killed
 - [ ] Server started with `pnpm mastra:dev` after the most recent `.env` edit
 - [ ] `wait-for-server.sh` reports ready on `:4111` (not `:4112`+)
-- [ ] Builder settings endpoint returns valid config
-- [ ] Builder workspace exists in DB with correct metadata
-- [ ] Baseline entity counts recorded
+- [ ] Builder settings endpoint returns valid config (`features.agent.skills: true`, both `configuration.agent.models` and `modelPolicy` present)
+- [ ] Builder workspace exists in DB with correct metadata (and `runtimeRegistered: true` on the list response)
+- [ ] Baseline entity counts recorded from `{ page, total }` shape
