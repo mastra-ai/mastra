@@ -96,10 +96,12 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
       });
 
       if (!modified) {
+        await fs.writeFile(fullPath.replace(/\.d\.ts$/, '.d.cts'), code);
         continue;
       }
 
       await fs.writeFile(fullPath, code);
+      await fs.writeFile(fullPath.replace(/\.d\.ts$/, '.d.cts'), code);
     }
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
