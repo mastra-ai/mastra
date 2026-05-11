@@ -125,6 +125,6 @@ Ensure Playwright browsers are installed:
 
 ## Notes
 
-- Local traces are stored in-memory by default
-- Traces persist only while the dev server is running
-- For persistent traces, configure a storage backend
+- Local traces persist only for the current dev-server session unless a storage backend is configured
+- With the default in-memory setup, restarting the dev server wipes them
+- For persistent traces across restarts, configure a storage backend

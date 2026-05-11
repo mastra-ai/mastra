@@ -77,8 +77,8 @@ curl -X POST <server-url>/api/agents/weather-agent/generate \
 
 **Local (`--env local`)**:
 
-- Traces stored in-memory
-- Only persist while dev server runs
+- Traces persist only for the current dev-server session unless a storage backend is configured
+- With the default in-memory setup, restarting the dev server wipes them
 - Check `@mastra/observability` is installed
 
 **Cloud (`--env staging/production`)**:
@@ -120,9 +120,10 @@ curl -s "http://localhost:4111/api/observability/traces?page=0&perPage=100" | \
 - `traceId` values returned in earlier generate/workflow responses resolve
   via `/observability/traces/:traceId`
 
-**Note:** local traces are in-memory only (MastraStorageExporter). They disappear
-on dev server restart. Run the agent/tool/workflow tests in the same dev
-server session as the traces test.
+**Note:** local traces persist only for the current dev-server session unless a
+storage backend is configured — restarting wipes them when using the default
+in-memory setup. Run the agent/tool/workflow tests in the same dev server
+session as the traces test.
 
 ## Direct Trace API (Cloud Only)
 
