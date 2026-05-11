@@ -207,12 +207,12 @@ console.log(grouped.embeddingsByDocument); // [[[...], [...]], [[...]]]
 | `voyage-4-large` | Best quality, highest batch capacity | 256/512/1024/2048 | 120k |
 | `voyage-4` | Balanced quality/speed, high throughput | 256/512/1024/2048 | 320k |
 | `voyage-4-lite` | Maximum throughput | 256/512/1024/2048 | 1M |
-| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 | 32k |
-| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 | 32k |
-| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 | 32k |
-| `voyage-code-3` | Code retrieval | 256/512/1024/2048 | 32k |
-| `voyage-finance-2` | Finance domain | 1024 | 32k |
-| `voyage-law-2` | Legal domain | 1024 | 32k |
+| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 | 120k |
+| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 | 320k |
+| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 | 1M |
+| `voyage-code-3` | Code retrieval | 256/512/1024/2048 | 120k |
+| `voyage-finance-2` | Finance domain | 1024 | 120k |
+| `voyage-law-2` | Legal domain | 1024 | 120k |
 
 ### Multimodal Models
 

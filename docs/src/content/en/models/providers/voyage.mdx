@@ -1,5 +1,5 @@
 ---
-title: "VoyageAI | Models | Mastra"
+title: "VoyageAI | Models"
 description: "Use VoyageAI embedding and reranker models with Mastra."
 ---
 
@@ -9,7 +9,7 @@ VoyageAI provides text embeddings, multimodal embeddings, contextualized chunk e
 
 Learn more in the [VoyageAI documentation](https://docs.voyageai.com/).
 
-```bash
+```bash title=".env"
 VOYAGE_API_KEY=your-api-key
 ```
 
@@ -87,12 +87,12 @@ const result = await embedder.doEmbed({ values: ['Hello'] });
 | `voyage-4-large` | Best quality, highest batch capacity | 256/512/1024/2048 | 120k |
 | `voyage-4` | Balanced quality/speed, high throughput | 256/512/1024/2048 | 320k |
 | `voyage-4-lite` | Maximum throughput | 256/512/1024/2048 | 1M |
-| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 | 32k |
-| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 | 32k |
-| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 | 32k |
-| `voyage-code-3` | Code retrieval | 256/512/1024/2048 | 32k |
-| `voyage-finance-2` | Finance domain | 1024 | 32k |
-| `voyage-law-2` | Legal domain | 1024 | 32k |
+| `voyage-3-large` | Best quality, multilingual | 256/512/1024/2048 | 120k |
+| `voyage-3.5` | Balanced quality/speed | 256/512/1024/2048 | 320k |
+| `voyage-3.5-lite` | Lowest latency/cost | 256/512/1024/2048 | 1M |
+| `voyage-code-3` | Code retrieval | 256/512/1024/2048 | 120k |
+| `voyage-finance-2` | Finance domain | 1024 | 120k |
+| `voyage-law-2` | Legal domain | 1024 | 120k |
 
 ## Multimodal Embeddings
 
@@ -195,12 +195,6 @@ const result = await model.doEmbed({
     },
   },
 });
-```
-
-## Direct Package Installation
-
-```bash npm2yarn copy
-npm install @mastra/voyageai
 ```
 
 For detailed usage, see the [@mastra/voyageai package documentation](https://www.npmjs.com/package/@mastra/voyageai).
