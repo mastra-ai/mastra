@@ -744,7 +744,7 @@ export type HarnessEvent =
       toolCallId: string;
       result: unknown;
       isError: boolean;
-      providerMetadata?: Record<string, any>;
+      providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
@@ -948,7 +948,7 @@ export type HarnessMessageContent =
       name: string;
       result: unknown;
       isError: boolean;
-      providerMetadata?: Record<string, any>;
+      providerMetadata?: Record<string, unknown>;
     }
   | {
       type: 'system_reminder';

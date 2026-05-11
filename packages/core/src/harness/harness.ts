@@ -1757,7 +1757,7 @@ export class Harness<TState = {}> {
             const inv = part.toolInvocation;
             content.push({ type: 'tool_call', id: inv.toolCallId, name: inv.toolName, args: inv.args });
             if (inv.state === 'result' && inv.result !== undefined) {
-              const partProviderMetadata = part.providerMetadata as Record<string, any> | undefined;
+              const partProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
               content.push({
                 type: 'tool_result',
                 id: inv.toolCallId,
@@ -1778,7 +1778,7 @@ export class Harness<TState = {}> {
           break;
         case 'tool-result':
           if (part.toolCallId && part.toolName) {
-            const resultProviderMetadata = part.providerMetadata as Record<string, any> | undefined;
+            const resultProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
             content.push({
               type: 'tool_result',
               id: part.toolCallId,
@@ -2018,7 +2018,7 @@ export class Harness<TState = {}> {
 
         case 'tool-result': {
           const toolResult = chunk.payload;
-          const providerMetadata = toolResult.providerMetadata as Record<string, any> | undefined;
+          const providerMetadata = toolResult.providerMetadata as Record<string, unknown> | undefined;
           currentMessage.content.push({
             type: 'tool_result',
             id: toolResult.toolCallId,
