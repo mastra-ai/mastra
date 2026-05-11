@@ -27,6 +27,25 @@ class RawLinesComponent implements Component {
   }
   invalidate(): void {}
 }
+
+/**
+ * Inject `z=<value>` into the first kitty APC sequence's control params.
+ *
+ * pi-tui's `encodeKitty` does not expose a z-index option. The kitty
+ * protocol only requires control params on the first APC chunk (the
+ * `a=T,...` introducer); continuation chunks use `m=0|1` only. So we
+ * splice into the first chunk's param list, before the `;` separator
+ * that introduces the base64 payload.
+ *
+ * If the sequence does not look like a kitty APC (e.g. iTerm2's
+ * `\x1b]1337;File=...`), return it unchanged.
+ */
+function injectKittyZIndex(sequence: string, z: number): string {
+  if (!sequence.startsWith('\x1b_G')) return sequence;
+  const semi = sequence.indexOf(';');
+  if (semi < 0) return sequence;
+  return sequence.slice(0, semi) + `,z=${z}` + sequence.slice(semi);
+}
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
@@ -1596,7 +1615,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
           lines.push(borderPrefix);
         }
         const moveUp = rendered.rows > 1 ? `\x1b[${rendered.rows - 1}A` : '';
-        lines.push(borderPrefix + moveUp + rendered.sequence);
+        // Inject a deeply-negative z-index into the first kitty APC's
+        // parameters so popups/modals (which have non-default cell
+        // background colors) render on top of the image. The kitty
+        // protocol places images under text at any z<0, but only places
+        // them under cell backgrounds when z is below INT32_MIN/2
+        // (-1,073,741,824). iTerm2 ignores z= and is unaffected.
+        const sequence = injectKittyZIndex(rendered.sequence, -1073741825);
+        lines.push(borderPrefix + moveUp + sequence);
         this.contentBox.addChild(new RawLinesComponent(lines));
       } else {
         this.contentBox.addChild(
