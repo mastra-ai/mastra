@@ -66,15 +66,15 @@ export const Vertical: Story = {
 export const VerticalCloseSpacing: Story = {
   render: () => (
     <ButtonsGroup orientation="vertical" spacing="close">
-      <Button variant="ghost">
+      <Button variant="outline">
         <CopyIcon />
         Copy
       </Button>
-      <Button variant="ghost">
+      <Button variant="outline">
         <ScissorsIcon />
         Cut
       </Button>
-      <Button variant="ghost">
+      <Button variant="outline">
         <ClipboardIcon />
         Paste
       </Button>

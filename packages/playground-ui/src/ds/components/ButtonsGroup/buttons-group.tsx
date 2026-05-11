@@ -1,4 +1,5 @@
 import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { formElementSizes } from '@/ds/primitives/form-element';
@@ -55,9 +56,13 @@ const buttonsGroupVariants = cva(
   },
 );
 
+// Derive variant types from cva (single source of truth) and strip `null` that cva injects.
+type ButtonsGroupVariantsProps = VariantProps<typeof buttonsGroupVariants>;
+export type ButtonsGroupSpacing = NonNullable<ButtonsGroupVariantsProps['spacing']>;
+
 export type ButtonsGroupProps = React.ComponentPropsWithoutRef<'div'> & {
   orientation?: Orientation;
-  spacing?: 'default' | 'close';
+  spacing?: ButtonsGroupSpacing;
 };
 
 export const ButtonsGroup = React.forwardRef<HTMLDivElement, ButtonsGroupProps>(
