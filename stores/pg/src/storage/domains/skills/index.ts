@@ -16,11 +16,12 @@ import type {
   StorageListSkillsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
-import type {
-  SkillVersion,
-  CreateSkillVersionInput,
-  ListSkillVersionsInput,
-  ListSkillVersionsOutput,
+import {
+  type SkillVersion,
+  type CreateSkillVersionInput,
+  type ListSkillVersionsInput,
+  type ListSkillVersionsOutput,
+  skillSnapshotFieldValuesEqual,
 } from '@mastra/core/storage/domains/skills';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -252,8 +253,10 @@ export class SkillsPG extends SkillsStorage {
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !skillSnapshotFieldValuesEqual(
+              configFields[field as keyof typeof configFields],
+              latestConfig[field as keyof typeof latestConfig],
+            ),
         );
 
         if (changedFields.length > 0) {

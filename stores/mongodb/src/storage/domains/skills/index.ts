@@ -16,11 +16,12 @@ import type {
   StorageListSkillsInput,
   StorageListSkillsOutput,
 } from '@mastra/core/storage';
-import type {
-  SkillVersion,
-  CreateSkillVersionInput,
-  ListSkillVersionsInput,
-  ListSkillVersionsOutput,
+import {
+  type SkillVersion,
+  type CreateSkillVersionInput,
+  type ListSkillVersionsInput,
+  type ListSkillVersionsOutput,
+  skillSnapshotFieldValuesEqual,
 } from '@mastra/core/storage/domains/skills';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -258,7 +259,6 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         }
       }
 
-      // If we have config updates, create a new version
       if (Object.keys(configFields).length > 0) {
         const latestVersion = await this.getLatestVersion(id);
 
@@ -272,18 +272,26 @@ export class MongoDBSkillsStorage extends SkillsStorage {
           });
         }
 
-        // Extract existing snapshot and merge with updates
         const existingSnapshot = this.extractSnapshotFields(latestVersion);
+        const changedFields = Object.keys(configFields).filter(
+          field =>
+            !skillSnapshotFieldValuesEqual(
+              configFields[field],
+              existingSnapshot[field as keyof typeof existingSnapshot],
+            ),
+        );
 
-        await this.createVersion({
-          id: randomUUID(),
-          skillId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...existingSnapshot,
-          ...configFields,
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateSkillVersionInput);
+        if (changedFields.length > 0) {
+          await this.createVersion({
+            id: randomUUID(),
+            skillId: id,
+            versionNumber: latestVersion.versionNumber + 1,
+            ...existingSnapshot,
+            ...configFields,
+            changedFields,
+            changeMessage: `Updated: ${changedFields.join(', ')}`,
+          } as CreateSkillVersionInput);
+        }
       }
 
       // Handle metadata-level updates
