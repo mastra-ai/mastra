@@ -601,8 +601,12 @@ export async function executeLoop(
   let isTrue = true;
   const prevIterationCount = stepResults[step.id]?.metadata?.iterationCount;
   let iteration = prevIterationCount ? prevIterationCount - 1 : 0;
-  const prevPayload = stepResults[step.id]?.payload;
-  let result = { status: 'success', output: prevPayload ?? prevOutput } as unknown as StepResult<any, any, any, any>;
+  const prevStepResult = stepResults[step.id];
+  const loopInput =
+    prevStepResult && Object.prototype.hasOwnProperty.call(prevStepResult, 'payload')
+      ? prevStepResult.payload
+      : prevOutput;
+  let result = { status: 'success', output: loopInput } as unknown as StepResult<any, any, any, any>;
   let currentResume = resume;
   let currentRestart = restart;
   let currentTimeTravel = timeTravel;

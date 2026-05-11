@@ -293,6 +293,96 @@ export function createDurableToolCallStep() {
         };
       }
 
+      const toolOptions = {
+        toolCallId,
+        messages: [],
+        workspace,
+        requestContext,
+        resumeData: isResumingFromSuspension ? resumeData : undefined,
+
+        // In-execution suspend callback — allows tools to suspend mid-execution
+        suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+          if (suspendOptions?.requireToolApproval) {
+            // Tool is requesting approval during execution
+            const approvalResumeSchema = JSON.stringify({
+              type: 'object',
+              properties: {
+                approved: { type: 'boolean' },
+              },
+              required: ['approved'],
+            });
+
+            if (pubsub) {
+              await emitChunkEvent(pubsub, runId, {
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema },
+              });
+            }
+
+            if (pubsub) {
+              await emitSuspendedEvent(pubsub, runId, {
+                toolCallId,
+                toolName,
+                args,
+                type: 'approval',
+                resumeSchema: approvalResumeSchema,
+              });
+            }
+
+            await doFlush();
+
+            return suspend(
+              {
+                type: 'approval',
+                requireToolApproval: { toolCallId, toolName, args },
+              },
+              { resumeLabel: toolCallId },
+            );
+          } else {
+            // General tool suspension (e.g., tool calls context.agent.suspend())
+            const suspendedEventData: AgentSuspendedEventData = {
+              toolCallId,
+              toolName,
+              args,
+              suspendPayload,
+              type: 'suspension',
+              resumeSchema: suspendOptions?.resumeSchema,
+            };
+
+            if (pubsub) {
+              await emitChunkEvent(pubsub, runId, {
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId,
+                  toolName,
+                  suspendPayload,
+                  args,
+                  resumeSchema: suspendOptions?.resumeSchema,
+                },
+              });
+
+              await emitSuspendedEvent(pubsub, runId, suspendedEventData);
+            }
+
+            await doFlush();
+
+            return suspend(
+              {
+                type: 'suspension',
+                toolCallSuspended: suspendPayload,
+                toolName,
+                resumeLabel: suspendOptions?.resumeLabel,
+              },
+              { resumeLabel: toolCallId },
+            );
+          }
+        },
+      };
+
       // Resolve whether to run in background using the shared config resolver
       if (bgManager && !bgConfig?.disabled && typeof cleanedArgs === 'object' && cleanedArgs !== null) {
         const bgResolved = resolveBackgroundConfig({
@@ -319,11 +409,12 @@ export function createDurableToolCallStep() {
                 executor: {
                   execute: async (taskArgs: any, taskContext: any) => {
                     return tool.execute!(taskArgs, {
-                      toolCallId,
-                      messages: [],
-                      workspace,
-                      requestContext,
-                      abortSignal: taskContext?.abortSignal,
+                      ...toolOptions,
+                      ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                      suspend: async (data?: unknown, options?: SuspendOptions) => {
+                        await toolOptions.suspend?.(data, options);
+                        return taskContext?.suspend?.(data, options);
+                      },
                     });
                   },
                 },
@@ -468,6 +559,7 @@ export function createDurableToolCallStep() {
                       backgroundTasks: {
                         [params.toolCallId]: {
                           startedAt: params.startedAt,
+                          suspendedAt: params.suspendedAt,
                           taskId: params.taskId,
                         },
                       },
@@ -479,6 +571,30 @@ export function createDurableToolCallStep() {
                 onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
               },
             });
+
+            // If the agent is resuming this tool call and a previously-suspended
+            // bg task exists for this toolCallId+runId, resume the bg task with
+            // the agent-resume payload instead of dispatching a fresh one.
+            const isSuspendedBgResume =
+              isResumingFromSuspension && resumeData && typeof resumeData === 'object' && resumeData !== null;
+            if (isSuspendedBgResume) {
+              const isSuspended = await bgTask.checkIfSuspended({
+                toolCallId,
+                runId,
+                agentId: initData.agentId,
+                threadId: state?.threadId,
+                resourceId: state?.resourceId,
+                toolName,
+              });
+              if (isSuspended) {
+                const task = await bgTask.resume(resumeData);
+                return {
+                  ...typedInput,
+                  args: cleanedArgs,
+                  result: `Background task resumed. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+                };
+              }
+            }
 
             const { task, fallbackToSync } = await bgTask.dispatch();
 
@@ -514,95 +630,7 @@ export function createDurableToolCallStep() {
       }
 
       try {
-        const result = await tool.execute(cleanedArgs, {
-          toolCallId,
-          messages: [],
-          workspace,
-          requestContext,
-          resumeData: isResumingFromSuspension ? resumeData : undefined,
-
-          // In-execution suspend callback — allows tools to suspend mid-execution
-          suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
-            if (suspendOptions?.requireToolApproval) {
-              // Tool is requesting approval during execution
-              const approvalResumeSchema = JSON.stringify({
-                type: 'object',
-                properties: {
-                  approved: { type: 'boolean' },
-                },
-                required: ['approved'],
-              });
-
-              if (pubsub) {
-                await emitChunkEvent(pubsub, runId, {
-                  type: 'tool-call-approval',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema },
-                });
-              }
-
-              if (pubsub) {
-                await emitSuspendedEvent(pubsub, runId, {
-                  toolCallId,
-                  toolName,
-                  args,
-                  type: 'approval',
-                  resumeSchema: approvalResumeSchema,
-                });
-              }
-
-              await doFlush();
-
-              return suspend(
-                {
-                  type: 'approval',
-                  requireToolApproval: { toolCallId, toolName, args },
-                },
-                { resumeLabel: toolCallId },
-              );
-            } else {
-              // General tool suspension (e.g., tool calls context.agent.suspend())
-              const suspendedEventData: AgentSuspendedEventData = {
-                toolCallId,
-                toolName,
-                args,
-                suspendPayload,
-                type: 'suspension',
-                resumeSchema: suspendOptions?.resumeSchema,
-              };
-
-              if (pubsub) {
-                await emitChunkEvent(pubsub, runId, {
-                  type: 'tool-call-suspended',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId,
-                    toolName,
-                    suspendPayload,
-                    args,
-                    resumeSchema: suspendOptions?.resumeSchema,
-                  },
-                });
-
-                await emitSuspendedEvent(pubsub, runId, suspendedEventData);
-              }
-
-              await doFlush();
-
-              return suspend(
-                {
-                  type: 'suspension',
-                  toolCallSuspended: suspendPayload,
-                  toolName,
-                  resumeLabel: suspendOptions?.resumeLabel,
-                },
-                { resumeLabel: toolCallId },
-              );
-            }
-          },
-        });
+        const result = await tool.execute(cleanedArgs, toolOptions);
 
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {

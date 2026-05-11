@@ -21,6 +21,7 @@ export interface OMSettingsConfig {
   reflectorModelId: string;
   observationThreshold: number;
   reflectionThreshold: number;
+  cavemanObservations: boolean;
 }
 
 export interface OMSettingsCallbacks {
@@ -28,6 +29,7 @@ export interface OMSettingsCallbacks {
   onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
+  onCavemanObservationsChange: (enabled: boolean) => void;
   onClose: () => void;
 }
 
@@ -158,6 +160,27 @@ class ThresholdSubmenu extends Container {
 }
 
 // =============================================================================
+// Boolean Submenu
+// =============================================================================
+
+class BooleanSubmenu extends SelectList {
+  constructor(currentValue: boolean, onSelect: (value: boolean) => void, onBack: () => void) {
+    const items: SelectItem[] = [
+      { value: 'on', label: '  On', description: 'Caveman-style terse compression' },
+      { value: 'off', label: '  Off', description: 'Standard prose observations' },
+    ];
+    super(items, items.length, getSelectListTheme());
+
+    this.setSelectedIndex(currentValue ? 0 : 1);
+
+    this.onSelect = (item: SelectItem) => {
+      onSelect(item.value === 'on');
+    };
+    this.onCancel = onBack;
+  }
+}
+
+// =============================================================================
 // OM Settings Component
 // =============================================================================
 
@@ -256,6 +279,24 @@ export class OMSettingsComponent extends Box implements Focusable {
               config.reflectionThreshold = value;
               callbacks.onReflectionThresholdChange(value);
               done(formatTokens(value));
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'caveman-observations',
+        label: 'Caveman observations',
+        description:
+          'Optional. Use terse caveman-style compression for observations and reflections ' +
+          'instead of standard prose. Off by default; turn on if you prefer the more compact style',
+        currentValue: config.cavemanObservations ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new BooleanSubmenu(
+            config.cavemanObservations,
+            value => {
+              config.cavemanObservations = value;
+              callbacks.onCavemanObservationsChange(value);
+              done(value ? 'On' : 'Off');
             },
             () => done(),
           ),

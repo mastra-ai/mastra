@@ -94,4 +94,16 @@ describe('Harness tracing propagation', () => {
     expect(streamOptions).not.toHaveProperty('tracingContext');
     expect(streamOptions).not.toHaveProperty('tracingOptions');
   });
+
+  it('starts a new message with a clean abort state after a stale operation was aborted', async () => {
+    const events: Array<{ type: string; reason?: string }> = [];
+    harness.subscribe(event => {
+      events.push(event as { type: string; reason?: string });
+    });
+    (harness as unknown as { abortRequested: boolean }).abortRequested = true;
+
+    await harness.sendMessage({ content: 'hello' });
+
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'complete' });
+  });
 });

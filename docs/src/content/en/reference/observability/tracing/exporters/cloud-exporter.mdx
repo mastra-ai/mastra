@@ -1,6 +1,6 @@
 ---
 title: "Reference: CloudExporter | Observability"
-description: API reference for the CloudExporter
+description: API reference for the deprecated CloudExporter (replaced by MastraPlatformExporter)
 packages:
   - "@mastra/observability"
 ---
@@ -9,7 +9,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # CloudExporter
 
-**Added in:** `@mastra/observability@1.8.0`
+**Added in:** `@mastra/observability@1.8.0`. **Deprecated in `1.12.0`** in favor of [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter).
+
+:::warning[Deprecated]
+
+`CloudExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. The two classes share the same constructor, environment variables, and runtime behavior; `CloudExporter` keeps its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs so monitoring rules built against it keep working.
+
+:::
 
 Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform for online visualization and monitoring.
 

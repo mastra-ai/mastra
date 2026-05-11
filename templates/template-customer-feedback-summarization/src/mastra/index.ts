@@ -1,7 +1,12 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import {
+  Observability,
+  MastraStorageExporter,
+  MastraPlatformExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
 import { feedbackSummarizer } from './agents/feedback-summarizer';
 import { actionabilityScorer, completenessScorer } from './scorers/feedback-scorers';
 
@@ -20,7 +25,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter(), new CloudExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },

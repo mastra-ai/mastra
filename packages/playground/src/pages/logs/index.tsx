@@ -191,7 +191,9 @@ export default function LogsPage() {
     );
   }
 
-  if (logs.length === 0 && !isLoadingLogs && url.filterTokens.length === 0) {
+  const contentFiltersApplied = !!url.selectedEntityOption || url.filterTokens.length > 0;
+
+  if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
       <PageLayout width="wide" height="full">
         {pageTopArea}

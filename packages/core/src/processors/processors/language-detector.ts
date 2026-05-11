@@ -6,7 +6,7 @@ import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
-import { resolveObservabilityContext } from '../../observability';
+import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
@@ -198,6 +198,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
       name: 'Language Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: {
+        tracingPolicy: { internal: InternalSpans.ALL },
+      },
     });
   }
 
