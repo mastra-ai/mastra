@@ -1898,10 +1898,10 @@ export class Harness<TState = {}> {
     }
 
     const signalMetadata = getRecordValue(msg.content.metadata?.signal);
-    if (msg.role === 'signal' && signalMetadata?.type === 'system-reminder') {
+    if (signalMetadata?.type === 'system-reminder') {
       const reminder = toSystemReminderContent({
         type: signalMetadata.type,
-        contents: msg.content.content,
+        contents: signalMetadata.contents ?? msg.content.content,
         attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
       });
       if (reminder) {
@@ -2235,9 +2235,11 @@ export class Harness<TState = {}> {
         this.pendingApprovalToolName = toolName;
         this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-        const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(resolve => {
-          this.pendingApprovalResolve = resolve;
-        });
+        const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+          resolve => {
+            this.pendingApprovalResolve = resolve;
+          },
+        );
         this.pendingApprovalToolName = null;
 
         if (approval.decision === 'approve') {
