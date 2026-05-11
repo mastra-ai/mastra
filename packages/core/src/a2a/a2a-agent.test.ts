@@ -575,7 +575,7 @@ describe('A2AAgent', () => {
 
     expect(elapsedMs).toBeLessThan(40);
 
-    const events = [];
+    const events: string[] = [];
     for await (const event of stream.fullStream) {
       events.push(event.type);
     }
