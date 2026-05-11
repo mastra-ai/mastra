@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
-import type { HarnessEvent, HarnessThread, TaskItem } from '@mastra/core/harness';
+import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
 
 import { getCurrentGitBranch } from '../utils/project.js';
 import {
@@ -122,6 +122,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      // Clear per-thread ephemeral state first so renderExistingMessages
+      // and other downstream observers see clean state.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks([]);
+        state.ui.requestRender();
+      }
+      state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -134,14 +142,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
-      }
-      // Restore tasks from thread state
-      const threadState = state.harness.getState() as {
-        tasks?: TaskItem[];
-      };
-      if (state.taskProgress) {
-        state.taskProgress.updateTasks(threadState.tasks ?? []);
-        state.ui.requestRender();
+        // Load goal state from thread metadata
+        state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
       }
       break;
     }
@@ -150,16 +152,26 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      // If /goal started without an existing thread, save that pending goal to the
+      // newly-created thread. Otherwise load the thread's own goal metadata so goals
+      // do not bleed into unrelated new threads.
+      const shouldPersistPendingGoal = state.goalManager?.consumePersistOnNextThreadCreate() ?? false;
+      if (shouldPersistPendingGoal) {
+        state.goalManager?.saveToThread(state).catch(() => {});
+      } else {
+        state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
+      }
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
-      // Clear stale tasks from the previous thread
+      // Clear per-thread ephemeral state so new threads start clean.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
-      state.taskWriteInsertIndex = -1;
+      state.taskToolInsertIndex = -1;
       break;
     }
 
@@ -217,9 +229,28 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       handleOMBufferingFailed(ectx, event.operationType, event.error);
       break;
 
-    case 'om_activation':
-      handleOMActivation(ectx, event.operationType, event.tokensActivated, event.observationTokens);
+    case 'om_activation': {
+      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+        triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+        lastActivityAt?: number;
+        ttlExpiredMs?: number;
+        activateAfterIdle?: number;
+        previousModel?: string;
+        currentModel?: string;
+      };
+      handleOMActivation(
+        ectx,
+        activationEvent.operationType,
+        activationEvent.tokensActivated,
+        activationEvent.observationTokens,
+        activationEvent.triggeredBy,
+        activationEvent.activateAfterIdle,
+        activationEvent.ttlExpiredMs,
+        activationEvent.previousModel,
+        activationEvent.currentModel,
+      );
       break;
+    }
 
     case 'om_thread_title_updated':
       state.currentThreadTitle = event.newTitle;
@@ -248,7 +279,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     // Subagent / Task delegation events
     case 'subagent_start':
-      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId);
+      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId, event.forked);
       break;
 
     case 'subagent_tool_start':
@@ -269,11 +300,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'task_updated': {
-      const tasks = event.tasks as TaskItem[];
+      const tasks = event.tasks as TaskItemSnapshot[];
       if (state.taskProgress) {
         state.taskProgress.updateTasks(tasks ?? []);
 
-        // Find the most recent task_write tool component and get its position
+        // Defensive cleanup for older or non-streaming task_write components.
+        // Current task tools update the pinned component directly through task_updated.
         let insertIndex = -1;
         for (let i = state.allToolComponents.length - 1; i >= 0; i--) {
           const comp = state.allToolComponents[i];
@@ -285,19 +317,21 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           }
         }
         // Fall back to the position recorded during streaming (when no inline component was created)
-        if (insertIndex === -1 && state.taskWriteInsertIndex >= 0) {
-          insertIndex = state.taskWriteInsertIndex;
-          state.taskWriteInsertIndex = -1;
+        if (insertIndex === -1 && state.taskToolInsertIndex >= 0) {
+          insertIndex = state.taskToolInsertIndex;
+          state.taskToolInsertIndex = -1;
         }
 
         // Check if all tasks are completed
         const allCompleted = tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed');
-        if (allCompleted) {
+        const previousTasks = state.harness.getDisplayState().previousTasks;
+        const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
+        if (allCompleted && !wasAllCompleted) {
           // Show collapsed completed list (pinned/live)
           ectx.renderCompletedTasksInline(tasks, insertIndex, true);
-        } else if (state.harness.getDisplayState().previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
-          ectx.renderClearedTasksInline(state.harness.getDisplayState().previousTasks, insertIndex);
+          ectx.renderClearedTasksInline(previousTasks, insertIndex);
         }
 
         state.ui.requestRender();

@@ -28,7 +28,7 @@ export function EntityListSkeleton({ columns, numberOfRows = 3 }: EntityListSkel
           {Array.from({ length: columnCount }).map((_, colIdx) => (
             <EntityListCell key={colIdx}>
               <div
-                className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"
+                className="bg-surface4 rounded-md animate-pulse text-transparent h-4 select-none"
                 style={{ width: getPseudoRandomWidth(rowIdx, colIdx) }}
               />
             </EntityListCell>

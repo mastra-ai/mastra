@@ -6,7 +6,8 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
-import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+import type { Mastra } from '@mastra/core/mastra';
+import { MastraMemory } from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -16,6 +17,8 @@ import type {
   ObservationalMemoryOptions,
   MemoryConfig,
 } from '@mastra/core/memory';
+import { SpanType, EntityType } from '@mastra/core/observability';
+import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -36,6 +39,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -62,6 +66,9 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
+  activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
+  activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
+  temporalMarkers?: boolean;
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -77,8 +84,107 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 };
+
+/*
+ * Compatibility note: the working-memory and system-reminder helpers below are
+ * intentionally copied from @mastra/core instead of imported from
+ * @mastra/core/memory. @mastra/memory's peer range permits older core versions
+ * that do not export these newer helper names, and importing them can crash a
+ * published memory build during ESM instantiation before user code runs.
+ *
+ * Until v2 can tighten the peer contract, keep these copies manually in sync
+ * with packages/core/src/memory/working-memory-utils.ts and
+ * packages/core/src/memory/system-reminders.ts. Those source files also carry
+ * compatibility notes that point back here.
+ */
+const WORKING_MEMORY_START_TAG = '<working_memory>';
+const WORKING_MEMORY_END_TAG = '</working_memory>';
+const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function extractWorkingMemoryTags(text: string): string[] | null {
+  const results: string[] = [];
+  let pos = 0;
+
+  while (pos < text.length) {
+    const start = text.indexOf(WORKING_MEMORY_START_TAG, pos);
+    if (start === -1) break;
+
+    const end = text.indexOf(WORKING_MEMORY_END_TAG, start + WORKING_MEMORY_START_TAG.length);
+    if (end === -1) break;
+
+    results.push(text.substring(start, end + WORKING_MEMORY_END_TAG.length));
+    pos = end + WORKING_MEMORY_END_TAG.length;
+  }
+
+  return results.length > 0 ? results : null;
+}
+
+export function removeWorkingMemoryTags(text: string): string {
+  let result = '';
+  let pos = 0;
+
+  while (pos < text.length) {
+    const start = text.indexOf(WORKING_MEMORY_START_TAG, pos);
+    if (start === -1) {
+      result += text.substring(pos);
+      break;
+    }
+
+    result += text.substring(pos, start);
+
+    const end = text.indexOf(WORKING_MEMORY_END_TAG, start + WORKING_MEMORY_START_TAG.length);
+    if (end === -1) {
+      result += text.substring(start);
+      break;
+    }
+
+    pos = end + WORKING_MEMORY_END_TAG.length;
+  }
+
+  return result;
+}
+
+export function extractWorkingMemoryContent(text: string): string | null {
+  const start = text.indexOf(WORKING_MEMORY_START_TAG);
+  if (start === -1) return null;
+
+  const contentStart = start + WORKING_MEMORY_START_TAG.length;
+  const end = text.indexOf(WORKING_MEMORY_END_TAG, contentStart);
+  if (end === -1) return null;
+
+  return text.substring(contentStart, end);
+}
+
+function isSystemReminderMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'user' || !isRecord(message.content)) {
+    return false;
+  }
+
+  const metadata = message.content.metadata;
+  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
+    return true;
+  }
+
+  const firstTextPart = message.content.parts.find(part => part.type === 'text');
+  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
+}
+
+function filterSystemReminderMessages(
+  messages: MastraDBMessage[],
+  includeSystemReminders?: boolean,
+): MastraDBMessage[] {
+  if (includeSystemReminders) {
+    return messages;
+  }
+
+  return messages.filter(message => !isSystemReminderMessage(message));
+}
 
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
@@ -91,7 +197,6 @@ function normalizeObservationalMemoryConfig(
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
-export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -106,13 +211,31 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  */
 export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
+  private _omEngineInstance: ObservationalMemory | null | undefined;
+  private _mastraInstance: Mastra | undefined;
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
     if (!this._omEngine) {
-      this._omEngine = this._initOMEngine();
+      this._omEngine = this._initOMEngine().then(engine => {
+        this._omEngineInstance = engine;
+        if (engine && this._mastraInstance) {
+          engine.__registerMastra(this._mastraInstance);
+        }
+        return engine;
+      });
     }
     return this._omEngine;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
+    this._mastraInstance = mastra;
+    if (this._omEngineInstance) {
+      this._omEngineInstance.__registerMastra(mastra);
+    } else {
+      void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
+    }
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
@@ -129,6 +252,21 @@ export class Memory extends MastraMemory {
       observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
     this.threadConfig = mergedConfig;
+
+    // Validate retrieval vector config at construction time
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    if (omConfig?.retrieval && typeof omConfig.retrieval === 'object' && omConfig.retrieval.vector) {
+      if (!this.vector) {
+        throw new Error(
+          '`retrieval: { vector: true }` requires a vector store. Pass a `vector` option to your Memory instance.',
+        );
+      }
+      if (!this.embedder) {
+        throw new Error(
+          '`retrieval: { vector: true }` requires an embedder. Pass an `embedder` option to your Memory instance.',
+        );
+      }
+    }
   }
 
   /**
@@ -187,11 +325,31 @@ export class Memory extends MastraMemory {
     }
   }
 
+  private createMemorySpan(
+    operationType: MemoryOperationAttributes['operationType'],
+    observabilityContext?: Partial<ObservabilityContext>,
+    input?: any,
+    attributes?: Partial<MemoryOperationAttributes>,
+  ) {
+    const currentSpan = observabilityContext?.tracingContext?.currentSpan;
+    if (!currentSpan) return undefined;
+    return currentSpan.createChildSpan({
+      type: SpanType.MEMORY_OPERATION,
+      name: `memory: ${operationType}`,
+      entityType: EntityType.MEMORY,
+      entityName: 'Memory',
+      input,
+      attributes: { operationType, ...attributes },
+    });
+  }
+
   async recall(
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      includeSystemReminders?: boolean;
       threadId: string;
+      observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -201,158 +359,209 @@ export class Memory extends MastraMemory {
     perPage: number | false;
     hasMore: boolean;
   }> {
-    const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
-    const config = this.getMergedThreadConfig(threadConfig || {});
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
-
-    // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-    const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
-
-    // lastMessages: false means "disable conversation history entirely".
-    // When the resolved perPage is false from config (not an explicit caller override),
-    // return empty messages. This prevents recall() from treating false as "no limit"
-    // and returning ALL messages when the user intended to disable history.
-    const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
-
-    // When limiting messages (perPage !== false) without explicit orderBy, we need to:
-    // 1. Query DESC to get the NEWEST messages (not oldest)
-    // 2. Reverse results to restore chronological order for the LLM
-    // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
-    const shouldGetNewestAndReverse = !orderBy && perPage !== false;
-    const effectiveOrderBy = shouldGetNewestAndReverse
-      ? { field: 'createdAt' as const, direction: 'DESC' as const }
-      : orderBy;
-
-    const vectorResults: {
-      id: string;
-      score: number;
-      metadata?: Record<string, any>;
-      vector?: number[];
-    }[] = [];
-
-    // Log memory recall parameters, excluding potentially large schema objects
-    this.logger.debug(`Memory recall() with:`, {
-      threadId,
-      perPage,
-      page,
-      orderBy: effectiveOrderBy,
-      hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
-      workingMemoryEnabled: config.workingMemory?.enabled,
-      semanticRecallEnabled: Boolean(config.semanticRecall),
-      historyDisabledByConfig,
-    });
-
-    const defaultRange = DEFAULT_MESSAGE_RANGE;
-    const defaultTopK = DEFAULT_TOP_K;
-
-    const vectorConfig =
-      typeof config?.semanticRecall === `boolean`
-        ? {
-            topK: defaultTopK,
-            messageRange: defaultRange,
-          }
-        : {
-            topK: config?.semanticRecall?.topK ?? defaultTopK,
-            messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
-          };
-
-    const resourceScope =
-      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
-      config.semanticRecall === true;
-
-    // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
-    if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
-      throw new Error(
-        `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
-      );
-    }
-
-    let usage: { tokens: number } | undefined;
-
-    // If history is disabled and there's no semantic recall to perform, return empty immediately
-    if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
-      return { messages: [], usage: undefined, total: 0, page: page ?? 0, perPage: 0, hasMore: false };
-    }
-
-    if (config?.semanticRecall && vectorSearchString && this.vector) {
-      const result = await this.embedMessageContent(vectorSearchString!);
-      usage = result.usage;
-      const { embeddings, dimension } = result;
-      const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-      await Promise.all(
-        embeddings.map(async embedding => {
-          if (typeof this.vector === `undefined`) {
-            throw new Error(
-              `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
-            );
-          }
-
-          vectorResults.push(
-            ...(await this.vector.query({
-              indexName,
-              queryVector: embedding,
-              topK: vectorConfig.topK,
-              filter: resourceScope
-                ? {
-                    resource_id: resourceId,
-                  }
-                : {
-                    thread_id: threadId,
-                  },
-            })),
-          );
-        }),
-      );
-    }
-
-    // Get raw messages from storage
-    const memoryStore = await this.getMemoryStore();
-
-    // When history is disabled by config, use perPage: 0 so only semantic recall
-    // include results are returned (not the full message history)
-    const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
-
-    const paginatedResult = await memoryStore.listMessages({
+    const {
       threadId,
       resourceId,
-      perPage: effectivePerPage,
+      perPage: perPageArg,
       page,
-      orderBy: effectiveOrderBy,
+      orderBy,
+      threadConfig,
+      vectorSearchString,
+      includeSystemReminders,
       filter,
-      ...(vectorResults?.length
-        ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              threadId: r.metadata?.thread_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
-          }
-        : {}),
-    });
-    // Reverse to restore chronological order if we queried DESC to get newest messages
-    const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+    } = args;
+    const config = this.getMergedThreadConfig(threadConfig || {});
+    const semanticRecallEnabled = Boolean(config.semanticRecall);
 
-    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+    const span = this.createMemorySpan(
+      'recall',
+      args.observabilityContext,
+      { threadId, resourceId, vectorSearchString },
+      {
+        semanticRecallEnabled,
+        lastMessages: config.lastMessages,
+      },
+    );
 
-    // Always return mastra-db format (V2)
-    const messages = list.get.all.db();
+    try {
+      if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
-    const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
-    return { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
+      // Use perPage from args if provided, otherwise use threadConfig.lastMessages
+      const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+
+      // lastMessages: false means "disable conversation history entirely".
+      // When the resolved perPage is false from config (not an explicit caller override),
+      // return empty messages. This prevents recall() from treating false as "no limit"
+      // and returning ALL messages when the user intended to disable history.
+      const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
+
+      // When limiting messages (perPage !== false) without explicit orderBy, we need to:
+      // 1. Query DESC to get the NEWEST messages (not oldest)
+      // 2. Reverse results to restore chronological order for the LLM
+      // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
+      const shouldGetNewestAndReverse = !orderBy && perPage !== false;
+      const effectiveOrderBy = shouldGetNewestAndReverse
+        ? { field: 'createdAt' as const, direction: 'DESC' as const }
+        : orderBy;
+
+      const vectorResults: {
+        id: string;
+        score: number;
+        metadata?: Record<string, any>;
+        vector?: number[];
+      }[] = [];
+
+      // Log memory recall parameters, excluding potentially large schema objects
+      this.logger.debug('Memory recall', {
+        threadId,
+        perPage,
+        page,
+        orderBy: effectiveOrderBy,
+        hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
+        workingMemoryEnabled: config.workingMemory?.enabled,
+        semanticRecallEnabled,
+        historyDisabledByConfig,
+      });
+
+      const defaultRange = DEFAULT_MESSAGE_RANGE;
+      const defaultTopK = DEFAULT_TOP_K;
+
+      const vectorConfig =
+        typeof config?.semanticRecall === `boolean`
+          ? {
+              topK: defaultTopK,
+              messageRange: defaultRange,
+            }
+          : {
+              topK: config?.semanticRecall?.topK ?? defaultTopK,
+              messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
+            };
+
+      const resourceScope =
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
+        config.semanticRecall === true;
+
+      // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
+      if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
+        throw new Error(
+          `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
+            `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
+        );
+      }
+
+      let usage: { tokens: number } | undefined;
+
+      // If history is disabled and there's no semantic recall to perform, return empty immediately
+      if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+        const result = {
+          messages: [],
+          usage: undefined,
+          total: 0,
+          page: page ?? 0,
+          perPage: 0,
+          hasMore: false,
+        };
+        span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
+        return result;
+      }
+
+      if (config?.semanticRecall && vectorSearchString && this.vector) {
+        const result = await this.embedMessageContent(vectorSearchString!);
+        usage = result.usage;
+        const { embeddings, dimension } = result;
+        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+        await Promise.all(
+          embeddings.map(async embedding => {
+            if (typeof this.vector === `undefined`) {
+              throw new Error(
+                `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+              );
+            }
+
+            const scopeFilter = resourceScope ? { resource_id: resourceId } : { thread_id: threadId };
+            const userFilter = typeof config.semanticRecall === 'object' ? config.semanticRecall.filter : undefined;
+            const combinedFilter = userFilter ? { $and: [scopeFilter, userFilter] } : scopeFilter;
+
+            vectorResults.push(
+              ...(await this.vector.query({
+                indexName,
+                queryVector: embedding,
+                topK: vectorConfig.topK,
+                filter: combinedFilter,
+              })),
+            );
+          }),
+        );
+      }
+
+      // Get raw messages from storage
+      const memoryStore = await this.getMemoryStore();
+
+      // When history is disabled by config, use perPage: 0 so only semantic recall
+      // include results are returned (not the full message history)
+      const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+
+      const paginatedResult = await memoryStore.listMessages({
+        threadId,
+        resourceId,
+        perPage: effectivePerPage,
+        page,
+        orderBy: effectiveOrderBy,
+        filter,
+        ...(vectorResults?.length
+          ? {
+              include: vectorResults.map(r => ({
+                id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
+            }
+          : {}),
+      });
+      // Reverse to restore chronological order if we queried DESC to get newest messages
+      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+
+      const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+
+      // Always return mastra-db format (V2)
+      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+
+      const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
+      const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
+
+      span?.end({
+        output: { success: true },
+        attributes: {
+          messageCount: messages.length,
+          embeddingTokens: usage?.tokens,
+          vectorResultCount: vectorResults.length,
+        },
+      });
+
+      return recallResult;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.getThreadById({ threadId });
+    return memoryStore.getThreadById({ threadId, resourceId });
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
@@ -476,12 +685,12 @@ export class Memory extends MastraMemory {
               filter: { thread_id: threadId },
             });
           } catch {
-            this.logger.debug(`Failed to delete vectors for thread ${threadId} in ${indexName}, skipping`);
+            this.logger.debug('Failed to delete vectors for thread, skipping', { threadId, indexName });
           }
         }),
       );
     } catch {
-      this.logger.debug(`Failed to clean up vectors for thread ${threadId}`);
+      this.logger.debug('Failed to clean up vectors for thread', { threadId });
     }
   }
 
@@ -490,11 +699,13 @@ export class Memory extends MastraMemory {
     resourceId,
     workingMemory,
     memoryConfig,
+    observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -502,50 +713,64 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
-    const scope = config.workingMemory.scope || 'resource';
-
-    // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
-    if (scope === 'resource' && !resourceId) {
-      throw new Error(
-        `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
-      );
-    }
-
-    // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
-    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
-    const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
-      ? this.updateWorkingMemoryMutexes.get(mutexKey)!
-      : new Mutex();
-    this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
-    const release = await mutex.acquire();
+    const span = this.createMemorySpan(
+      'update',
+      observabilityContext,
+      { threadId, resourceId },
+      {
+        workingMemoryEnabled: true,
+      },
+    );
 
     try {
-      const memoryStore = await this.getMemoryStore();
-      if (scope === 'resource' && resourceId) {
-        // Update working memory in resource table
-        await memoryStore.updateResource({
-          resourceId,
-          workingMemory,
-        });
-      } else {
-        // Update working memory in thread metadata (existing behavior)
-        const thread = await this.getThreadById({ threadId });
-        if (!thread) {
-          throw new Error(`Thread ${threadId} not found`);
-        }
+      const scope = config.workingMemory.scope || 'resource';
 
-        await memoryStore.updateThread({
-          id: threadId,
-          title: thread.title || '',
-          metadata: {
-            ...thread.metadata,
-            workingMemory,
-          },
-        });
+      // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
+      if (scope === 'resource' && !resourceId) {
+        throw new Error(
+          `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
+            `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+        );
       }
-    } finally {
-      release();
+
+      // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
+      const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
+      const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
+        ? this.updateWorkingMemoryMutexes.get(mutexKey)!
+        : new Mutex();
+      this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
+      const release = await mutex.acquire();
+
+      try {
+        const memoryStore = await this.getMemoryStore();
+        if (scope === 'resource' && resourceId) {
+          await memoryStore.updateResource({
+            resourceId,
+            workingMemory,
+          });
+        } else {
+          const thread = await this.getThreadById({ threadId });
+          if (!thread) {
+            throw new Error(`Thread ${threadId} not found`);
+          }
+
+          await memoryStore.updateThread({
+            id: threadId,
+            title: thread.title || '',
+            metadata: {
+              ...thread.metadata,
+              workingMemory,
+            },
+          });
+        }
+      } finally {
+        release();
+      }
+
+      span?.end({ output: { success: true } });
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
     }
   }
 
@@ -746,7 +971,10 @@ ${workingMemory}`;
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
     const key = (await this.hasher).h32(content);
     const cached = this.embeddingCache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.logger.debug('Embedding cache hit', { contentHash: key, chunks: cached.chunks.length });
+      return cached;
+    }
     const chunks = this.chunkText(content);
 
     if (typeof this.embedder === `undefined`) {
@@ -798,111 +1026,173 @@ ${workingMemory}`;
   async saveMessages({
     messages,
     memoryConfig,
+    observabilityContext,
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
-    // Then strip working memory tags from all messages
-    const updatedMessages = messages
-      .map(m => {
-        return this.updateMessageToHideWorkingMemoryV2(m);
-      })
-      .filter((m): m is MastraDBMessage => Boolean(m));
-
-    const config = this.getMergedThreadConfig(memoryConfig);
-
-    // Convert messages to MastraDBMessage format if needed
-    const dbMessages = new MessageList({
-      generateMessageId: () => this.generateId(),
-    })
-      .add(updatedMessages, 'memory')
-      .get.all.db();
-
-    const memoryStore = await this.getMemoryStore();
-    const result = await memoryStore.saveMessages({
-      messages: dbMessages,
+    const span = this.createMemorySpan('save', observabilityContext, undefined, {
+      messageCount: messages.length,
     });
 
-    let totalTokens = 0;
+    try {
+      // System messages are runtime instructions and should never be stored in memory.
+      // Then strip working memory tags from all persistable messages.
+      const updatedMessages = messages
+        .filter(m => m.role !== 'system')
+        .map(m => {
+          return this.updateMessageToHideWorkingMemoryV2(m);
+        })
+        .filter((m): m is MastraDBMessage => Boolean(m));
 
-    if (this.vector && config.semanticRecall) {
-      // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
-      const embeddingData: Array<{
-        embeddings: number[][];
-        metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
-      }> = [];
-      let dimension: number | undefined;
+      const config = this.getMergedThreadConfig(memoryConfig);
 
-      // Process embeddings concurrently - this doesn't use DB connections
-      await Promise.all(
-        updatedMessages.map(async message => {
-          let textForEmbedding: string | null = null;
+      // Convert messages to MastraDBMessage format if needed
+      const dbMessages = new MessageList({
+        generateMessageId: () => this.generateId(),
+      })
+        .add(updatedMessages, 'memory')
+        .get.all.db();
 
-          if (
-            message.content.content &&
-            typeof message.content.content === 'string' &&
-            message.content.content.trim() !== ''
-          ) {
-            textForEmbedding = message.content.content;
-          } else if (message.content.parts && message.content.parts.length > 0) {
-            // Extract text from all text parts, concatenate
-            const joined = message.content.parts
-              .filter(part => part.type === 'text')
-              .map(part => (part as TextPart).text)
-              .join(' ')
-              .trim();
-            if (joined) textForEmbedding = joined;
+      const memoryStore = await this.getMemoryStore();
+      const result = await memoryStore.saveMessages({
+        messages: dbMessages,
+      });
+
+      let totalTokens = 0;
+
+      if (this.vector && config.semanticRecall) {
+        const messagesByThread = new Map<string, MastraDBMessage[]>();
+        updatedMessages.forEach(message => {
+          if (message.threadId) {
+            if (!messagesByThread.has(message.threadId)) {
+              messagesByThread.set(message.threadId, []);
+            }
+            messagesByThread.get(message.threadId)!.push(message);
           }
-
-          if (!textForEmbedding) return;
-
-          const result = await this.embedMessageContent(textForEmbedding);
-          dimension = result.dimension;
-          if (result.usage?.tokens) {
-            totalTokens += result.usage.tokens;
-          }
-
-          embeddingData.push({
-            embeddings: result.embeddings,
-            metadata: result.chunks.map(() => ({
-              message_id: message.id,
-              thread_id: message.threadId,
-              resource_id: message.resourceId,
-            })),
-          });
-        }),
-      );
-
-      // Batch all vectors into a single upsert call to avoid pool exhaustion
-      if (embeddingData.length > 0 && dimension !== undefined) {
-        if (typeof this.vector === `undefined`) {
-          throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
-        }
-
-        const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-        // Flatten all embeddings and metadata into single arrays
-        const allVectors: number[][] = [];
-        const allMetadata: Array<{
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
-        }> = [];
-
-        for (const data of embeddingData) {
-          allVectors.push(...data.embeddings);
-          allMetadata.push(...data.metadata);
-        }
-
-        await this.vector.upsert({
-          indexName,
-          vectors: allVectors,
-          metadata: allMetadata,
         });
-      }
-    }
 
-    return { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
+        const threadMetadataMap = new Map<string, Record<string, unknown>>();
+        await Promise.all(
+          Array.from(messagesByThread.keys()).map(async threadId => {
+            try {
+              const thread = await memoryStore.getThreadById({ threadId });
+              if (thread?.metadata) {
+                threadMetadataMap.set(threadId, thread.metadata);
+              }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              throw new Error(
+                `Could not fetch metadata for thread ${threadId} while saving semantic recall embeddings: ${message}`,
+              );
+            }
+          }),
+        );
+
+        // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
+        const embeddingData: Array<{
+          embeddings: number[][];
+          metadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          >;
+        }> = [];
+        let dimension: number | undefined;
+
+        // Process embeddings concurrently - this doesn't use DB connections
+        await Promise.all(
+          updatedMessages.map(async message => {
+            let textForEmbedding: string | null = null;
+
+            if (
+              message.content.content &&
+              typeof message.content.content === 'string' &&
+              message.content.content.trim() !== ''
+            ) {
+              textForEmbedding = message.content.content;
+            } else if (message.content.parts && message.content.parts.length > 0) {
+              // Extract text from all text parts, concatenate
+              const joined = message.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => (part as TextPart).text)
+                .join(' ')
+                .trim();
+              if (joined) textForEmbedding = joined;
+            }
+
+            if (!textForEmbedding) return;
+
+            const result = await this.embedMessageContent(textForEmbedding);
+            dimension = result.dimension;
+            if (result.usage?.tokens) {
+              totalTokens += result.usage.tokens;
+            }
+
+            const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
+
+            embeddingData.push({
+              embeddings: result.embeddings,
+              metadata: result.chunks.map(() => ({
+                ...threadMetadata,
+                message_id: message.id,
+                thread_id: message.threadId,
+                resource_id: message.resourceId,
+              })),
+            });
+          }),
+        );
+
+        // Batch all vectors into a single upsert call to avoid pool exhaustion
+        if (embeddingData.length > 0 && dimension !== undefined) {
+          if (typeof this.vector === `undefined`) {
+            throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
+          }
+
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+          // Flatten all embeddings and metadata into single arrays
+          const allVectors: number[][] = [];
+          const allMetadata: Array<
+            Record<string, unknown> & {
+              message_id: string;
+              thread_id: string | undefined;
+              resource_id: string | undefined;
+            }
+          > = [];
+
+          for (const data of embeddingData) {
+            allVectors.push(...data.embeddings);
+            allMetadata.push(...data.metadata);
+          }
+
+          await this.vector.upsert({
+            indexName,
+            vectors: allVectors,
+            metadata: allMetadata,
+          });
+        }
+      }
+
+      const saveResult = { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
+
+      span?.end({
+        output: { success: true },
+        attributes: {
+          messageCount: dbMessages.length,
+          embeddingTokens: saveResult.usage?.tokens,
+          semanticRecallEnabled: Boolean(config.semanticRecall),
+        },
+      });
+
+      return saveResult;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
   }
 
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
@@ -1240,8 +1530,12 @@ ${workingMemory}`;
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
+
+    const persistableMessages = messages.filter(m => m.role !== 'system');
+    if (persistableMessages.length === 0) return;
+
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.saveMessages({ messages });
+    await memoryStore.saveMessages({ messages: persistableMessages });
   }
 
   /**
@@ -1279,12 +1573,29 @@ ${workingMemory}`;
 
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
+    const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
+      ? async (observation: {
+          text: string;
+          groupId: string;
+          range: string;
+          threadId: string;
+          resourceId: string;
+          observedAt?: Date;
+        }) => {
+          await this.indexObservation(observation);
+        }
+      : undefined;
+
     return new OMClass({
       storage: memoryStore,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
+      activateAfterIdle: omConfig.activateAfterIdle,
+      activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      mastra: this._mastraInstance,
+      onIndexObservations,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -1456,6 +1767,289 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
+  private getObservationEmbeddingIndexName(dimensions?: number): string {
+    const defaultDimensions = 384;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}observations${separator}${usedDimensions}`;
+  }
+
+  private async createObservationEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+    const defaultDimensions = 384;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const indexName = this.getObservationEmbeddingIndexName(dimensions);
+
+    if (typeof this.vector === `undefined`) {
+      throw new Error(
+        `Tried to create observation embedding index but no vector db is attached to this Memory instance.`,
+      );
+    }
+
+    await this.vector.createIndex({
+      indexName,
+      dimension: usedDimensions,
+    } as any);
+
+    return { indexName };
+  }
+
+  /**
+   * Search observation groups across threads by semantic similarity.
+   * Requires a vector store and embedder to be configured.
+   */
+  public async searchMessages({
+    query,
+    resourceId,
+    topK = 10,
+    filter,
+  }: {
+    query: string;
+    resourceId: string;
+    topK?: number;
+    filter?: {
+      threadId?: string;
+      observedAfter?: Date;
+      observedBefore?: Date;
+    };
+  }): Promise<{
+    results: Array<{
+      threadId: string;
+      score: number;
+      groupId?: string;
+      range?: string;
+      text?: string;
+      observedAt?: Date;
+    }>;
+  }> {
+    if (!this.vector) {
+      throw new Error('searchMessages requires a vector store. Configure vector and embedder on your Memory instance.');
+    }
+
+    const { embeddings, dimension } = await this.embedMessageContent(query);
+    const { indexName } = await this.createObservationEmbeddingIndex(dimension);
+
+    const vectorFilter: VectorFilter = { resource_id: resourceId };
+    if (filter?.threadId) {
+      vectorFilter.thread_id = filter.threadId;
+    }
+    if (filter?.observedAfter || filter?.observedBefore) {
+      vectorFilter.observed_at = {
+        ...(filter.observedAfter ? { $gt: filter.observedAfter.toISOString() } : {}),
+        ...(filter.observedBefore ? { $lt: filter.observedBefore.toISOString() } : {}),
+      };
+    }
+
+    const queryResults: Array<{
+      threadId: string;
+      score: number;
+      groupId?: string;
+      range?: string;
+      text?: string;
+      observedAt?: Date;
+    }> = [];
+
+    await Promise.all(
+      embeddings.map(async embedding => {
+        const results = await this.vector!.query({
+          indexName,
+          queryVector: embedding,
+          topK,
+          filter: vectorFilter,
+        });
+        for (const r of results) {
+          if (!r.metadata?.thread_id) {
+            continue;
+          }
+
+          const groupId = typeof r.metadata.group_id === 'string' ? r.metadata.group_id : undefined;
+          if (!groupId) {
+            continue;
+          }
+
+          queryResults.push({
+            threadId: r.metadata.thread_id,
+            score: r.score,
+            groupId,
+            range: typeof r.metadata.range === 'string' ? r.metadata.range : undefined,
+            text: typeof r.metadata.text === 'string' ? r.metadata.text : undefined,
+            observedAt:
+              typeof r.metadata.observed_at === 'string' || r.metadata.observed_at instanceof Date
+                ? new Date(r.metadata.observed_at)
+                : undefined,
+          });
+        }
+      }),
+    );
+
+    const bestByGroup = new Map<string, (typeof queryResults)[0]>();
+    for (const result of queryResults) {
+      if (!result.groupId) {
+        continue;
+      }
+
+      const existing = bestByGroup.get(result.groupId);
+      if (!existing || result.score > existing.score) {
+        bestByGroup.set(result.groupId, result);
+      }
+    }
+
+    const results = [...bestByGroup.values()].sort((a, b) => b.score - a.score);
+
+    return { results };
+  }
+
+  /**
+   * Index a single observation group into the observation vector store.
+   */
+  public async indexObservation({
+    text,
+    groupId,
+    range,
+    threadId,
+    resourceId,
+    observedAt,
+  }: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }): Promise<void> {
+    if (!this.vector || !this.embedder) return;
+
+    const embedResult = await this.embedMessageContent(text);
+    if (embedResult.embeddings.length === 0 || embedResult.dimension === undefined) {
+      return;
+    }
+
+    const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
+
+    await this.vector.upsert({
+      indexName,
+      vectors: embedResult.embeddings,
+      metadata: embedResult.chunks.map(chunk => ({
+        group_id: groupId,
+        range,
+        thread_id: threadId,
+        resource_id: resourceId,
+        observed_at: observedAt?.toISOString(),
+        text: chunk,
+      })),
+    });
+  }
+
+  /**
+   * Update per-record observational memory config overrides for a thread.
+   * The provided config is deep-merged, so you only need to specify fields you want to change.
+   *
+   * @example
+   * ```ts
+   * await memory.updateObservationalMemoryConfig({
+   *   threadId: 'thread-1',
+   *   config: {
+   *     observation: { messageTokens: 2000 },
+   *     reflection: { observationTokens: 8000 },
+   *   },
+   * });
+   * ```
+   */
+  public async updateObservationalMemoryConfig({
+    threadId,
+    resourceId,
+    config,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    config: Record<string, unknown>;
+  }): Promise<void> {
+    const omEngine = await this.omEngine;
+    if (!omEngine) {
+      throw new Error('Observational memory is not enabled');
+    }
+    await omEngine.updateRecordConfig(threadId, resourceId, config);
+  }
+
+  /**
+   * Index a list of messages directly (without querying storage).
+   * Used by observe-time indexing to vectorize newly-observed messages.
+   */
+  private async indexMessagesList(messages: MastraDBMessage[]): Promise<void> {
+    if (!this.vector || !this.embedder) return;
+
+    const embeddingData: Array<{
+      embeddings: number[][];
+      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+    }> = [];
+    let dimension: number | undefined;
+
+    await Promise.all(
+      messages.map(async message => {
+        let textForEmbedding: string | null = null;
+
+        if (
+          message.content.content &&
+          typeof message.content.content === 'string' &&
+          message.content.content.trim() !== ''
+        ) {
+          textForEmbedding = message.content.content;
+        } else if (message.content.parts && message.content.parts.length > 0) {
+          const joined = message.content.parts
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join(' ')
+            .trim();
+          if (joined) textForEmbedding = joined;
+        }
+
+        if (!textForEmbedding) return;
+
+        const embedResult = await this.embedMessageContent(textForEmbedding);
+        dimension = embedResult.dimension;
+
+        embeddingData.push({
+          embeddings: embedResult.embeddings,
+          metadata: embedResult.chunks.map(() => ({
+            message_id: message.id,
+            thread_id: message.threadId,
+            resource_id: message.resourceId,
+          })),
+        });
+      }),
+    );
+
+    if (embeddingData.length > 0 && dimension !== undefined) {
+      const { indexName } = await this.createEmbeddingIndex(dimension);
+
+      const allVectors: number[][] = [];
+      const allMetadata: Array<{
+        message_id: string;
+        thread_id: string | undefined;
+        resource_id: string | undefined;
+      }> = [];
+
+      for (const data of embeddingData) {
+        allVectors.push(...data.embeddings);
+        allMetadata.push(...data.metadata);
+      }
+
+      await this.vector.upsert({
+        indexName,
+        vectors: allVectors,
+        metadata: allMetadata,
+      });
+    }
+  }
+
+  /**
+   * Check whether retrieval search (vector-based) is enabled.
+   * Returns true when `retrieval: { vector: true }` and Memory has vector + embedder configured.
+   */
+  hasRetrievalSearch(retrieval: ObservationalMemoryOptions['retrieval']): boolean {
+    if (!retrieval || retrieval === true) return false;
+    return !!retrieval.vector && !!this.vector && !!this.embedder;
+  }
+
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     const tools: Record<string, ToolAction<any, any, any>> = {};
@@ -1467,8 +2061,10 @@ Notes:
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
-      tools.recall = recallTool(mergedConfig);
+    if (omConfig?.retrieval) {
+      const retrievalScope =
+        typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
+      tools.recall = recallTool(mergedConfig, { retrievalScope });
     }
 
     return tools;
@@ -1592,13 +2188,13 @@ Notes:
                       filter: { message_id: { $in: batch } },
                     });
                   } catch {
-                    this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+                    this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
                   }
                 }
               }),
             );
           } catch {
-            this.logger.debug(`Failed to clean up old vectors during message update`);
+            this.logger.debug('Failed to clean up old vectors during message update');
           }
         }
 
@@ -1638,8 +2234,11 @@ Notes:
    *   - Message objects with 'id' properties
    * @returns Promise that resolves when all messages are deleted
    */
-  public async deleteMessages(input: MessageDeleteInput): Promise<void> {
-    // Normalize input to array of IDs
+  public async deleteMessages(
+    input: MessageDeleteInput,
+    observabilityContext?: Partial<ObservabilityContext>,
+  ): Promise<void> {
+    // Normalize input to messageIds before creating span to avoid leaking full message objects into traces
     let messageIds: string[];
 
     if (!Array.isArray(input)) {
@@ -1647,7 +2246,7 @@ Notes:
     }
 
     if (input.length === 0) {
-      return; // No-op for empty array
+      return;
     }
 
     messageIds = input.map(item => {
@@ -1660,18 +2259,27 @@ Notes:
       }
     });
 
-    // Validate all IDs are non-empty strings
     const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
     if (invalidIds.length > 0) {
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    // Delete from storage, then fire-and-forget vector cleanup
-    const memoryStore = await this.getMemoryStore();
+    const span = this.createMemorySpan('delete', observabilityContext, undefined, {
+      messageCount: messageIds.length,
+    });
 
-    await memoryStore.deleteMessages(messageIds);
-    if (this.vector) {
-      void this.deleteMessageVectors(messageIds);
+    try {
+      const memoryStore = await this.getMemoryStore();
+
+      await memoryStore.deleteMessages(messageIds);
+      if (this.vector) {
+        void this.deleteMessageVectors(messageIds);
+      }
+
+      span?.end({ output: { success: true }, attributes: { messageCount: messageIds.length } });
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
     }
   }
 
@@ -1695,13 +2303,13 @@ Notes:
                 filter: { message_id: { $in: batch } },
               });
             } catch {
-              this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+              this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
             }
           }
         }),
       );
     } catch {
-      this.logger.debug(`Failed to clean up vectors for deleted messages`);
+      this.logger.debug('Failed to clean up vectors for deleted messages');
     }
   }
 
@@ -2236,7 +2844,9 @@ Notes:
     if (!engine) return null;
 
     const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
-    return new ObservationalMemoryProcessor(engine, this);
+    return new ObservationalMemoryProcessor(engine, this, {
+      temporalMarkers: effectiveConfig.temporalMarkers,
+    });
   }
 }
 

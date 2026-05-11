@@ -28,24 +28,24 @@ describe('getAttributes - token usage', () => {
     expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
   });
 
-  it('should extract cacheRead from inputDetails', () => {
+  it('should extract cacheRead from inputDetails using OTel-spec attribute name', () => {
     const span = createModelGenerationSpan({
       model: 'claude-3-opus',
       provider: 'anthropic',
       usage: { inputTokens: 1000, outputTokens: 200, inputDetails: { cacheRead: 800 } },
     });
     const attrs = getAttributes(span);
-    expect(attrs['gen_ai.usage.cached_input_tokens']).toBe(800);
+    expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(800);
   });
 
-  it('should extract cacheWrite from inputDetails', () => {
+  it('should extract cacheWrite from inputDetails using OTel-spec attribute name', () => {
     const span = createModelGenerationSpan({
       model: 'claude-3-opus',
       provider: 'anthropic',
       usage: { inputTokens: 1000, outputTokens: 200, inputDetails: { cacheWrite: 500 } },
     });
     const attrs = getAttributes(span);
-    expect(attrs['gen_ai.usage.cache_write_tokens']).toBe(500);
+    expect(attrs['gen_ai.usage.cache_creation.input_tokens']).toBe(500);
   });
 
   it('should extract reasoning from outputDetails', () => {
@@ -67,22 +67,33 @@ describe('formatUsageMetrics', () => {
     expect(result['gen_ai.usage.output_tokens']).toBe(50);
   });
 
-  it('should extract cacheRead from inputDetails', () => {
+  it('should extract cacheRead from inputDetails using OTel-spec attribute name', () => {
     const usage: UsageStats = { inputTokens: 1000, outputTokens: 200, inputDetails: { cacheRead: 800 } };
     const result = formatUsageMetrics(usage);
-    expect(result['gen_ai.usage.cached_input_tokens']).toBe(800);
+    expect(result['gen_ai.usage.cache_read.input_tokens']).toBe(800);
   });
 
-  it('should extract cacheWrite from inputDetails', () => {
+  it('should extract cacheWrite from inputDetails using OTel-spec attribute name', () => {
     const usage: UsageStats = { inputTokens: 1000, outputTokens: 200, inputDetails: { cacheWrite: 500 } };
     const result = formatUsageMetrics(usage);
-    expect(result['gen_ai.usage.cache_write_tokens']).toBe(500);
+    expect(result['gen_ai.usage.cache_creation.input_tokens']).toBe(500);
   });
 
   it('should extract reasoning from outputDetails', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = formatUsageMetrics(usage);
     expect(result['gen_ai.usage.reasoning_tokens']).toBe(400);
+  });
+
+  it('should not emit non-spec cache attribute names that older versions used', () => {
+    const usage: UsageStats = {
+      inputTokens: 1000,
+      outputTokens: 500,
+      inputDetails: { cacheRead: 600, cacheWrite: 200 },
+    };
+    const result = formatUsageMetrics(usage) as Record<string, unknown>;
+    expect(result['gen_ai.usage.cached_input_tokens']).toBeUndefined();
+    expect(result['gen_ai.usage.cache_write_tokens']).toBeUndefined();
   });
 
   it('should return empty metrics for undefined usage', () => {

@@ -7,7 +7,6 @@ const meta: Meta<typeof ScrollArea> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -15,7 +14,7 @@ type Story = StoryObj<typeof ScrollArea>;
 
 export const Default: Story = {
   render: () => (
-    <ScrollArea className="h-[200px] w-[300px] rounded-md border border-border1 p-4">
+    <ScrollArea className="h-[200px] w-dropdown-max-height rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 20 }).map((_, i) => (
           <p key={i} className="text-sm text-neutral5">
@@ -29,7 +28,7 @@ export const Default: Story = {
 
 export const WithMaxHeight: Story = {
   render: () => (
-    <ScrollArea maxHeight="150px" className="w-[300px] rounded-md border border-border1 p-4">
+    <ScrollArea maxHeight="150px" className="w-dropdown-max-height rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 15 }).map((_, i) => (
           <p key={i} className="text-sm text-neutral5">
@@ -43,7 +42,7 @@ export const WithMaxHeight: Story = {
 
 export const HorizontalScroll: Story = {
   render: () => (
-    <ScrollArea className="h-[100px] w-[300px] rounded-md border border-border1 p-4">
+    <ScrollArea className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4">
       <div className="flex gap-4 w-[800px]">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
@@ -94,7 +93,7 @@ const config = {
 
 export const ChatMessages: Story = {
   render: () => (
-    <ScrollArea className="h-[300px] w-[350px] rounded-md border border-border1 p-4">
+    <ScrollArea className="h-dropdown-max-height w-[350px] rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className={`p-3 rounded-lg ${i % 2 === 0 ? 'bg-surface3 ml-8' : 'bg-surface4 mr-8'}`}>

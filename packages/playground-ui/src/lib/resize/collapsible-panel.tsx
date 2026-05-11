@@ -39,7 +39,7 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props 
         <Tooltip>
           <div className="flex items-center justify-center h-full">
             <TooltipTrigger asChild>
-              <Button onClick={expand} className="!h-48 border-none">
+              <Button onClick={expand} className="h-48! border-none">
                 <Icon>{direction === 'left' ? <ArrowRight /> : <ArrowLeft />}</Icon>
               </Button>
             </TooltipTrigger>

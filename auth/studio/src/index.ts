@@ -19,6 +19,8 @@ export interface StudioUser extends EEUser {
   organizationId?: string;
   role?: string;
   permissions?: string[];
+  /** All organization IDs the user is a member of (for cross-org access checks) */
+  memberOrgIds?: string[];
 }
 
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
@@ -121,8 +123,9 @@ export class MastraAuthStudio
 
     if (!user) return null;
 
-    // Org-scoping: if this instance belongs to a specific org, reject users not in that org
-    if (this.organizationId && user.organizationId !== this.organizationId) {
+    // Org-scoping: if this instance belongs to a specific org, reject users not a member of that org
+    // Check memberOrgIds (all orgs user belongs to) rather than organizationId (current org)
+    if (this.organizationId && !user.memberOrgIds?.includes(this.organizationId)) {
       return null;
     }
 
@@ -167,8 +170,16 @@ export class MastraAuthStudio
     // The shared API already consumed the OAuth code and passes the sealed
     // session directly as the `code` parameter in the redirect to this callback.
     // Validate it to get user info.
+    this.logger.debug('SSO callback: validating sealed session via shared API', {
+      sharedApiUrl: this.sharedApiUrl,
+      codeLength: code?.length,
+    });
     const user = await this.verifySessionCookie(code);
     if (!user) {
+      this.logger.error('SSO callback: session validation failed — verifySessionCookie returned null', {
+        sharedApiUrl: this.sharedApiUrl,
+        codeLength: code?.length,
+      });
       throw new Error('Session validation failed');
     }
 
@@ -196,6 +207,8 @@ export class MastraAuthStudio
     return {
       provider: 'mastra-studio',
       text: 'Sign in with Mastra',
+      description:
+        'Your deployed Studio is secured by your Mastra account. Sign in with the same email you used to sign up on mastra.ai.',
     };
   }
 
@@ -267,7 +280,53 @@ export class MastraAuthStudio
   }
 
   async refreshSession(sessionId: string): Promise<Session | null> {
-    return this.validateSession(sessionId);
+    try {
+      // Call the shared API's /auth/refresh endpoint to get a fresh access token
+      const res = await fetch(`${this.sharedApiUrl}/auth/refresh`, {
+        method: 'GET',
+        headers: {
+          Cookie: `${COOKIE_NAME}=${sessionId}`,
+        },
+      });
+
+      if (!res.ok) {
+        this.logger.warn('refreshSession: shared API refresh returned non-OK status', {
+          status: res.status,
+          url: `${this.sharedApiUrl}/auth/refresh`,
+        });
+        // Refresh failed, fall back to validation (will likely also fail)
+        return this.validateSession(sessionId);
+      }
+
+      // Parse the new sealed session from Set-Cookie header
+      const setCookie = res.headers.get('Set-Cookie');
+      const newSessionId = setCookie ? parseCookieFromHeader(setCookie, COOKIE_NAME) : null;
+
+      if (!newSessionId) {
+        this.logger.warn('refreshSession: no Set-Cookie header in refresh response');
+        // No new cookie returned, fall back to validation with original
+        return this.validateSession(sessionId);
+      }
+
+      // Verify the new session works and return it
+      const user = await this.verifySessionCookie(newSessionId);
+      if (!user) return null;
+
+      const now = new Date();
+      return {
+        id: newSessionId,
+        userId: user.id,
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        createdAt: now,
+      };
+    } catch (error) {
+      this.logger.error('refreshSession: fetch to shared API failed', {
+        url: `${this.sharedApiUrl}/auth/refresh`,
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      });
+      // On error, fall back to validation
+      return this.validateSession(sessionId);
+    }
   }
 
   getSessionIdFromRequest(request: Request): string | null {
@@ -335,7 +394,14 @@ export class MastraAuthStudio
         },
       });
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        this.logger.warn('verifySessionCookie: shared API returned non-OK status', {
+          status: res.status,
+          statusText: res.statusText,
+          url: `${this.sharedApiUrl}/auth/me`,
+        });
+        return null;
+      }
 
       const data = (await res.json()) as {
         user: {
@@ -348,6 +414,7 @@ export class MastraAuthStudio
         organizationId: string;
         role?: string;
         permissions?: string[];
+        memberOrgIds?: string[];
       };
 
       return {
@@ -358,8 +425,13 @@ export class MastraAuthStudio
         organizationId: data.organizationId,
         role: data.role,
         permissions: data.permissions,
+        memberOrgIds: data.memberOrgIds,
       };
-    } catch {
+    } catch (error) {
+      this.logger.error('verifySessionCookie: fetch to shared API failed', {
+        url: `${this.sharedApiUrl}/auth/me`,
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      });
       return null;
     }
   }
@@ -376,7 +448,13 @@ export class MastraAuthStudio
         },
       });
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        this.logger.warn('verifyBearerToken: shared API returned non-OK status', {
+          status: res.status,
+          url: `${this.sharedApiUrl}/auth/verify`,
+        });
+        return null;
+      }
 
       const data = (await res.json()) as {
         user: {
@@ -386,6 +464,8 @@ export class MastraAuthStudio
           lastName: string;
         };
         organizationId: string;
+        role?: string;
+        memberOrgIds?: string[];
       };
 
       return {
@@ -393,8 +473,14 @@ export class MastraAuthStudio
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
         organizationId: data.organizationId,
+        role: data.role,
+        memberOrgIds: data.memberOrgIds,
       };
-    } catch {
+    } catch (error) {
+      this.logger.error('verifyBearerToken: fetch to shared API failed', {
+        url: `${this.sharedApiUrl}/auth/verify`,
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      });
       return null;
     }
   }
@@ -408,6 +494,22 @@ function parseCookie(cookieHeader: string | null | undefined, name: string): str
   if (!cookieHeader) return null;
   const match = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
   return match?.[1] ?? null;
+}
+
+/**
+ * Parse a cookie value from a Set-Cookie header.
+ * Set-Cookie format: "name=value; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400"
+ */
+function parseCookieFromHeader(setCookieHeader: string, name: string): string | null {
+  // Set-Cookie header starts with "name=value" followed by optional attributes
+  const parts = setCookieHeader.split(';');
+  if (parts.length === 0) return null;
+
+  const [cookieName, ...valueParts] = parts[0]!.split('=');
+  if (cookieName?.trim() !== name) return null;
+
+  // Value could contain = characters, so rejoin
+  return valueParts.join('=') || null;
 }
 
 // ---------------------------------------------------------------------------

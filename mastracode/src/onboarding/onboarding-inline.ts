@@ -1,5 +1,5 @@
 /**
- * Inline onboarding component.
+ * Setup onboarding component.
  *
  * Walks the user through a multi-step wizard:
  *  1. Welcome
@@ -8,11 +8,11 @@
  *  4. OM pack selection (observational memory model)
  *  5. YOLO mode toggle
  *
- * The component renders each step inline in the conversation stream.
- * On completion it fires `onComplete` with the collected choices.
+ * The component renders as a settings overlay. On completion it fires
+ * `onComplete` with the collected choices.
  */
 
-import { Box, Container, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline.js';
@@ -71,7 +71,7 @@ type StepId = 'welcome' | 'auth' | 'modePack' | 'omPack' | 'yolo' | 'done';
 // Component
 // ---------------------------------------------------------------------------
 
-export class OnboardingInlineComponent extends Container implements Focusable {
+export class OnboardingInlineComponent extends Box implements Focusable {
   private tui: TUI;
   private options: OnboardingOptions;
 
@@ -99,7 +99,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
   }
 
   constructor(options: OnboardingOptions) {
-    super();
+    super(4, 2, (text: string) => theme.bg('overlayBg', text));
     this.tui = options.tui;
     this.options = options;
 
@@ -189,7 +189,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private makeBox(): Box {
     this.clearStep();
-    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => theme.bg('toolPendingBg', text));
+    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => theme.bg('overlayBg', text));
     // Add a spacer between steps, but not before the very first one
     if (this.stepCount > 0) {
       this.addChild(new Spacer(1));
@@ -630,7 +630,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
   private collapseStep(summary: string): void {
     if (!this.stepBox) return;
     this.stepBox.clear();
-    this.stepBox.setBgFn((text: string) => theme.bg('toolSuccessBg', text));
+    this.stepBox.setBgFn((text: string) => theme.bg('overlayBg', text));
     this.stepBox.addChild(new Text(`${theme.fg('success', '✓')} ${theme.fg('text', summary)}`, 0, 0));
     this.selectList = undefined;
     this.activeInlineQuestion = undefined;

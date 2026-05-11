@@ -6,6 +6,7 @@ permissions:
 on:
   schedule:
     - cron: '0 4,16 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: alpha-prerelease-main
@@ -13,7 +14,7 @@ concurrency:
 
 jobs:
   alpha-version:
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Initial checkout
@@ -39,7 +40,30 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Ensure alpha prerelease mode
+        id: ensure-prerelease
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          HUSKY: 0
+        run: |
+          if [ -f .changeset/pre.json ]; then
+            node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const pre = JSON.parse(readFileSync('.changeset/pre.json', 'utf8'));
+          if (pre.mode !== 'pre' || pre.tag !== 'alpha') {
+            console.error(`Expected .changeset/pre.json to be in alpha pre mode, got mode=${pre.mode} tag=${pre.tag}`);
+            process.exit(1);
+          }
+          NODE
+            echo "Already in alpha prerelease mode"
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "restored=true" >> "$GITHUB_OUTPUT"
+
       - name: Version packages (alpha prerelease)
+        if: steps.ensure-prerelease.outputs.restored != 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           HUSKY: 0
@@ -47,6 +71,7 @@ jobs:
 
       - name: Check for changes
         id: check-changes
+        if: steps.ensure-prerelease.outputs.restored != 'true'
         run: |
           if git diff --quiet && git diff --cached --quiet; then
             echo "No version changes detected"
@@ -58,18 +83,20 @@ jobs:
           fi
 
       - name: Bump mcp-docs-server prerelease version
-        if: steps.check-changes.outputs.has_changes == 'true'
+        if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
         run: |
           cd packages/mcp-docs-server
           pnpm version prerelease --preid alpha --no-git-tag-version
           cd ../..
 
       - name: Commit and push version changes
-        if: steps.check-changes.outputs.has_changes == 'true'
+        if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           HUSKY: 0
         run: |
           git add -A
           git commit -m "chore: version packages"
-          git push
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin HEAD:"${GITHUB_REF_NAME}"

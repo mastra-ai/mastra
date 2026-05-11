@@ -63,6 +63,8 @@ export interface MockOptions {
   transformRequest?: LLMRecorderOptions['transformRequest'];
   /** Enable verbose debug logging */
   debug?: boolean;
+  /** When true, only accept exact hash matches during replay. Disables fuzzy/similarity matching. */
+  exactMatch?: boolean;
 }
 
 /**

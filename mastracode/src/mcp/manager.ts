@@ -9,6 +9,8 @@ import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
+const MASTRACODE_MCP_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 /** Summary of MCP initialization result. */
 export interface McpInitResult {
   connected: McpServerStatus[];
@@ -142,6 +144,7 @@ export function createMcpManager(projectDir: string, configDirName = DEFAULT_CON
     client = new MCPClient({
       id: 'mastra-code-mcp',
       servers: buildServerDefs(servers),
+      timeout: MASTRACODE_MCP_TIMEOUT_MS,
     });
 
     // Use listToolsetsWithErrors() to get tools grouped by server name,

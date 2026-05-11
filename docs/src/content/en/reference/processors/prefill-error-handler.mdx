@@ -1,0 +1,95 @@
+---
+title: "Reference: PrefillErrorHandler | Processors"
+description: "Documentation for the PrefillErrorHandler processor in Mastra, which handles assistant-response prefill errors by appending a continue message and retrying."
+packages:
+  - "@mastra/core"
+---
+
+# PrefillErrorHandler
+
+The `PrefillErrorHandler` is an **error processor** that handles assistant-response prefill errors. This error occurs when a conversation ends with an assistant message and the model rejects the request because it interprets it as prefilling the assistant response.
+
+When the error is detected, the processor appends a hidden `<system-reminder>continue</system-reminder>` user message to the conversation and signals a retry. The reminder is persisted with `metadata.systemReminder = { type: 'anthropic-prefill-processor-retry' }`, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
+
+Add this processor to `errorProcessors` when you want Mastra to recover from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "assistant response prefill is incompatible with `enable_thinking`" errors).
+
+## How it works
+
+1. The LLM API call fails with a known assistant-prefill rejection message
+1. `PrefillErrorHandler` checks that this is the first retry attempt
+1. It appends a hidden `<system-reminder>continue</system-reminder>` user message to the `messageList`
+1. It returns `{ retry: true }` to signal the LLM call should be retried with the modified messages
+
+The processor now reacts to the API rejection itself instead of re-checking whether the conversation currently ends with an assistant message. This makes it resilient to cases where the provider rejects the request for prefill semantics even if the trailing message shape has already been transformed upstream.
+
+## Usage example
+
+Add `PrefillErrorHandler` to `errorProcessors` for any agent that should retry assistant-prefill failures:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { PrefillErrorHandler } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'anthropic/claude-opus-4-6',
+  errorProcessors: [new PrefillErrorHandler()],
+})
+```
+
+If you want custom recovery behavior, provide your own error processor with a `processAPIError` method:
+
+```typescript title="src/mastra/agents/custom-error-handling.ts"
+import { Agent } from '@mastra/core/agent'
+import type { Processor } from '@mastra/core/processors'
+
+const customErrorHandler: Processor = {
+  id: 'custom-prefill-error-handler',
+  processAPIError({ error, messageList, retryCount }) {
+    // Your custom logic here
+  },
+}
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'anthropic/claude-opus-4-6',
+  errorProcessors: [customErrorHandler],
+})
+```
+
+## Constructor parameters
+
+The `PrefillErrorHandler` takes no constructor parameters.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'prefill-error-handler'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Prefill Error Handler'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
+    description:
+      'Handles known assistant-prefill errors by appending a hidden system reminder continue message and signaling retry. Only triggers on the first retry attempt.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Related
+
+- [Processor interface](/reference/processors/processor-interface)
+- [Guardrails](/docs/agents/guardrails)

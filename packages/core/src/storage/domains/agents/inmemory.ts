@@ -38,14 +38,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageAgentType | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getById called for ${id}`);
     const agent = this.db.agents.get(id);
     return agent ? this.deepCopyAgent(agent) : null;
   }
 
   async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     const { agent } = input;
-    this.logger.debug(`InMemoryAgentsStorage: create called for ${agent.id}`);
 
     if (this.db.agents.has(agent.id)) {
       throw new Error(`Agent with id ${agent.id} already exists`);
@@ -84,7 +82,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
   async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemoryAgentsStorage: update called for ${id}`);
 
     const existingAgent = this.db.agents.get(id);
     if (!existingAgent) {
@@ -109,7 +106,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: delete called for ${id}`);
     // Idempotent delete - no-op if agent doesn't exist
     this.db.agents.delete(id);
     // Also delete all versions for this agent
@@ -119,8 +115,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryAgentsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -178,8 +172,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
-    this.logger.debug(`InMemoryAgentsStorage: createVersion called for agent ${input.agentId}`);
-
     // Check if version with this ID already exists (versions are immutable)
     if (this.db.agentVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -203,14 +195,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async getVersion(id: string): Promise<AgentVersion | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getVersion called for ${id}`);
     const version = this.db.agentVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getVersionByNumber called for agent ${agentId}, v${versionNumber}`);
-
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -220,8 +209,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getLatestVersion called for agent ${agentId}`);
-
     let latest: AgentVersion | null = null;
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId) {
@@ -236,8 +223,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
     const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryAgentsStorage: listVersions called for agent ${agentId}`);
 
     // Normalize perPage for query (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -275,14 +260,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteVersion called for ${id}`);
     // Idempotent delete - no-op if version doesn't exist
     this.db.agentVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByParentId called for agent ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.agentVersions.entries()) {
       if (version.agentId === entityId) {
@@ -296,8 +278,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async countVersions(agentId: string): Promise<number> {
-    this.logger.debug(`InMemoryAgentsStorage: countVersions called for agent ${agentId}`);
-
     let count = 0;
     for (const version of this.db.agentVersions.values()) {
       if (version.agentId === agentId) {

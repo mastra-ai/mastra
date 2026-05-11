@@ -7,6 +7,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
+import { executeWithContextSync } from '../../observability/utils';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -47,7 +48,6 @@ export class MastraLLMVNext extends MastraBase {
         category: ErrorCategory.USER,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     } else {
       this.#models = models;
@@ -111,7 +111,9 @@ export class MastraLLMVNext extends MastraBase {
     structuredOutput,
     options,
     inputProcessors,
+    llmRequestInputProcessors,
     outputProcessors,
+    errorProcessors,
     returnScorerData,
     providerOptions,
     messageList,
@@ -145,19 +147,12 @@ export class MastraLLMVNext extends MastraBase {
     const messages = messageList.get.all.aiV5.model();
 
     const firstModel = this.#firstModel.model;
-    this.logger.debug(`[LLM] - Streaming text`, {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      tools: Object.keys(tools || {}),
-    });
 
     const modelSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
-        messages: [...messageList.getSystemMessages(), ...messages],
+        messages: [...messageList.getAllSystemMessages(), ...messages],
       },
       attributes: {
         model: firstModel.modelId,
@@ -174,7 +169,23 @@ export class MastraLLMVNext extends MastraBase {
       requestContext,
     });
 
-    // Create model span tracker that will be shared across all LLM execution steps
+    if (modelSpan) {
+      executeWithContextSync({
+        span: modelSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
+
+    // Create model span tracker that will be shared across all LLM execution steps.
+    // The agentic loop calls setInferenceContext + startInference per-step so the
+    // MODEL_INFERENCE span reflects the post-processor tool set / parameters.
     const modelSpanTracker = modelSpan?.createTracker();
 
     try {
@@ -194,7 +205,9 @@ export class MastraLLMVNext extends MastraBase {
         _internal,
         structuredOutput,
         inputProcessors,
+        llmRequestInputProcessors,
         outputProcessors,
+        errorProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
@@ -242,7 +255,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Step Change:', {
+            this.logger.debug('Stream step change', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,
@@ -308,7 +321,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Finished:', {
+            this.logger.debug('Stream finished', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,

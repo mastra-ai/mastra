@@ -1,13 +1,20 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
+import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
+import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityContext, TracingOptions } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+import type { ToolPayloadTransformPolicy } from '../tools';
+import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -18,6 +25,7 @@ import type {
   PublicStructuredOutputOptions,
   AgentMethodType,
   MastraDBMessage,
+  AgentInstructions,
 } from './types';
 
 // Re-export types for convenience
@@ -273,6 +281,15 @@ export interface DelegationConfig {
   onDelegationComplete?: OnDelegationCompleteHandler;
 
   /**
+   * Include the full subagent result in the supervisor model context.
+   *
+   * By default, the supervisor model receives only the subagent's text response
+   * in later iterations. Set this to true to also include nested subagent tool
+   * results in the supervisor model context.
+   */
+  includeSubAgentToolResultsInModelContext?: boolean;
+
+  /**
    * Callback that controls which parent messages are passed to each subagent as conversation
    * context. Receives the full parent message history along with delegation metadata, and
    * returns the messages that should be forwarded.
@@ -290,6 +307,68 @@ export interface DelegationConfig {
    * ```
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+}
+
+/**
+ * Minimal interface for objects that can be used as subagents in the `agents` field.
+ * `Agent` already satisfies this interface. Implement this to create lighter-weight
+ * subagents without the full Agent class.
+ */
+export interface SubAgent<TOutput = unknown, TRequestContext extends Record<string, any> | unknown = unknown> {
+  /** Unique identifier for this subagent */
+  readonly id: string;
+
+  /** Human-readable name used in logs and error details */
+  readonly name?: string;
+
+  /** Human-readable description used for the generated tool description */
+  getDescription(): string;
+
+  /** Returns the model instance used to select the execution path. */
+  getModel(opts: {
+    requestContext?: RequestContext;
+  }): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+
+  /** Returns default execution options, if configured. */
+  getDefaultOptions?(opts: {
+    requestContext?: RequestContext;
+  }): AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> | undefined;
+
+  /** Whether this subagent has its own memory configured */
+  hasOwnMemory(): boolean;
+
+  /** Inject parent memory into this subagent when it does not have its own */
+  __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>): void;
+
+  /** Returns the memory instance, if configured */
+  getMemory(opts: { requestContext?: RequestContext }): Promise<MastraMemory | undefined>;
+
+  /** Returns the system prompt / instructions */
+  getInstructions(opts: { requestContext?: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
+
+  /** Execute a prompt and return the full result */
+  generate(messages: MessageListInput, options?: AgentExecutionOptionsBase<any>): Promise<FullOutput>;
+
+  /** Stream a prompt execution */
+  stream(messages: MessageListInput, options?: AgentExecutionOptionsBase<any>): Promise<MastraModelOutput>;
+
+  /** Resume a previously suspended generate execution */
+  resumeGenerate(resumeData: any, options?: AgentExecutionOptionsBase<any>): Promise<FullOutput>;
+
+  /** Resume a previously suspended stream execution */
+  resumeStream(resumeData: any, options?: AgentExecutionOptionsBase<any>): Promise<MastraModelOutput>;
+
+  /** Execute a prompt using a legacy v1 model */
+  generateLegacy?(messages: MessageListInput, options?: any): Promise<any>;
+
+  /** Stream a prompt execution using a legacy v1 model */
+  streamLegacy?(messages: MessageListInput, options?: any): Promise<any>;
+
+  /** Register a Mastra instance on implementations that need it */
+  __registerMastra?(mastra: Mastra): void;
+
+  /** Returns background task configuration, if configured */
+  getBackgroundTasksConfig?(): AgentBackgroundConfig | undefined;
 }
 
 /**
@@ -449,11 +528,17 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Save messages incrementally after each stream step completes (default: false). */
+  /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
+
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   */
+  versions?: VersionOverrides;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -486,6 +571,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Error processors to use for this execution (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides agent's default maxProcessorRetries.
@@ -554,6 +641,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
 
+  /** Per-invocation transform policy for tool payloads in display and transcript serializers. */
+  transform?: ToolPayloadTransformPolicy;
+
   /**
    * Callback fired after each iteration (LLM call) completes.
    * Can control whether to continue and inject feedback.
@@ -601,6 +691,17 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * ```
    */
   delegation?: DelegationConfig;
+
+  /** Whether to disable background tasks for this execution */
+  disableBackgroundTasks?: boolean;
+
+  /**
+   * @internal
+   * When true, the in-loop `backgroundTaskCheckStep` returns immediately
+   * without waiting for running tasks to complete. Set by
+   * `agent.streamUntilIdle`, which drives continuation from outside the loop.
+   */
+  _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

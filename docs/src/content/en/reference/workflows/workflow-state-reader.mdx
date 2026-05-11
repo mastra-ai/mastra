@@ -1,0 +1,152 @@
+---
+title: "Reference: Workflow state reader | Workflows"
+description: "API reference for workflow state reader helpers, which inspect persisted workflow run state."
+packages:
+  - "@mastra/core"
+---
+
+# Workflow state reader
+
+Workflow state reader helpers inspect the public `WorkflowState` returned by `workflow.getWorkflowRunById()`. Use them to recover suspended runs, inspect resume labels, and read step payloads or outputs without parsing raw workflow snapshots.
+
+## Usage example
+
+```typescript title="src/mastra/workflows/recover-run.ts"
+import { createWorkflowStateReader } from '@mastra/core/workflows'
+
+const state = await workflow.getWorkflowRunById('run-123')
+
+if (state) {
+  const reader = createWorkflowStateReader(state)
+  const suspendedStep = reader.getSuspendedStep()
+  const labels = reader.getResumeLabels()
+
+  console.log(reader.getStatus())
+  console.log(reader.getStepOutput('extract-data'))
+  console.log(suspendedStep?.path)
+  console.log(labels.approve)
+}
+```
+
+## Functions
+
+### `createWorkflowStateReader(state)`
+
+Creates a reader object with methods bound to one `WorkflowState`.
+
+```typescript
+const reader = createWorkflowStateReader(state)
+const suspendedStep = reader.getSuspendedStep()
+```
+
+### `getWorkflowStepOutput(state, stepId)`
+
+Returns the output for a step ID, including nested workflow dot paths such as `parent.child`. For `foreach` steps, returns one entry per iteration; suspended iterations can have `undefined` output entries.
+
+```typescript
+const output = getWorkflowStepOutput(state, 'extract-data')
+```
+
+### `getWorkflowStepPayload(state, stepId)`
+
+Returns the payload that was passed to a step. For `foreach` steps, returns one entry per iteration.
+
+```typescript
+const payload = getWorkflowStepPayload(state, 'extract-data')
+```
+
+### `getWorkflowSuspendedStep(state)`
+
+Returns the first suspended step from the workflow state. When multiple steps are suspended, ordering follows the order stored in `suspendedPaths`.
+
+```typescript
+const suspendedStep = getWorkflowSuspendedStep(state)
+```
+
+### `getWorkflowSuspendedSteps(state)`
+
+Returns all suspended steps from the workflow state. Each result includes the top-level step ID, resume path, execution path, suspend payload, suspend output, and matching resume labels.
+
+```typescript
+const suspendedSteps = getWorkflowSuspendedSteps(state)
+```
+
+### `getWorkflowResumeLabel(state, label)`
+
+Returns a resume label by name.
+
+```typescript
+const label = getWorkflowResumeLabel(state, 'approve')
+```
+
+### `getWorkflowResumeLabels(state)`
+
+Returns all resume labels from the workflow state.
+
+```typescript
+const labels = getWorkflowResumeLabels(state)
+```
+
+## Reader methods
+
+`createWorkflowStateReader(state)` returns the following methods:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'getStatus',
+    type: '() => WorkflowRunStatus',
+    description: 'Returns the workflow run status.',
+  },
+  {
+    name: 'getResult',
+    type: '() => WorkflowState["result"]',
+    description: 'Returns the terminal workflow result when it exists.',
+  },
+  {
+    name: 'getError',
+    type: '() => WorkflowState["error"]',
+    description: 'Returns the terminal workflow error when it exists.',
+  },
+  {
+    name: 'getStepOutput',
+    type: '(stepId: string) => any | Array<any | undefined> | undefined',
+    description: 'Returns the output for a step ID or nested workflow dot path.',
+  },
+  {
+    name: 'getStepPayload',
+    type: '(stepId: string) => any | Array<any | undefined> | undefined',
+    description: 'Returns the payload for a step ID or nested workflow dot path.',
+  },
+  {
+    name: 'getSuspendedStep',
+    type: '() => { stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> } | undefined',
+    description: 'Returns the first suspended step.',
+  },
+  {
+    name: 'getSuspendedSteps',
+    type: '() => Array<{ stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> }>',
+    description: 'Returns all suspended steps.',
+  },
+  {
+    name: 'getResumeLabel',
+    type: '(label: string) => { stepId: string; foreachIndex?: number } | undefined',
+    description: 'Returns a resume label by name.',
+  },
+  {
+    name: 'getResumeLabels',
+    type: '() => Record<string, { stepId: string; foreachIndex?: number }>',
+    description: 'Returns all resume labels.',
+  },
+]}
+/>
+
+## Notes
+
+`requestContext` and `tracingContext` are only returned by `workflow.getWorkflowRunById()` when explicitly requested with `fields`.
+
+## Related
+
+- [Suspend & resume](/docs/workflows/suspend-and-resume)
+- [Snapshots](/docs/workflows/snapshots)
+- [Workflow class](/reference/workflows/workflow)

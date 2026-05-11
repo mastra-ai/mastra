@@ -10,14 +10,35 @@ import type {
 } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 
+export type ScorerRunInputForLLMJudge =
+  | ScorerRunInputForAgent
+  | string
+  | {
+      inputMessages?: unknown[];
+      messages?: unknown[];
+      prompt?: string;
+      text?: string;
+      content?: unknown;
+      input?: unknown;
+      user?: unknown;
+      [key: string]: unknown;
+    };
+
+export type ScorerRunOutputForLLMJudge =
+  | ScorerRunOutputForAgent
+  | string
+  | unknown[]
+  | {
+      text?: string;
+      content?: unknown;
+      role?: string;
+      [key: string]: unknown;
+    };
+
 /**
- * Extracts text content from a MastraDBMessage.
+ * Extracts text content from a MastraDBMessage or ModelMessage-like object.
  *
- * This function matches the logic used in `MessageList.mastraDBMessageToAIV4UIMessage`.
- * It first checks for a string `content.content` field, then falls back to extracting
- * text from the `parts` array (returning only the last text part, like AI SDK does).
- *
- * @param message - The MastraDBMessage to extract text from
+ * @param message - The message to extract text from
  * @returns The extracted text content, or an empty string if no text is found
  *
  * @example
@@ -32,16 +53,80 @@ import { RequestContext } from '@mastra/core/request-context';
  * ```
  */
 export function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
-  if (typeof message.content.content === 'string' && message.content.content !== '') {
-    return message.content.content;
+  const content = message.content as any;
+
+  if (typeof content === 'string') {
+    return content;
   }
-  if (message.content.parts && Array.isArray(message.content.parts)) {
+  if (Array.isArray(content)) {
+    const textParts = content.filter(p => p.type === 'text');
+    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+  }
+  if (typeof content?.content === 'string' && content.content !== '') {
+    return content.content;
+  }
+  if (typeof content?.text === 'string' && content.text !== '') {
+    return content.text;
+  }
+  if (content?.parts && Array.isArray(content.parts)) {
     // Return only the last text part like AI SDK does
-    const textParts = message.content.parts.filter(p => p.type === 'text');
+    const textParts = content.parts.filter((p: any) => p.type === 'text');
     return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
   }
   return '';
 }
+
+const isRecord = (value: unknown): value is Record<string, any> => {
+  return typeof value === 'object' && value !== null;
+};
+
+const getTextFromValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const textParts = value
+      .filter(part => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
+      .map(part => part.text);
+    return textParts.length > 0 ? textParts[textParts.length - 1] : undefined;
+  }
+  if (!isRecord(value)) return undefined;
+
+  return (
+    getTextFromValue(value.content) ??
+    (typeof value.text === 'string' ? value.text : undefined) ??
+    (typeof value.body === 'string' ? value.body : undefined)
+  );
+};
+
+export const isScorerRunInputForAgent = (input: unknown): input is ScorerRunInputForAgent => {
+  return (
+    isRecord(input) &&
+    Array.isArray(input.inputMessages) &&
+    Array.isArray(input.rememberedMessages) &&
+    Array.isArray(input.systemMessages) &&
+    isRecord(input.taggedSystemMessages)
+  );
+};
+
+const isMastraDBMessageLike = (message: unknown): message is MastraDBMessage => {
+  return (
+    isRecord(message) &&
+    typeof message.id === 'string' &&
+    typeof message.role === 'string' &&
+    'content' in message &&
+    'createdAt' in message
+  );
+};
+
+export const isScorerRunOutputForAgent = (output: unknown): output is ScorerRunOutputForAgent => {
+  return Array.isArray(output) && output.every(isMastraDBMessageLike);
+};
+
+const getTextFromMessages = (messages: unknown, role: string): string | undefined => {
+  if (!Array.isArray(messages)) return undefined;
+
+  const message = messages.find(message => isRecord(message) && message.role === role);
+  return message ? getTextFromValue(message) : undefined;
+};
 
 /**
  * Rounds a number to two decimal places.
@@ -139,10 +224,11 @@ export const createTestRun = (
 /**
  * Extracts the user message text from a scorer run input.
  *
- * Finds the first message with role 'user' and extracts its text content.
+ * Accepts the agent shape (`{ inputMessages }`), `ModelMessage[]`
+ * (`{ messages }`), workflow input (`{ prompt }`), and a bare string.
  *
- * @param input - The scorer run input containing input messages
- * @returns The user message text, or `undefined` if no user message is found
+ * @param input - The scorer run input
+ * @returns The user message text, or `undefined` if none can be extracted
  *
  * @example
  * ```ts
@@ -153,9 +239,19 @@ export const createTestRun = (
  *   });
  * ```
  */
-export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): string | undefined => {
-  const message = input?.inputMessages.find(({ role }) => role === 'user');
-  return message ? getTextContentFromMastraDBMessage(message) : undefined;
+export const getUserMessageFromRunInput = (input?: unknown): string | undefined => {
+  if (typeof input === 'string') return input;
+  if (!isRecord(input)) return undefined;
+
+  return (
+    getTextFromMessages(input.inputMessages, 'user') ??
+    getTextFromMessages(input.messages, 'user') ??
+    (typeof input.prompt === 'string' ? input.prompt : undefined) ??
+    (typeof input.text === 'string' ? input.text : undefined) ??
+    getTextFromValue(input.content) ??
+    getTextFromValue(input.input) ??
+    getTextFromValue(input.user)
+  );
 };
 
 /**
@@ -176,11 +272,12 @@ export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): stri
  *   });
  * ```
  */
-export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
+export const getSystemMessagesFromRunInput = (input?: unknown): string[] => {
   const systemMessages: string[] = [];
+  if (!isRecord(input)) return systemMessages;
 
   // Add standard system messages
-  if (input?.systemMessages) {
+  if (Array.isArray(input.systemMessages)) {
     systemMessages.push(
       ...input.systemMessages
         .map(msg => {
@@ -200,12 +297,28 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
     );
   }
 
+  const addSystemMessages = (messages: unknown) => {
+    if (!Array.isArray(messages)) return;
+
+    systemMessages.push(
+      ...messages
+        .filter(message => isRecord(message) && message.role === 'system')
+        .map(message => getTextFromValue(message))
+        .filter((content): content is string => Boolean(content)),
+    );
+  };
+
+  addSystemMessages(input.inputMessages);
+  addSystemMessages(input.messages);
+
   // Add tagged system messages (these are specialized system prompts)
-  if (input?.taggedSystemMessages) {
+  if (isRecord(input.taggedSystemMessages)) {
     Object.values(input.taggedSystemMessages).forEach(messages => {
+      if (!Array.isArray(messages)) return;
       messages.forEach(msg => {
-        if (typeof msg.content === 'string') {
-          systemMessages.push(msg.content);
+        const content = getTextFromValue(msg);
+        if (content) {
+          systemMessages.push(content);
         }
       });
     });
@@ -231,7 +344,7 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
  *   });
  * ```
  */
-export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string => {
+export const getCombinedSystemPrompt = (input?: unknown): string => {
   const systemMessages = getSystemMessagesFromRunInput(input);
   return systemMessages.join('\n\n');
 };
@@ -239,10 +352,12 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
 /**
  * Extracts the assistant message text from a scorer run output.
  *
- * Finds the first message with role 'assistant' and extracts its text content.
+ * Accepts the agent shape (`MastraDBMessage[]` / `ModelMessage[]`), workflow
+ * output (`{ text }`), task output (`{ content }`), a single assistant message
+ * object, and a bare string.
  *
- * @param output - The scorer run output (array of MastraDBMessage)
- * @returns The assistant message text, or `undefined` if no assistant message is found
+ * @param output - The scorer run output
+ * @returns The assistant message text, or `undefined` if none can be extracted
  *
  * @example
  * ```ts
@@ -253,9 +368,25 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
  *   });
  * ```
  */
-export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
-  const message = output?.find(({ role }) => role === 'assistant');
-  return message ? getTextContentFromMastraDBMessage(message) : undefined;
+export const getAssistantMessageFromRunOutput = (output?: unknown) => {
+  if (typeof output === 'string') return output;
+  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (!isRecord(output)) return undefined;
+
+  const isAssistantOutput = output.role === undefined || output.role === 'assistant';
+
+  if (isAssistantOutput && typeof output.text === 'string') return output.text;
+  if (isAssistantOutput && typeof output.content === 'string') return output.content;
+  if (isAssistantOutput && (isRecord(output.content) || Array.isArray(output.content))) {
+    return (
+      getTextContentFromMastraDBMessage(output as MastraDBMessage) ||
+      getTextContentFromMastraDBMessage(output.content as MastraDBMessage) ||
+      undefined
+    );
+  }
+  if (output.role === 'assistant') return getTextContentFromMastraDBMessage(output as MastraDBMessage) || undefined;
+
+  return undefined;
 };
 
 /**
@@ -738,7 +869,7 @@ export { extractTrajectory } from '@mastra/core/evals';
  * const result = compareTrajectories(
  *   { steps: [{ stepType: 'tool_call', name: 'search' }, { stepType: 'tool_call', name: 'summarize' }] },
  *   { steps: [{ stepType: 'tool_call', name: 'search' }, { stepType: 'tool_call', name: 'summarize' }] },
- *   { strictOrder: true }
+ *   { ordering: 'strict' }
  * );
  * // result.score = 1.0
  * ```
@@ -748,59 +879,18 @@ export function compareTrajectories(
   expected: Trajectory | { steps: ExpectedStep[] },
   options: {
     ordering?: 'strict' | 'relaxed' | 'unordered';
-    /** @deprecated Use ordering: 'strict' instead */
-    strictOrder?: boolean;
-    compareStepData?: boolean;
     allowRepeatedSteps?: boolean;
   } = {},
 ): TrajectoryComparisonResult {
-  const { compareStepData = false, allowRepeatedSteps = true } = options;
+  const { allowRepeatedSteps = true, ordering = 'relaxed' } = options;
 
-  // Normalize expected to ExpectedStep[]. We need to distinguish between
-  // Trajectory (containing TrajectoryStep[]) and { steps: ExpectedStep[] }.
-  // TrajectoryStep variants have fields like toolArgs, toolResult, agentId, modelId, etc.
-  // ExpectedStep has optional data, children (TrajectoryExpectation), and lacks those fields.
-  const trajectoryStepKeys = [
-    'toolArgs',
-    'toolResult',
-    'agentId',
-    'modelId',
-    'durationMs',
-    'success',
-    'promptTokens',
-    'completionTokens',
-  ];
-  const hasTrajectorySteps =
-    expected.steps.length > 0 && expected.steps.some((s: any) => trajectoryStepKeys.some(k => k in s));
-
-  let normalizedExpected: { steps: ExpectedStep[] };
-  if (hasTrajectorySteps) {
-    // Convert TrajectoryStep[] to ExpectedStep[] by extracting step-specific data
-    normalizedExpected = {
-      steps: (expected.steps as TrajectoryStep[]).map((s: TrajectoryStep) => {
-        const stepData = getStepData(s);
-        const data: Record<string, unknown> = {};
-        if (stepData.input !== undefined) data.input = stepData.input;
-        if (stepData.output !== undefined) data.output = stepData.output;
-        return {
-          name: s.name,
-          stepType: s.stepType,
-          ...(Object.keys(data).length > 0 ? { data } : {}),
-        } as ExpectedStep;
-      }),
-    };
-  } else {
-    // Already ExpectedStep[] — use as-is
-    normalizedExpected = expected as { steps: ExpectedStep[] };
-  }
-
-  // Resolve ordering: new `ordering` option takes precedence over deprecated `strictOrder`
-  let ordering: 'strict' | 'relaxed' | 'unordered' = 'relaxed';
-  if (options.ordering) {
-    ordering = options.ordering;
-  } else if (options.strictOrder) {
-    ordering = 'strict';
-  }
+  // Normalize expected to ExpectedStep[]. TrajectoryStep and ExpectedStep share
+  // the same field names, so TrajectoryStep[] can be used directly as ExpectedStep[].
+  // The only structural difference is `children` (TrajectoryStep[] vs TrajectoryExpectation),
+  // but compareTrajectories doesn't recurse into children.
+  const normalizedExpected: { steps: ExpectedStep[] } = {
+    steps: expected.steps as ExpectedStep[],
+  };
 
   if (normalizedExpected.steps.length === 0) {
     return {
@@ -827,18 +917,14 @@ export function compareTrajectories(
     .map(([name]: [string, number]) => name);
 
   if (ordering === 'strict') {
-    return compareStrictOrder(actual, normalizedExpected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+    return compareStrictOrder(actual, normalizedExpected, { allowRepeatedSteps, repeatedSteps });
   }
 
   if (ordering === 'unordered') {
-    return compareUnorderedPresence(actual, normalizedExpected, {
-      compareStepData,
-      allowRepeatedSteps,
-      repeatedSteps,
-    });
+    return compareUnorderedPresence(actual, normalizedExpected, { allowRepeatedSteps, repeatedSteps });
   }
 
-  return compareRelaxedOrder(actual, normalizedExpected, { compareStepData, allowRepeatedSteps, repeatedSteps });
+  return compareRelaxedOrder(actual, normalizedExpected, { allowRepeatedSteps, repeatedSteps });
 }
 
 /**
@@ -866,7 +952,7 @@ export type TrajectoryComparisonResult = {
 function compareStrictOrder(
   actual: Trajectory,
   expected: { steps: ExpectedStep[] },
-  opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
+  opts: { allowRepeatedSteps: boolean; repeatedSteps: string[] },
 ): TrajectoryComparisonResult {
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
   const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
@@ -881,13 +967,8 @@ function compareStrictOrder(
     const actualName = actualNames[i];
     const expectedName = expectedNames[i];
     if (actualName === expectedName) {
-      if (opts.compareStepData && actual.steps[i] && expected.steps[i]) {
-        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!, true)) {
-          matchedSteps++;
-          matchedExpectedIndices.add(i);
-        }
-      } else if (actual.steps[i] && expected.steps[i]) {
-        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!, false)) {
+      if (actual.steps[i] && expected.steps[i]) {
+        if (expectedStepMatches(actual.steps[i]!, expected.steps[i]!)) {
           matchedSteps++;
           matchedExpectedIndices.add(i);
         }
@@ -932,7 +1013,7 @@ function compareStrictOrder(
 function compareRelaxedOrder(
   actual: Trajectory,
   expected: { steps: ExpectedStep[] },
-  opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
+  opts: { allowRepeatedSteps: boolean; repeatedSteps: string[] },
 ): TrajectoryComparisonResult {
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
   const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
@@ -950,7 +1031,7 @@ function compareRelaxedOrder(
     for (let j = lastMatchedIndex + 1; j < actualNames.length; j++) {
       if (actualNames[j] === expectedName) {
         if (actual.steps[j] && expected.steps[i]) {
-          if (expectedStepMatches(actual.steps[j]!, expected.steps[i]!, opts.compareStepData)) {
+          if (expectedStepMatches(actual.steps[j]!, expected.steps[i]!)) {
             matchedSteps++;
             lastMatchedIndex = j;
             matchedExpectedIndices.add(i);
@@ -1000,36 +1081,42 @@ function compareRelaxedOrder(
 }
 
 /**
- * Extract the data fields from a step for comparison purposes.
- * Returns an object with `input` and `output` fields based on the step type.
+ * Fields on each ExpectedStep variant that are comparable data (not structural).
+ * Used by `expectedStepMatches` to know which fields to compare when `compareData` is true.
  */
-function getStepData(step: TrajectoryStep): { input?: unknown; output?: unknown } {
-  switch (step.stepType) {
-    case 'tool_call':
-    case 'mcp_tool_call':
-      return { input: step.toolArgs, output: step.toolResult };
-    case 'workflow_step':
-      return { output: step.output };
-    default:
-      return {};
-  }
-}
+const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
+  tool_call: ['toolArgs', 'toolResult', 'success'],
+  mcp_tool_call: ['toolArgs', 'toolResult', 'mcpServer', 'success'],
+  model_generation: ['modelId', 'promptTokens', 'completionTokens', 'finishReason'],
+  agent_run: ['agentId'],
+  workflow_step: ['stepId', 'status', 'output'],
+  workflow_run: ['workflowId', 'status'],
+  workflow_conditional: ['conditionCount', 'selectedSteps'],
+  workflow_parallel: ['branchCount', 'parallelSteps'],
+  workflow_loop: ['loopType', 'totalIterations'],
+  workflow_sleep: ['sleepDurationMs', 'sleepType'],
+  workflow_wait_event: ['eventName', 'eventReceived'],
+  processor_run: ['processorId'],
+};
 
 /**
  * Check if an actual TrajectoryStep matches an ExpectedStep.
- * Matches by name, optionally by stepType, and optionally by data fields.
+ * Matches by name, optionally by stepType, and auto-compares any variant-specific
+ * fields that are present on the expected step.
  */
-function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep, compareData: boolean): boolean {
+function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep): boolean {
   if (actual.name !== expected.name) return false;
   if (expected.stepType && actual.stepType !== expected.stepType) return false;
 
-  if (compareData && expected.data) {
-    const actualData = getStepData(actual);
-    for (const [key, value] of Object.entries(expected.data)) {
-      const actualField = key === 'input' ? actualData.input : key === 'output' ? actualData.output : undefined;
-      if (actualField === undefined) return false;
+  if (expected.stepType) {
+    const fields = COMPARABLE_FIELDS_BY_TYPE[expected.stepType] ?? [];
+    for (const field of fields) {
+      const expectedVal = (expected as any)[field];
+      if (expectedVal === undefined) continue; // field not specified in expectation, skip
+      const actualVal = (actual as any)[field];
+      if (actualVal === undefined) return false;
       try {
-        if (JSON.stringify(actualField) !== JSON.stringify(value)) return false;
+        if (JSON.stringify(actualVal) !== JSON.stringify(expectedVal)) return false;
       } catch {
         return false;
       }
@@ -1042,40 +1129,22 @@ function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep, com
 function compareUnorderedPresence(
   actual: Trajectory,
   expected: { steps: ExpectedStep[] },
-  opts: { compareStepData: boolean; allowRepeatedSteps: boolean; repeatedSteps: string[] },
+  opts: { allowRepeatedSteps: boolean; repeatedSteps: string[] },
 ): TrajectoryComparisonResult {
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
   const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
 
   let matchedSteps = 0;
   const matchedExpectedIndices = new Set<number>();
-
-  if (opts.compareStepData) {
-    // For data comparison, try to match each expected step to an unused actual step
-    const usedIndices = new Set<number>();
-    for (let i = 0; i < expected.steps.length; i++) {
-      const expectedStep = expected.steps[i]!;
-      for (let j = 0; j < actual.steps.length; j++) {
-        if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep, true)) {
-          matchedSteps++;
-          matchedExpectedIndices.add(i);
-          usedIndices.add(j);
-          break;
-        }
-      }
-    }
-  } else {
-    // Name + stepType based presence check using expectedStepMatches
-    const usedIndices = new Set<number>();
-    for (let i = 0; i < expected.steps.length; i++) {
-      const expectedStep = expected.steps[i]!;
-      for (let j = 0; j < actual.steps.length; j++) {
-        if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep, false)) {
-          matchedSteps++;
-          matchedExpectedIndices.add(i);
-          usedIndices.add(j);
-          break;
-        }
+  const usedIndices = new Set<number>();
+  for (let i = 0; i < expected.steps.length; i++) {
+    const expectedStep = expected.steps[i]!;
+    for (let j = 0; j < actual.steps.length; j++) {
+      if (!usedIndices.has(j) && expectedStepMatches(actual.steps[j]!, expectedStep)) {
+        matchedSteps++;
+        matchedExpectedIndices.add(i);
+        usedIndices.add(j);
+        break;
       }
     }
   }

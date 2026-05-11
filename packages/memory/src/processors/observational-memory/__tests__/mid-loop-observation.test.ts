@@ -255,6 +255,69 @@ describe('Mid-Loop Observation', () => {
       expect(recordAfterStep1?.lastObservedAt).toBeDefined();
     });
 
+    it('should rotate the response message id after synchronous observation persists', async () => {
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+      const sealedAtRotate: boolean[] = [];
+      const rotateResponseMessageId = vi.fn(() => {
+        const latestAssistant = [...messageList.get.all.db()].reverse().find(message => message.role === 'assistant');
+        sealedAtRotate.push(
+          !!(latestAssistant?.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed,
+        );
+        return 'rotated-response-id';
+      });
+
+      const messageList = new MessageList({
+        threadId,
+        resourceId,
+      });
+
+      for (let i = 0; i < 20; i++) {
+        const msg = createTestMessage(
+          `Step ${i}: `.padEnd(200, 'x'),
+          i % 2 === 0 ? 'user' : 'assistant',
+          `msg-${i}`,
+          new Date(Date.now() - (20 - i) * 1000),
+        );
+        messageList.add(msg, 'memory');
+      }
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).not.toHaveBeenCalled();
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(sealedAtRotate).toEqual([true]);
+    });
+
     it('should NOT trigger observation on step 0', async () => {
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};
@@ -410,6 +473,87 @@ describe('Mid-Loop Observation', () => {
       // The key assertion is that activation happened (above checks).
       // The bug we're fixing is that activation was DEFERRED to step 0 of next turn,
       // which would have left activeObservations empty after step 1.
+    });
+
+    it('should rotate the active response message id only when OM seals a buffered chunk', async () => {
+      const persistMessages = vi.fn(async () => {});
+      const memoryProvider: MemoryContextProvider = {
+        ...noopMemoryProvider,
+        persistMessages,
+      };
+      const omWithBuffering = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: {
+          model: createMockObserverModel(),
+          messageTokens: 1000,
+          bufferTokens: 200,
+          bufferActivation: 0.8,
+        },
+        reflection: {
+          model: createMockObserverModel(),
+          observationTokens: 50000,
+        },
+      });
+      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering, memoryProvider);
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+      const messageList = new MessageList({ threadId, resourceId });
+      const rotateResponseMessageId = vi.fn(() => 'rotated-response-id');
+
+      for (let i = 0; i < 10; i++) {
+        messageList.add(
+          createTestMessage(
+            `Warmup ${i}: `.padEnd(200, 'x'),
+            i % 2 === 0 ? 'user' : 'assistant',
+            `warmup-${i}`,
+            new Date(Date.now() - (100 - i) * 1000),
+          ),
+          'memory',
+        );
+      }
+
+      await processorWithBuffering.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      for (let i = 0; i < 20; i++) {
+        if (persistMessages.mock.calls.length > 0) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      expect(persistMessages).toHaveBeenCalled();
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+
+      const rotateCallsAfterBufferedStep = rotateResponseMessageId.mock.calls.length;
+
+      await processorWithBuffering.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(rotateCallsAfterBufferedStep);
     });
   });
 });

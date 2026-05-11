@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Popover, PopoverContent, PopoverTrigger } from './popover';
+import { Settings } from 'lucide-react';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Label } from '../Label';
-import { Settings } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
 const meta: Meta<typeof Popover> = {
   title: 'Feedback/Popover',
@@ -11,7 +11,6 @@ const meta: Meta<typeof Popover> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

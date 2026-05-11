@@ -1,4 +1,5 @@
 import type { AgentConfig } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ModelByInputTokens } from './model-by-input-tokens';
@@ -48,6 +49,8 @@ export interface ProviderOptions {
   google?: GoogleProviderOptions;
   [key: string]: Record<string, any> | undefined;
 }
+
+export type ActivationTTL = number | string | false;
 
 /**
  * Configuration for the observation step (Observer agent).
@@ -136,6 +139,20 @@ export interface ObservationConfig {
    * @default 0.8 (retain ~20% of messageTokens as raw messages)
    */
   bufferActivation?: number;
+
+  /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable top-level `activateAfterIdle` for observations.
+   * If unset, top-level `activateAfterIdle` is used for observations.
+   */
+  activateAfterIdle?: ActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * If unset, top-level `activateOnProviderChange` is used for observations.
+   */
+  activateOnProviderChange?: boolean;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -232,6 +249,20 @@ export interface ReflectionConfig {
   blockAfter?: number;
 
   /**
+   * Time before buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable idle activation for reflections.
+   * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
+   */
+  activateAfterIdle?: ActivationTTL;
+
+  /**
+   * Force-activate buffered reflections when the actor provider/model changes.
+   * Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to enable.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Ratio (0-1) controlling when async reflection buffering starts.
    * When observation tokens reach `observationTokens * bufferActivation`,
    * reflection runs in the background. On activation at the full threshold,
@@ -281,6 +312,12 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
+  activateAfterIdle?: number;
+}
+
+export interface ObservationModelContext {
+  provider?: string;
+  modelId?: string;
 }
 
 /**
@@ -621,6 +658,21 @@ export interface DataOmActivationPart {
 
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
+
+    /** Whether activation was triggered by threshold crossing, activateAfterIdle expiry, or a model/provider change */
+    triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+
+    /** Unix-ms timestamp of the last assistant message part used for TTL checks */
+    lastActivityAt?: number;
+
+    /** How long activateAfterIdle had been exceeded when activation fired */
+    ttlExpiredMs?: number;
+
+    /** Previous assistant model identifier that triggered activation, e.g. openai/gpt-4o */
+    previousModel?: string;
+
+    /** Current actor model identifier that triggered activation, e.g. anthropic/claude-3-7-sonnet */
+    currentModel?: string;
   };
 }
 
@@ -758,10 +810,26 @@ export interface ObservationalMemoryConfig {
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
    *
+   * Use `{ vector: true }` to also index emitted observation groups into the
+   * configured vector store for semantic recall, and `scope` to limit recall
+   * browsing to the current thread instead of the whole resource.
+   *
    * @experimental
    * @default false
    */
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+
+  /**
+   * Optional callback used to index emitted observation groups for semantic retrieval.
+   */
+  onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
 
   /**
    * Model for both Observer and Reflector agents.
@@ -809,6 +877,38 @@ export interface ObservationalMemoryConfig {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
+
+  /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observations activate regardless of whether the
+   * token threshold has been reached.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
+   * opt reflections into idle activation.
+   */
+  activateAfterIdle?: ActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * This helps flush prompt-cache-specific memory before switching to a different model.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateOnProviderChange`
+   * to opt reflections into provider-change activation.
+   */
+  activateOnProviderChange?: boolean;
+
+  /** @internal Parent Mastra instance for custom gateway model resolution. */
+  mastra?: Mastra;
 }
 
 /**
@@ -830,6 +930,10 @@ export interface ResolvedObservationConfig {
   bufferTokens?: number;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
+  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: number;
+  /** Force-activate buffered observations when the actor model/provider changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
@@ -851,15 +955,25 @@ export interface ResolvedReflectionConfig {
   providerOptions: ProviderOptions;
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
+  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: number;
+  /** Force-activate buffered reflections when the actor model/provider changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */
   instruction?: string;
 }
 
+export interface ObserveHookUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 export interface ObserveHooks {
   onObservationStart?: () => void;
-  onObservationEnd?: () => void;
+  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
   onReflectionStart?: () => void;
-  onReflectionEnd?: () => void;
+  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
 }

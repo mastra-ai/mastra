@@ -8,11 +8,11 @@ import {
   EntityType,
   SpanType,
   wrapMastra,
-  executeWithContext,
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, Span } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -572,8 +572,12 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
 
   if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
     for (const [_id, scorerObject] of Object.entries(scorersToUse || {})) {
+      if (engine.mastra) {
+        scorerObject.scorer.__registerMastra(engine.mastra);
+        engine.mastra.addScorer(scorerObject.scorer, undefined, { source: 'code' });
+      }
       runScorer({
-        scorerId: scorerObject.name,
+        scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,
         runId: runId,
         input: input,

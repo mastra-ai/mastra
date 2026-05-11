@@ -11,8 +11,11 @@ import type {
 import { describe, it, expect } from 'vitest';
 import {
   getTextContentFromMastraDBMessage,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
+  isScorerRunOutputForAgent,
   createTestMessage,
   createToolInvocation,
   extractToolResults,
@@ -58,13 +61,116 @@ describe('Scorer Utils', () => {
       const result = getAssistantMessageFromRunOutput(output);
       expect(result).toBe('Assistant response');
     });
+
+    it('should extract assistant text from workflow-style output', () => {
+      expect(getAssistantMessageFromRunOutput({ text: 'Workflow response' })).toBe('Workflow response');
+      expect(getAssistantMessageFromRunOutput({ content: 'Task response' })).toBe('Task response');
+      expect(getAssistantMessageFromRunOutput('String response')).toBe('String response');
+    });
+
+    it('should not extract non-assistant role text from single message output', () => {
+      expect(getAssistantMessageFromRunOutput({ role: 'user', text: 'User text' })).toBeUndefined();
+      expect(getAssistantMessageFromRunOutput({ role: 'user', content: 'User content' })).toBeUndefined();
+    });
+
+    it('should extract assistant text from nested content output', () => {
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { parts: [{ type: 'text', text: 'Nested task response' }] },
+        }),
+      ).toBe('Nested task response');
+
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { content: { parts: [{ type: 'text', text: 'Nested message response' }] } },
+        }),
+      ).toBe('Nested message response');
+    });
+
+    it('should extract assistant text from model messages', () => {
+      const output = [
+        { role: 'user', content: 'Question' },
+        { role: 'assistant', content: [{ type: 'text', text: 'Model response' }] },
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Model response');
+    });
   });
 
-  /**
-   * When using a reasoning model, the reasoning text
-   * should be available in the scorer's preprocess function. Currently, there's
-   * no utility function to extract reasoning text from the run output.
-   */
+  describe('isScorerRunOutputForAgent', () => {
+    it('should only match arrays of message-like objects', () => {
+      expect(isScorerRunOutputForAgent([createTestMessage({ role: 'assistant', content: 'Assistant response' })])).toBe(
+        true,
+      );
+      expect(isScorerRunOutputForAgent(['Assistant response'])).toBe(false);
+      expect(isScorerRunOutputForAgent([{ role: 'assistant', content: 'Assistant response' }])).toBe(false);
+      expect(isScorerRunOutputForAgent({ text: 'Workflow response' })).toBe(false);
+    });
+  });
+
+  describe('getUserMessageFromRunInput', () => {
+    it('should extract user text content from agent input', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          createTestMessage({ content: 'User question', role: 'user' }),
+          createTestMessage({ content: 'Assistant response', role: 'assistant' }),
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('User question');
+    });
+
+    it('should extract user text from workflow-style input', () => {
+      expect(getUserMessageFromRunInput({ prompt: 'Workflow question' })).toBe('Workflow question');
+      expect(getUserMessageFromRunInput('String question')).toBe('String question');
+    });
+
+    it('should extract user text from common non-agent input fields', () => {
+      expect(getUserMessageFromRunInput({ text: 'Text question' })).toBe('Text question');
+      expect(getUserMessageFromRunInput({ content: 'Content question' })).toBe('Content question');
+      expect(getUserMessageFromRunInput({ input: { text: 'Input question' } })).toBe('Input question');
+      expect(getUserMessageFromRunInput({ user: { body: 'User question' } })).toBe('User question');
+    });
+
+    it('should extract user text from model messages', () => {
+      const input = {
+        messages: [
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: [{ type: 'text', text: 'Model question' }] },
+        ],
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('Model question');
+    });
+
+    it('should extract user text from message text and body fields', () => {
+      expect(getUserMessageFromRunInput({ messages: [{ role: 'user', text: 'Text message question' }] })).toBe(
+        'Text message question',
+      );
+      expect(getUserMessageFromRunInput({ inputMessages: [{ role: 'user', body: 'Body message question' }] })).toBe(
+        'Body message question',
+      );
+    });
+  });
+
+  describe('getCombinedSystemPrompt', () => {
+    it('should include system messages from non-agent message arrays', () => {
+      expect(
+        getCombinedSystemPrompt({
+          messages: [
+            { role: 'system', content: 'System message' },
+            { role: 'user', content: 'User question' },
+          ],
+          inputMessages: [{ role: 'system', text: 'Input system message' }],
+        }),
+      ).toBe('Input system message\n\nSystem message');
+    });
+  });
+
   describe('Reasoning text extraction', () => {
     it('should extract reasoning from content.reasoning field', () => {
       const messageWithReasoning: MastraDBMessage = {
@@ -81,8 +187,6 @@ describe('Scorer Utils', () => {
 
       const output: ScorerRunOutputForAgent = [messageWithReasoning];
 
-      // Currently there's no function to get reasoning - this test documents the missing functionality
-      // We need a getReasoningFromRunOutput function similar to getAssistantMessageFromRunOutput
       const reasoning = getReasoningFromRunOutput(output);
 
       expect(reasoning).toBe('Let me think about this step by step...');
@@ -826,7 +930,7 @@ describe('Scorer Utils', () => {
         const a = { steps: [step('search'), step('summarize')] };
         const b = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(a, b, { strictOrder: true });
+        const result = compareTrajectories(a, b, { ordering: 'strict' });
 
         expect(result.score).toBe(1);
       });
@@ -835,7 +939,7 @@ describe('Scorer Utils', () => {
         const a = { steps: [step('summarize'), step('search')] };
         const b = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(a, b, { strictOrder: true });
+        const result = compareTrajectories(a, b, { ordering: 'strict' });
 
         expect(result.score).toBe(0);
         expect(result.outOfOrderSteps).toContain('summarize');
@@ -846,7 +950,7 @@ describe('Scorer Utils', () => {
         const actual = { steps: [step('search'), step('summarize'), step('format')] };
         const expected = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(actual, expected, { strictOrder: true });
+        const result = compareTrajectories(actual, expected, { ordering: 'strict' });
 
         // 2 matched / 2 expected = 1.0, extra penalty: (1/2) * 0.5 = 0.25, score = 0.75
         expect(result.score).toBe(0.75);
@@ -857,7 +961,7 @@ describe('Scorer Utils', () => {
         const actual = { steps: [step('search')] };
         const expected = { steps: [step('search'), step('summarize'), step('format')] };
 
-        const result = compareTrajectories(actual, expected, { strictOrder: true });
+        const result = compareTrajectories(actual, expected, { ordering: 'strict' });
 
         // Position 0: match. Positions 1,2: actual is undefined -> no match
         expect(result.matchedSteps).toBe(1);
@@ -870,7 +974,7 @@ describe('Scorer Utils', () => {
         const actual = { steps: [step('search'), step('search'), step('summarize')] };
         const expected = { steps: [step('search'), step('summarize')] };
 
-        const result = compareTrajectories(actual, expected, { strictOrder: true, allowRepeatedSteps: false });
+        const result = compareTrajectories(actual, expected, { ordering: 'strict', allowRepeatedSteps: false });
 
         expect(result.repeatedSteps).toEqual(['search']);
         // Position 0: match. Position 1: search vs summarize -> no match.
@@ -880,31 +984,31 @@ describe('Scorer Utils', () => {
       });
     });
 
-    describe('step data comparison', () => {
-      it('should match steps with same toolArgs when compareStepData is true', () => {
+    describe('step data comparison (auto-detected from expected fields)', () => {
+      it('should match steps with same toolArgs', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
       });
 
-      it('should not match steps with different toolArgs when compareStepData is true', () => {
+      it('should not match steps with different toolArgs', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'world' } }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(0);
       });
 
-      it('should not match steps with different toolResult when compareStepData is true', () => {
+      it('should not match steps with different toolResult', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolResult: { count: 5 } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolResult: { count: 10 } }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(0);
       });
@@ -913,7 +1017,7 @@ describe('Scorer Utils', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'process' }] };
         const b = { steps: [{ stepType: 'workflow_step' as const, name: 'process' }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(0);
         expect(result.matchedSteps).toBe(0);
@@ -930,14 +1034,15 @@ describe('Scorer Utils', () => {
             },
           ],
         };
+        // Expected step only specifies stepType, no toolArgs/toolResult → matches by name+type only
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search' }] };
 
-        const result = compareTrajectories(a, b, { compareStepData: true });
+        const result = compareTrajectories(a, b);
 
         expect(result.score).toBe(1);
       });
 
-      it('should work with compareStepData in strict mode', () => {
+      it('should auto-compare data fields in strict mode', () => {
         const a = {
           steps: [
             { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'a' } },
@@ -951,7 +1056,7 @@ describe('Scorer Utils', () => {
           ],
         };
 
-        const result = compareTrajectories(a, b, { strictOrder: true, compareStepData: true });
+        const result = compareTrajectories(a, b, { ordering: 'strict' });
 
         // Position 0 matches, position 1 name matches but data doesn't -> not matched
         expect(result.matchedSteps).toBe(1);
@@ -1006,26 +1111,6 @@ describe('Scorer Utils', () => {
       });
     });
 
-    describe('ordering option backward compat', () => {
-      it('should treat strictOrder: true the same as ordering: strict', () => {
-        const a: Trajectory = {
-          steps: [
-            { stepType: 'tool_call' as const, name: 'b' },
-            { stepType: 'tool_call' as const, name: 'a' },
-          ],
-        };
-        const b: Trajectory = {
-          steps: [
-            { stepType: 'tool_call' as const, name: 'a' },
-            { stepType: 'tool_call' as const, name: 'b' },
-          ],
-        };
-        const r1 = compareTrajectories(a, b, { strictOrder: true });
-        const r2 = compareTrajectories(a, b, { ordering: 'strict' });
-        expect(r1.score).toBe(r2.score);
-      });
-    });
-
     describe('ExpectedStep matching', () => {
       it('should match ExpectedStep by name only (no stepType)', () => {
         const actual: Trajectory = {
@@ -1072,41 +1157,41 @@ describe('Scorer Utils', () => {
         expect(result.missingSteps).toEqual(['search']);
       });
 
-      it('should match ExpectedStep with data comparison', () => {
+      it('should match ExpectedStep when toolArgs match', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'hello' } }],
         };
         const expected: { steps: ExpectedStep[] } = {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         };
 
-        const result = compareTrajectories(actual, expected, { compareStepData: true });
+        const result = compareTrajectories(actual, expected);
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
       });
 
-      it('should fail data comparison when toolArgs differ', () => {
+      it('should fail when expected toolArgs differ from actual', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'different' } }],
         };
         const expected: { steps: ExpectedStep[] } = {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          steps: [{ name: 'search', stepType: 'tool_call', toolArgs: { query: 'hello' } }],
         };
 
-        const result = compareTrajectories(actual, expected, { compareStepData: true });
+        const result = compareTrajectories(actual, expected);
         expect(result.score).toBe(0);
         expect(result.matchedSteps).toBe(0);
       });
 
-      it('should match without data comparison even when data differs', () => {
+      it('should match by name+type only when no data fields are specified', () => {
         const actual: Trajectory = {
-          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'different' } }],
+          steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'anything' } }],
         };
         const expected: { steps: ExpectedStep[] } = {
-          steps: [{ name: 'search', stepType: 'tool_call', data: { input: { query: 'hello' } } }],
+          // No toolArgs specified → data comparison skipped, matches by name+type
+          steps: [{ name: 'search', stepType: 'tool_call' }],
         };
 
-        // compareStepData defaults to false
         const result = compareTrajectories(actual, expected);
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
@@ -1152,7 +1237,7 @@ describe('Scorer Utils', () => {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } }],
         };
 
-        const result = compareTrajectories(actual, expectedAsTrajectory, { compareStepData: true });
+        const result = compareTrajectories(actual, expectedAsTrajectory);
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
       });

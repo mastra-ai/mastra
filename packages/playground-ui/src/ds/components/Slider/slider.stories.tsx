@@ -7,7 +7,6 @@ const meta: Meta<typeof Slider> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     disabled: {
       control: { type: 'boolean' },

@@ -3,6 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
   MastraCompositeStore,
+  TABLE_BACKGROUND_TASKS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -10,13 +11,19 @@ import {
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
+import { BackgroundTasksStorageCloudflare } from './storage/domains/background-tasks';
 import { MemoryStorageCloudflare } from './storage/domains/memory';
 import { ScoresStorageCloudflare } from './storage/domains/scores';
 import { WorkflowsStorageCloudflare } from './storage/domains/workflows';
 import { isWorkersConfig } from './storage/types';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageCloudflare, ScoresStorageCloudflare, WorkflowsStorageCloudflare };
+export {
+  BackgroundTasksStorageCloudflare,
+  MemoryStorageCloudflare,
+  ScoresStorageCloudflare,
+  WorkflowsStorageCloudflare,
+};
 export type { CloudflareDomainConfig } from './storage/types';
 import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './storage/types';
 
@@ -54,7 +61,13 @@ export class CloudflareKVStorage extends MastraCompositeStore {
     }
 
     // Validate all required table bindings exist
-    const requiredTables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS] as const;
+    const requiredTables = [
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_SCORERS,
+      TABLE_BACKGROUND_TASKS,
+    ] as const;
 
     for (const table of requiredTables) {
       if (!(table in config.bindings)) {
@@ -82,6 +95,7 @@ export class CloudflareKVStorage extends MastraCompositeStore {
       let workflows: WorkflowsStorageCloudflare;
       let memory: MemoryStorageCloudflare;
       let scores: ScoresStorageCloudflare;
+      let backgroundTasks: BackgroundTasksStorageCloudflare;
 
       if (isWorkersConfig(config)) {
         this.validateWorkersConfig(config);
@@ -96,6 +110,7 @@ export class CloudflareKVStorage extends MastraCompositeStore {
         workflows = new WorkflowsStorageCloudflare(domainConfig);
         memory = new MemoryStorageCloudflare(domainConfig);
         scores = new ScoresStorageCloudflare(domainConfig);
+        backgroundTasks = new BackgroundTasksStorageCloudflare(domainConfig);
       } else {
         this.validateRestConfig(config);
         this.accountId = config.accountId.trim();
@@ -113,12 +128,14 @@ export class CloudflareKVStorage extends MastraCompositeStore {
         workflows = new WorkflowsStorageCloudflare(domainConfig);
         memory = new MemoryStorageCloudflare(domainConfig);
         scores = new ScoresStorageCloudflare(domainConfig);
+        backgroundTasks = new BackgroundTasksStorageCloudflare(domainConfig);
       }
 
       this.stores = {
         workflows,
         memory,
         scores,
+        backgroundTasks,
       };
     } catch (error) {
       throw new MastraError(

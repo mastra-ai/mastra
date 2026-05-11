@@ -35,11 +35,27 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
       // Increment iteration count
       currentIteration++;
 
+      // Skip scorers if a background task result was just injected —
+      // the LLM hasn't processed it yet, so scoring now would be premature
+      if (inputData.backgroundTaskPending) {
+        return inputData;
+      }
+
       // Only run isTaskComplete check if scorers are configured
       const hasIsTaskCompleteScorers = isTaskComplete?.scorers && isTaskComplete.scorers.length > 0;
 
       //Also check if the step result is not continued to avoid running scorers before the LLM is done
       if (!hasIsTaskCompleteScorers || inputData.stepResult?.isContinued) {
+        return inputData;
+      }
+
+      // Skip scoring when the only thing this iteration did was update working
+      // memory. Working-memory updates are housekeeping — not a task response —
+      // so grading them would produce misleading scores. The next iteration
+      // (where the LLM actually answers the user) will be scored instead.
+      const iterationToolCalls = (inputData.output.toolCalls || []) as Array<{ toolName: string }>;
+      const isWorkingMemoryTool = (name: string) => name === 'updateWorkingMemory' || name === 'update-working-memory';
+      if (iterationToolCalls.length > 0 && iterationToolCalls.every(tc => isWorkingMemoryTool(tc.toolName))) {
         return inputData;
       }
       // Get the original user message for context
