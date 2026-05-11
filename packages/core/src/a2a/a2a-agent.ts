@@ -270,6 +270,16 @@ function createResumeSchema(): string {
   });
 }
 
+function resolveStreamTextId(candidateIds: Array<string | undefined>): string {
+  for (const candidate of candidateIds) {
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return 'text-1';
+}
+
 function createResponseMessages(text: string): MastraDBMessage[] {
   if (!text) {
     return [];
@@ -380,9 +390,6 @@ export class A2AAgent implements SubAgent {
 
   readonly #url: string;
   readonly #description: string;
-  readonly #instructions: A2AAgentOptions['instructions'];
-  readonly #defaultOptions?: A2AAgentOptions['defaultOptions'];
-  readonly #backgroundTasks?: A2AAgentOptions['backgroundTasks'];
   readonly #headers: Record<string, string>;
   readonly #fetch: FetchLike;
   readonly #retries: number;
@@ -392,11 +399,6 @@ export class A2AAgent implements SubAgent {
   readonly #abortSignal?: AbortSignal;
   readonly #timeoutMs?: number;
   readonly #verifyAgentCard?: A2AAgentOptions['verifyAgentCard'];
-  readonly #model = {
-    modelId: 'a2a/remote-agent',
-    provider: 'a2a',
-    specificationVersion: 'v2',
-  } as const;
 
   #cachedBootstrap?: AgentBootstrap;
   readonly #runState = new Map<string, A2AAgentRunState>();
@@ -406,9 +408,6 @@ export class A2AAgent implements SubAgent {
   constructor(options: A2AAgentOptions) {
     this.#url = options.url.replace(/\/$/, '');
     this.#description = options.description ?? `Remote A2A agent at ${this.#url}`;
-    this.#instructions = options.instructions;
-    this.#defaultOptions = options.defaultOptions;
-    this.#backgroundTasks = options.backgroundTasks;
     this.#headers = options.headers ?? {};
     this.#fetch = options.fetch ?? fetch;
     this.#retries = options.retries ?? 0;
@@ -430,11 +429,8 @@ export class A2AAgent implements SubAgent {
     return this.#description;
   }
 
-  getModel: SubAgent['getModel'] = async () => this.#model as Awaited<ReturnType<SubAgent['getModel']>>;
-
-  getDefaultOptions() {
-    return this.#defaultOptions;
-  }
+  getModel: SubAgent['getModel'] = async () =>
+    ({ specificationVersion: 'v2' }) as Awaited<ReturnType<SubAgent['getModel']>>;
 
   hasOwnMemory(): boolean {
     return Boolean(this.#memory);
@@ -459,14 +455,10 @@ export class A2AAgent implements SubAgent {
     });
   }
 
-  getInstructions: SubAgent['getInstructions'] = async () => this.#instructions ?? '';
+  getInstructions: SubAgent['getInstructions'] = async () => '';
 
   __registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
-  }
-
-  getBackgroundTasksConfig() {
-    return this.#backgroundTasks;
   }
 
   async generate(
@@ -1064,7 +1056,7 @@ export class A2AAgent implements SubAgent {
           } else if (isMessage(event)) {
             const text = extractMessageText(event);
             if (text) {
-              textId ??= `${runId}-text`;
+              textId ??= resolveStreamTextId([event.messageId, task?.id]);
               if (textId) {
                 if (!textStarted) {
                   yield { type: 'text-start', payload: { id: textId } };
@@ -1080,7 +1072,7 @@ export class A2AAgent implements SubAgent {
               )
               .join('');
             if (text) {
-              textId ??= `${runId}-text`;
+              textId ??= resolveStreamTextId([event.artifact.artifactId, task?.id]);
               if (textId) {
                 if (!textStarted) {
                   yield { type: 'text-start', payload: { id: textId } };
@@ -1292,6 +1284,7 @@ export class A2AAgent implements SubAgent {
   }): A2AAgentStreamResult {
     const messageList = new MessageList();
     const toolName = this.id;
+    const textId = resolveStreamTextId([result.message?.messageId, result.task?.id]);
     if (result.text) {
       messageList.add(
         {
@@ -1304,9 +1297,9 @@ export class A2AAgent implements SubAgent {
 
     const fullStream = (async function* () {
       if (result.text) {
-        yield { type: 'text-start', payload: { id: `${runId}-text` } };
-        yield { type: 'text-delta', payload: { id: `${runId}-text`, text: result.text } };
-        yield { type: 'text-end', payload: { id: `${runId}-text` } };
+        yield { type: 'text-start', payload: { id: textId } };
+        yield { type: 'text-delta', payload: { id: textId, text: result.text } };
+        yield { type: 'text-end', payload: { id: textId } };
       }
 
       if (result.resumePayload) {

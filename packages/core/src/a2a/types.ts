@@ -1,6 +1,4 @@
 import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
-import type { AgentExecutionOptions, AgentInstructions } from '../agent';
-import type { AgentBackgroundConfig } from '../background-tasks';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 
 /**
@@ -161,9 +159,6 @@ export interface A2AAgentOptions {
   id?: string;
   name?: string;
   description?: string;
-  instructions?: AgentInstructions;
-  defaultOptions?: AgentExecutionOptions<unknown>;
-  backgroundTasks?: AgentBackgroundConfig;
   headers?: Record<string, string>;
   retries?: number;
   backoffMs?: number;

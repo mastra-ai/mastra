@@ -1,6 +1,9 @@
 import type { AgentCard, Message, Task } from '@a2a-js/sdk';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { SubAgent } from '../agent';
+import { Agent } from '../agent';
+import { RequestContext } from '../request-context';
 
 import { A2AAgent } from './a2a-agent';
 
@@ -63,6 +66,28 @@ function createMessage(text: string): Message {
     messageId: 'message-1',
     parts: [{ kind: 'text', text }],
   } as Message;
+}
+
+function createParentModel() {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      text: 'ok',
+      content: [{ type: 'text', text: 'ok' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    }),
+  });
 }
 
 function createFetchMock(
@@ -212,6 +237,115 @@ describe('A2AAgent', () => {
     );
   });
 
+  it('can be registered on a parent agent and executed through the generated subagent tool', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      (input, init) => {
+        expect(String(input)).toBe('https://remote.example.com/a2a/remote');
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.method).toBe('message/send');
+        return jsonRpcResult(createMessage('Remote subagent response'));
+      },
+    ]);
+
+    const remote = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const parent = new Agent({
+      id: 'parent-agent',
+      name: 'Parent Agent',
+      instructions: 'Delegate to subagents when needed.',
+      model: createParentModel(),
+      agents: {
+        remote,
+      },
+    });
+
+    const tools = await parent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+
+    const agentTool = tools['agent-remote'];
+    expect(agentTool).toBeDefined();
+
+    const result = await agentTool.execute!({ prompt: 'Do the remote thing' }, {
+      toolCallId: 'call-1',
+      messages: [],
+    } as any);
+
+    expect(result.text).toBe('Remote subagent response');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('streams through the generated subagent tool when the parent agent uses stream mode', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      (input, init) => {
+        expect(String(input)).toBe('https://remote.example.com/a2a/remote');
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.method).toBe('message/stream');
+        return createSseResponse([
+          createTask(),
+          {
+            kind: 'artifact-update',
+            taskId: 'task-1',
+            contextId: 'ctx-1',
+            lastChunk: true,
+            artifact: {
+              artifactId: 'response:text',
+              name: 'response.txt',
+              parts: [{ kind: 'text', text: 'Hello from remote stream' }],
+            },
+          },
+          {
+            kind: 'status-update',
+            taskId: 'task-1',
+            contextId: 'ctx-1',
+            final: true,
+            status: {
+              state: 'completed',
+              timestamp: new Date().toISOString(),
+            },
+          },
+        ]);
+      },
+    ]);
+
+    const remote = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const parent = new Agent({
+      id: 'parent-agent',
+      name: 'Parent Agent',
+      instructions: 'Delegate to subagents when needed.',
+      model: createParentModel(),
+      agents: {
+        remote,
+      },
+    });
+
+    const tools = await parent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'stream',
+    });
+
+    const agentTool = tools['agent-remote'];
+    const result = await agentTool.execute!({ prompt: 'Stream the remote thing' }, {
+      toolCallId: 'call-2',
+      messages: [],
+    } as any);
+
+    expect(result.text).toBe('Hello from remote stream');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for a non-stream task to complete in generate()', async () => {
     const workingTask = createTask();
     const completedTask = createTask({
@@ -341,6 +475,9 @@ describe('A2AAgent', () => {
     }
 
     expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
+    expect(events[0]?.payload?.id).toBe('message-1');
+    expect(events[1]?.payload?.id).toBe('message-1');
+    expect(events[2]?.payload?.id).toBe('message-1');
     expect(await stream.text).toBe('Buffered remote response');
     expect((await stream.getResult()).text).toBe('Buffered remote response');
   });
@@ -387,6 +524,9 @@ describe('A2AAgent', () => {
     }
 
     expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
+    expect(events[0]?.payload?.id).toBe('response:text');
+    expect(events[1]?.payload?.id).toBe('response:text');
+    expect(events[2]?.payload?.id).toBe('response:text');
     expect(await stream.text).toBe('Hello from stream');
     expect((await stream.task)?.status.state).toBe('completed');
   });
