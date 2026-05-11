@@ -311,13 +311,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             for (const toolCall of successfulResults) {
               // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
               // can access it on the chunk's providerMetadata.mastra.modelOutput.
+              // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
               const providerMetadata = !toolCall.providerExecuted
                 ? await getProviderMetadataWithModelOutput(toolCall)
                 : undefined;
-
-              const chunkProviderMetadata = providerMetadata
-                ? ({ ...toolCall.providerMetadata, ...providerMetadata } as ProviderMetadata)
-                : (toolCall.providerMetadata as ProviderMetadata | undefined);
+              const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
+                | ProviderMetadata
+                | undefined;
 
               const chunk = await transformToolChunk(
                 {
@@ -405,13 +405,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
           // can access it on the chunk's providerMetadata.mastra.modelOutput.
+          // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
           const providerMetadata = !toolCall.providerExecuted
             ? await getProviderMetadataWithModelOutput(toolCall)
             : undefined;
-
-          const chunkProviderMetadata = providerMetadata
-            ? ({ ...toolCall.providerMetadata, ...providerMetadata } as ProviderMetadata)
-            : (toolCall.providerMetadata as ProviderMetadata | undefined);
+          const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
 
           const chunk = await transformToolChunk(
             {
