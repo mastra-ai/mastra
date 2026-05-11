@@ -696,7 +696,7 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        return data.startsWith('data:') || data.startsWith('http') ? data : `data:${mimeType};base64,${data}`;
+        return data;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;

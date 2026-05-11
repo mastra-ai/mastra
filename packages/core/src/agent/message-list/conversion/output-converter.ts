@@ -5,6 +5,7 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
+import { categorizeFileData } from '../prompt/image-utils';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
@@ -334,6 +335,60 @@ function restoreAssistantFileProviderMetadata(
   });
 }
 
+function restoreRawBase64FileData(
+  modelMessages: AIV5Type.ModelMessage[],
+  dbMessages: MastraDBMessage[],
+): AIV5Type.ModelMessage[] {
+  const queueByRole = new Map<'user' | 'assistant', string[]>([
+    ['user', []],
+    ['assistant', []],
+  ]);
+
+  for (const message of dbMessages) {
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    const queue = queueByRole.get(message.role)!;
+    for (const part of message.content?.parts || []) {
+      if (part.type !== 'file' || typeof part.data !== 'string' || part.data.startsWith('data:')) continue;
+      if (categorizeFileData(part.data, part.mimeType).type === 'raw') {
+        queue.push(part.data);
+      }
+    }
+  }
+
+  if (queueByRole.get('user')!.length === 0 && queueByRole.get('assistant')!.length === 0) {
+    return modelMessages;
+  }
+
+  return modelMessages.map(message => {
+    if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content === 'string') {
+      return message;
+    }
+
+    const queue = queueByRole.get(message.role);
+    if (!queue?.length) return message;
+
+    let changed = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'file' || typeof part.data !== 'string' || !part.data.startsWith('data:')) {
+        return part;
+      }
+      const raw = queue.shift();
+      if (!raw) return part;
+      changed = true;
+      return { ...part, data: raw };
+    });
+
+    return changed ? { ...message, content } : message;
+  });
+}
+
+/**
+ * Restores raw base64 payloads on model file parts when the original DB message
+ * contained plain base64 data (without a data URI prefix).
+ *
+ * This preserves direct `generateText({ messages })` behavior for providers like
+ * Gemini where inline_data.data must be a raw base64 payload.
+ */
 /**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
@@ -350,7 +405,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
 
-  const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
+  const withAssistantMetadata = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
+  const result = restoreRawBase64FileData(withAssistantMetadata, dbMessages);
 
   // Restore message-level providerOptions from metadata.providerMetadata
   // This preserves providerOptions through the DB → UI → Model conversion
