@@ -165,6 +165,84 @@ describe('Observability Config Validation', () => {
         });
       }).not.toThrow();
     });
+
+    it('should accept sensitiveDataFilter as boolean', () => {
+      expect(() => {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: false,
+        });
+      }).not.toThrow();
+    });
+
+    it('should accept sensitiveDataFilter as options object', () => {
+      expect(() => {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            sensitiveFields: ['mySecret'],
+            redactionStyle: 'partial',
+            redactionToken: '***',
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should reject invalid sensitiveDataFilter value', () => {
+      try {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          // @ts-expect-error - testing invalid config
+          sensitiveDataFilter: 'invalid',
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        if (error instanceof MastraError) {
+          expect(error.id).toBe('OBSERVABILITY_INVALID_CONFIG');
+          expect(error.message).toContain('sensitiveDataFilter');
+        }
+      }
+    });
+
+    it('should reject unknown keys on sensitiveDataFilter options', () => {
+      try {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            // @ts-expect-error - misspelled option should fail-closed
+            sensitiveFieldsTypo: ['client_secret'],
+          },
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        if (error instanceof MastraError) {
+          expect(error.id).toBe('OBSERVABILITY_INVALID_CONFIG');
+          expect(error.message).toContain('sensitiveDataFilter');
+        }
+      }
+    });
   });
 
   describe('SamplingStrategy validation', () => {

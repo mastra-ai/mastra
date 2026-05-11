@@ -35,7 +35,7 @@ export const buttonVariants = cva(
           'bg-surface4 border border-border2 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
         cta: 'bg-accent1 border border-transparent hover:bg-accent1/90 hover:shadow-glow-accent1 disabled:hover:shadow-none text-surface1 font-medium',
         ghost:
-          'bg-transparent border border-transparent hover:bg-surface4 hover:text-neutral6 active:bg-surface5 text-neutral4',
+          'bg-transparent border border-transparent hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral4',
         outline:
           'bg-transparent border border-border1 hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral5',
         link: 'inline-flex justify-start rounded-none h-auto px-0 bg-transparent text-neutral3 hover:text-neutral4 gap-1 [&>svg]:mx-0 w-auto [&>svg]:opacity-70',

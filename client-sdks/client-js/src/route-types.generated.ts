@@ -5850,6 +5850,176 @@ export interface PostAgentsAgentIdDeclineNetworkToolCall_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/resume-stream-until-idle
+// ============================================================================
+export type PostAgentsAgentIdResumeStreamUntilIdle_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
+  instructions?: (string | string[] | any | any[]) | undefined;
+  system?: (string | string[] | any | any[]) | undefined;
+  context?: any[] | undefined;
+  memory?:
+    | {
+        thread:
+          | string
+          | {
+              id: string;
+              [x: string]: unknown;
+            };
+        resource: string;
+        options?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        readOnly?: boolean | undefined;
+      }
+    | undefined;
+  runId: string;
+  savePerStep?: boolean | undefined;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
+  maxSteps?: number | undefined;
+  stopWhen?: any | undefined;
+  providerOptions?:
+    | {
+        anthropic?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        google?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        openai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+        xai?:
+          | {
+              [key: string]: any;
+            }
+          | undefined;
+      }
+    | undefined;
+  modelSettings?: any | undefined;
+  activeTools?: string[] | undefined;
+  toolsets?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  clientTools?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  toolChoice?:
+    | (
+        | ('auto' | 'none' | 'required')
+        | {
+            type: 'tool';
+            toolName: string;
+          }
+      )
+    | undefined;
+  requireToolApproval?: boolean | undefined;
+  scorers?:
+    | (
+        | {
+            [key: string]: any;
+          }
+        | {
+            [key: string]: {
+              scorer: string;
+              sampling?: any | undefined;
+            };
+          }
+      )
+    | undefined;
+  returnScorerData?: boolean | undefined;
+  tracingOptions?:
+    | {
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContextKeys?: string[] | undefined;
+        traceId?: string | undefined;
+        parentSpanId?: string | undefined;
+        tags?: string[] | undefined;
+        hideInput?: boolean | undefined;
+        hideOutput?: boolean | undefined;
+      }
+    | undefined;
+  output?: any | undefined;
+  structuredOutput?:
+    | {
+        schema: {
+          [x: string]: unknown;
+        };
+        model?: (string | any) | undefined;
+        instructions?: string | undefined;
+        jsonPromptInjection?: boolean | undefined;
+        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+        fallbackValue?: any | undefined;
+      }
+    | undefined;
+  resumeData: unknown;
+  toolCallId?: string | undefined;
+  maxIdleMs?: number | undefined;
+  [x: string]: unknown;
+};
+
+export type PostAgentsAgentIdResumeStreamUntilIdle_Response = any;
+
+export type PostAgentsAgentIdResumeStreamUntilIdle_Request = Simplify<
+  (PostAgentsAgentIdResumeStreamUntilIdle_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdResumeStreamUntilIdle_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdResumeStreamUntilIdle_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdResumeStreamUntilIdle_Body
+        ? { body?: PostAgentsAgentIdResumeStreamUntilIdle_Body }
+        : { body: PostAgentsAgentIdResumeStreamUntilIdle_Body })
+>;
+
+export interface PostAgentsAgentIdResumeStreamUntilIdle_RouteContract {
+  pathParams: PostAgentsAgentIdResumeStreamUntilIdle_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdResumeStreamUntilIdle_Body;
+  request: PostAgentsAgentIdResumeStreamUntilIdle_Request;
+  response: PostAgentsAgentIdResumeStreamUntilIdle_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/network
 // ============================================================================
 export type PostAgentsAgentIdNetwork_PathParams = {
@@ -8643,6 +8813,100 @@ export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteC
 }
 
 // ============================================================================
+// Route: POST /workflows/:workflowId/runs/:runId/steps/execute
+// ============================================================================
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams = {
+  /** Unique identifier for the workflow */
+  workflowId: string;
+  /** Unique identifier for the workflow run */
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
+  stepId: string;
+  executionPath: number[];
+  stepResults: {
+    [key: string]: any;
+  };
+  state: {
+    [key: string]: any;
+  };
+  requestContext: {
+    [key: string]: any;
+  };
+  input?: any | undefined;
+  resumeData?: any | undefined;
+  retryCount?: number | undefined;
+  foreachIdx?: number | undefined;
+  format?: ('legacy' | 'vnext') | undefined;
+  perStep?: boolean | undefined;
+  validateInputs?: boolean | undefined;
+};
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = any;
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request = Simplify<
+  (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams extends never
+    ? {}
+    : { params: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body
+        ? { body?: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body }
+        : { body: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body })
+>;
+
+export interface PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract {
+  pathParams: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams;
+  queryParams: never;
+  body: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body;
+  request: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request;
+  response: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /workflows/events
+// ============================================================================
+export type PostWorkflowsEvents_Body = {
+  event: {
+    id: string;
+    type: string;
+    data: unknown;
+    runId: string;
+    createdAt: string;
+    index?: number | undefined;
+    deliveryAttempt?: number | undefined;
+    [x: string]: unknown;
+  };
+};
+
+export type PostWorkflowsEvents_Response = {
+  ok: boolean;
+  retry?: boolean | undefined;
+};
+
+export type PostWorkflowsEvents_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostWorkflowsEvents_Body extends never
+      ? {}
+      : {} extends PostWorkflowsEvents_Body
+        ? { body?: PostWorkflowsEvents_Body }
+        : { body: PostWorkflowsEvents_Body })
+>;
+
+export interface PostWorkflowsEvents_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostWorkflowsEvents_Body;
+  request: PostWorkflowsEvents_Request;
+  response: PostWorkflowsEvents_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tools
 // ============================================================================
 export type GetTools_Response = {
@@ -8922,8 +9186,8 @@ export interface PostProcessorsProcessorIdExecute_RouteContract {
 export type PostV1Responses_Body = {
   /** Optional model identifier override, such as openai/gpt-5. When omitted, the agent default model is used. */
   model?: string | undefined;
-  /** Mastra agent ID for the request */
-  agent_id: string;
+  /** Mastra agent ID for the request. Required unless previous_response_id is provided. */
+  agent_id?: string | undefined;
   input:
     | string
     | {
@@ -8962,6 +9226,12 @@ export type PostV1Responses_Body = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9052,6 +9322,12 @@ export type PostV1Responses_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -9174,6 +9450,12 @@ export type GetV1ResponsesResponseId_Response = {
     | {
         /** OpenAI provider options such as previousResponseId, conversation, or responseId */
         openai?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        /** Azure OpenAI provider options such as previousResponseId, store, or itemId */
+        azure?:
           | {
               [key: string]: unknown;
             }
@@ -11065,6 +11347,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'generic'
             | 'model_generation'
             | 'model_step'
+            | 'model_inference'
             | 'model_chunk'
             | 'mcp_tool_call'
             | 'processor_run'
@@ -11084,6 +11367,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11230,6 +11514,7 @@ export type GetObservabilityTraces_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11248,7 +11533,8 @@ export type GetObservabilityTraces_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11435,6 +11721,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'generic'
             | 'model_generation'
             | 'model_step'
+            | 'model_inference'
             | 'model_chunk'
             | 'mcp_tool_call'
             | 'processor_run'
@@ -11454,6 +11741,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11601,6 +11889,7 @@ export type GetObservabilityBranches_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11619,7 +11908,8 @@ export type GetObservabilityBranches_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11790,6 +12080,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11808,7 +12099,8 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11972,6 +12264,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11990,7 +12283,8 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12148,6 +12442,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12166,7 +12461,8 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12245,6 +12541,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12263,7 +12560,8 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12540,12 +12838,15 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
       | (
           | 'AGENT'
           | 'WORKFLOW'
+          | 'TRAJECTORY'
+          | 'STEP'
           | 'agent_run'
           | 'scorer_run'
           | 'scorer_step'
           | 'generic'
           | 'model_generation'
           | 'model_step'
+          | 'model_inference'
           | 'model_chunk'
           | 'mcp_tool_call'
           | 'processor_run'
@@ -12565,6 +12866,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'rag_vector_operation'
           | 'rag_action'
           | 'graph_action'
+          | 'mapping'
         )
       | undefined;
     structuredOutput?: boolean | undefined;
@@ -14870,7 +15172,7 @@ export type PostObservabilityMetricsAggregate_Body = {
   name: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
-  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
   distinctColumn?:
     | (
         | 'entityType'
@@ -14885,6 +15187,8 @@ export type PostObservabilityMetricsAggregate_Body = {
         | 'environment'
         | 'executionSource'
         | 'serviceName'
+        | 'threadId'
+        | 'resourceId'
       )
     | undefined;
   filters?:
@@ -15037,7 +15341,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
   groupBy: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
-  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
   distinctColumn?:
     | (
         | 'entityType'
@@ -15052,6 +15356,8 @@ export type PostObservabilityMetricsBreakdown_Body = {
         | 'environment'
         | 'executionSource'
         | 'serviceName'
+        | 'threadId'
+        | 'resourceId'
       )
     | undefined;
   filters?:
@@ -15205,7 +15511,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
-  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to low/medium-cardinality categorical columns; ID columns are not allowed. */
+  /** Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions. */
   distinctColumn?:
     | (
         | 'entityType'
@@ -15220,6 +15526,8 @@ export type PostObservabilityMetricsTimeseries_Body = {
         | 'environment'
         | 'executionSource'
         | 'serviceName'
+        | 'threadId'
+        | 'resourceId'
       )
     | undefined;
   filters?:
@@ -16229,6 +16537,17 @@ export type GetWellKnownAgentIdAgentCardJson_Response = {
   defaultInputModes: string[];
   defaultOutputModes: string[];
   supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
   skills: {
     id: string;
     name: string;
@@ -71945,6 +72264,58 @@ export interface GetSystemPackages_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /system/api-schema
+// ============================================================================
+export type GetSystemApiSchema_Response = {
+  version: 1;
+  routes: {
+    method: string;
+    path: string;
+    responseType: string;
+    pathParamSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    queryParamSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    bodySchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    responseSchema?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    responseShape: {
+      kind: 'array' | 'record' | 'object-property' | 'single' | 'unknown';
+      listProperty?: string | undefined;
+      paginationProperty?: string | undefined;
+    };
+  }[];
+};
+
+export type GetSystemApiSchema_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSystemApiSchema_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetSystemApiSchema_Request;
+  response: GetSystemApiSchema_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /datasets
 // ============================================================================
 export type GetDatasets_QueryParams = {
@@ -74297,14 +74668,16 @@ export interface GetBackgroundTasksStream_RouteContract {
 // ============================================================================
 export type GetBackgroundTasks_QueryParams = {
   agentId?: string | undefined;
-  status?: ('pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out') | undefined;
+  status?: ('pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out') | undefined;
   runId?: string | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
+  toolName?: string | undefined;
+  toolCallId?: string | undefined;
   fromDate?: Date | undefined;
   toDate?: Date | undefined;
-  dateFilterBy?: ('createdAt' | 'startedAt' | 'completedAt') | undefined;
-  orderBy?: ('createdAt' | 'startedAt' | 'completedAt') | undefined;
+  dateFilterBy?: ('createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt') | undefined;
+  orderBy?: ('createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt') | undefined;
   orderDirection?: ('asc' | 'desc') | undefined;
   page?: number | undefined;
   perPage?: number | undefined;
@@ -74313,7 +74686,7 @@ export type GetBackgroundTasks_QueryParams = {
 export type GetBackgroundTasks_Response = {
   tasks: {
     id: string;
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+    status: 'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
     toolName: string;
     toolCallId: string;
     args: {
@@ -74336,6 +74709,7 @@ export type GetBackgroundTasks_Response = {
     retryCount: number;
     maxRetries: number;
     timeoutMs: number;
+    suspendPayload?: unknown | undefined;
   }[];
   total: number;
 };
@@ -74368,7 +74742,7 @@ export type GetBackgroundTasksBackgroundTaskId_PathParams = {
 
 export type GetBackgroundTasksBackgroundTaskId_Response = {
   id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+  status: 'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
   toolName: string;
   toolCallId: string;
   args: {
@@ -74391,6 +74765,7 @@ export type GetBackgroundTasksBackgroundTaskId_Response = {
   retryCount: number;
   maxRetries: number;
   timeoutMs: number;
+  suspendPayload?: unknown | undefined;
 };
 
 export type GetBackgroundTasksBackgroundTaskId_Request = Simplify<
@@ -74975,6 +75350,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
   'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
   'POST /agents/:agentId/decline-network-tool-call': PostAgentsAgentIdDeclineNetworkToolCall_RouteContract;
+  'POST /agents/:agentId/resume-stream-until-idle': PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
   'POST /agents/:agentId/network': PostAgentsAgentIdNetwork_RouteContract;
   'POST /agents/:agentId/model': PostAgentsAgentIdModel_RouteContract;
   'POST /agents/:agentId/model/reset': PostAgentsAgentIdModelReset_RouteContract;
@@ -75020,6 +75396,8 @@ export interface RouteTypes {
   'POST /workflows/:workflowId/restart-async': PostWorkflowsWorkflowIdRestartAsync_RouteContract;
   'POST /workflows/:workflowId/restart-all-active-workflow-runs': PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_RouteContract;
   'POST /workflows/:workflowId/restart-all-active-workflow-runs-async': PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteContract;
+  'POST /workflows/:workflowId/runs/:runId/steps/execute': PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract;
+  'POST /workflows/events': PostWorkflowsEvents_RouteContract;
   'GET /tools': GetTools_RouteContract;
   'GET /tools/:toolId': GetToolsToolId_RouteContract;
   'POST /tools/:toolId/execute': PostToolsToolIdExecute_RouteContract;
@@ -75229,6 +75607,7 @@ export interface RouteTypes {
   'GET /processor-providers': GetProcessorProviders_RouteContract;
   'GET /processor-providers/:providerId': GetProcessorProvidersProviderId_RouteContract;
   'GET /system/packages': GetSystemPackages_RouteContract;
+  'GET /system/api-schema': GetSystemApiSchema_RouteContract;
   'GET /datasets': GetDatasets_RouteContract;
   'POST /datasets': PostDatasets_RouteContract;
   'GET /datasets/:datasetId': GetDatasetsDatasetId_RouteContract;
@@ -75393,6 +75772,9 @@ export interface Client {
   };
   '/agents/:agentId/resume-stream': {
     POST: PostAgentsAgentIdResumeStream_RouteContract;
+  };
+  '/agents/:agentId/resume-stream-until-idle': {
+    POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
   };
   '/agents/:agentId/skills/:skillName': {
     GET: GetAgentsAgentIdSkillsSkillName_RouteContract;
@@ -75929,6 +76311,9 @@ export interface Client {
     GET: GetStoredWorkspacesStoredWorkspaceId_RouteContract;
     PATCH: PatchStoredWorkspacesStoredWorkspaceId_RouteContract;
   };
+  '/system/api-schema': {
+    GET: GetSystemApiSchema_RouteContract;
+  };
   '/system/packages': {
     GET: GetSystemPackages_RouteContract;
   };
@@ -76035,6 +76420,9 @@ export interface Client {
   '/workflows/:workflowId/runs/:runId/cancel': {
     POST: PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract;
   };
+  '/workflows/:workflowId/runs/:runId/steps/execute': {
+    POST: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract;
+  };
   '/workflows/:workflowId/start': {
     POST: PostWorkflowsWorkflowIdStart_RouteContract;
   };
@@ -76055,6 +76443,9 @@ export interface Client {
   };
   '/workflows/:workflowId/time-travel-stream': {
     POST: PostWorkflowsWorkflowIdTimeTravelStream_RouteContract;
+  };
+  '/workflows/events': {
+    POST: PostWorkflowsEvents_RouteContract;
   };
   '/workspaces': {
     GET: GetWorkspaces_RouteContract;

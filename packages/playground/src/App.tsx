@@ -334,6 +334,7 @@ function App() {
     () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
     [baseUrl, apiPrefix],
   );
+  const studioHeaders = useMemo(() => ({ ...headers, 'x-mastra-client-type': 'studio' }), [headers]);
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -348,7 +349,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
+    <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>

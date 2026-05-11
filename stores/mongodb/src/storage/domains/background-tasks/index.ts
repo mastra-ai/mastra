@@ -23,11 +23,13 @@ function toDoc(task: BackgroundTask): Record<string, any> {
     args: task.args,
     result: task.result ?? null,
     error: task.error ?? null,
+    suspend_payload: task.suspendPayload ?? null,
     retry_count: task.retryCount,
     max_retries: task.maxRetries,
     timeout_ms: task.timeoutMs,
     createdAt: task.createdAt.toISOString(),
     startedAt: task.startedAt?.toISOString() ?? null,
+    suspendedAt: task.suspendedAt?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,
   };
 }
@@ -45,11 +47,13 @@ function fromDoc(doc: Record<string, any>): BackgroundTask {
     runId: doc.run_id ?? '',
     result: doc.result ?? undefined,
     error: doc.error ?? undefined,
+    suspendPayload: doc.suspend_payload ?? undefined,
     retryCount: Number(doc.retry_count ?? 0),
     maxRetries: Number(doc.max_retries ?? 0),
     timeoutMs: Number(doc.timeout_ms ?? 300_000),
     createdAt: new Date(doc.createdAt),
     startedAt: doc.startedAt ? new Date(doc.startedAt) : undefined,
+    suspendedAt: doc.suspendedAt ? new Date(doc.suspendedAt) : undefined,
     completedAt: doc.completedAt ? new Date(doc.completedAt) : undefined,
   };
 }
@@ -129,8 +133,10 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if ('status' in update) $set.status = update.status;
     if ('result' in update) $set.result = update.result ?? null;
     if ('error' in update) $set.error = update.error ?? null;
+    if ('suspendPayload' in update) $set.suspend_payload = update.suspendPayload ?? null;
     if ('retryCount' in update) $set.retry_count = update.retryCount;
     if ('startedAt' in update) $set.startedAt = update.startedAt?.toISOString() ?? null;
+    if ('suspendedAt' in update) $set.suspendedAt = update.suspendedAt?.toISOString() ?? null;
     if ('completedAt' in update) $set.completedAt = update.completedAt?.toISOString() ?? null;
 
     if (Object.keys($set).length === 0) return;
@@ -157,13 +163,16 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if (filter.resourceId) query.resource_id = filter.resourceId;
     if (filter.runId) query.run_id = filter.runId;
     if (filter.toolName) query.tool_name = filter.toolName;
+    if (filter.toolCallId) query.tool_call_id = filter.toolCallId;
     // Date range filtering
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? 'startedAt'
-        : filter.dateFilterBy === 'completedAt'
-          ? 'completedAt'
-          : 'createdAt';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.dateFilterBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     if (filter.fromDate) {
       query[dateCol] = { ...(query[dateCol] || {}), $gte: filter.fromDate.toISOString() };
     }
@@ -172,7 +181,13 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     }
 
     const orderCol =
-      filter.orderBy === 'startedAt' ? 'startedAt' : filter.orderBy === 'completedAt' ? 'completedAt' : 'createdAt';
+      filter.orderBy === 'startedAt'
+        ? 'startedAt'
+        : filter.orderBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.orderBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     const direction = filter.orderDirection === 'desc' ? -1 : 1;
 
     const collection = await this.getCollection();
@@ -207,9 +222,11 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? 'startedAt'
-        : filter.dateFilterBy === 'completedAt'
-          ? 'completedAt'
-          : 'createdAt';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.dateFilterBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     if (filter.fromDate) {
       query[dateCol] = { ...(query[dateCol] || {}), $gte: filter.fromDate.toISOString() };
     }
@@ -221,6 +238,7 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if (filter.resourceId) query.resource_id = filter.resourceId;
     if (filter.runId) query.run_id = filter.runId;
     if (filter.toolName) query.tool_name = filter.toolName;
+    if (filter.toolCallId) query.tool_call_id = filter.toolCallId;
 
     if (Object.keys(query).length === 0) return; // Safety: don't delete everything
 

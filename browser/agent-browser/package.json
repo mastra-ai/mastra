@@ -30,8 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.19.0",
-    "typed-emitter": "^2.1.0"
+    "agent-browser": "0.19.0"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",

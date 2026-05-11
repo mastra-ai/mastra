@@ -1,8 +1,42 @@
-# OtelExporter - OpenTelemetry Tracing Exporter
+# OtelExporter - OpenTelemetry Exporter
 
-Export Mastra traces to any OpenTelemetry-compatible observability platform.
+Export Mastra traces and logs to any OpenTelemetry-compatible observability platform.
 
 > **⚠️ Important:** This package requires you to install an additional exporter package based on your provider. Each provider section below includes the specific installation command.
+
+## Signals
+
+The exporter forwards two OpenTelemetry signals:
+
+- **Traces** — Mastra spans, exported via `BatchSpanProcessor` over an OTLP `SpanExporter`.
+- **Logs** — Mastra log events, exported via `BatchLogRecordProcessor` over an OTLP `LogRecordExporter`. When a log carries `traceId`/`spanId`, both the OTEL log record's native trace context and `mastra.traceId`/`mastra.spanId` attributes are populated so backends like Grafana, Datadog, and Honeycomb can correlate logs to traces automatically.
+
+Both signals are enabled by default and share the same provider configuration. Toggle individual signals via `signals`:
+
+```typescript
+new OtelExporter({
+  provider: {
+    /* ... */
+  },
+  signals: {
+    traces: true, // default
+    logs: true, // default
+  },
+});
+```
+
+Log export requires the matching OTLP log exporter package for your protocol — install one of:
+
+```bash
+# HTTP/JSON
+npm install @opentelemetry/exporter-logs-otlp-http
+# HTTP/Protobuf
+npm install @opentelemetry/exporter-logs-otlp-proto
+# gRPC
+npm install @opentelemetry/exporter-logs-otlp-grpc @grpc/grpc-js
+```
+
+If the matching log exporter package is not installed, log export is silently disabled and traces continue to work.
 
 ## Environment Variables
 
@@ -397,7 +431,13 @@ interface OtelExporterConfig {
 
   // Export configuration
   timeout?: number; // Export timeout in milliseconds (default: 30000)
-  batchSize?: number; // Max spans per batch (default: 512)
+  batchSize?: number; // Max spans/logs per batch (default: 512)
+
+  // Per-signal toggles. All signals are enabled by default.
+  signals?: {
+    traces?: boolean;
+    logs?: boolean;
+  };
 
   // Debug
   logLevel?: 'debug' | 'info' | 'warn' | 'error';

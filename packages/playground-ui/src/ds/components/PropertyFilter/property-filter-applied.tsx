@@ -1,6 +1,8 @@
-import { XIcon } from 'lucide-react';
+import { LockIcon, XIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
@@ -17,6 +19,15 @@ export type PropertyFilterAppliedProps = {
    * its input so the user can start typing immediately.
    */
   autoFocusFieldId?: string;
+  /**
+   * Field ids whose pills must remain visible and read-only — value stays
+   * displayed but cannot be edited or removed. Use when an upstream context
+   * (e.g. agent-scoped traces tab) pre-applies a filter that the user must
+   * not be able to clear.
+   */
+  lockedFieldIds?: readonly string[];
+  /** Tooltip content shown on hover/focus of any locked pill. */
+  lockedTooltipContent?: ReactNode;
 };
 
 function stringifyTokenValue(value: string | string[]) {
@@ -31,6 +42,55 @@ const OPERATOR_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md `;
 const REMOVE_CLASS = 'rounded-tl-none rounded-bl-none border-l-transparent';
 const INPUT_CLASS = 'rounded-none';
 const VALUE_BUTTON_CLASS = 'rounded-none';
+const LOCKED_VALUE_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md text-neutral5 px-2.5 max-w-[20rem] truncate`;
+const LOCKED_ICON_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md rounded-r-lg border-r-2 border-l-1 gap-1.5 text-neutral3`;
+const DEFAULT_LOCKED_TOOLTIP = 'This filter is set by the current context and cannot be removed here.';
+
+function lookupOptionLabel(field: PropertyFilterField, value: string | string[]): string {
+  if (field.kind === 'pick-multi' && field.options) {
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'Any';
+      return value.map(v => field.options.find(o => o.value === v)?.label ?? v).join(', ');
+    }
+    return field.options.find(o => o.value === value)?.label ?? value;
+  }
+  return stringifyTokenValue(value);
+}
+
+type LockedTokenPillProps = {
+  field: PropertyFilterField;
+  value: string | string[];
+  tooltipContent: ReactNode;
+};
+
+function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps) {
+  const display = lookupOptionLabel(field, value);
+  const lockA11yLabel = `${field.label} filter is locked by context`;
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={`${PILL_CLASS} cursor-not-allowed select-none`}
+            data-locked-field-id={field.id}
+            data-property-filter-pill="locked"
+            tabIndex={0}
+            aria-label={lockA11yLabel}
+          >
+            <span className={LABEL_CLASS}>{field.label}</span>
+            <span className={OPERATOR_CLASS}>is</span>
+            <span className={LOCKED_VALUE_CLASS}>{display}</span>
+            <span className={LOCKED_ICON_CLASS} aria-hidden>
+              <LockIcon className="h-3.5 w-3.5" />
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>{tooltipContent}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 type TextTokenPillProps = {
   field: Extract<PropertyFilterField, { kind: 'text' }>;
@@ -162,8 +222,12 @@ export function PropertyFilterApplied({
   onTokensChange,
   disabled,
   autoFocusFieldId,
+  lockedFieldIds,
+  lockedTooltipContent = DEFAULT_LOCKED_TOOLTIP,
 }: PropertyFilterAppliedProps) {
   if (tokens.length === 0) return null;
+
+  const lockedSet = new Set(lockedFieldIds ?? []);
 
   const replaceTokenAt = (index: number, next: PropertyFilterToken) => {
     const copy = [...tokens];
@@ -180,6 +244,17 @@ export function PropertyFilterApplied({
       {tokens.map((token, index) => {
         const field = fields.find(f => f.id === token.fieldId);
         if (!field) return null;
+
+        if (lockedSet.has(token.fieldId)) {
+          return (
+            <LockedTokenPill
+              key={`${token.fieldId}-${index}`}
+              field={field}
+              value={token.value}
+              tooltipContent={lockedTooltipContent}
+            />
+          );
+        }
 
         if (field.kind === 'text' && typeof token.value === 'string') {
           return (

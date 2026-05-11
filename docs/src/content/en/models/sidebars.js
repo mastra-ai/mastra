@@ -233,6 +233,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
+        },
+        {
+          type: 'doc',
           id: 'providers/fireworks-ai',
           label: 'Fireworks AI',
         },

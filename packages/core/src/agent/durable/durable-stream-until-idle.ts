@@ -32,6 +32,13 @@ const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
   'background-task-cancelled',
+  // Suspended is non-terminal for the bg task itself (it can be resumed
+  // later via `manager.resume`), but it IS terminal-for-this-iteration of
+  // the streamUntilIdle wrapper: the agent should react to the suspend in
+  // a follow-up turn so the user is told the task is parked. Without
+  // this, the wrapper waits indefinitely for completed/failed/cancelled
+  // and the stream times out.
+  'background-task-suspended',
 ]);
 
 async function resolveScope(
@@ -62,18 +69,31 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
       return {
         toolCallId: payload.toolCallId as string | undefined,
         toolName: payload.toolName as string | undefined,
+        isSuspended: !!payload.suspendedAt,
       };
     })
     .filter(e => !!e.toolCallId);
 
-  const idList = entries.map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId)).join(', ');
+  const idList = entries
+    .filter(e => !e.isSuspended)
+    .map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId))
+    .join(', ');
+
+  // Suspend payloads are tool-controlled and may carry secrets, PII, or
+  // large opaque blobs — never serialize them into the continuation
+  // prompt. Just name the suspended tool-call IDs.
+  const suspendedIdList = entries
+    .filter(e => e.isSuspended)
+    .map(e => `${e.toolCallId} (${e.toolName})`)
+    .join(', ');
 
   return (
     `Background task(s) you previously dispatched have completed. ` +
     `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
-    `Use these result(s) to answer the user's original question.`
+    `Use these result(s) to answer the user's original question.` +
+    `IMPORTANT: The following tool-call IDs are suspended: ${suspendedIdList}. Do not attempt to resume them; let the user know they are waiting for explicit resume input.`
   );
 }
 
@@ -142,7 +162,10 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
   // --- State ---
   const runningTaskIds = new Set<string>();
   const pendingCompletions: Array<Record<string, unknown>> = [];
-  const processedCompletionIds = new Set<string>();
+  // Keyed by `${taskId}:${chunkType}` so a task that suspends + later
+  // resumes + completes doesn't see its `background-task-completed`
+  // dropped as a "duplicate" of the earlier `background-task-suspended`.
+  const processedTerminalKeys = new Set<string>();
   const innerCleanups: Array<() => void> = [];
   let isProcessing = false;
   let closed = false;
@@ -230,7 +253,8 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
         const tid = (chunk as { payload?: { taskId?: string } }).payload?.taskId;
-        if (tid) processedCompletionIds.add(tid);
+        const ctype = (chunk as { type?: string }).type;
+        if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
       const inner = await (agent as any).stream([], continuationOpts);
@@ -290,7 +314,8 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
-        if (taskId && TERMINAL_BG_CHUNKS.has(chunk.type) && processedCompletionIds.has(taskId)) {
+        const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
+        if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
         }
 
