@@ -1,7 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { BaseMessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -54,6 +54,16 @@ export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
+const isThreadSignalUnsupportedError = (error: unknown) => {
+  const candidate = error as { status?: number; message?: string; body?: unknown } | undefined;
+  const status = candidate?.status;
+  if (status === 404 || status === 405 || status === 501) {
+    return true;
+  }
+
+  return status === 400 && candidate?.message?.includes('No active agent run found for signal target');
+};
+
 export const useChat = ({
   agentId,
   resourceId,
@@ -77,6 +87,7 @@ export const useChat = ({
   const _threadSubscriptionAbortRef = useRef<AbortController | null>(null);
   const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
+  const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
@@ -98,12 +109,12 @@ export const useChat = ({
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
 
-  const getSignalContents = (coreUserMessages: CoreUserMessage[]): MessageListInput => {
+  const getSignalContents = (coreUserMessages: CoreUserMessage[]): BaseMessageListInput => {
     if (coreUserMessages.length === 1) {
-      return coreUserMessages[0] as MessageListInput;
+      return coreUserMessages[0] as BaseMessageListInput;
     }
 
-    return coreUserMessages as MessageListInput;
+    return coreUserMessages as BaseMessageListInput;
   };
 
   const getSignalPreview = (coreUserMessages: CoreUserMessage[]) => {
@@ -198,6 +209,16 @@ export const useChat = ({
             });
         })
         .catch(error => {
+          if (isThreadSignalUnsupportedError(error)) {
+            _threadSignalsUnsupportedRef.current = true;
+            if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+              _threadSubscriptionAbortRef.current = null;
+              _threadSubscriptionKeyRef.current = undefined;
+              _threadSubscriptionPromiseRef.current = null;
+            }
+            return;
+          }
+
           if ((error as { name?: string }).name !== 'AbortError') {
             console.error('[useChat] Thread subscription failed', error);
             setIsRunning(false);
@@ -368,7 +389,7 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId);
 
-    if (!threadId) {
+    const streamWithLegacyRoute = async () => {
       const runId = uuid();
       const response = await agent.streamUntilIdle(coreUserMessages, {
         runId,
@@ -384,6 +405,7 @@ export const useChat = ({
         },
         instructions,
         requestContext: resolvedRequestContext,
+        ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
         providerOptions: providerOptions as any,
         requireToolApproval,
         tracingOptions,
@@ -400,12 +422,21 @@ export const useChat = ({
         _streamAbortRef.current = null;
       }
       setIsRunning(false);
+    };
+
+    if (!threadId || _threadSignalsUnsupportedRef.current) {
+      await streamWithLegacyRoute();
       return;
     }
 
     _onChunk.current = onChunk;
 
     await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
+
+    if (_threadSignalsUnsupportedRef.current) {
+      await streamWithLegacyRoute();
+      return;
+    }
 
     const resolvedSignalId = signalId ?? uuid();
     onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
@@ -419,26 +450,33 @@ export const useChat = ({
         },
         resourceId: resourceId || agentId,
         threadId,
-        streamOptions: {
-          maxSteps,
-          modelSettings: {
-            frequencyPenalty,
-            presencePenalty,
-            maxRetries,
-            maxOutputTokens: maxTokens,
-            temperature,
-            topK,
-            topP,
+        ifIdle: {
+          streamOptions: {
+            maxSteps,
+            modelSettings: {
+              frequencyPenalty,
+              presencePenalty,
+              maxRetries,
+              maxOutputTokens: maxTokens,
+              temperature,
+              topK,
+              topP,
+            },
+            instructions,
+            requestContext: resolvedRequestContext,
+            providerOptions: providerOptions as any,
+            requireToolApproval,
+            tracingOptions,
           },
-          instructions,
-          requestContext: resolvedRequestContext,
-          providerOptions: providerOptions as any,
-          requireToolApproval,
-          tracingOptions,
         },
       });
     } catch (error) {
       onSignalEcho?.(resolvedSignalId);
+      if (isThreadSignalUnsupportedError(error)) {
+        _threadSignalsUnsupportedRef.current = true;
+        await streamWithLegacyRoute();
+        return;
+      }
       throw error;
     }
 
