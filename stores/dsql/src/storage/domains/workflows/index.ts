@@ -14,6 +14,7 @@ import type {
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
@@ -112,21 +113,164 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  updateWorkflowResults(_args: {
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+    try {
+      const { result: context } = await withRetry(
+        async () => {
+          return this.#db.client.tx(async t => {
+            const tableName = getTableName({
+              indexName: TABLE_WORKFLOW_SNAPSHOT,
+              schemaName: getSchemaName(this.#schema),
+            });
+
+            const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState | string }>(
+              `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2`,
+              [workflowName, runId],
+            );
+
+            let snapshot: WorkflowRunState;
+            if (!existingSnapshotResult) {
+              snapshot = {
+                context: {},
+                activePaths: [],
+                timestamp: Date.now(),
+                suspendedPaths: {},
+                activeStepsPath: {},
+                resumeLabels: {},
+                serializedStepGraph: [],
+                status: 'pending',
+                value: {},
+                waitingPaths: {},
+                runId,
+                requestContext: {},
+              } as WorkflowRunState;
+            } else {
+              const existingSnapshot = existingSnapshotResult.snapshot;
+              snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+            }
+
+            snapshot.context[stepId] = result;
+            snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+            const now = new Date();
+            await t.none(
+              `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (workflow_name, run_id) DO UPDATE
+               SET snapshot = $3, "updatedAt" = $5`,
+              [workflowName, runId, JSON.stringify(snapshot), now, now],
+            );
+
+            return snapshot.context;
+          });
+        },
+        {
+          onRetry: (error, attempt, delay) => {
+            this.logger?.warn?.(
+              `updateWorkflowResults retry ${attempt} for workflow ${workflowName}/${runId} after ${delay}ms: ${error.message}`,
+            );
+          },
+        },
+      );
+
+      return context;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(_args: {
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+    try {
+      const { result } = await withRetry(
+        async () => {
+          return this.#db.client.tx(async t => {
+            const tableName = getTableName({
+              indexName: TABLE_WORKFLOW_SNAPSHOT,
+              schemaName: getSchemaName(this.#schema),
+            });
+
+            const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState | string }>(
+              `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2`,
+              [workflowName, runId],
+            );
+
+            if (!existingSnapshotResult) {
+              return undefined;
+            }
+
+            const existingSnapshot = existingSnapshotResult.snapshot;
+            const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+            if (!snapshot || !snapshot?.context) {
+              throw new Error(`Snapshot not found for runId ${runId}`);
+            }
+
+            const updatedSnapshot = { ...snapshot, ...opts };
+
+            await t.none(
+              `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
+              [JSON.stringify(updatedSnapshot), new Date(), workflowName, runId],
+            );
+
+            return updatedSnapshot;
+          });
+        },
+        {
+          onRetry: (error, attempt, delay) => {
+            this.logger?.warn?.(
+              `updateWorkflowState retry ${attempt} for workflow ${workflowName}/${runId} after ${delay}ms: ${error.message}`,
+            );
+          },
+        },
+      );
+
+      return result;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({

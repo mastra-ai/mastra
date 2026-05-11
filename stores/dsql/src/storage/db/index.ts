@@ -828,7 +828,8 @@ export class DsqlDB extends MastraBase {
       }
 
       // Aurora DSQL: Use ASYNC instead of CONCURRENTLY
-      const sql = `CREATE ${uniqueStr}INDEX ASYNC ${name} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
+      const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
+      const sql = `CREATE ${uniqueStr}INDEX ASYNC ${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
       const result = await this.client.oneOrNone<{ job_uuid: string }>(sql);
 
