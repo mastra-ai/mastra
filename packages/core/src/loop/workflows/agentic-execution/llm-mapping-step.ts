@@ -16,31 +16,6 @@ import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
-/**
- * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts are
- * converted to `type: 'image-data'` or `type: 'file-data'` as the AI SDK
- * provider layer expects. AI SDK performs this same normalization internally in
- * `mapToolResultOutput`, but Mastra calls toModelOutput directly and stores
- * the result, so we need to replicate this mapping.
- */
-function normalizeModelOutput(output: unknown): unknown {
-  if (output == null || typeof output !== 'object') return output;
-
-  const obj = output as Record<string, unknown>;
-  if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
-
-  return {
-    ...obj,
-    value: (obj.value as Array<Record<string, unknown>>).map(item => {
-      if (item.type !== 'media') return item;
-      if (typeof item.mediaType === 'string' && item.mediaType.startsWith('image/')) {
-        return { type: 'image-data', data: item.data, mediaType: item.mediaType };
-      }
-      return { type: 'file-data', data: item.data, mediaType: item.mediaType };
-    }),
-  };
-}
-
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
@@ -143,6 +118,31 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * When toModelOutput is defined, the transform runs under a MAPPING child span so
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
+      /**
+       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
+       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
+       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
+       * but Mastra calls toModelOutput directly and stores the result, bypassing
+       * that normalization.
+       */
+      function normalizeModelOutput(output: unknown): unknown {
+        if (output == null || typeof output !== 'object') return output;
+
+        const obj = output as Record<string, unknown>;
+        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
+
+        return {
+          ...obj,
+          value: (obj.value as Array<Record<string, unknown>>).map(item => {
+            if (item.type !== 'media') return item;
+            if (typeof item.mediaType === 'string' && item.mediaType.startsWith('image/')) {
+              return { type: 'image-data', data: item.data, mediaType: item.mediaType };
+            }
+            return { type: 'file-data', data: item.data, mediaType: item.mediaType };
+          }),
+        };
+      }
+
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         toolCallId?: string;
