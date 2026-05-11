@@ -23,6 +23,7 @@ import type { ServerRoute } from './routes';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,

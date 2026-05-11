@@ -1,7 +1,8 @@
 ---
 title: "Server Adapters | Server"
-description: "Manually configure a Mastra server using Express, Hono, Fastify, Koa, or NestJS adapters."
+description: "Manually configure a Mastra server using Elysia, Express, Hono, Fastify, Koa, or NestJS adapters."
 packages:
+  - "@mastra/elysia"
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/nestjs"
@@ -32,6 +33,7 @@ If you want to use [Studio](/docs/studio/overview) with your server adapter, use
 
 Mastra currently provides these official server adapters:
 
+- [@mastra/elysia](/reference/server/elysia-adapter)
 - [@mastra/express](/reference/server/express-adapter)
 - [@mastra/hono](/reference/server/hono-adapter)
 - [@mastra/fastify](/reference/server/fastify-adapter)
@@ -45,6 +47,12 @@ You can build your own adapter, read [custom adapters](/docs/server/custom-adapt
 Install the adapter for the framework of your choice.
 
 <Tabs>
+  <TabItem value="elysia" label="Elysia">
+    ```bash npm2yarn
+    npm install @mastra/elysia@latest elysia
+    ```
+  </TabItem>
+
   <TabItem value="express" label="Express">
     ```bash npm2yarn
     npm install @mastra/express@latest
@@ -81,6 +89,29 @@ Install the adapter for the framework of your choice.
 Initialize your app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra/index.ts`. Calling `init()` automatically registers Mastra middleware and all available endpoints. You can continue adding your own routes as normal, either before or after `init()`, and they’ll run alongside Mastra’s endpoints.
 
 <Tabs>
+  <TabItem value="elysia" label="Elysia">
+    ```typescript {7} title="src/elysia-server.ts"
+    import { Elysia } from 'elysia'
+    import { MastraServer } from '@mastra/elysia'
+    import { mastra } from './mastra'
+
+    const app = new Elysia()
+    const server = new MastraServer({ app, mastra })
+
+    await server.init()
+
+    app.listen(4111)
+
+    console.log('Server running on http://localhost:4111')
+    ```
+
+    :::info
+
+    See the [Elysia Adapter](/reference/server/elysia-adapter) documentation for full configuration options.
+
+    :::
+  </TabItem>
+
   <TabItem value="express" label="Express">
     ```typescript {8} title="src/express-server.ts"
     import express from 'express'
@@ -284,7 +315,7 @@ You can add your own routes to the app alongside Mastra's routes.
 
 :::info
 
-Visit "Adding custom routes" for [Express](/reference/server/express-adapter#adding-custom-routes) and [Hono](/reference/server/hono-adapter#adding-custom-routes) for more information.
+Visit "Adding custom routes" for [Elysia](/reference/server/elysia-adapter#adding-custom-routes), [Express](/reference/server/express-adapter#adding-custom-routes), and [Hono](/reference/server/hono-adapter#adding-custom-routes) for more information.
 
 :::
 
@@ -435,7 +466,7 @@ When using adapters, configure these features directly with your framework. For 
 
 Server adapters register MCP (Model Context Protocol) routes during `registerRoutes()` when MCP servers are configured in your Mastra instance. MCP allows external tools and services to connect to your Mastra server and interact with your agents.
 
-The adapter registers routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns.
+Most adapters register routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns. The Elysia adapter currently supports MCP HTTP transport only.
 
 ### Serverless mode
 
@@ -471,6 +502,7 @@ See [MCP](/docs/mcp/overview) for configuration details and how to set up MCP se
 
 ## Related
 
+- [Elysia Adapter](/reference/server/elysia-adapter) - Elysia-specific setup
 - [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
 - [Express Adapter](/reference/server/express-adapter) - Express-specific setup
 - [NestJS Adapter](/reference/server/nestjs-adapter) - NestJS-specific setup
