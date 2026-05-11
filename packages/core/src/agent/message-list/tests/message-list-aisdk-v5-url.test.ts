@@ -355,5 +355,40 @@ describe('MessageList AI SDK v5 URL handling', () => {
         expect(v3FilePart.mediaType).toBe('image/png');
       }
     });
+
+    it('should preserve raw base64 in aiV5 prompt model file parts', () => {
+      const base64Data =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+      const modelMessages = [
+        {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'image' as const,
+              mediaType: 'image/png',
+              image: base64Data,
+            },
+            { type: 'text' as const, text: 'Describe this image' },
+          ],
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(modelMessages, 'input');
+
+      const promptMessages = messageList.get.all.aiV5.prompt();
+      expect(promptMessages).toHaveLength(1);
+      expect(promptMessages[0].role).toBe('user');
+
+      const userContent = promptMessages[0].content;
+      expect(Array.isArray(userContent)).toBe(true);
+
+      const filePart = (userContent as any[]).find(part => part.type === 'file');
+      expect(filePart).toBeDefined();
+      expect(filePart.mediaType).toBe('image/png');
+      expect(filePart.data).toBe(base64Data);
+      expect(filePart.data).not.toMatch(/^data:.*;base64,/);
+    });
   });
 });
