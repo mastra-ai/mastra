@@ -12,7 +12,8 @@ import type { PromptInjectionOptions } from '../../processors/processors/prompt-
 import { SystemPromptScrubber } from '../../processors/processors/system-prompt-scrubber';
 import type { SystemPromptScrubberOptions } from '../../processors/processors/system-prompt-scrubber';
 import { TokenLimiterProcessor } from '../../processors/processors/token-limiter';
-import { ToolCallFilter, type ToolCallFilterOptions } from '../../processors/processors/tool-call-filter';
+import { ToolCallFilter } from '../../processors/processors/tool-call-filter';
+import type { ToolCallFilterOptions } from '../../processors/processors/tool-call-filter';
 import { UnicodeNormalizer } from '../../processors/processors/unicode-normalizer';
 import type { ProcessorProvider, ProcessorPhase } from '../types';
 
