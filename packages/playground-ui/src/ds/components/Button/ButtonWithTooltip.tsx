@@ -23,7 +23,7 @@ export const ButtonWithTooltip = React.forwardRef<HTMLButtonElement, ButtonWithT
               <span
                 aria-hidden
                 className={cn(
-                  'pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-yellow-400 ring-1 ring-surface2',
+                  'pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-accent6 ring-1 ring-surface2',
                 )}
               />
             )}
