@@ -4,104 +4,95 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text, renderImage, allocateImageId, getImageDimensions, imageFallback, getCapabilities, getCellDimensions } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, renderImage, allocateImageId, getImageDimensions, imageFallback, getCapabilities, getCellDimensions, visibleWidth } from '@mariozechner/pi-tui';
 import type { Component, TUI } from '@mariozechner/pi-tui';
 import { imageManager, type ImageOwner } from './image-manager.js';
 
 /**
  * Inline image component for tool result boxes.
  *
- * Layout problem
- * --------------
- * The kitty/iTerm2 image escape is a single string with no newlines that
- * visually occupies N terminal rows. We must reserve N rows in the TUI's
- * line stream or the input box overlaps the image. We cannot wrap that
- * line through pi-tui's `Text` (its `visibleWidth` mis-parses cursor-up
- * `\x1b[NA` adjacent to a kitty `\x1b_G` APC start and slices the kitty
- * payload). We emit (rows-1) empty bordered lines plus a final line
- * containing a cursor-up + image escape — exactly what pi-tui's built-in
- * `Image` component does.
+ * Two visual states, fixed row count
+ * ----------------------------------
+ * The component always occupies the SAME number of terminal rows. Each
+ * frame it picks one of two presentations for those rows:
  *
- * Active/superseded
- * -----------------
- * To avoid stale kitty placements piling up in the terminal, only the
- * MOST RECENT image is rendered with the actual escape sequence. Older
- * images downgrade to a one-line text fallback (`[Image: image/png ...]`).
- * This is coordinated by `imageManager`.
+ *   1. "drawn"      — (rows-1) empty bordered lines plus a final line
+ *                     containing cursor-up + the kitty/iTerm2 escape, so
+ *                     the image is actually rendered.
+ *   2. "placeholder" — every row is empty/bordered except for a single
+ *                     centered "(image)" label, used when the image
+ *                     should not be drawn right now.
  *
- * Overlay coordination
- * --------------------
- * pi-tui's `compositeLineAt` short-circuits on image-bearing lines so
- * popups can't paint over them. While any overlay is up we therefore:
- *   - return only the bordered empty rows from `render()` (no kitty
- *     escape) so popup compositing produces clean cells, and
- *   - separately send a kitty `delete-by-id` to the terminal the moment
- *     the overlay opens (handled by `imageManager`) so any previously-
- *     placed graphics layer is cleared underneath the popup.
- * When the overlay closes the kitty escape returns to the line stream,
- * the diff renderer notices the line changed, and the image is re-placed.
+ * Because the row count never changes the input box, prompts, etc. never
+ * shift when we toggle between states.
+ *
+ * "Placeholder" is chosen whenever one of these is true:
+ *   - this is not the most recent inline image (a newer screenshot has
+ *     taken over as "active"); we do not stack kitty placements.
+ *   - an overlay is currently visible; pi-tui's compositor cannot paint
+ *     over image-bearing lines, so we hide ours and `imageManager` also
+ *     writes a delete-by-id to clear the graphics layer underneath the
+ *     overlay. When the overlay closes the next render re-emits the
+ *     escape and the diff renderer re-places it.
+ *
+ * Why a custom component (not Text)
+ * ---------------------------------
+ * pi-tui's Text wraps via `visibleWidth`, and `visibleWidth` misparses
+ * `\x1b[NA` (cursor-up) when it is immediately followed by a kitty
+ * `\x1b_G` APC start — the CSI scanner stops at `G` and swallows the APC
+ * introducer. The line would then be treated as thousands of columns
+ * wide and sliced mid-payload, rendering as raw base64.
  */
 class InlineImageComponent implements Component, ImageOwner {
   /** Total terminal rows this component reserves. Stable across frames. */
   private readonly rows: number;
   /** Border-only prefix used on every line ("│ " with theme color). */
   private readonly borderPrefix: string;
-  /** Full kitty/iterm2 escape (already chunked); empty for fallback path. */
+  /** Full kitty/iterm2 escape (already chunked). */
   private readonly sequence: string;
   /** Cursor-up escape applied on the final line so the image draws at row 0. */
   private readonly moveUp: string;
-  /** Kitty image id (omitted for iTerm2 / fallback). */
+  /** Kitty image id (omitted for iTerm2). */
   private readonly kittyImageId?: number;
-  /** Single-line fallback used when this component has been superseded. */
-  private readonly fallbackLine: string;
   /** Cached "empty bordered" lines reused while suppressed. */
   private readonly emptyLines: string[];
-
-  private demoted = false;
-  private onDemotedCallback?: () => void;
+  /** Pre-rendered "(image)" placeholder lines (same row count as `rows`). */
+  private readonly placeholderLines: string[];
 
   constructor(args: {
     rows: number;
     borderPrefix: string;
     sequence: string;
     moveUp: string;
+    contentWidth: number;
     kittyImageId?: number;
-    fallbackLine: string;
-    onDemoted?: () => void;
   }) {
     this.rows = args.rows;
     this.borderPrefix = args.borderPrefix;
     this.sequence = args.sequence;
     this.moveUp = args.moveUp;
     this.kittyImageId = args.kittyImageId;
-    this.fallbackLine = args.fallbackLine;
-    this.onDemotedCallback = args.onDemoted;
 
     this.emptyLines = [];
     for (let i = 0; i < this.rows; i++) this.emptyLines.push(this.borderPrefix);
 
+    // Vertically + horizontally centered "(image)" inside the reserved rows.
+    const label = theme.fg('muted', '(image)');
+    const labelVisibleWidth = visibleWidth(label);
+    const leftPad = Math.max(0, Math.floor((args.contentWidth - labelVisibleWidth) / 2));
+    const middleRow = Math.floor((this.rows - 1) / 2);
+    this.placeholderLines = this.emptyLines.map((empty, i) =>
+      i === middleRow ? this.borderPrefix + ' '.repeat(leftPad) + label : empty,
+    );
+
     imageManager.register(this, this.kittyImageId);
   }
 
-  onDemoted(): void {
-    // Called by imageManager when a newer image takes over. Switch this
-    // component to its text-fallback presentation. Notifying the parent
-    // gives it a chance to rebuild so the row count shrinks to 1.
-    this.demoted = true;
-    this.onDemotedCallback?.();
-  }
-
   render(): string[] {
-    if (this.demoted || !imageManager.isActive(this)) {
-      // Single bordered line so the box still says "an image was here".
-      return [this.fallbackLine];
-    }
-    if (imageManager.imageSuppressedByOverlay()) {
-      // Reserve rows but emit nothing graphical. Lines differ from the
-      // "active + visible" frame, so pi-tui's diff renderer will repaint
-      // them next frame when the overlay closes (the kitty escape will
-      // be on the last line and trigger re-placement).
-      return this.emptyLines;
+    const showImage =
+      imageManager.isActive(this) && !imageManager.imageSuppressedByOverlay();
+    if (!showImage) {
+      return this.placeholderLines;
     }
     const last = this.borderPrefix + this.moveUp + this.sequence;
     const lines = this.emptyLines.slice(0, this.rows - 1);
@@ -220,13 +211,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
-  /**
-   * Set to true when a newer screenshot supersedes this tool's image.
-   * On subsequent rebuilds we skip emitting an InlineImageComponent and
-   * fall back to a text placeholder so we don't re-register and steal
-   * "active" from the newer image.
-   */
-  private imageSuperseded = false;
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -256,8 +240,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   updateResult(result: ToolResult, isPartial = false): void {
     this.result = result;
     this.isPartial = isPartial;
-    // A fresh result may bring a new image; let it claim "active" again.
-    this.imageSuperseded = false;
     // Keep streaming output for colored display in final result
     this.rebuild();
   }
@@ -1644,10 +1626,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         continue;
       }
 
-      if (!caps.images || this.imageSuperseded) {
-        // No graphics capability, OR a newer screenshot has demoted us:
-        // either way render a compact text placeholder so we don't claim
-        // multiple rows or re-register as the active image.
+      if (!caps.images) {
         this.contentBox.addChild(
           new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
         );
@@ -1677,24 +1656,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       if (rendered) {
         const borderPrefix = borderFn('│') + ' ';
         const moveUp = rendered.rows > 1 ? `\x1b[${rendered.rows - 1}A` : '';
-        const fallbackLine = borderPrefix + theme.fg('muted', imageFallback(img.mimeType, dims));
         this.contentBox.addChild(
           new InlineImageComponent({
             rows: rendered.rows,
             borderPrefix,
             sequence: rendered.sequence,
             moveUp,
+            contentWidth: maxWidthCells,
             kittyImageId: rendered.imageId,
-            fallbackLine,
-            onDemoted: () => {
-              // Flip BEFORE rebuilding so the upcoming rebuild renders a
-              // text placeholder instead of constructing a new
-              // InlineImageComponent (which would re-register and steal
-              // "active" from the new image that just demoted us).
-              this.imageSuperseded = true;
-              this.rebuild();
-              this.ui.requestRender();
-            },
           }),
         );
       } else {
