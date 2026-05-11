@@ -64,6 +64,12 @@ elif [ -n "${OPENAI_API_KEY:-}" ]; then
   ok "env: OPENAI_API_KEY in shell (mastra dev will pass through since .env has no entry)"
 else
   err "error: openai-key-missing"
+  echo "    Options (ask the user which one applies — don't guess):" >&2
+  echo "      a) Paste the key — user pastes it; you add OPENAI_API_KEY=… to examples/agent/.env (with consent)." >&2
+  echo "      b) Source rc — if the user says the key is in their shell rc, run:" >&2
+  echo "           zsh -c 'source ~/.zshrc && echo \"OPENAI_API_KEY=\${OPENAI_API_KEY}\"'" >&2
+  echo "         then copy that value into examples/agent/.env (with consent)." >&2
+  echo "      c) Manual — user edits .env themselves and re-runs preflight." >&2
 fi
 
 # 4. Mode expectation (delegated to auth-detect.sh)
