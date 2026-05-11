@@ -1,34 +1,56 @@
 #!/usr/bin/env bash
-# Print `auth=on` if WorkOS env vars are resolvable, otherwise `auth=off`.
+# Print the auth mode the running `mastra dev` server will see.
 #
-# Resolution order (matches preflight.sh):
-#   1. shell env
-#   2. $BUILDER_SMOKE_RC (rc file path, never sourced — only inspected)
-#   3. examples/agent/.env
-#   4. repo-root .env, .env.local
+# Because `mastra dev` overwrites process.env from examples/agent/.env at
+# boot, ONLY .env determines the server's mode. Shell-exported AUTH_PROVIDER
+# does not enable WorkOS auth in the server.
+#
+# Output:
+#   mode=off                            — AUTH_PROVIDER absent/commented in .env
+#   mode=on:workos                      — AUTH_PROVIDER=workos in .env
+#   mode=on:<other>                     — AUTH_PROVIDER=<other-provider> in .env
+#   mode=ambiguous                      — AUTH_PROVIDER set in shell only,
+#                                          not in .env (server runs auth-off
+#                                          but shell value will leak elsewhere)
+#
+# Exit codes:
+#   0 — clear mode (off, on:*)
+#   1 — ambiguous
+
 set -uo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 EXAMPLE_ENV="${REPO_ROOT}/examples/agent/.env"
-ROOT_ENV="${REPO_ROOT}/.env"
-ROOT_ENV_LOCAL="${REPO_ROOT}/.env.local"
-RC_FILE="${BUILDER_SMOKE_RC:-}"
 
-has_var() {
+env_value() {
   local name="$1"
-  if [ -n "${!name:-}" ]; then return 0; fi
-  for f in "${RC_FILE}" "${EXAMPLE_ENV}" "${ROOT_ENV}" "${ROOT_ENV_LOCAL}"; do
-    [ -z "$f" ] && continue
-    [ -f "$f" ] || continue
-    if grep -E "^[[:space:]]*(export[[:space:]]+)?${name}=" "$f" | grep -vqE "=$|=\"\"|=''"; then
-      return 0
-    fi
-  done
-  return 1
+  [ -f "${EXAMPLE_ENV}" ] || return 1
+  local line
+  line=$(grep -E "^[[:space:]]*${name}=" "${EXAMPLE_ENV}" | head -n1 || true)
+  [ -n "${line}" ] || return 1
+  local val="${line#*=}"
+  val="${val%\"}"; val="${val#\"}"
+  val="${val%\'}"; val="${val#\'}"
+  [ -n "${val}" ] || return 1
+  printf '%s' "${val}"
 }
 
-if has_var WORKOS_CLIENT_ID && has_var WORKOS_API_KEY; then
-  echo "auth=on"
-else
-  echo "auth=off"
+env_provider=""
+if val=$(env_value AUTH_PROVIDER); then
+  env_provider="${val}"
 fi
+
+shell_provider="${AUTH_PROVIDER:-}"
+
+if [ -n "${env_provider}" ]; then
+  echo "mode=on:${env_provider}"
+  exit 0
+fi
+
+if [ -n "${shell_provider}" ]; then
+  echo "mode=ambiguous"
+  exit 1
+fi
+
+echo "mode=off"
+exit 0

@@ -109,60 +109,52 @@ If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-sk
 ## Prerequisites
 
 - Working tree on the agent-builder feature branch.
-- `OPENAI_API_KEY` set. `examples/agent` instantiates `OpenAIVoice` at module load — without a key the server crashes inside `OpenAIVoice` (`voice/openai/dist/index.js`: `Error: No API key provided for speech model`) before HTTP ever opens.
-- For non-auth runs, set `MASTRA_FGA_ENABLED=false` whenever `AUTH_PROVIDER=workos` is also set (FGA auto-enables in that combo and throws `FGADeniedError` on tool calls).
-- Optional: `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_ORGANIZATION_ID` for auth tests.
-- Optional: `BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID` if the registered browser provider is Stagehand/Browserbase.
+- `examples/agent` installed standalone: `cd examples/agent && pnpm i --ignore-workspace`.
+- `OPENAI_API_KEY` set in `examples/agent/.env` (preferred) OR exported in the shell. `examples/agent` instantiates `OpenAIVoice` at module load — without a key the server crashes inside `OpenAIVoice` (`voice/openai/dist/index.js`: `Error: No API key provided for speech model`) before HTTP ever opens.
 - Whichever browser MCP/tool the harness has access to. If neither is available, run with `--skip-browser` and report UI as `⏭️ Skipped (no browser tool)`.
 
-### Env-var resolution order
+### How `mastra dev` reads env (important)
 
-The smoke scripts (`preflight.sh`, `auth-detect.sh`) look for each variable in this order, first non-empty wins. They never source or mutate your environment.
+`mastra dev` loads `examples/agent/.env` via dotenv and **unconditionally overwrites `process.env`** with whatever's there (`packages/cli/src/commands/dev/dev.ts` ~line 384). Practical consequences:
 
-1. Already-exported shell env (`echo $VAR`).
-2. `$BUILDER_SMOKE_RC` — optional path to a personal env file the script will `grep` (not source). Keeps team-specific secrets out of `examples/agent/.env`.
-3. `examples/agent/.env`.
-4. Repo-root `.env`, then `.env.local`.
+- **`.env` is the source of truth for the running server.** Inline overrides like `AUTH_PROVIDER= pnpm mastra:dev` are silently clobbered.
+- **Shell-only vars survive only if `.env` has no entry for the same key.** A blank line like `OPENAI_API_KEY=` in `.env` will overwrite a shell-exported key with empty.
+- **The auth mode the server actually runs in is determined by `.env` alone.** A globally exported `AUTH_PROVIDER=workos` in your shell does NOT enable WorkOS auth in the server if `.env` doesn't have it — but it WILL leak into anything else this process runs, which is its own kind of confusing. Preflight flags this case.
 
-Run preflight first:
+### Auth modes
+
+Two states matter:
+
+- **auth off** — `AUTH_PROVIDER` line in `examples/agent/.env` is commented out or absent. No WorkOS, no RBAC, no FGA. This is the state for Prompts 1–6.
+- **auth on** — `AUTH_PROVIDER=workos` plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` all present in `examples/agent/.env`. WorkOS authentication + role-based access + per-resource FGA all engage. This is the state for Prompt 7.
+
+There's **no** `MASTRA_FGA_ENABLED` toggle. FGA fires when an FGA provider was constructed (which happens iff `AUTH_PROVIDER=workos`), and it scopes its checks against `WORKOS_ORGANIZATION_ID`. Disabling FGA without disabling WorkOS auth is not a supported configuration in this example.
+
+### Detection: run preflight before each section
 
 ```bash
+# Detect current state and required vars. No mode expectation:
 bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+
+# Expect a specific mode (exits non-zero on mismatch):
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on
 ```
 
-It exits non-zero if any required var is missing and prints exactly where each found one came from.
+Preflight is **detect-only**. It never edits `.env`, never sources rc files, never copies values around. When it fails it prints a concrete action the user (or you, with their explicit consent) should take. Possible failure messages and what to do:
 
-### Agent: how to handle missing env vars
+| Preflight says | What it means | What the agent should do |
+| --- | --- | --- |
+| `OPENAI_API_KEY is not set in examples/agent/.env nor in the current shell` | Server will crash at boot | Ask the user to add the key to `examples/agent/.env` (or to dictate the value so you can edit). Don't proceed. |
+| `OPENAI_API_KEY is only in the shell, not in examples/agent/.env` | May or may not survive `mastra dev` env load | Ask the user to confirm `.env` has no `OPENAI_API_KEY=` line at all, or to copy the value into `.env`. |
+| `AUTH_PROVIDER is set in your shell but absent from examples/agent/.env` | Mode is ambiguous; running server has no auth but shell value will leak into other commands | Ask the user to either `unset AUTH_PROVIDER` in this shell OR add it to `.env`. |
+| `Expected auth-off mode, but examples/agent/.env has AUTH_PROVIDER=...` | Running `--expect off` against an auth-on `.env` | Ask the user to comment out the `AUTH_PROVIDER` line in `.env` (or do it for them if they say so), restart `mastra dev`, re-run preflight. |
+| `Expected auth-on mode, but examples/agent/.env has no AUTH_PROVIDER` | Running `--expect on` against an auth-off `.env` | Ask the user to add `AUTH_PROVIDER=workos` + the three WORKOS_* vars to `.env` (they can do it themselves or dictate values for you to write). Restart `mastra dev`. |
+| `AUTH_PROVIDER=workos but these WorkOS vars are missing` | Partial auth-on config | List the missing vars to the user. Ask them to add the values to `.env` (or dictate them). |
 
-**You have explicit permission to `source` the user's shell rc on their behalf** when preflight reports missing vars — the user almost certainly has their API keys exported in `~/.zshrc` or `~/.bashrc` already, and asking them to paste a raw key value is the wrong move.
+**Default behavior: ask the user, don't auto-edit.** Targeted `.env` edits are allowed only when the user explicitly says "go ahead, comment that line out" or "yes, set those four vars to these values." Never write secrets into `.env` without the user dictating them.
 
-Recommended order when preflight fails:
-
-1. **Source the user's rc, then re-run preflight in the same shell.** Do this ONCE per session, in the same terminal you'll launch `pnpm mastra:dev` from. The rc may run side effects (`nvm`, `starship`, etc.) — that's fine for a smoke run, just don't loop it.
-
-   ```bash
-   source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
-   bash .claude/skills/builder-smoke-test/scripts/preflight.sh
-   ```
-
-2. If sourcing didn't pick the var up (key lives somewhere unusual), tell the user which var is still missing and offer three options: export it manually, add it to `examples/agent/.env`, or point `$BUILDER_SMOKE_RC` at an env file.
-
-3. **Do not prompt the user for raw key values.** They already have the keys somewhere — your job is to find them, not extract them.
-
-Once preflight passes in a given shell, the same shell can launch `pnpm mastra:dev` directly and `examples/agent` will inherit the vars.
-
-### Agent: how to handle the `AUTH_PROVIDER=workos` + `MASTRA_FGA_ENABLED` cross-check
-
-Preflight warns when `AUTH_PROVIDER=workos` is set but `MASTRA_FGA_ENABLED` is not. `examples/agent/.env` keeps `AUTH_PROVIDER=workos` as a long-lived value — the user routinely toggles between auth-off and auth-on runs by flipping FGA, not by removing the provider.
-
-When this warning fires, **just resolve it without asking**:
-
-- **For any `--auth off` run (Prompts 1–6 by default):** add `MASTRA_FGA_ENABLED=false` to `examples/agent/.env` if it isn't there. This is the canonical workaround — documented in the prerequisites, gitignored, and persistent across runs. Then re-run preflight; the warning disappears.
-- **For Prompt 7 (`--auth on`):** the user manages auth env themselves per Prompt 7's text. Leave `.env` alone, trust their setup, and proceed.
-
-This is **not** real auth-off. With `AUTH_PROVIDER=workos` still in `.env`, the server is auth-on at the WorkOS layer; setting `MASTRA_FGA_ENABLED=false` only disables FGA tool-call enforcement. That's an acceptable approximation for the non-auth prompts because (a) no WorkOS session means requests are unauthenticated and (b) the FGA bypass prevents `FGADeniedError`s from masking real failures. Flag this in your run report under "Configuration" — don't block on it.
-
-If you want pedantically pure auth-off semantics (no `AUTH_PROVIDER` at all), that's the user's call — surface the option in your report but don't unilaterally remove it from `.env`.
+When the user has fixed the issue (either themselves or via your edit), they'll tell you it's good. Restart `mastra dev` if you edited `.env` — the env file is only read at boot — then re-run preflight.
 
 ## Starting the dev server
 
@@ -179,9 +171,10 @@ pnpm mastra:dev
 # Poll /api/agents until 200 (60s budget). Detects mastra dev's port-bump.
 bash .claude/skills/builder-smoke-test/scripts/wait-for-server.sh
 
-# Detect auth state from env vars (respects $BUILDER_SMOKE_RC + project .env files)
+# Detect auth mode purely from examples/agent/.env (because mastra dev
+# overwrites process.env with .env at boot, only .env matters here).
 bash .claude/skills/builder-smoke-test/scripts/auth-detect.sh
-# → prints `auth=on` or `auth=off`
+# → prints `mode=off`, `mode=on:workos`, or `mode=ambiguous` (shell-only AUTH_PROVIDER)
 
 # Reset fixtures (only if --fixtures-reset is set)
 bash .claude/skills/builder-smoke-test/scripts/fixtures-reset.sh
@@ -285,7 +278,7 @@ The branch has accumulated minor papercuts. Note these in your report only if yo
 - `pnpm clean` does not remove `examples/agent/mastra.db`. Use `--fixtures-reset` if you need a clean DB.
 - Dev server can crash on hot-reload from `/auth/refresh` polling. Restart and continue.
 - `OPENAI_API_KEY` is required at startup — server won't boot without it, even if you only test non-LLM surfaces.
-- `AUTH_PROVIDER=workos` auto-enables FGA; set `MASTRA_FGA_ENABLED=false` to opt out.
+- `mastra dev` overwrites `process.env` from `.env` at boot, so inline env overrides on the command line don't reach the server. Edit `examples/agent/.env` instead.
 
 ## References
 
@@ -303,7 +296,8 @@ The branch has accumulated minor papercuts. Note these in your report only if yo
 - `references/infrastructure.md` — `/editor/builder/infrastructure` payload + admin UI
 - `references/channels.md` — Slack provider visibility, connectChannel tool
 - `references/ui.md` — browser checklist across Builder routes
-- `references/auth.md` — WorkOS on/off, 401 behavior, authorId, FGA workaround
+- `references/auth.md` — WorkOS on/off, 401 behavior, authorId, mode-toggle via `.env`
+- `scripts/preflight.sh` — env detection + mode expectation (`--expect off|on`)
 - `scripts/wait-for-server.sh` — poll `:4111` until healthy
-- `scripts/auth-detect.sh` — detect WorkOS env vars
+- `scripts/auth-detect.sh` — detect auth mode from `.env`
 - `scripts/fixtures-reset.sh` — wipe + reseed `examples/agent/mastra.db`

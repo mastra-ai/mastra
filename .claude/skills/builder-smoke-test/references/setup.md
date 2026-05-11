@@ -4,31 +4,46 @@ Verify the `examples/agent` dev server is running and the builder is configured 
 
 ## Steps
 
-### 0. Preflight — env vars
+### 0. Preflight — env vars + mode
 
-Before starting the server, run preflight. It checks the four standard
-locations (shell env → `$BUILDER_SMOKE_RC` rc file → `examples/agent/.env`
-→ repo-root `.env*`) and exits non-zero if anything required is missing.
+Before starting the server, run preflight with the auth mode this prompt
+expects (`off` for Prompts 1–6, `on` for Prompt 7). Preflight is
+detect-only and exits non-zero on missing vars, mode mismatch, or a
+shell/`.env` collision on `AUTH_PROVIDER`.
 
 ```bash
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+# Most prompts (auth-off):
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
+
+# Prompt 7 only (auth-on, WorkOS):
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on
 ```
 
-Required:
+Why `.env` matters more than your shell: `mastra dev` reads
+`examples/agent/.env` via dotenv and **overwrites `process.env`** with the
+loaded values (see `packages/cli/src/commands/dev/dev.ts` around line 384).
+That means:
+
+- Inline overrides on the command line are silently clobbered.
+- Shell-only vars survive only if `.env` has no entry for the same key.
+- The auth mode the server actually runs in is determined by `.env` alone.
+
+Required for every prompt:
 
 - `OPENAI_API_KEY` — `examples/agent` instantiates `OpenAIVoice` at module
   load. Without a key the server crashes during bundle init, before HTTP
   ever opens, with: `Error: No API key provided for speech model` from
-  `voice/openai/dist/index.js`.
+  `voice/openai/dist/index.js`. Prefer setting it in `examples/agent/.env`
+  so it definitely reaches the server.
 
-Recommended for non-auth runs:
+Required for Prompt 7 (auth-on) only:
 
-- `MASTRA_FGA_ENABLED=false` — if `AUTH_PROVIDER=workos` is set (it usually
-  is in `examples/agent/.env`), FGA auto-enables and throws `FGADeniedError`
-  on tool execution. Preflight warns about this exact combination.
+- `AUTH_PROVIDER=workos` in `examples/agent/.env`.
+- `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` in `.env`.
 
-If preflight reports missing vars, fix them and re-run before continuing.
-Don't proceed assuming "the server might still start" — it won't.
+If preflight reports any failure, **do not auto-edit `.env`**. Surface the
+diagnosis to the user, ask whether they'll edit `.env` themselves or want
+you to do it for them. Restart `mastra dev` if `.env` changed.
 
 ### 1. Zombie port check
 
@@ -115,9 +130,9 @@ If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't 
 
 ## Checklist
 
-- [ ] Preflight passes (all required vars present)
+- [ ] Preflight passes for the expected mode (`--expect off` or `--expect on`)
 - [ ] Port `:4111` is free, or the zombie has been killed
-- [ ] Server started with `pnpm mastra:dev`
+- [ ] Server started with `pnpm mastra:dev` after the most recent `.env` edit
 - [ ] `wait-for-server.sh` reports ready on `:4111` (not `:4112`+)
 - [ ] Builder settings endpoint returns valid config
 - [ ] Builder workspace exists in DB with correct metadata

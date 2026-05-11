@@ -48,6 +48,6 @@ done
 
 echo "  Common causes:" >&2
 echo "    - OPENAI_API_KEY missing → boot crashes in OpenAIVoice ctor before HTTP opens" >&2
-echo "    - AUTH_PROVIDER=workos without MASTRA_FGA_ENABLED=false → FGA crash on first call" >&2
+echo "    - AUTH_PROVIDER=workos in .env without valid WORKOS_* creds → boot fails inside auth provider" >&2
 echo "    - Port ${PORT} bound by a stale process (run: lsof -i :${PORT})" >&2
 exit 1
