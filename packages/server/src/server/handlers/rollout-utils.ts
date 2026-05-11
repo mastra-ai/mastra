@@ -1,6 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityStorage } from '@mastra/core/storage';
-import type { RolloutAllocation, RolloutRecord } from '@mastra/core/storage';
+import type { RolloutAllocation, RolloutRecord, ObservabilityStorage } from '@mastra/core/storage';
 
 type CoreRolloutHelpers = {
   resolveVersionFromRollout: (rollout: RolloutRecord, requestContext?: { get(key: string): unknown }) => string;
