@@ -161,6 +161,48 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
+  it('queues follow-ups with Ctrl+F while the harness is running', () => {
+    const { state, editor, actions } = createState(true);
+    const queueFollowUpMessage = vi.fn();
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage,
+    });
+
+    const queueFollowUp = actions.get('queueFollowUp');
+    expect(queueFollowUp).toBeDefined();
+
+    expect(queueFollowUp?.()).toBe(true);
+    expect(queueFollowUpMessage).toHaveBeenCalledWith('/help');
+    expect(editor.addToHistory).toHaveBeenCalledWith('/help');
+    expect(editor.setText).toHaveBeenCalledWith('');
+    expect(editor.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('blocks Ctrl+F queueing while the goal judge is evaluating', () => {
+    vi.mocked(showInfo).mockClear();
+    const { state, editor, actions } = createState(true);
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5' };
+    const queueFollowUpMessage = vi.fn();
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage,
+    });
+
+    const queueFollowUp = actions.get('queueFollowUp');
+    expect(queueFollowUp?.()).toBe(true);
+    expect(editor.onSubmit).not.toHaveBeenCalled();
+    expect(editor.addToHistory).not.toHaveBeenCalled();
+    expect(editor.setText).not.toHaveBeenCalled();
+    expect(queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith(state, GOAL_JUDGE_INPUT_LOCK_MESSAGE);
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
   it('blocks Enter submissions while the goal judge is evaluating', () => {
     vi.mocked(showInfo).mockClear();
     const { state, editor, actions } = createState(false);
