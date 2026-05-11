@@ -11363,6 +11363,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11528,7 +11529,8 @@ export type GetObservabilityTraces_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11735,6 +11737,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11901,7 +11904,8 @@ export type GetObservabilityBranches_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12091,7 +12095,8 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12274,7 +12279,8 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12451,7 +12457,8 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12549,7 +12556,8 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12854,6 +12862,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'rag_vector_operation'
           | 'rag_action'
           | 'graph_action'
+          | 'mapping'
         )
       | undefined;
     structuredOutput?: boolean | undefined;

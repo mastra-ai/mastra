@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
+import { getStepAvailableToolNames } from '../../../../observability/utils';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
@@ -213,16 +214,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepIndex = (inputData as any).stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
-            // Apply request-side context to MODEL_INFERENCE spans the tracker creates.
-            // setInferenceContext is optional on the interface; older trackers
-            // without the method gracefully no-op.
-            modelSpanTracker?.setInferenceContext?.({
-              parameters: currentModelSettings as Record<string, unknown> | undefined,
-              availableTools: currentTools ? Object.keys(currentTools) : undefined,
-              toolChoice: currentToolChoice,
-              responseFormat: execOptions.structuredOutput ? 'json_schema' : undefined,
-            });
-
             // Build structured output for AI SDK if configured
             const structuredOutputConfig = execOptions.structuredOutput;
             const structuredOutput =
@@ -300,6 +291,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 8. Start MODEL_STEP span at the beginning of LLM execution
             modelSpanTracker?.startStep();
+
+            // Apply post-processor request-side context to MODEL_INFERENCE then
+            // open the inference span immediately before the model call so its
+            // startTime excludes any input processor work and availableTools /
+            // toolChoice reflect per-step mutations. responseFormat tracks the
+            // actual structuredOutput payload sent to execute() — which is
+            // undefined when structuringModelConfig routes through a separate
+            // structuring step instead of asking the model for json_schema.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: currentModelSettings as Record<string, unknown> | undefined,
+              availableTools: getStepAvailableToolNames(currentTools as Record<string, unknown> | undefined),
+              toolChoice: currentToolChoice,
+              responseFormat: structuredOutput ? 'json_schema' : undefined,
+            });
+            modelSpanTracker?.startInference?.();
 
             // 10. Execute LLM call
             const modelResult = execute({

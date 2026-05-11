@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDynamicTools } from '../tools.js';
+
+vi.mock('../tools/index.js', () => ({
+  createWebSearchTool: () => ({ description: 'web search' }),
+  createWebExtractTool: () => ({ description: 'web extract' }),
+  hasTavilyKey: () => false,
+  requestSandboxAccessTool: { description: 'request sandbox access' },
+}));
+
+import { createDynamicTools } from './tools.js';
 
 function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
   return {

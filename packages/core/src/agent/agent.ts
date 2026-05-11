@@ -70,9 +70,10 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool } from '../tools/types';
+import type { CoreTool, ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -265,6 +266,7 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  #toolPayloadTransform?: ToolPayloadTransformPolicy;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -360,6 +362,9 @@ export class Agent<
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
+    this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
+      config.transform ?? (config as any).toolPayloadProjection,
+    );
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -948,7 +953,7 @@ export class Agent<
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
-    // User-configured processors run last to allow customization
+    // User-configured processors run after auto-derived layers to allow customization
     return [
       ...memoryProcessors,
       ...workspaceProcessors,
@@ -5353,6 +5358,13 @@ export class Agent<
       llm,
     };
 
+    const toolPayloadTransform =
+      normalizeToolPayloadTransformPolicy(options.transform ?? (options as any).toolPayloadProjection) ??
+      this.#toolPayloadTransform ??
+      normalizeToolPayloadTransformPolicy(
+        this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
+      );
+
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
@@ -5375,6 +5387,7 @@ export class Agent<
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
+      toolPayloadTransform,
       ...(options.disableBackgroundTasks
         ? {}
         : {
