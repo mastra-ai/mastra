@@ -167,7 +167,7 @@ Use stagehand_extract to get data from pages.`,
 | `stagehand_observe` | Discover actionable elements on a page |
 | `stagehand_navigate` | Navigate to a URL |
 | `stagehand_tabs` | Manage browser tabs |
-| `stagehand_screenshot` | Capture a full-page screenshot as a PNG image |
+| `stagehand_screenshot` | Capture a screenshot as PNG (viewport by default; set `fullPage: true` for full page) |
 | `stagehand_close` | Close the browser |
 
 To exclude specific tools, pass `excludeTools` in the constructor:
@@ -330,7 +330,7 @@ Manage browser tabs.
 
 ### `stagehand_screenshot`
 
-Capture a full-page screenshot of the current page as a PNG image. The result includes multi-part content with the image and page metadata for vision-capable models. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
+Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). The result includes multi-part content with the image and page metadata for vision-capable models. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
 
 ```text
 // Viewport only (default)

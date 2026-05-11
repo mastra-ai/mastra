@@ -11,7 +11,7 @@ export function createScreenshotTool(browser: StagehandBrowser) {
   return createTool({
     id: STAGEHAND_TOOLS.SCREENSHOT,
     description:
-      'Capture a full-page screenshot as a visible PNG image. Use observe or extract when you only need text or interactive elements — screenshots are expensive. Use this when you need to visually inspect the page, e.g. evaluating images, product photos, layout, design, or colors.',
+      'Capture a screenshot of the current viewport as a visible PNG (set fullPage: true for full-page capture). Use observe or extract when you only need text or interactive elements — screenshots are expensive. Use this when you need to visually inspect the page, e.g. evaluating images, product photos, layout, design, or colors.',
     inputSchema: screenshotInputSchema,
     execute: async (input, { agent }) => {
       const threadId = agent?.threadId;
@@ -29,8 +29,8 @@ export function createScreenshotTool(browser: StagehandBrowser) {
         };
       }
 
-      const label = result.title ?? result.url ?? 'current page';
-      const location = result.url ? ` (${result.url})` : '';
+      const label = result.title ?? 'current page';
+      const location = result.title && result.url ? ` (${result.url})` : '';
       return {
         type: 'content' as const,
         value: [

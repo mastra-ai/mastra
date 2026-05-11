@@ -115,7 +115,7 @@ then interact with elements using their refs (e.g., @e5).`,
 | `browser_press` | Press keyboard keys |
 | `browser_select` | Select option from dropdown |
 | `browser_scroll` | Scroll the page or element |
-| `browser_screenshot` | Capture a full-page screenshot as a PNG image |
+| `browser_screenshot` | Capture a screenshot as PNG (viewport by default; set `fullPage: true` for full page) |
 | `browser_close` | Close the browser |
 
 ### Extended tools
@@ -406,7 +406,7 @@ Execute JavaScript in the page context. Use as an escape hatch when other tools 
 
 ### `browser_screenshot`
 
-Capture a full-page screenshot of the current page as a PNG image. The result includes multi-part content with the image and page metadata for vision-capable models. Use `browser_snapshot` when you only need text or structured data.
+Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). The result includes multi-part content with the image and page metadata for vision-capable models. Use `browser_snapshot` when you only need text or structured data.
 
 ```text
 // Viewport only (default)
