@@ -458,10 +458,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * This ensures all spans emit events regardless of implementation
    */
   private wireSpanLifecycle<TType extends SpanType>(span: Span<TType>): void {
-    // Internal spans are also wired so that filtered MODEL_GENERATION spans
-    // can roll their usage up to the closest exported ancestor. emitSpanEnded
-    // / emitSpanUpdated still short-circuit for filtered spans via
-    // getSpanForExport, so no trace events leak for internal spans.
+    // Skip wiring for filtered internal spans, except MODEL_GENERATION —
+    // those need the wrap so captureModelUsageRollup can intercept usage
+    // before originalEnd discards it. Other internal types (AGENT_RUN,
+    // WORKFLOW_RUN, MODEL_STEP, MODEL_CHUNK, …) carry nothing to roll up,
+    // and skipping the closure-per-span cost matters in streaming hot
+    // paths like per-chunk MODEL_CHUNK spans.
+    if (!this.config.includeInternalSpans && span.isInternal && span.type !== SpanType.MODEL_GENERATION) {
+      return;
+    }
 
     // Store original methods
     const originalEnd = span.end.bind(span);
