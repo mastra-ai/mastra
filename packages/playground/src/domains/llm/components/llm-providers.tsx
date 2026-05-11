@@ -1,4 +1,4 @@
-import { Combobox, Skeleton } from '@mastra/playground-ui';
+import { Combobox, Skeleton, cn } from '@mastra/playground-ui';
 import type { ComboboxProps, ComboboxOption } from '@mastra/playground-ui';
 import { Info } from 'lucide-react';
 import { useMemo } from 'react';
@@ -52,7 +52,11 @@ export const LLMProviders = ({
       ),
       end: provider.docUrl ? (
         <Info
-          className="w-4 h-4 text-neutral2 hover:text-neutral3 cursor-pointer"
+          className={cn(
+            'size-3.5 text-neutral2 opacity-0 transition-opacity duration-100 cursor-pointer',
+            'hover:text-neutral4 hover:opacity-100',
+            'group-data-[highlighted]/item:opacity-100',
+          )}
           onClick={e => {
             e.stopPropagation();
             window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
