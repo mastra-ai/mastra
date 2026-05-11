@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed storage init proxy caching rejected init promises. Previously, if storage `init()` failed once (for example due to a transient network error during boot), every subsequent storage call replayed the same rejection until the process restarted. The proxy now clears the cached promise on rejection so the next call retries init, while still sharing a single in-flight promise across concurrent callers and caching a successful init exactly once.
+Fixed Mastra getting stuck after a storage startup failure. Previously, if storage couldn't start up (for example, because the database was briefly unreachable), Mastra would keep returning the same error for every operation until the process was restarted. Now the next storage operation tries to start storage again, so brief outages recover on their own. Storage startup failures are also logged, so the problem is visible even when a later retry succeeds.

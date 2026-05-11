@@ -1,9 +1,15 @@
+import type { IMastraLogger } from '../logger';
 import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
 
 export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeStore {
   let hasInitialized: null | Promise<void> = null;
+
+  // `logger` is protected on MastraBase, but always assigned at construction
+  // time, so we can read it at runtime through a narrow cast.
+  const getLogger = (): IMastraLogger | undefined =>
+    (storage as MastraCompositeStore & { logger?: IMastraLogger }).logger;
 
   // Wrap init so a rejection clears the cached promise. Without this,
   // a single transient init failure (e.g. a network blip during boot)
@@ -15,6 +21,11 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
       if (hasInitialized === wrapped) {
         hasInitialized = null;
       }
+      // Surface failures even when a follow-up call's retry succeeds.
+      // Otherwise transient init failures would recover silently and only
+      // be visible to whichever caller happened to be waiting when init
+      // first failed.
+      getLogger()?.error('Storage init failed; will retry on next storage call', { error: err });
       throw err;
     });
     hasInitialized = wrapped;

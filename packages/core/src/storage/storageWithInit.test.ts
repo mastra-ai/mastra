@@ -225,6 +225,22 @@ describe('augmentWithInit', () => {
       expect(init).toHaveBeenCalledTimes(2);
     });
 
+    it('logs a clear error message when init fails', async () => {
+      const error = new Error('db unreachable');
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+      const init = vi.fn().mockRejectedValue(error);
+      const mockStorage = { init, logger, disableInit: false } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+
+      await expect(augmentedStorage.init()).rejects.toThrow('db unreachable');
+
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      const [message, context] = logger.error.mock.calls[0]!;
+      expect(message).toMatch(/init failed/i);
+      expect(context).toMatchObject({ error });
+    });
+
     it('still caches a successful init after a retry', async () => {
       const init = vi
         .fn()
