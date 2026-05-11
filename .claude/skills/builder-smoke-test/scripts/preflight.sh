@@ -17,10 +17,39 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-EXAMPLE_ENV="${REPO_ROOT}/examples/agent/.env"
+EXAMPLE_DIR="${REPO_ROOT}/examples/agent"
+EXAMPLE_ENV="${EXAMPLE_DIR}/.env"
 ROOT_ENV="${REPO_ROOT}/.env"
 ROOT_ENV_LOCAL="${REPO_ROOT}/.env.local"
 RC_FILE="${BUILDER_SMOKE_RC:-}"
+
+# Repo-shape sanity check. The skill operates on this checkout — unlike the
+# smoke-test skill it does NOT scaffold a new project. Refuse to run from the
+# wrong tree so we don't silently chase phantom paths.
+if [ ! -f "${REPO_ROOT}/pnpm-workspace.yaml" ] || [ ! -f "${EXAMPLE_DIR}/package.json" ]; then
+  echo "✗ Preflight: repo shape doesn't look like the mastra monorepo."
+  echo "  Expected pnpm-workspace.yaml and examples/agent/package.json under:"
+  echo "    ${REPO_ROOT}"
+  echo "  cd into your mastra worktree before running this skill."
+  exit 1
+fi
+
+# Workspace install check. examples/agent uses link: overrides to ../../packages/*
+# so it MUST be installed with --ignore-workspace (per AGENTS.md). A missing
+# node_modules here means the dev server will fail with module-resolution errors
+# long before any HTTP probe.
+if [ ! -d "${EXAMPLE_DIR}/node_modules" ]; then
+  echo "✗ Preflight: examples/agent/node_modules is missing."
+  echo "  examples/agent pins to local packages via link: overrides and must be"
+  echo "  installed standalone:"
+  echo
+  echo "    cd ${EXAMPLE_DIR#${REPO_ROOT}/}"
+  echo "    pnpm i --ignore-workspace"
+  echo
+  echo "  Do NOT run pnpm install from the repo root for this example — the"
+  echo "  workspace resolver will replace the link: overrides."
+  exit 1
+fi
 
 # Required vs optional for a default (auth-off) run.
 REQUIRED=("OPENAI_API_KEY")
