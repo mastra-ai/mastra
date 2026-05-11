@@ -42,7 +42,10 @@ export const WithMaxHeight: Story = {
 
 export const HorizontalScroll: Story = {
   render: () => (
-    <ScrollArea className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4">
+    <ScrollArea
+      orientation="horizontal"
+      className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4"
+    >
       <div className="flex gap-4 w-[800px]">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
@@ -56,7 +59,7 @@ export const HorizontalScroll: Story = {
 
 export const CodeBlock: Story = {
   render: () => (
-    <ScrollArea className="h-[200px] w-[400px] rounded-md border border-border1 bg-surface2">
+    <ScrollArea orientation="both" className="h-[200px] w-[400px] rounded-md border border-border1 bg-surface2">
       <pre className="p-4 text-sm font-mono text-neutral5">
         {`function example() {
   const data = fetchData();
