@@ -17,6 +17,7 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { verifyProject } from './commands/actions/verify-project';
 import { registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
@@ -170,6 +171,17 @@ program
   .option('-s, --studio', 'Bundle the studio UI with the build')
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
+
+program
+  .command('verify')
+  .description('Validate that your Mastra project is ready to deploy (no upload)')
+  .option('-d, --dir <path>', 'Path to your Mastra project directory')
+  .option('--env-file <file>', 'Env file to validate against (for example: .env.production)')
+  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--strict', 'Treat warnings as errors (exit 1 on any issue)')
+  .option('--json', 'Emit machine-readable JSON output (for CI)')
+  .option('--debug', 'Enable debug logs', false)
+  .action(wrapAction(verifyProject));
 
 const workerCommand = program.command('worker').description('Build and run standalone Mastra worker bundles');
 
