@@ -73,7 +73,7 @@ import { createBrightDataFetchTool } from '@mastra/brightdata';
 const fetchTool = createBrightDataFetchTool();
 
 // Accepts: url (required)
-// Returns: { url, content }  // content is markdown
+// Returns: { url, content }  // content is Markdown
 ```
 
 ## Configuration
@@ -96,7 +96,7 @@ const agent = new Agent({
   id: 'rag-agent',
   name: 'Research Assistant',
   model: 'anthropic/claude-sonnet-4-6',
-  instructions: `You are a research assistant. Use brightdata-search to find relevant pages, then use brightdata-fetch to get full markdown content from the best results.`,
+  instructions: `You are a research assistant. Use brightdata-search to find relevant pages, then use brightdata-fetch to get full Markdown content from the best results.`,
   tools: createBrightDataTools(),
 });
 ```

@@ -141,7 +141,7 @@ const searchTool = createBrightDataSearchTool()
 
 ## `createBrightDataFetchTool()`
 
-Creates a tool that fetches a webpage through Bright Data's Web Unlocker and returns the page content as markdown.
+Creates a tool that fetches a webpage through Bright Data's Web Unlocker and returns the page content as Markdown.
 
 **Tool ID:** `brightdata-fetch`
 
@@ -175,7 +175,7 @@ const fetchTool = createBrightDataFetchTool()
   {
     name: 'content',
     type: 'string',
-    description: 'Page content as markdown.',
+    description: 'Page content as Markdown.',
   },
 ]}
 />
@@ -195,7 +195,7 @@ const agent = new Agent({
   name: 'Research Agent',
   model: 'anthropic/claude-sonnet-4-6',
   instructions:
-    'You are a research assistant. Use the search tool to find relevant pages, then use the fetch tool to read full markdown content from the best results.',
+    'You are a research assistant. Use the search tool to find relevant pages, then use the fetch tool to read full Markdown content from the best results.',
   tools: {
     webSearch,
     webFetch,

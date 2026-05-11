@@ -10,14 +10,14 @@ const inputSchema = z.object({
 
 const outputSchema = z.object({
   url: z.string(),
-  content: z.string().describe('Page content as markdown'),
+  content: z.string().describe('Page content as Markdown'),
 });
 
 export function createBrightDataFetchTool(config?: BrightDataClientOptions) {
   return createTool({
     id: 'brightdata-fetch',
     description:
-      "Fetch a webpage and return its content as markdown. Uses Bright Data's Web Unlocker which bypasses bot detection and CAPTCHAs. Pass any URL, including pages that block normal scrapers.",
+      "Fetch a webpage and return its content as Markdown. Uses Bright Data's Web Unlocker which bypasses bot detection and CAPTCHAs. Pass any URL, including pages that block normal scrapers.",
     inputSchema,
     outputSchema,
     execute: async input => {
