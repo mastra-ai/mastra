@@ -39,6 +39,15 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
    */
   braintrustLogger?: Logger<true>;
 
+  /**
+   * Optional resolver for the active Braintrust span.
+   *
+   * Pass Braintrust's `currentSpan` from the same package instance that creates
+   * `Eval()` or `logger.traced()` spans when your app and Mastra may resolve
+   * different copies of the `braintrust` package.
+   */
+  currentSpan?: () => Span | undefined;
+
   /** Braintrust API key. Required if logger is not provided. */
   apiKey?: string;
   /** Optional custom endpoint */
@@ -210,7 +219,13 @@ export class BraintrustExporter extends TrackingExporter<
       // Try to find a Braintrust span to attach to:
       // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
       // 2. Fall back to the configured logger
-      const externalSpan = currentSpan();
+      let externalSpan: Span | undefined;
+      try {
+        externalSpan = this.config.currentSpan?.();
+      } catch (err) {
+        this.logger.error('Braintrust exporter: Failed to resolve configured currentSpan', { error: err });
+      }
+      externalSpan ??= currentSpan();
 
       // Check if it's a valid span (not the NOOP_SPAN)
       if (externalSpan && externalSpan.id) {

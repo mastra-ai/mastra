@@ -2383,6 +2383,44 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     expect(traceData.getRoot()).toBe(mockExternalSpan);
   });
 
+  it('should use configured currentSpan resolver before the package currentSpan fallback', async () => {
+    const { currentSpan: realCurrentSpan } = await import('braintrust');
+    const mockedCurrentSpan = vi.mocked(realCurrentSpan);
+
+    mockExternalSpan.startSpan.mockReturnValue(mockExternalSpan);
+    mockedCurrentSpan.mockReturnValue(undefined as any);
+
+    const config: BraintrustExporterConfig = {
+      braintrustLogger: mockLogger as Logger<true>,
+      currentSpan: vi.fn(() => mockExternalSpan as any),
+    };
+    const exporter = new TestBraintrustExporter(config);
+    const rootSpan = createMockSpan({
+      id: 'configured-current-span-root',
+      name: 'configured-current-span-agent',
+      type: SpanType.AGENT_RUN,
+      isRoot: true,
+      attributes: { agentId: 'test-agent' },
+    });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: rootSpan,
+    });
+
+    expect(config.currentSpan).toHaveBeenCalled();
+    expect(mockedCurrentSpan).not.toHaveBeenCalled();
+    expect(mockExternalSpan.startSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spanId: 'configured-current-span-root',
+        name: 'configured-current-span-agent',
+      }),
+    );
+
+    const traceData = exporter._getTraceData(rootSpan.traceId);
+    expect(traceData.getRoot()).toBe(mockExternalSpan);
+  });
+
   it('should nest child spans correctly with external parent', async () => {
     // Mock currentSpan to return an external span
     const { currentSpan: realCurrentSpan } = await import('braintrust');
