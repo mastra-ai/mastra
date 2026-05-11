@@ -240,3 +240,74 @@ describe('ACPConnection', () => {
     expect(handler).toHaveBeenCalledWith(request);
   });
 });
+
+describe('AcpAgent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.connectionInstances.length = 0;
+    mocks.onPrompt = undefined;
+    mocks.spawn.mockImplementation(() => createProcess());
+  });
+
+  it('generates a response through the ACP connection', async () => {
+    const { AcpAgent } = await import('../agent');
+
+    mocks.onPrompt = async acpConnection => {
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'done' },
+        },
+      });
+    };
+
+    const agent = new AcpAgent({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    const result = await agent.generate('write tests', { instructions: 'Be concise', runId: 'run-1' });
+
+    expect(result.text).toBe('done');
+    expect(result.runId).toBe('run-1');
+    expect(result.response?.dbMessages?.[0]?.role).toBe('assistant');
+    expect(mocks.connectionInstances[0]?.prompt).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'Be concise\n\nwrite tests' }],
+    });
+  });
+
+  it('streams ACP output as agent chunks', async () => {
+    const { AcpAgent } = await import('../agent');
+
+    mocks.onPrompt = async acpConnection => {
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'streamed' },
+        },
+      });
+    };
+
+    const agent = new AcpAgent({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    const result = await agent.stream('stream it', { runId: 'run-2' });
+    const chunks = [];
+    for await (const chunk of result.fullStream as any) {
+      chunks.push(chunk);
+    }
+
+    await expect(result.text).resolves.toBe('streamed');
+    expect(chunks.map(chunk => chunk.type)).toEqual(['text-start', 'text-delta', 'text-end', 'step-finish', 'finish']);
+    expect(result.messageList.get.response.db()[0]?.role).toBe('assistant');
+  });
+});
