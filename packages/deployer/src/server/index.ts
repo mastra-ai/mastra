@@ -551,7 +551,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // MUST be called after serve() returns per @hono/node-ws requirements
   injectWebSocket?.(server);
 
-  await mastra.startEventEngine();
+  await mastra.startWorkers();
 
   return server;
 }

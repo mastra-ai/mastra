@@ -48,6 +48,7 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   }
   state.followUpComponents = [];
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -139,6 +140,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -160,6 +162,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();

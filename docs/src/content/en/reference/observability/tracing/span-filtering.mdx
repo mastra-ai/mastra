@@ -21,7 +21,7 @@ The following example demonstrates how to combine `excludeSpanTypes` and `spanFi
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { SpanType } from '@mastra/core/observability'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
@@ -29,7 +29,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-app',
-        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        exporters: [new MastraStorageExporter(), new LangfuseExporter()],
         excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
         spanFilter: span => {
           if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {

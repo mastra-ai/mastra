@@ -31,7 +31,7 @@ Phoenix is an open-source observability platform that can be self-hosted or used
 
 ```bash title=".env"
 # Required
-PHOENIX_ENDPOINT=http://localhost:6006/v1/traces  # Or your Phoenix Cloud URL
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces  # Or your Phoenix Cloud URL
 
 # Optional
 PHOENIX_API_KEY=your-api-key  # For authenticated Phoenix instances
@@ -75,7 +75,7 @@ export const mastra = new Mastra({
         serviceName: process.env.PHOENIX_PROJECT_NAME || 'mastra-service',
         exporters: [
           new ArizeExporter({
-            endpoint: process.env.PHOENIX_ENDPOINT!,
+            endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
             apiKey: process.env.PHOENIX_API_KEY,
             projectName: process.env.PHOENIX_PROJECT_NAME,
           }),
@@ -96,7 +96,7 @@ docker run --pull=always -d --name arize-phoenix -p 6006:6006 \
   arizephoenix/phoenix:latest
 ```
 
-Set `PHOENIX_ENDPOINT=http://localhost:6006/v1/traces` and run your Mastra agent to see traces at [localhost:6006](http://localhost:6006).
+Set `PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces` and run your Mastra agent to see traces at [localhost:6006](http://localhost:6006).
 
 :::
 
@@ -210,7 +210,7 @@ Control how traces are batched and exported:
 
 ```typescript
 new ArizeExporter({
-  endpoint: process.env.PHOENIX_ENDPOINT!,
+  endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
   apiKey: process.env.PHOENIX_API_KEY,
 
   // Batch processing configuration
@@ -225,7 +225,7 @@ Add custom attributes to all exported spans:
 
 ```typescript
 new ArizeExporter({
-  endpoint: process.env.PHOENIX_ENDPOINT!,
+  endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
   resourceAttributes: {
     'deployment.environment': process.env.NODE_ENV,
     'service.namespace': 'production',
