@@ -24,10 +24,10 @@ export const TabList = ({ children, className, variant }: TabListProps) => {
   const resolvedVariant = variant ?? 'line';
 
   return (
-    <div className={cn('w-full overflow-x-auto', className)}>
+    <div className="w-full overflow-x-auto">
       <BaseTabs.List
         data-variant={resolvedVariant}
-        className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }))}
+        className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
       >
         {children}
         {resolvedVariant === 'line' && (
