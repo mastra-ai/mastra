@@ -493,6 +493,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     toolName: tc.toolName,
                     args: tc.args,
                   },
+                  ...(tc.providerMetadata !== undefined ? { providerMetadata: tc.providerMetadata } : {}),
+                  ...(tc.providerExecuted !== undefined ? { providerExecuted: tc.providerExecuted } : {}),
                 });
               }
 
