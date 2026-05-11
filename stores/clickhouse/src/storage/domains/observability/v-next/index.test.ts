@@ -13,7 +13,7 @@
 import { createClient } from '@clickhouse/client';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildRetentionDDL } from './ddl';
+import { ALL_MIGRATIONS, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -4059,6 +4059,47 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(stmts[0]).toBe('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
     });
 
+    // --- Unit tests for buildRetentionEntries ---
+
+    it('buildRetentionEntries returns structured entries whose sql matches buildRetentionDDL', () => {
+      const config = { tracing: 30, logs: 7, metrics: 14 };
+      const entries = buildRetentionEntries(config);
+      const ddl = buildRetentionDDL(config);
+      expect(entries).toHaveLength(ddl.length);
+      expect(entries.map(e => e.sql)).toEqual(ddl);
+      for (const entry of entries) {
+        expect(entry.sql).toContain(`ALTER TABLE ${entry.table}`);
+        expect(entry.sql).toContain(`${entry.column} + INTERVAL ${entry.days} DAY`);
+      }
+    });
+
+    // --- Unit tests for parseTtlExpression ---
+
+    it('parseTtlExpression parses normalized toIntervalDay form', () => {
+      expect(parseTtlExpression('TTL endedAt + toIntervalDay(30)')).toEqual({ column: 'endedAt', days: 30 });
+    });
+
+    it('parseTtlExpression parses INTERVAL N DAY form', () => {
+      expect(parseTtlExpression('TTL timestamp + INTERVAL 7 DAY')).toEqual({ column: 'timestamp', days: 7 });
+    });
+
+    it('parseTtlExpression extracts TTL from a full CREATE TABLE statement', () => {
+      const createTable = `CREATE TABLE mastra_span_events (...) ENGINE = ReplacingMergeTree PARTITION BY toDate(endedAt) ORDER BY (traceId) TTL endedAt + toIntervalDay(30) SETTINGS index_granularity = 8192`;
+      expect(parseTtlExpression(createTable)).toEqual({ column: 'endedAt', days: 30 });
+    });
+
+    it('parseTtlExpression handles backtick-quoted column identifiers', () => {
+      // ClickHouse's `system.tables.create_table_query` often wraps identifiers
+      // in backticks, e.g. `TTL `endedAt` + toIntervalDay(30)`.
+      expect(parseTtlExpression('TTL `endedAt` + toIntervalDay(30)')).toEqual({ column: 'endedAt', days: 30 });
+      expect(parseTtlExpression('TTL `timestamp` + INTERVAL 7 DAY')).toEqual({ column: 'timestamp', days: 7 });
+    });
+
+    it('parseTtlExpression returns null when no TTL clause is present', () => {
+      expect(parseTtlExpression('ORDER BY (traceId, endedAt)')).toBeNull();
+      expect(parseTtlExpression('')).toBeNull();
+    });
+
     // --- Integration test: retention is applied during init ---
 
     it('init applies retention TTL to tables', async () => {
@@ -4113,6 +4154,181 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         for (const table of signalTables) {
           await client.command({ query: `ALTER TABLE ${table} REMOVE TTL` });
         }
+        await client.close();
+      }
+    });
+  });
+
+  // ==========================================================================
+  // init() idempotence
+  //
+  // Regression coverage for the metadata-version churn that hung agent streams
+  // when ClickHouse observability was configured. On Replicated/Shared
+  // MergeTree, every ALTER bumps the table's metadata version even when the
+  // change is a no-op, so init() must skip ALTERs whose target is already in
+  // place to avoid replica catch-up races on every process boot.
+  // ==========================================================================
+
+  describe('init idempotence', () => {
+    // --- Unit tests for ALL_MIGRATIONS shape ---
+
+    it('ALL_MIGRATIONS entries carry table + name consistent with their SQL', () => {
+      expect(ALL_MIGRATIONS.length).toBeGreaterThan(0);
+      for (const entry of ALL_MIGRATIONS) {
+        expect(entry.sql).toContain(`ALTER TABLE ${entry.table}`);
+        expect(entry.sql).toContain(entry.name);
+        if (entry.kind === 'column') {
+          expect(entry.sql).toContain('ADD COLUMN IF NOT EXISTS');
+        } else {
+          expect(entry.sql).toContain('ADD INDEX IF NOT EXISTS');
+        }
+      }
+    });
+
+    it('ALL_MIGRATIONS entry names are unique within (table, kind)', () => {
+      const seen = new Set<string>();
+      for (const entry of ALL_MIGRATIONS) {
+        const key = `${entry.kind}:${entry.table}:${entry.name}`;
+        expect(seen.has(key), `duplicate migration entry ${key}`).toBe(false);
+        seen.add(key);
+      }
+    });
+
+    // --- Integration tests: init() must not re-issue applied ALTERs ---
+
+    it('re-running init against a current schema emits zero ALTER statements', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      try {
+        // First init brings the DB to the current schema.
+        const first = new ObservabilityStorageClickhouseVNext({ client });
+        await first.init();
+
+        // Wrap client.command so we can observe the second init's DDL traffic.
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+
+        try {
+          const second = new ObservabilityStorageClickhouseVNext({ client });
+          await second.init();
+
+          const alters = commands.filter(q => /^\s*ALTER\s+TABLE/i.test(q));
+          expect(alters, `expected no ALTERs, got:\n${alters.join('\n')}`).toEqual([]);
+        } finally {
+          spy.mockRestore();
+        }
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('changing retention only emits MODIFY TTL for tables whose value actually differs', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      const signalTables = [
+        'mastra_span_events',
+        'mastra_trace_roots',
+        'mastra_trace_branches',
+        'mastra_log_events',
+        'mastra_metric_events',
+        'mastra_score_events',
+        'mastra_feedback_events',
+      ];
+
+      try {
+        // Establish baseline retention.
+        const first = new ObservabilityStorageClickhouseVNext({
+          client,
+          retention: { tracing: 30, logs: 7, metrics: 14 },
+        });
+        await first.init();
+
+        // Spy on the second init's DDL traffic.
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+
+        try {
+          // Change only `logs`; leave tracing and metrics unchanged.
+          const second = new ObservabilityStorageClickhouseVNext({
+            client,
+            retention: { tracing: 30, logs: 21, metrics: 14 },
+          });
+          await second.init();
+
+          const ttlAlters = commands.filter(q => /MODIFY TTL/i.test(q));
+          expect(ttlAlters).toHaveLength(1);
+          expect(ttlAlters[0]).toContain('mastra_log_events');
+          expect(ttlAlters[0]).toContain('21 DAY');
+        } finally {
+          spy.mockRestore();
+        }
+      } finally {
+        // Clean up TTLs so other tests start from a clean state.
+        for (const table of signalTables) {
+          await client.command({ query: `ALTER TABLE ${table} REMOVE TTL` }).catch(() => {});
+        }
+        await client.close();
+      }
+    });
+
+    it('init still applies an ALTER for a column that was manually dropped', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      // Pick a migration we know is additive and safe to drop/re-add.
+      const target = ALL_MIGRATIONS.find(
+        m => m.kind === 'column' && m.table === 'mastra_log_events' && m.name === 'entityVersionId',
+      );
+      expect(target).toBeDefined();
+
+      try {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.command({
+          query: `ALTER TABLE ${target!.table} DROP COLUMN IF EXISTS ${target!.name}`,
+        });
+
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+
+        try {
+          await new ObservabilityStorageClickhouseVNext({ client }).init();
+          const matched = commands.filter(q => q.includes(`ALTER TABLE ${target!.table}`) && q.includes(target!.name));
+          expect(matched).toHaveLength(1);
+        } finally {
+          spy.mockRestore();
+        }
+
+        // Verify column is back so subsequent tests see the expected schema.
+        const colResult = await client.query({
+          query: `SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String} AND name = {name:String}`,
+          query_params: { table: target!.table, name: target!.name },
+          format: 'JSONEachRow',
+        });
+        expect(((await colResult.json()) as unknown[]).length).toBe(1);
+      } finally {
         await client.close();
       }
     });

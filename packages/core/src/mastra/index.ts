@@ -251,14 +251,14 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
+   * import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
    *     configs: {
    *       default: {
    *         serviceName: 'mastra',
-   *         exporters: [new DefaultExporter(), new CloudExporter()],
+   *         exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
    *       },
    *     },
    *   })
@@ -815,7 +815,7 @@ export class Mastra<
    * as default. If a real observability entrypoint already exists, the exporter
    * is added directly to the existing default instance.
    *
-   * @param exporter - The exporter to register (e.g. a CloudExporter)
+   * @param exporter - The exporter to register (e.g. a MastraPlatformExporter)
    * @param instance - An ObservabilityInstance pre-configured with the exporter, used as default when bootstrapping
    * @param entrypoint - A real ObservabilityEntrypoint to bootstrap if the current one is a no-op
    */
@@ -859,7 +859,7 @@ export class Mastra<
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
    *   observability: new Observability({
-   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *     configs: { default: { serviceName: 'mastra', exporters: [new MastraStorageExporter()] } },
    *   }),
    * });
    * ```
@@ -1007,8 +1007,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
+            'Import and instantiate: import { Observability, MastraStorageExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new MastraStorageExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
