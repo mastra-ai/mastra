@@ -175,13 +175,7 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [],
-    "bodyParams": [
-      "resourceId",
-      "runId",
-      "signal",
-      "streamOptions",
-      "threadId"
-    ],
+    "bodyParams": [],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
