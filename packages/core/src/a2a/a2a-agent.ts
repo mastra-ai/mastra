@@ -280,12 +280,24 @@ function resolveStreamTextId(candidateIds: Array<string | undefined>): string {
   return 'text-1';
 }
 
-function createResponseMessages(text: string): MastraDBMessage[] {
+function resolveMemoryInfo<OUTPUT>(options?: AgentExecutionOptionsBase<OUTPUT>) {
+  const threadId = typeof options?.memory?.thread === 'string' ? options.memory.thread : options?.memory?.thread?.id;
+
+  return {
+    threadId,
+    resourceId: options?.memory?.resource,
+  };
+}
+
+function createResponseMessages(
+  text: string,
+  memoryInfo: { threadId?: string; resourceId?: string } = {},
+): MastraDBMessage[] {
   if (!text) {
     return [];
   }
 
-  return new MessageList()
+  return new MessageList(memoryInfo)
     .add(
       {
         role: 'assistant',
@@ -303,6 +315,8 @@ function createGenerateResult({
   message,
   resumePayload,
   resumeSchema,
+  threadId,
+  resourceId,
 }: {
   runId: string;
   text: string;
@@ -310,8 +324,10 @@ function createGenerateResult({
   message?: Message;
   resumePayload?: A2AAgentResumePayload;
   resumeSchema?: string;
+  threadId?: string;
+  resourceId?: string;
 }): A2AAgentGenerateResult {
-  const responseMessages = createResponseMessages(text);
+  const responseMessages = createResponseMessages(text, { threadId, resourceId });
 
   return {
     text,
@@ -468,12 +484,14 @@ export class A2AAgent implements SubAgent {
     const bootstrap = await this.#getBootstrap();
     const runId = options?.runId ?? randomUUID();
     const prompt = messagesToPrompt(messages, options);
+    const memoryInfo = resolveMemoryInfo(options);
 
     return this.#sendAndResolve({
       bootstrap,
       runId,
       prompt,
       signal: options?.abortSignal,
+      ...memoryInfo,
     });
   }
 
@@ -492,6 +510,7 @@ export class A2AAgent implements SubAgent {
     }
 
     const bootstrap = await this.#getBootstrap();
+    const memoryInfo = resolveMemoryInfo(options);
 
     if (state.waitingForInput) {
       const prompt = resumeDataToPrompt(resumeData);
@@ -502,6 +521,7 @@ export class A2AAgent implements SubAgent {
         signal: options?.abortSignal,
         contextId: state.contextId,
         referenceTaskIds: state.taskId ? [state.taskId] : undefined,
+        ...memoryInfo,
       });
     }
 
@@ -520,6 +540,7 @@ export class A2AAgent implements SubAgent {
       runId,
       task,
       signal: options?.abortSignal,
+      ...memoryInfo,
     });
   }
 
@@ -530,10 +551,11 @@ export class A2AAgent implements SubAgent {
     const bootstrap = await this.#getBootstrap();
     const runId = options?.runId ?? randomUUID();
     const prompt = messagesToPrompt(messages, options);
+    const memoryInfo = resolveMemoryInfo(options);
 
     if (!bootstrap.streamingSupported) {
       const result = await this.generate(messages, options);
-      return this.#createBufferedStreamResult({ runId, result });
+      return this.#createBufferedStreamResult({ runId, result, ...memoryInfo });
     }
 
     return this.#runRemoteStream({
@@ -541,6 +563,7 @@ export class A2AAgent implements SubAgent {
       runId,
       prompt,
       signal: options?.abortSignal,
+      ...memoryInfo,
     });
   }
 
@@ -556,13 +579,14 @@ export class A2AAgent implements SubAgent {
     }
 
     const bootstrap = await this.#getBootstrap();
+    const memoryInfo = resolveMemoryInfo(options);
 
     if (state.waitingForInput) {
       const prompt = resumeDataToPrompt(resumeData);
 
       if (!bootstrap.streamingSupported) {
         const result = await this.resumeGenerate(resumeData, options);
-        return this.#createBufferedStreamResult({ runId, result });
+        return this.#createBufferedStreamResult({ runId, result, ...memoryInfo });
       }
 
       return this.#runRemoteStream({
@@ -572,6 +596,7 @@ export class A2AAgent implements SubAgent {
         signal: options?.abortSignal,
         contextId: state.contextId,
         referenceTaskIds: state.taskId ? [state.taskId] : undefined,
+        ...memoryInfo,
       });
     }
 
@@ -581,7 +606,7 @@ export class A2AAgent implements SubAgent {
 
     if (!bootstrap.streamingSupported) {
       const result = await this.resumeGenerate(resumeData, options);
-      return this.#createBufferedStreamResult({ runId, result });
+      return this.#createBufferedStreamResult({ runId, result, ...memoryInfo });
     }
 
     return this.#resubscribeToRemoteStream({
@@ -590,6 +615,7 @@ export class A2AAgent implements SubAgent {
       taskId: state.taskId,
       initialTask: state.lastTask,
       signal: options?.abortSignal,
+      ...memoryInfo,
     });
   }
 
@@ -671,6 +697,8 @@ export class A2AAgent implements SubAgent {
     signal,
     contextId,
     referenceTaskIds,
+    threadId,
+    resourceId,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
@@ -678,6 +706,8 @@ export class A2AAgent implements SubAgent {
     signal?: AbortSignal;
     contextId?: string;
     referenceTaskIds?: string[];
+    threadId?: string;
+    resourceId?: string;
   }): Promise<A2AAgentGenerateResult> {
     const response = await this.#sendMessage({
       bootstrap,
@@ -693,6 +723,8 @@ export class A2AAgent implements SubAgent {
         runId,
         text: extractMessageText(response),
         message: response,
+        threadId,
+        resourceId,
       });
     }
 
@@ -701,6 +733,8 @@ export class A2AAgent implements SubAgent {
       runId,
       task: response,
       signal,
+      threadId,
+      resourceId,
     });
   }
 
@@ -739,11 +773,15 @@ export class A2AAgent implements SubAgent {
     runId,
     task,
     signal,
+    threadId,
+    resourceId,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
     task: Task;
     signal?: AbortSignal;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<A2AAgentGenerateResult> {
     let currentTask = task;
 
@@ -761,6 +799,8 @@ export class A2AAgent implements SubAgent {
           text: evaluation.text,
           task: evaluation.task,
           message: evaluation.message,
+          threadId,
+          resourceId,
         });
       }
 
@@ -782,6 +822,8 @@ export class A2AAgent implements SubAgent {
           task: evaluation.task,
           resumePayload: evaluation.resumePayload,
           resumeSchema: evaluation.resumeSchema,
+          threadId,
+          resourceId,
         });
       }
 
@@ -845,6 +887,8 @@ export class A2AAgent implements SubAgent {
     signal,
     contextId,
     referenceTaskIds,
+    threadId,
+    resourceId,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
@@ -852,6 +896,8 @@ export class A2AAgent implements SubAgent {
     signal?: AbortSignal;
     contextId?: string;
     referenceTaskIds?: string[];
+    threadId?: string;
+    resourceId?: string;
   }): Promise<A2AAgentStreamResult> {
     const response = await this.#request(bootstrap.executionUrl, {
       method: 'POST',
@@ -878,6 +924,8 @@ export class A2AAgent implements SubAgent {
       bootstrap,
       runId,
       stream: await requireResponseBody(response, 'message/stream'),
+      threadId,
+      resourceId,
     });
   }
 
@@ -887,12 +935,16 @@ export class A2AAgent implements SubAgent {
     taskId,
     initialTask,
     signal,
+    threadId,
+    resourceId,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
     taskId: string;
     initialTask?: Task;
     signal?: AbortSignal;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<A2AAgentStreamResult> {
     const response = await this.#request(bootstrap.executionUrl, {
       method: 'POST',
@@ -911,6 +963,8 @@ export class A2AAgent implements SubAgent {
       runId,
       initialTask,
       stream: await requireResponseBody(response, 'tasks/resubscribe'),
+      threadId,
+      resourceId,
     });
   }
 
@@ -919,11 +973,15 @@ export class A2AAgent implements SubAgent {
     runId,
     initialTask,
     stream,
+    threadId,
+    resourceId,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
     initialTask?: Task;
     stream: ReadableStream<Uint8Array>;
+    threadId?: string;
+    resourceId?: string;
   }): Promise<A2AAgentStreamResult> {
     const [consumerStream, accumulatorStream] = stream.tee();
     const resultDeferred = createDeferred<A2AAgentGenerateResult>();
@@ -931,7 +989,7 @@ export class A2AAgent implements SubAgent {
     const taskDeferred = createDeferred<Task | undefined>();
     const suspendPayloadDeferred = createDeferred<A2AAgentResumePayload | undefined>();
     const resumeSchemaDeferred = createDeferred<string | undefined>();
-    const messageList = new MessageList();
+    const messageList = new MessageList({ threadId, resourceId });
 
     void this.#collectStreamEvents({
       bootstrap,
@@ -972,6 +1030,8 @@ export class A2AAgent implements SubAgent {
             runId,
             text: consumed.text,
             task: consumed.task,
+            threadId,
+            resourceId,
             ...(consumed.suspended
               ? {
                   resumePayload: consumed.suspended.payload,
@@ -1278,11 +1338,15 @@ export class A2AAgent implements SubAgent {
   #createBufferedStreamResult({
     runId,
     result,
+    threadId,
+    resourceId,
   }: {
     runId: string;
     result: A2AAgentGenerateResult;
+    threadId?: string;
+    resourceId?: string;
   }): A2AAgentStreamResult {
-    const messageList = new MessageList();
+    const messageList = new MessageList({ threadId, resourceId });
     const toolName = this.id;
     const textId = resolveStreamTextId([result.message?.messageId, result.task?.id]);
     if (result.text) {

@@ -412,6 +412,29 @@ describe('A2AAgent', () => {
     expect(output.message?.kind).toBe('message');
   });
 
+  it('preserves subagent memory identifiers on returned assistant messages', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      jsonRpcResult(createMessage('Generate path response')),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.generate('Use the generate path', {
+      memory: {
+        thread: 'subagent-thread-1',
+        resource: 'subagent-resource-1',
+      },
+    });
+
+    expect(output.messages).toHaveLength(1);
+    expect(output.messages[0]?.threadId).toBe('subagent-thread-1');
+    expect(output.messages[0]?.resourceId).toBe('subagent-resource-1');
+  });
+
   it('uses cached run state in resumeGenerate() and sends a follow-up message with context/reference task ids', async () => {
     const inputRequiredTask = createTask({
       id: 'task-input',
