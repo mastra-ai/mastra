@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 1.33.0-alpha.10
+
+### Minor Changes
+
+- Added `preserveModelOutput` to `ToolCallFilter` so filtered tool history can keep compact model-facing output without raw tool args or results. ([#16060](https://github.com/mastra-ai/mastra/pull/16060))
+
+  ```ts
+  import { ToolCallFilter } from '@mastra/core/processors';
+
+  const filter = new ToolCallFilter({
+    preserveModelOutput: true,
+  });
+  ```
+
+- Added a SubAgent interface for custom supervisor subagents. ([#16359](https://github.com/mastra-ai/mastra/pull/16359))
+
+### Patch Changes
+
+- dependencies updates: ([#16398](https://github.com/mastra-ai/mastra/pull/16398))
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.27` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.27) (from `npm:@ai-sdk/provider-utils@4.0.26`, in `dependencies`)
+
+- Fixed processor-combined workflows to use the agent logger so processor step failures are logged through the configured logger instead of console output. ([#16369](https://github.com/mastra-ai/mastra/pull/16369))
+
+- Fixed AI SDK v6 dynamic tool UI messages so MessageList preserves tool state during history normalization. Fixes #16046. ([#16062](https://github.com/mastra-ai/mastra/pull/16062))
+
+- Hide internal spans from Mastra-owned processors in exported traces. The `PROCESSOR_RUN` span still appears, but the agent, model, and tool spans that processors create under the hood are now marked internal and filtered out by default. ([#16424](https://github.com/mastra-ai/mastra/pull/16424))
+
+  Affects the moderation, PII detector, language detector, prompt-injection detector, system-prompt scrubber, and structured-output processors.
+
+  To inspect the internals (e.g. for debugging a Mastra-owned processor's behavior), set `includeInternalSpans: true` on your Observability config and the full subtree will be exported.
+
+- Fixed `timeTravel()` on evented workflows so jumping to a `.branch()` step no longer returns empty results for branches that did not run. Branch results now include only the branch that ran, matching the default workflow engine. ([#16428](https://github.com/mastra-ai/mastra/pull/16428))
+
+- Fix `abort()` not cancelling evented workflows ([#16416](https://github.com/mastra-ai/mastra/pull/16416))
+
+- Added validation to evented workflows to ensure execution prerequisites are met. `EventedWorkflow.createRun()` now throw clear error messages when the workflow execution flow is empty (missing `.then()`, `.branch()`, etc. calls) or when the step graph has uncommitted changes (missing `.commit()` call). This catches configuration errors early rather than failing during execution. ([#16361](https://github.com/mastra-ai/mastra/pull/16361))
+
 ## 1.33.0-alpha.9
 
 ### Minor Changes

@@ -26,6 +26,11 @@ const filterSpecific = new ToolCallFilter({
 const filterAfterRecentTools = new ToolCallFilter({
   filterAfterToolSteps: 2,
 })
+
+// Preserve compact model-facing output for filtered completed tool results
+const filterWithCompactToolHistory = new ToolCallFilter({
+  preserveModelOutput: true,
+})
 ```
 
 ## Constructor parameters
@@ -54,6 +59,14 @@ const filterAfterRecentTools = new ToolCallFilter({
             description:
               'Enables filtering during agent loops and preserves tool calls and results from this many recent tool-producing steps. If undefined, step filtering is disabled',
             isOptional: true,
+          },
+          {
+            name: 'preserveModelOutput',
+            type: 'boolean',
+            description:
+              'Preserves compact model-facing output from completed filtered tool results with providerMetadata.mastra.modelOutput. Raw tool args and raw results are removed',
+            isOptional: true,
+            defaultValue: 'false',
           },
         ],
       },
@@ -105,6 +118,27 @@ Set `filterAfterToolSteps: 0` to filter all previous tool calls and results on e
 ```typescript
 const filter = new ToolCallFilter({
   filterAfterToolSteps: 2,
+})
+```
+
+## Preserve compact model output
+
+Set `preserveModelOutput: true` to retain compact `toModelOutput` history for completed tool results that the filter removes. This keeps the model-facing output as text in the prompt while removing the raw `toolInvocation.args` and raw `toolInvocation.result` payloads.
+
+Only completed tool results with `providerMetadata.mastra.modelOutput` are preserved. Tool calls, incomplete results, and results without stored model output are still filtered.
+
+```typescript
+const filter = new ToolCallFilter({
+  preserveModelOutput: true,
+})
+```
+
+Combine `preserveModelOutput` with `exclude` to preserve compact output only for filtered tools:
+
+```typescript
+const filter = new ToolCallFilter({
+  exclude: ['searchDatabase'],
+  preserveModelOutput: true,
 })
 ```
 

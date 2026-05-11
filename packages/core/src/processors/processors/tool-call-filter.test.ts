@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage } from '../../memory/types';
+import { toolCallFilterProvider } from '../../processor-provider/providers';
 import type { ProcessInputStepArgs } from '../index';
 
 import { ToolCallFilter } from './tool-call-filter';
@@ -908,6 +909,379 @@ describe('ToolCallFilter', () => {
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
       expect(resultMessages).toHaveLength(1);
       expect(resultMessages[0]!.id).toBe('msg-1');
+    });
+  });
+
+  describe('preserveModelOutput', () => {
+    const createMessageList = (messages: MastraDBMessage[]) => {
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      return messageList;
+    };
+
+    const toolMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-user',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Search and summarize',
+          parts: [{ type: 'text' as const, text: 'Search and summarize' }],
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 'msg-tools',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: '',
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'call' as const,
+                toolCallId: 'call-search',
+                toolName: 'search',
+                args: { query: 'SECRET_QUERY' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Call metadata must not be preserved' },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-search',
+                toolName: 'search',
+                args: { query: 'SECRET_QUERY' },
+                result: { raw: 'SECRET_RAW_RESULT' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Compact search summary' },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-without-model-output',
+                toolName: 'raw-search',
+                args: { query: 'UNSAFE_ARGS' },
+                result: { raw: 'UNSAFE_RESULT' },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    it('keeps default filtering unchanged when model output is present', async () => {
+      const filter = new ToolCallFilter();
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInput({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(JSON.stringify(resultMessages)).not.toContain('Compact search summary');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_RAW_RESULT');
+    });
+
+    it('preserves only compact model output for excluded completed tool results', async () => {
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInput({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const serialized = JSON.stringify(resultMessages);
+      expect(serialized).toContain('Compact search summary');
+      expect(serialized).not.toContain('Call metadata must not be preserved');
+      expect(serialized).not.toContain('SECRET_RAW_RESULT');
+      expect(serialized).not.toContain('SECRET_QUERY');
+      expect(serialized).not.toContain('UNSAFE_RESULT');
+      expect(serialized).not.toContain('UNSAFE_ARGS');
+
+      const assistantParts = resultMessages.flatMap(message =>
+        typeof message.content === 'string' ? [] : message.content.parts,
+      );
+      expect(assistantParts.some((part: any) => part.type === 'tool-invocation')).toBe(false);
+      expect(assistantParts.filter((part: any) => part.type === 'text').map((part: any) => part.text)).toContain(
+        'search result:\nCompact search summary',
+      );
+    });
+
+    it('preserves model output while filtering only matching specific tools', async () => {
+      const filter = new ToolCallFilter({ exclude: ['search'], preserveModelOutput: true });
+      const messages: MastraDBMessage[] = [
+        ...toolMessages,
+        {
+          id: 'msg-calculator',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-calculator',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                  result: 4,
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = createMessageList(messages);
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const parts = resultMessages.flatMap(message =>
+        typeof message.content === 'string' ? [] : message.content.parts,
+      );
+      expect(
+        parts.some((part: any) => part.type === 'text' && part.text === 'search result:\nCompact search summary'),
+      ).toBe(true);
+      expect(
+        parts.some((part: any) => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'search'),
+      ).toBe(false);
+      expect(
+        parts.some((part: any) => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'calculator'),
+      ).toBe(true);
+    });
+
+    it('uses the compact representation for filtered step history without dangling tool results', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 0, preserveModelOutput: true });
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const filteredMessages = result.messages!;
+      expect(JSON.stringify(filteredMessages)).toContain('Compact search summary');
+
+      const promptList = new MessageList();
+      promptList.add(filteredMessages, 'input');
+      const prompt = await promptList.get.all.aiV5.llmPrompt();
+      expect(prompt.some(message => message.role === 'tool')).toBe(false);
+      expect(JSON.stringify(prompt)).toContain('Compact search summary');
+    });
+
+    it('leaves recent step tool results intact when filterAfterToolSteps preserves them', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 1, preserveModelOutput: true });
+      const messageList = new MessageList();
+      messageList.add(toolMessages[0]!, 'input');
+      messageList.add(toolMessages[1]!, 'response');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const serialized = JSON.stringify(result.messages);
+      expect(serialized).toContain('SECRET_QUERY');
+      expect(serialized).toContain('SECRET_RAW_RESULT');
+      expect(serialized).not.toContain('search result:\\nCompact search summary');
+
+      const parts = result.messages!.flatMap(message =>
+        typeof message.content === 'string' ? [] : message.content.parts,
+      );
+      expect(parts.some((part: any) => part.type === 'tool-invocation')).toBe(true);
+    });
+
+    it('supports text, primitive, array, and json-like model output shapes', async () => {
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+      const messages: MastraDBMessage[] = [
+        toolMessages[0]!,
+        {
+          id: 'msg-output-shapes',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-text',
+                  toolName: 'textTool',
+                  args: { secret: 'TEXT_ARGS' },
+                  result: 'TEXT_RAW',
+                },
+                providerMetadata: { mastra: { modelOutput: { type: 'text', text: 'Text from text field' } } },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-number',
+                  toolName: 'numberTool',
+                  args: { secret: 'NUMBER_ARGS' },
+                  result: 'NUMBER_RAW',
+                },
+                providerMetadata: { mastra: { modelOutput: 42 } },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-array',
+                  toolName: 'arrayTool',
+                  args: { secret: 'ARRAY_ARGS' },
+                  result: 'ARRAY_RAW',
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: [
+                      { type: 'text', value: 'First line' },
+                      { type: 'json', value: { safe: true } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = createMessageList(messages);
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const preservedTexts = resultMessages.flatMap(message =>
+        typeof message.content === 'string'
+          ? []
+          : message.content.parts.filter((part: any) => part.type === 'text').map((part: any) => part.text),
+      );
+      const serialized = JSON.stringify(resultMessages);
+      expect(preservedTexts).toContain('textTool result:\nText from text field');
+      expect(preservedTexts).toContain('numberTool result:\n42');
+      expect(preservedTexts).toContain('arrayTool result:\nFirst line\n{"safe":true}');
+      expect(serialized).not.toContain('TEXT_ARGS');
+      expect(serialized).not.toContain('NUMBER_RAW');
+      expect(serialized).not.toContain('ARRAY_RAW');
+    });
+
+    it('drops model output that cannot be represented as text', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+      const messages: MastraDBMessage[] = [
+        toolMessages[0]!,
+        {
+          id: 'msg-circular-output',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-circular',
+                  toolName: 'circularTool',
+                  args: { secret: 'CIRCULAR_ARGS' },
+                  result: 'CIRCULAR_RAW',
+                },
+                providerMetadata: { mastra: { modelOutput: circular } },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = createMessageList(messages);
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const serialized = JSON.stringify(resultMessages);
+      expect(serialized).not.toContain('circularTool result');
+      expect(serialized).not.toContain('CIRCULAR_ARGS');
+      expect(serialized).not.toContain('CIRCULAR_RAW');
+    });
+
+    it('does not transform messages when exclude is empty', async () => {
+      const filter = new ToolCallFilter({ exclude: [], preserveModelOutput: true });
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInput({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const serialized = JSON.stringify(resultMessages);
+      expect(serialized).toContain('SECRET_QUERY');
+      expect(serialized).toContain('SECRET_RAW_RESULT');
+      expect(serialized).toContain('Compact search summary');
+      expect(serialized).not.toContain('search result:\\nCompact search summary');
+    });
+
+    it('exposes filterAfterToolSteps and preserveModelOutput through the processor provider config', async () => {
+      const parsedConfig = toolCallFilterProvider.configSchema.parse({
+        filterAfterToolSteps: 0,
+        preserveModelOutput: true,
+      });
+      const processor = toolCallFilterProvider.createProcessor(parsedConfig);
+      const messageList = createMessageList(toolMessages);
+
+      const result = await processor.processInputStep?.(mockStepArgs(messageList));
+
+      expect(result?.messages).toBeDefined();
+      const resultMessages = result?.messages;
+      expect(JSON.stringify(resultMessages)).toContain('Compact search summary');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_QUERY');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_RAW_RESULT');
+    });
+
+    it('exposes preserveModelOutput through the processor provider config', async () => {
+      const parsedConfig = toolCallFilterProvider.configSchema.parse({ preserveModelOutput: true });
+      const processor = toolCallFilterProvider.createProcessor(parsedConfig);
+      const messageList = createMessageList(toolMessages);
+
+      const result = await processor.processInput?.({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result?.get.all.db();
+      expect(JSON.stringify(resultMessages)).toContain('Compact search summary');
     });
   });
 
