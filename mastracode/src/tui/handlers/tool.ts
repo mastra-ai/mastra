@@ -429,8 +429,10 @@ export function buildToolResultContent(
   result: unknown,
   modelOutput?: unknown,
 ): ToolResult['content'] {
-  const content: ToolResult['content'] = [{ type: 'text', text: formatToolResult(result) }];
+  const content: ToolResult['content'] = [];
+  let hasImageParts = false;
 
+  // Extract image parts from modelOutput (e.g. screenshot tool)
   if (
     modelOutput &&
     typeof modelOutput === 'object' &&
@@ -440,8 +442,15 @@ export function buildToolResultContent(
     for (const part of (modelOutput as any).value) {
       if (part?.type === 'media' && typeof part.data === 'string' && typeof part.mediaType === 'string') {
         content.push({ type: 'image', data: part.data, mimeType: part.mediaType });
+        hasImageParts = true;
       }
     }
+  }
+
+  // Only include the raw text result when there are no image parts.
+  // When modelOutput provides images, the raw result is redundant base64 JSON.
+  if (!hasImageParts) {
+    content.unshift({ type: 'text', text: formatToolResult(result) });
   }
 
   return content;
