@@ -19,7 +19,7 @@ import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
-import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { buildToolResultContent, formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
@@ -507,14 +507,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           );
 
           if (toolResult && toolResult.type === 'tool_result') {
+            const modelOutput = (toolResult.providerMetadata?.mastra as { modelOutput?: unknown } | undefined)
+              ?.modelOutput;
             toolComponent.updateResult(
               {
-                content: [
-                  {
-                    type: 'text',
-                    text: formatToolResult(toolResult.result),
-                  },
-                ],
+                content: buildToolResultContent(toolResult.result, modelOutput),
                 isError: toolResult.isError,
               },
               false,

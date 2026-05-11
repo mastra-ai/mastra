@@ -4,7 +4,7 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, renderImage, getImageDimensions, imageFallback, getCapabilities } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
@@ -1332,7 +1332,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
 
     const output = this.getFormattedOutput();
-    if (output) {
+    const images = this.getImageParts();
+    const hasContent = !!output || images.length > 0;
+
+    if (hasContent) {
       const termWidth = getTermWidth();
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
@@ -1342,27 +1345,32 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
-      let lines = output.split('\n');
-      const collapsedLines = 10;
-      const totalLines = lines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
+      if (output) {
+        let lines = output.split('\n');
+        const collapsedLines = 10;
+        const totalLines = lines.length;
+        const hasMore = !this.expanded && totalLines > collapsedLines + 1;
 
-      if (hasMore) {
-        lines = lines.slice(0, collapsedLines);
+        if (hasMore) {
+          lines = lines.slice(0, collapsedLines);
+        }
+
+        const borderedLines = lines.map(line => {
+          const truncated = truncateAnsi(line, maxLineWidth);
+          return border('│') + ' ' + theme.fg('toolOutput', truncated);
+        });
+        this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
+
+        if (hasMore) {
+          const remaining = totalLines - collapsedLines;
+          this.contentBox.addChild(
+            new Text(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`), 0, 0),
+          );
+        }
       }
 
-      const borderedLines = lines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + theme.fg('toolOutput', truncated);
-      });
-      this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
-
-      if (hasMore) {
-        const remaining = totalLines - collapsedLines;
-        this.contentBox.addChild(
-          new Text(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`), 0, 0),
-        );
-      }
+      // Render inline images (screenshots, etc.)
+      this.renderImageContent(border);
 
       // Bottom border with tool info
       this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
@@ -1489,6 +1497,63 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const { content } = extractContent(textContent);
     // Remove excessive blank lines while preserving intentional formatting
     return content.trim().replace(/\n\s*\n\s*\n/g, '\n\n');
+  }
+
+  /**
+   * Get image content parts from the tool result, if any.
+   */
+  private getImageParts(): Array<{ data: string; mimeType: string }> {
+    if (!this.result) return [];
+    return this.result.content
+      .filter(c => c.type === 'image' && c.data && c.mimeType)
+      .map(c => ({ data: c.data!, mimeType: c.mimeType! }));
+  }
+
+  /**
+   * Render inline image(s) inside a bordered tool box.
+   * Uses Kitty/iTerm2 graphics protocol when available, otherwise shows a text fallback.
+   */
+  private renderImageContent(borderFn: (char: string) => string): void {
+    const images = this.getImageParts();
+    if (images.length === 0) return;
+
+    const caps = getCapabilities();
+    const termWidth = getTermWidth();
+    const maxWidthCells = termWidth - 4 - BOX_INDENT * 2;
+
+    for (const img of images) {
+      const dims = getImageDimensions(img.data, img.mimeType);
+      if (!dims) {
+        this.contentBox.addChild(
+          new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, undefined)), 0, 0),
+        );
+        continue;
+      }
+
+      if (!caps.images) {
+        this.contentBox.addChild(
+          new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
+        );
+        continue;
+      }
+
+      const rendered = renderImage(img.data, dims, {
+        maxWidthCells,
+        maxHeightCells: 20,
+        preserveAspectRatio: true,
+      });
+      if (rendered) {
+        // Split the rendered sequence into lines so each can be bordered
+        const lines = rendered.sequence.split('\n');
+        for (const line of lines) {
+          this.contentBox.addChild(new Text(borderFn('│') + ' ' + line, 0, 0));
+        }
+      } else {
+        this.contentBox.addChild(
+          new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
+        );
+      }
+    }
   }
 
   /**

@@ -100,9 +100,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       handleToolInputEnd(ectx, event.toolCallId);
       break;
 
-    case 'tool_end':
-      handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
+    case 'tool_end': {
+      const modelOutput = (event.providerMetadata?.mastra as { modelOutput?: unknown } | undefined)?.modelOutput;
+      handleToolEnd(ectx, event.toolCallId, event.result, event.isError, modelOutput);
       break;
+    }
 
     case 'info':
       ectx.showInfo(event.message);

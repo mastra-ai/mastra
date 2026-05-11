@@ -379,7 +379,13 @@ export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: strin
   // Buffer cleanup handled by Harness display state
 }
 
-export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+export function handleToolEnd(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  result: unknown,
+  isError: boolean,
+  modelOutput?: unknown,
+): void {
   const { state } = ctx;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);
@@ -404,14 +410,39 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       state.allToolComponents.push(component);
     }
 
-    const toolResult: ToolResult = {
-      content: [{ type: 'text', text: formatToolResult(result) }],
-      isError,
-    };
+    const content = buildToolResultContent(result, modelOutput);
+    const toolResult: ToolResult = { content, isError };
     component.updateResult(toolResult, false);
 
     state.pendingTools.delete(toolCallId);
     state.pendingTaskToolIds?.delete(toolCallId);
     state.ui.requestRender();
   }
+}
+
+/**
+ * Build ToolResult content parts from a raw tool result and optional modelOutput.
+ * When modelOutput contains media parts (e.g. screenshots), includes them as
+ * image content so the TUI can render them inline.
+ */
+export function buildToolResultContent(
+  result: unknown,
+  modelOutput?: unknown,
+): ToolResult['content'] {
+  const content: ToolResult['content'] = [{ type: 'text', text: formatToolResult(result) }];
+
+  if (
+    modelOutput &&
+    typeof modelOutput === 'object' &&
+    (modelOutput as any).type === 'content' &&
+    Array.isArray((modelOutput as any).value)
+  ) {
+    for (const part of (modelOutput as any).value) {
+      if (part?.type === 'media' && typeof part.data === 'string' && typeof part.mediaType === 'string') {
+        content.push({ type: 'image', data: part.data, mimeType: part.mediaType });
+      }
+    }
+  }
+
+  return content;
 }

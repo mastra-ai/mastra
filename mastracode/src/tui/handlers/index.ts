@@ -16,6 +16,7 @@ export {
 export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts.js';
 export { handleSubagentStart, handleSubagentToolStart, handleSubagentToolEnd, handleSubagentEnd } from './subagent.js';
 export {
+  buildToolResultContent,
   formatToolResult,
   handleToolApprovalRequired,
   handleToolStart,
