@@ -9,6 +9,7 @@ import { AdaptiveModelRouter } from './adaptive-model-router';
 import type {
   AdaptiveModelRouterOptions,
   AdaptiveModelRouterTripwireMetadata,
+  AdaptiveModelRouterModel,
   ErrorRateRule,
   ScoreRule,
   FeedbackRule,
@@ -17,6 +18,12 @@ import type {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Two-model default used by most tests. */
+const DEFAULT_MODELS: AdaptiveModelRouterModel[] = [
+  { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+  { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+];
 
 function createMockObservabilityStorage(overrides?: {
   getMetricBreakdown?: ReturnType<typeof vi.fn>;
@@ -157,82 +164,90 @@ describe('AdaptiveModelRouter', () => {
   // =========================================================================
 
   describe('constructor', () => {
-    it('throws if no rules provided', () => {
-      expect(() => new AdaptiveModelRouter({ rules: [] })).toThrow('at least one rule');
+    it('throws if fewer than 2 models provided', () => {
+      expect(() => new AdaptiveModelRouter({ models: [] })).toThrow('at least 2 models');
+      expect(() => new AdaptiveModelRouter({ models: [{ id: 'a', model: 'openai/gpt-4o' }] })).toThrow(
+        'at least 2 models',
+      );
     });
 
     it('throws if error-rate threshold is out of range', () => {
       expect(
         () =>
           new AdaptiveModelRouter({
-            rules: [{ signal: 'error-rate', threshold: 0, fallbackModels: ['openai/gpt-4o-mini'] }],
+            models: DEFAULT_MODELS,
+            rules: [{ signal: 'error-rate', threshold: 0 }],
           }),
       ).toThrow('threshold must be between');
 
       expect(
         () =>
           new AdaptiveModelRouter({
-            rules: [{ signal: 'error-rate', threshold: 1.5, fallbackModels: ['openai/gpt-4o-mini'] }],
+            models: DEFAULT_MODELS,
+            rules: [{ signal: 'error-rate', threshold: 1.5 }],
           }),
       ).toThrow('threshold must be between');
-    });
-
-    it('throws if error-rate rule has no fallback models', () => {
-      expect(
-        () =>
-          new AdaptiveModelRouter({
-            rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: [] }],
-          }),
-      ).toThrow('at least one fallback model');
     });
 
     it('throws if score rule has no scorerId', () => {
       expect(
         () =>
           new AdaptiveModelRouter({
-            rules: [{ signal: 'score', scorerId: '', minScore: 0.7, fallbackModels: ['openai/gpt-4o'] }],
+            models: DEFAULT_MODELS,
+            rules: [{ signal: 'score', scorerId: '', minScore: 0.7 }],
           }),
       ).toThrow('scorerId');
     });
 
-    it('throws if score rule has no fallback models', () => {
+    it('throws if feedback rule has no feedbackType', () => {
       expect(
         () =>
           new AdaptiveModelRouter({
-            rules: [{ signal: 'score', scorerId: 'relevance', minScore: 0.7, fallbackModels: [] }],
+            models: DEFAULT_MODELS,
+            rules: [{ signal: 'feedback', feedbackType: '' }],
           }),
-      ).toThrow('at least one fallback model');
+      ).toThrow('feedbackType');
     });
 
-    it('throws if feedback rule has fewer than 2 models', () => {
-      expect(
-        () =>
-          new AdaptiveModelRouter({
-            rules: [{ signal: 'feedback', feedbackType: 'thumbs', models: ['openai/gpt-4o'] }],
-          }),
-      ).toThrow('at least two models');
-    });
-
-    it('accepts valid configuration', () => {
+    it('accepts valid configuration with explicit rules', () => {
       const router = new AdaptiveModelRouter({
-        rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+        models: DEFAULT_MODELS,
+        rules: [{ signal: 'error-rate', threshold: 0.3 }],
       });
       expect(router.id).toBe('adaptive-model-router');
       expect(router.name).toBe('Adaptive Model Router');
     });
 
-    it('defaults scope to resource', () => {
+    it('auto-generates default error-rate rule when rules are omitted', () => {
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
+      expect((router as any).rules).toHaveLength(1);
+      expect((router as any).rules[0].signal).toBe('error-rate');
+      expect((router as any).rules[0].threshold).toBe(0.3);
+    });
+
+    it('uses custom errorRateThreshold / minRequests for default rule', () => {
       const router = new AdaptiveModelRouter({
-        rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+        models: DEFAULT_MODELS,
+        errorRateThreshold: 0.5,
+        minRequests: 20,
       });
+      expect((router as any).rules[0].threshold).toBe(0.5);
+      expect((router as any).rules[0].minRequests).toBe(20);
+    });
+
+    it('defaults scope to resource', () => {
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       expect((router as any).scope).toBe('resource');
     });
 
     it('defaults window to 24h', () => {
-      const router = new AdaptiveModelRouter({
-        rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-      });
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       expect((router as any).defaultWindow).toBe('24h');
+    });
+
+    it('stores modelIds derived from models array', () => {
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
+      expect((router as any).modelIds).toEqual(['openai/gpt-4o', 'openai/gpt-4o-mini']);
     });
   });
 
@@ -249,9 +264,7 @@ describe('AdaptiveModelRouter', () => {
         getServerCache: () => mockCache,
       } as any;
 
-      const router = new AdaptiveModelRouter({
-        rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-      });
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       router.__registerMastra(mockMastra);
 
       expect((router as any).observabilityStorage).toBe(obsStorage);
@@ -264,9 +277,7 @@ describe('AdaptiveModelRouter', () => {
         getServerCache: () => createMockCache(),
       } as any;
 
-      const router = new AdaptiveModelRouter({
-        rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-      });
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       expect(() => router.__registerMastra(mockMastra)).toThrow('observability storage');
     });
 
@@ -279,9 +290,7 @@ describe('AdaptiveModelRouter', () => {
         },
       } as any;
 
-      const router = new AdaptiveModelRouter({
-        rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-      });
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       router.__registerMastra(mockMastra);
 
       expect((router as any).cache).toBeDefined();
@@ -296,11 +305,7 @@ describe('AdaptiveModelRouter', () => {
   describe('scope resolution', () => {
     it('returns undefined when no scope context is available (resource scope, no resourceId)', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        { rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }] },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS }, obsStorage, createMockCache());
 
       const args = createInputStepArgs({ stepNumber: 1 });
       const result = await router.processInputStep(args);
@@ -310,14 +315,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('uses resourceId for resource scope', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'resource',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS, scope: 'resource' }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-123');
@@ -334,14 +332,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('uses threadId for thread scope', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'thread',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS, scope: 'thread' }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-abc');
@@ -358,14 +349,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('uses traceId for run scope', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'run',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS, scope: 'run' }, obsStorage, createMockCache());
 
       const args = createInputStepArgs({
         stepNumber: 1,
@@ -382,14 +366,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('returns undefined for run scope without tracing context', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'run',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS, scope: 'run' }, obsStorage, createMockCache());
 
       const args = createInputStepArgs({ stepNumber: 1 });
       const result = await router.processInputStep(args);
@@ -410,10 +387,9 @@ describe('AdaptiveModelRouter', () => {
       const rule: ErrorRateRule = {
         signal: 'error-rate',
         threshold: 0.3,
-        fallbackModels: ['openai/gpt-4o-mini'],
         ...overrides,
       };
-      return createRouter({ rules: [rule], scope: 'resource' }, obsStorage, cache);
+      return createRouter({ models: DEFAULT_MODELS, rules: [rule], scope: 'resource' }, obsStorage, cache);
     }
 
     it('does not switch when error rate is below threshold', async () => {
@@ -448,11 +424,7 @@ describe('AdaptiveModelRouter', () => {
         }),
       });
 
-      const router = createErrorRateRouter(
-        { threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createErrorRateRouter({ threshold: 0.3 }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -498,11 +470,7 @@ describe('AdaptiveModelRouter', () => {
       });
 
       const cache = createMockCache();
-      const router = createErrorRateRouter(
-        { threshold: 0.3, cooldown: '2m', fallbackModels: ['openai/gpt-4o-mini'] },
-        obsStorage,
-        cache,
-      );
+      const router = createErrorRateRouter({ threshold: 0.3, cooldown: '2m' }, obsStorage, cache);
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -544,7 +512,8 @@ describe('AdaptiveModelRouter', () => {
       const obsStorage = createMockObservabilityStorage();
       const router = createRouter(
         {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'], window: '5m' }],
+          models: DEFAULT_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3, window: '5m' }],
           scope: 'run',
         },
         obsStorage,
@@ -588,11 +557,7 @@ describe('AdaptiveModelRouter', () => {
         }),
       });
 
-      const router = createErrorRateRouter(
-        { threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createErrorRateRouter({ threshold: 0.3 }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -619,10 +584,9 @@ describe('AdaptiveModelRouter', () => {
         signal: 'score',
         scorerId: 'relevance',
         minScore: 0.7,
-        fallbackModels: ['openai/gpt-4o'],
         ...overrides,
       };
-      return createRouter({ rules: [rule], scope: 'resource' }, obsStorage, cache);
+      return createRouter({ models: DEFAULT_MODELS, rules: [rule], scope: 'resource' }, obsStorage, cache);
     }
 
     it('does not switch when score is above minimum', async () => {
@@ -646,11 +610,7 @@ describe('AdaptiveModelRouter', () => {
         getScoreAggregate: vi.fn().mockResolvedValue({ value: 0.55 }),
       });
 
-      const router = createScoreRouter(
-        { minScore: 0.7, fallbackModels: ['openai/gpt-4o'] },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createScoreRouter({ minScore: 0.7 }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -659,7 +619,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       expect(result).toBeDefined();
-      expect(result?.model).toBe('openai/gpt-4o');
+      expect(result?.model).toBe('openai/gpt-4o-mini');
     });
 
     it('does not switch when score is null (no data)', async () => {
@@ -705,11 +665,7 @@ describe('AdaptiveModelRouter', () => {
       });
 
       const cache = createMockCache();
-      const router = createScoreRouter(
-        { minScore: 0.7, cooldown: '5m', fallbackModels: ['openai/gpt-4o'] },
-        obsStorage,
-        cache,
-      );
+      const router = createScoreRouter({ minScore: 0.7, cooldown: '5m' }, obsStorage, cache);
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -717,13 +673,13 @@ describe('AdaptiveModelRouter', () => {
       // First call — score below threshold
       const args1 = createInputStepArgs({ stepNumber: 1, requestContext });
       const result1 = await router.processInputStep(args1);
-      expect(result1?.model).toBe('openai/gpt-4o');
+      expect(result1?.model).toBe('openai/gpt-4o-mini');
       expect(cache.set).toHaveBeenCalled();
 
       // Second call — should still route to fallback (cooldown active)
       const args2 = createInputStepArgs({ stepNumber: 2, requestContext });
       const result2 = await router.processInputStep(args2);
-      expect(result2?.model).toBe('openai/gpt-4o');
+      expect(result2?.model).toBe('openai/gpt-4o-mini');
     });
 
     it('handles storage errors gracefully', async () => {
@@ -747,6 +703,11 @@ describe('AdaptiveModelRouter', () => {
   // =========================================================================
 
   describe('feedback rule', () => {
+    const FEEDBACK_MODELS: AdaptiveModelRouterModel[] = [
+      { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+      { id: 'anthropic/claude-3-sonnet', model: 'anthropic/claude-3-sonnet' },
+    ];
+
     function createFeedbackRouter(
       overrides: Partial<FeedbackRule> = {},
       obsStorage?: ObservabilityStorage,
@@ -755,10 +716,9 @@ describe('AdaptiveModelRouter', () => {
       const rule: FeedbackRule = {
         signal: 'feedback',
         feedbackType: 'thumbs',
-        models: ['openai/gpt-4o', 'anthropic/claude-3-sonnet'],
         ...overrides,
       };
-      return createRouter({ rules: [rule], scope: 'resource' }, obsStorage, cache);
+      return createRouter({ models: FEEDBACK_MODELS, rules: [rule], scope: 'resource' }, obsStorage, cache);
     }
 
     it('selects the best-rated model when feedback data is available', async () => {
@@ -776,11 +736,7 @@ describe('AdaptiveModelRouter', () => {
         }),
       });
 
-      const router = createFeedbackRouter(
-        { minSamples: 2, models: ['openai/gpt-4o', 'anthropic/claude-3-sonnet'] },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createFeedbackRouter({ minSamples: 2 }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -803,14 +759,7 @@ describe('AdaptiveModelRouter', () => {
         }),
       });
 
-      const router = createFeedbackRouter(
-        {
-          minSamples: 1,
-          models: ['openai/gpt-4o', 'anthropic/claude-3-sonnet'],
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createFeedbackRouter({ minSamples: 1 }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -833,11 +782,7 @@ describe('AdaptiveModelRouter', () => {
         }),
       });
 
-      const router = createFeedbackRouter(
-        { minSamples: 10, models: ['openai/gpt-4o', 'anthropic/claude-3-sonnet'] },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createFeedbackRouter({ minSamples: 10 }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -885,6 +830,12 @@ describe('AdaptiveModelRouter', () => {
   // =========================================================================
 
   describe('chained fallbacks', () => {
+    const THREE_MODELS: AdaptiveModelRouterModel[] = [
+      { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+      { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      { id: 'anthropic/claude-3-haiku', model: 'anthropic/claude-3-haiku' },
+    ];
+
     it('tries second fallback when first fallback is also in cooldown', async () => {
       const obsStorage = createMockObservabilityStorage({
         getMetricBreakdown: vi.fn().mockResolvedValue({
@@ -898,14 +849,8 @@ describe('AdaptiveModelRouter', () => {
       const cache = createMockCache();
       const router = createRouter(
         {
-          rules: [
-            {
-              signal: 'error-rate',
-              threshold: 0.3,
-              cooldown: '2m',
-              fallbackModels: ['openai/gpt-4o-mini', 'anthropic/claude-3-haiku'],
-            },
-          ],
+          models: THREE_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3, cooldown: '2m' }],
           scope: 'resource',
         },
         obsStorage,
@@ -945,14 +890,8 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
-          rules: [
-            {
-              signal: 'error-rate',
-              threshold: 0.3,
-              cooldown: '2m',
-              fallbackModels: ['openai/gpt-4o-mini', 'anthropic/claude-3-haiku'],
-            },
-          ],
+          models: THREE_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3, cooldown: '2m' }],
           scope: 'resource',
         },
         obsStorage,
@@ -972,31 +911,31 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({ stepNumber: 1, requestContext });
       const result = await router.processInputStep(args);
 
-      // All fallbacks in cooldown → stay with current model
+      // All models in cooldown — should return undefined (keep current model)
       expect(result).toBeUndefined();
     });
 
-    it('selects first available fallback in order', async () => {
+    it('respects fallback order (selects first available)', async () => {
       const obsStorage = createMockObservabilityStorage({
         getMetricBreakdown: vi.fn().mockResolvedValue({
           groups: [
-            { dimensions: { 'labels.status': 'ok' }, value: 1 },
-            { dimensions: { 'labels.status': 'error' }, value: 9 },
+            { dimensions: { 'labels.status': 'ok' }, value: 2 },
+            { dimensions: { 'labels.status': 'error' }, value: 8 },
           ],
         }),
       });
 
       const cache = createMockCache();
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'primary', model: 'primary' },
+        { id: 'fallback-a', model: 'fallback-a' },
+        { id: 'fallback-b', model: 'fallback-b' },
+        { id: 'fallback-c', model: 'fallback-c' },
+      ];
       const router = createRouter(
         {
-          rules: [
-            {
-              signal: 'error-rate',
-              threshold: 0.3,
-              cooldown: '2m',
-              fallbackModels: ['fallback-a', 'fallback-b', 'fallback-c'],
-            },
-          ],
+          models,
+          rules: [{ signal: 'error-rate', threshold: 0.3, cooldown: '2m' }],
           scope: 'resource',
         },
         obsStorage,
@@ -1006,7 +945,11 @@ describe('AdaptiveModelRouter', () => {
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-order');
 
-      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'primary' as any,
+      });
       const result = await router.processInputStep(args);
 
       // Should select first available fallback
@@ -1032,18 +975,10 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
+          models: DEFAULT_MODELS,
           rules: [
-            {
-              signal: 'error-rate',
-              threshold: 0.3,
-              fallbackModels: ['error-fallback'],
-            },
-            {
-              signal: 'score',
-              scorerId: 'relevance',
-              minScore: 0.7,
-              fallbackModels: ['score-fallback'],
-            },
+            { signal: 'error-rate', threshold: 0.3 },
+            { signal: 'score', scorerId: 'relevance', minScore: 0.7 },
           ],
           scope: 'resource',
         },
@@ -1057,8 +992,8 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({ stepNumber: 1, requestContext });
       const result = await router.processInputStep(args);
 
-      // Both rules would fire, but error-rate is first → wins
-      expect(result?.model).toBe('error-fallback');
+      // Both rules would fire, but error-rate is first -> wins
+      expect(result?.model).toBe('openai/gpt-4o-mini');
       // Score rule should not have been called
       expect(obsStorage.getScoreAggregate).not.toHaveBeenCalled();
     });
@@ -1076,18 +1011,10 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
+          models: DEFAULT_MODELS,
           rules: [
-            {
-              signal: 'error-rate',
-              threshold: 0.3,
-              fallbackModels: ['error-fallback'],
-            },
-            {
-              signal: 'score',
-              scorerId: 'relevance',
-              minScore: 0.7,
-              fallbackModels: ['score-fallback'],
-            },
+            { signal: 'error-rate', threshold: 0.3 },
+            { signal: 'score', scorerId: 'relevance', minScore: 0.7 },
           ],
           scope: 'resource',
         },
@@ -1103,7 +1030,7 @@ describe('AdaptiveModelRouter', () => {
 
       // Error rate 10% < 30%, so it falls through to score rule
       // Score 0.4 < 0.7, so score rule fires
-      expect(result?.model).toBe('score-fallback');
+      expect(result?.model).toBe('openai/gpt-4o-mini');
     });
 
     it('returns undefined when no rules fire', async () => {
@@ -1116,9 +1043,10 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
+          models: DEFAULT_MODELS,
           rules: [
-            { signal: 'error-rate', threshold: 0.3, fallbackModels: ['error-fallback'] },
-            { signal: 'score', scorerId: 'relevance', minScore: 0.7, fallbackModels: ['score-fallback'] },
+            { signal: 'error-rate', threshold: 0.3 },
+            { signal: 'score', scorerId: 'relevance', minScore: 0.7 },
           ],
           scope: 'resource',
         },
@@ -1154,7 +1082,8 @@ describe('AdaptiveModelRouter', () => {
       const onViolation = vi.fn();
       const router = createRouter(
         {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          models: DEFAULT_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3 }],
           scope: 'resource',
         },
         obsStorage,
@@ -1193,7 +1122,8 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          models: DEFAULT_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3 }],
           scope: 'resource',
         },
         obsStorage,
@@ -1234,7 +1164,8 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          models: DEFAULT_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3 }],
           scope: 'resource',
         },
         obsStorage,
@@ -1266,7 +1197,8 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          models: DEFAULT_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3 }],
           scope: 'resource',
         },
         obsStorage,
@@ -1295,7 +1227,8 @@ describe('AdaptiveModelRouter', () => {
 
       const router = createRouter(
         {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          models: DEFAULT_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3 }],
           scope: 'resource',
         },
         obsStorage,
@@ -1319,14 +1252,7 @@ describe('AdaptiveModelRouter', () => {
   describe('model ID resolution', () => {
     it('resolves model ID from string', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'resource',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -1344,14 +1270,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('resolves model ID from MastraLanguageModel object', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'resource',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -1368,14 +1287,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('resolves model ID from OpenAICompatibleConfig', async () => {
       const obsStorage = createMockObservabilityStorage();
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'resource',
-        },
-        obsStorage,
-        createMockCache(),
-      );
+      const router = createRouter({ models: DEFAULT_MODELS }, obsStorage, createMockCache());
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
@@ -1391,35 +1303,90 @@ describe('AdaptiveModelRouter', () => {
     });
   });
 
+  // =========================================================================
+  // Per-model settings
+  // =========================================================================
+
+  describe('per-model settings', () => {
+    it('includes modelSettings in the result when switching models', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getMetricBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { 'labels.status': 'ok' }, value: 3 },
+            { dimensions: { 'labels.status': 'error' }, value: 7 },
+          ],
+        }),
+      });
+
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        {
+          id: 'openai/gpt-4o-mini',
+          model: 'openai/gpt-4o-mini',
+          modelSettings: { temperature: 0.5, maxTokens: 1000 },
+          providerOptions: { openai: { reasoningEffort: 'low' } },
+        },
+      ];
+
+      const router = createRouter(
+        { models, rules: [{ signal: 'error-rate', threshold: 0.3 }], scope: 'resource' },
+        obsStorage,
+        createMockCache(),
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+      const result = await router.processInputStep(args);
+
+      expect(result).toBeDefined();
+      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.modelSettings).toEqual({ temperature: 0.5, maxTokens: 1000 });
+      expect(result?.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
+    });
+
+    it('does not include modelSettings when fallback has none', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getMetricBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { 'labels.status': 'ok' }, value: 3 },
+            { dimensions: { 'labels.status': 'error' }, value: 7 },
+          ],
+        }),
+      });
+
+      const router = createRouter(
+        { models: DEFAULT_MODELS, rules: [{ signal: 'error-rate', threshold: 0.3 }], scope: 'resource' },
+        obsStorage,
+        createMockCache(),
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+      const result = await router.processInputStep(args);
+
+      expect(result).toBeDefined();
+      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.modelSettings).toBeUndefined();
+      expect(result?.providerOptions).toBeUndefined();
+    });
+  });
+
   // -------------------------------------------------------------------------
   // processAPIError — reactive fallback retry
   // -------------------------------------------------------------------------
   describe('processAPIError', () => {
-    it('returns undefined when not in fallback-chain mode', async () => {
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'resource',
-        },
-        createMockObservabilityStorage(),
-        createMockCache(),
-      );
-
-      const result = await router.processAPIError(
-        createAPIErrorArgs({
-          state: { __adaptiveRouter_currentModelId: 'openai/gpt-4o', __adaptiveRouter_scopeKey: 'resource:user-1' },
-        }),
-      );
-      expect(result).toBeUndefined();
-    });
-
-    it('returns { retry: true } and opens circuit on API failure in fallback-chain mode', async () => {
+    it('returns { retry: true } and opens circuit on API failure', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
+      const models: AdaptiveModelRouterModel[] = [
         { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
         { id: 'anthropic/claude-3.5-sonnet', model: 'anthropic/claude-3.5-sonnet' },
         { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      ];
+      const router = new AdaptiveModelRouter({ models });
       (router as any).cache = cache;
 
       const state: Record<string, unknown> = {
@@ -1442,10 +1409,7 @@ describe('AdaptiveModelRouter', () => {
     });
 
     it('returns undefined when missing state (no prior processInputStep call)', async () => {
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = createMockCache();
 
       const result = await router.processAPIError(createAPIErrorArgs({ state: {} }));
@@ -1454,10 +1418,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('returns undefined when all fallbacks have been retried', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const state: Record<string, unknown> = {
@@ -1472,11 +1433,12 @@ describe('AdaptiveModelRouter', () => {
 
     it('tracks multiple retried models across successive failures', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
+      const models: AdaptiveModelRouterModel[] = [
         { id: 'model-a', model: 'model-a' },
         { id: 'model-b', model: 'model-b' },
         { id: 'model-c', model: 'model-c' },
-      ]);
+      ];
+      const router = new AdaptiveModelRouter({ models });
       (router as any).cache = cache;
 
       const state: Record<string, unknown> = {
@@ -1503,10 +1465,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('triggers onViolation callback on API error', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
       const violations: any[] = [];
       router.onViolation = (v: any) => violations.push(v);
@@ -1528,10 +1487,7 @@ describe('AdaptiveModelRouter', () => {
     it('still retries even when cache.set fails', async () => {
       const cache = createMockCache();
       (cache.set as any).mockRejectedValue(new Error('Redis unavailable'));
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const result = await router.processAPIError(
@@ -1551,27 +1507,18 @@ describe('AdaptiveModelRouter', () => {
   // processOutputStep — soft-failure detection
   // -------------------------------------------------------------------------
   describe('processOutputStep', () => {
-    it('returns messages unchanged when not in fallback-chain mode', async () => {
-      const router = createRouter(
-        {
-          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
-          scope: 'resource',
-        },
-        createMockObservabilityStorage(),
-        createMockCache(),
-      );
+    it('returns messages unchanged when state is missing', async () => {
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
+      (router as any).cache = createMockCache();
 
-      const args = createOutputStepArgs();
+      const args = createOutputStepArgs({ state: {} });
       const result = await router.processOutputStep(args);
       expect(result).toBe(args.messages);
     });
 
     it('returns messages unchanged on successful response (no soft failure)', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1590,10 +1537,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('opens circuit on error finish reason', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1611,10 +1555,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('opens circuit on unknown finish reason', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1631,10 +1572,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('opens circuit on empty response (stop with no text and no tool calls)', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1653,10 +1591,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('does NOT open circuit when stop with text', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1674,10 +1609,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('does NOT open circuit when stop with tool calls', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1696,10 +1628,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('triggers onViolation on soft failure', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
       const violations: any[] = [];
       router.onViolation = (v: any) => violations.push(v);
@@ -1722,10 +1651,7 @@ describe('AdaptiveModelRouter', () => {
     it('returns messages unchanged even when cache fails', async () => {
       const cache = createMockCache();
       (cache.set as any).mockRejectedValue(new Error('Redis unavailable'));
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
 
       const args = createOutputStepArgs({
@@ -1739,18 +1665,6 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processOutputStep(args);
       expect(result).toBe(args.messages);
     });
-
-    it('returns messages unchanged when state is missing', async () => {
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
-      (router as any).cache = createMockCache();
-
-      const args = createOutputStepArgs({ state: {} });
-      const result = await router.processOutputStep(args);
-      expect(result).toBe(args.messages);
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -1760,10 +1674,7 @@ describe('AdaptiveModelRouter', () => {
     it('stores current model ID in state for processAPIError to read', async () => {
       const obsStorage = createMockObservabilityStorage();
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
-      ]);
+      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).observabilityStorage = obsStorage;
       (router as any).cache = cache;
 
@@ -1789,12 +1700,13 @@ describe('AdaptiveModelRouter', () => {
   // End-to-end reactive fallback flow
   // -------------------------------------------------------------------------
   describe('end-to-end reactive fallback flow', () => {
-    it('processInputStep → processAPIError → processInputStep retry skips failed model', async () => {
+    it('processInputStep -> processAPIError -> processInputStep retry skips failed model', async () => {
       const cache = createMockCache();
-      const router = AdaptiveModelRouter.fromModelFallbacks([
+      const models: AdaptiveModelRouterModel[] = [
         { id: 'model-a', model: 'model-a' },
         { id: 'model-b', model: 'model-b' },
-      ]);
+      ];
+      const router = new AdaptiveModelRouter({ models });
       (router as any).cache = cache;
 
       const requestContext = new RequestContext();

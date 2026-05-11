@@ -711,16 +711,15 @@ export class Agent<
     // DynamicArgument fields (model, modelSettings, etc.) may be functions — use the
     // model `id` string as the FallbackModel when the model itself is a function, and
     // skip function-typed settings since they need request context to resolve.
-    const router = AdaptiveModelRouter.fromModelFallbacks(
-      fallbacks.map(f => ({
+    const router = new AdaptiveModelRouter({
+      models: fallbacks.map(f => ({
         id: f.id,
         model: typeof f.model === 'function' ? (f.id as FallbackModel) : (f.model as FallbackModel),
-        enabled: f.enabled,
         modelSettings: typeof f.modelSettings === 'function' ? undefined : f.modelSettings,
         providerOptions: typeof f.providerOptions === 'function' ? undefined : f.providerOptions,
         headers: typeof f.headers === 'function' ? undefined : f.headers,
       })),
-    );
+    });
 
     // Register mastra instance if available so the router gets access to storage/cache
     if (this.#mastra) {
@@ -1006,7 +1005,7 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
-    // Get adaptive model router processor if model fallbacks + adaptiveFallbacks enabled (with deduplication)
+    // Get adaptive model router processor if model fallbacks are configured (with deduplication)
     const adaptiveRouterProcessors = this.getAdaptiveModelRouterProcessor(
       configuredProcessors,
     ) as unknown as InputProcessorOrWorkflow[];

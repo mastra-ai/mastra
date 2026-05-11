@@ -52,6 +52,18 @@ export interface FallbackModelSettings {
 }
 
 /**
+ * A model entry in the AdaptiveModelRouter's fallback chain.
+ * Maps 1:1 to entries in an agent's ModelFallbacks config.
+ */
+export interface AdaptiveModelRouterModel {
+  id: string;
+  model: FallbackModel;
+  modelSettings?: FallbackModelSettings['modelSettings'];
+  providerOptions?: FallbackModelSettings['providerOptions'];
+  headers?: FallbackModelSettings['headers'];
+}
+
+/**
  * Error-rate rule: switches model when the error rate for the current model
  * exceeds a threshold, using metric breakdown with status labels.
  */
@@ -70,8 +82,6 @@ export interface ErrorRateRule {
   window?: RouterWindow;
   /** Cooldown duration before retrying the original model. @default '2m' */
   cooldown?: string;
-  /** Ordered list of fallback models. First available (non-cooled-down) model is selected. */
-  fallbackModels: FallbackModel[];
 }
 
 /**
@@ -90,13 +100,11 @@ export interface ScoreRule {
   window?: RouterWindow;
   /** Cooldown duration before re-checking. @default '5m' */
   cooldown?: string;
-  /** Ordered list of fallback models. */
-  fallbackModels: FallbackModel[];
 }
 
 /**
  * Feedback rule: switches model based on user feedback breakdown,
- * selecting the highest-rated model from a configured set.
+ * selecting the highest-rated model from the router's models array.
  */
 export interface FeedbackRule {
   signal: 'feedback';
@@ -110,8 +118,6 @@ export interface FeedbackRule {
   minSamples?: number;
   /** Time window for feedback aggregation. @default '7d' */
   window?: RouterWindow;
-  /** Models to compare feedback for. Each must have a label that matches the model dimension. */
-  models: FallbackModel[];
 }
 
 export type AdaptiveModelRouterRule = ErrorRateRule | ScoreRule | FeedbackRule;
@@ -139,12 +145,26 @@ export interface AdaptiveModelRouterViolationDetail {
 
 /**
  * Configuration options for AdaptiveModelRouter.
+ *
+ * The `models` array maps 1:1 to an agent's ModelFallbacks config.
+ * Each entry carries its own id, model, headers, modelSettings, and providerOptions.
+ * When the router switches models, these per-model settings are included in the result.
+ *
+ * Rules are optional -- when omitted, a default error-rate rule is created automatically.
  */
 export interface AdaptiveModelRouterOptions {
   /**
-   * Ordered list of rules. Rules are evaluated in order; the first rule that fires wins.
+   * Ordered list of models in the fallback chain.
+   * First entry is the primary model; subsequent entries are fallbacks in priority order.
+   * Requires at least 2 models.
    */
-  rules: AdaptiveModelRouterRule[];
+  models: AdaptiveModelRouterModel[];
+
+  /**
+   * Observability rules evaluated in order; the first rule that fires wins.
+   * When omitted, a default error-rate rule is created using the options below.
+   */
+  rules?: AdaptiveModelRouterRule[];
 
   /**
    * Scope for observability data queries.
@@ -153,43 +173,30 @@ export interface AdaptiveModelRouterOptions {
   scope?: RouterScope;
 
   /**
-   * Time window for queries when using 'resource' or 'thread' scope.
+   * Default time window for queries when using 'resource' or 'thread' scope.
    * Can be overridden per-rule.
    * @default '24h'
    */
   window?: RouterWindow;
-}
 
-/**
- * Options for creating an AdaptiveModelRouter from agent model fallbacks.
- * Used when `adaptiveFallbacks` is enabled on an agent with a model fallback array.
- */
-export interface AdaptiveFallbacksOptions {
   /**
-   * Error rate threshold (0-1). When a model's error rate exceeds this, it is skipped.
-   * @default 0.3
-   */
-  errorRateThreshold?: number;
-  /**
-   * Time window for error rate calculation.
-   * @default '5m'
-   */
-  window?: RouterWindow;
-  /**
-   * Cooldown duration before retrying a model that was marked as failing.
+   * Default cooldown duration for the circuit breaker.
+   * Used by processAPIError and the top-level cooldown check in processInputStep.
    * @default '2m'
    */
   cooldown?: string;
+
   /**
-   * Minimum number of requests before the error rate rule can fire.
+   * Error rate threshold for the default error-rate rule (when rules are not specified).
+   * @default 0.3
+   */
+  errorRateThreshold?: number;
+
+  /**
+   * Minimum requests before the default error-rate rule fires (when rules are not specified).
    * @default 5
    */
   minRequests?: number;
-  /**
-   * Scope for observability data queries.
-   * @default 'resource'
-   */
-  scope?: RouterScope;
 }
 
 const WINDOW_MS: Record<RouterWindow, number> = {
@@ -255,208 +262,76 @@ function getModelId(model: FallbackModel): string {
 /**
  * AdaptiveModelRouter intelligently switches models based on observability signals.
  *
+ * Takes a `models` array that maps 1:1 to an agent's ModelFallbacks config.
+ * Each model entry carries its own id, model reference, headers, modelSettings,
+ * and providerOptions. The router replaces the model fallback code path entirely.
+ *
  * Combines circuit-breaker (error-rate), score-gating, and feedback-routing
  * into a single processor with prioritized rules. Uses cache (Redis or in-memory)
  * to persist cooldown state across requests in serverless environments.
  *
- * **Chained fallbacks**: Each rule can specify multiple fallback models. When the
- * primary model's circuit is open, the router tries fallbacks in order, skipping
- * any that are also in cooldown. This enables fallback-of-fallback patterns.
- *
- * Uses `processInputStep` to evaluate rules before each LLM call.
- *
- * @example Error-rate circuit breaker with chained fallbacks:
- * ```typescript
- * new AdaptiveModelRouter({
- *   rules: [{
- *     signal: 'error-rate',
- *     threshold: 0.3,
- *     window: '5m',
- *     cooldown: '2m',
- *     fallbackModels: ['openai/gpt-4o-mini', 'anthropic/claude-3-haiku'],
- *   }],
- * })
- * ```
- *
- * @example Score-gated quality enforcement:
- * ```typescript
- * new AdaptiveModelRouter({
- *   rules: [{
- *     signal: 'score',
- *     scorerId: 'relevance',
- *     minScore: 0.7,
- *     window: '24h',
- *     fallbackModels: ['openai/gpt-4o'],
- *   }],
- * })
- * ```
- *
- * @example Combined rules (first matching rule wins):
- * ```typescript
- * new AdaptiveModelRouter({
- *   rules: [
- *     { signal: 'error-rate', threshold: 0.3, cooldown: '2m', fallbackModels: ['openai/gpt-4o-mini'] },
- *     { signal: 'score', scorerId: 'relevance', minScore: 0.7, fallbackModels: ['openai/gpt-4o'] },
- *     { signal: 'feedback', feedbackType: 'thumbs', models: ['openai/gpt-4o', 'anthropic/claude-3-sonnet'] },
- *   ],
- * })
- * ```
+ * Lifecycle hooks:
+ * - processInputStep: Proactive -- checks cooldowns and evaluates observability rules
+ *   before each LLM call to select the best model.
+ * - processAPIError: Reactive -- on API failure, opens circuit for the failed model
+ *   and signals retry so processInputStep switches to the next fallback.
+ * - processOutputStep: Monitors -- detects soft failures (empty responses, error
+ *   finish reasons) and opens circuits for future requests.
  */
 export class AdaptiveModelRouter implements Processor<'adaptive-model-router', AdaptiveModelRouterTripwireMetadata> {
   public readonly id = 'adaptive-model-router';
   public readonly name = 'Adaptive Model Router';
 
+  private models: AdaptiveModelRouterModel[];
+  private modelIds: string[];
   private rules: AdaptiveModelRouterRule[];
   private scope: RouterScope;
   private defaultWindow: RouterWindow;
+  private defaultCooldownMs: number;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
 
   private observabilityStorage?: ObservabilityStorage;
   private cache?: MastraServerCache;
 
-  /**
-   * All model IDs from the original fallback array (set when created via fromModelFallbacks).
-   * Used to track cooldown per-model in the fallback chain so that when processInputStep
-   * receives any model in the chain, the router can skip it if it's in cooldown and
-   * jump to the next available model.
-   */
-  private fallbackChainModelIds?: string[];
-
-  /**
-   * Per-model settings lookup keyed by model ID (set when created via fromModelFallbacks).
-   * When the router switches to a fallback, these settings (modelSettings, providerOptions,
-   * headers) are included in the ProcessInputStepResult alongside the model override.
-   */
-  private fallbackSettingsMap?: Map<string, FallbackModelSettings>;
-
-  /**
-   * Creates an AdaptiveModelRouter from an agent's model fallback array.
-   *
-   * When an agent has `model: [modelA, modelB, modelC]`, this factory creates a router
-   * that monitors error rates for each model in the chain. Instead of always trying
-   * model A first (even if it has been failing), the router skips models in cooldown
-   * and jumps directly to the next healthy model.
-   *
-   * This is the mechanism behind the `adaptiveFallbacks` agent config option.
-   *
-   * @example
-   * ```typescript
-   * // Automatic (via agent config):
-   * const agent = new Agent({
-   *   model: [
-   *     { model: 'openai/gpt-4o' },
-   *     { model: 'anthropic/claude-3.5-sonnet' },
-   *     { model: 'openai/gpt-4o-mini' },
-   *   ],
-   *   adaptiveFallbacks: true,
-   * });
-   *
-   * // Manual:
-   * const router = AdaptiveModelRouter.fromModelFallbacks(
-   *   [
-   *     { id: 'primary', model: 'openai/gpt-4o' },
-   *     { id: 'fallback-1', model: 'anthropic/claude-3.5-sonnet' },
-   *     { id: 'fallback-2', model: 'openai/gpt-4o-mini' },
-   *   ],
-   *   { errorRateThreshold: 0.3, window: '5m', cooldown: '2m' },
-   * );
-   * ```
-   */
-  static fromModelFallbacks(
-    fallbacks: Array<{
-      id: string;
-      model: FallbackModel;
-      enabled?: boolean;
-      modelSettings?: FallbackModelSettings['modelSettings'];
-      providerOptions?: FallbackModelSettings['providerOptions'];
-      headers?: FallbackModelSettings['headers'];
-    }>,
-    options?: AdaptiveFallbacksOptions,
-  ): AdaptiveModelRouter {
-    const enabledFallbacks = fallbacks.filter(f => f.enabled !== false);
-    if (enabledFallbacks.length < 2) {
-      throw new Error('AdaptiveModelRouter.fromModelFallbacks requires at least 2 enabled models');
-    }
-
-    const threshold = options?.errorRateThreshold ?? 0.3;
-    const window = options?.window ?? '5m';
-    const cooldown = options?.cooldown ?? '2m';
-    const minRequests = options?.minRequests ?? 5;
-    const scope = options?.scope ?? 'resource';
-
-    const allModels = enabledFallbacks.map(f => f.model);
-
-    const rule: ErrorRateRule = {
-      signal: 'error-rate',
-      threshold,
-      window,
-      cooldown,
-      minRequests,
-      fallbackModels: allModels.slice(1),
-    };
-
-    const router = new AdaptiveModelRouter({
-      rules: [rule],
-      scope,
-      window,
-    });
-
-    // Store the full chain so processInputStep can handle any model in the chain
-    router.fallbackChainModelIds = allModels.map(m => getModelId(m));
-
-    // Build per-model settings map so the router can include modelSettings,
-    // providerOptions, and headers in the ProcessInputStepResult when switching
-    const settingsMap = new Map<string, FallbackModelSettings>();
-    for (const entry of enabledFallbacks) {
-      const modelId = getModelId(entry.model);
-      const settings: FallbackModelSettings = {};
-      if (entry.modelSettings) settings.modelSettings = entry.modelSettings;
-      if (entry.providerOptions) settings.providerOptions = entry.providerOptions;
-      if (entry.headers) settings.headers = entry.headers;
-      if (Object.keys(settings).length > 0) {
-        settingsMap.set(modelId, settings);
-      }
-    }
-    if (settingsMap.size > 0) {
-      router.fallbackSettingsMap = settingsMap;
-    }
-
-    return router;
-  }
-
   constructor(options: AdaptiveModelRouterOptions) {
-    if (!options.rules || options.rules.length === 0) {
-      throw new Error('AdaptiveModelRouter requires at least one rule');
+    if (!options.models || options.models.length < 2) {
+      throw new Error('AdaptiveModelRouter requires at least 2 models');
     }
 
-    for (const rule of options.rules) {
-      if (rule.signal === 'error-rate') {
-        if (rule.threshold <= 0 || rule.threshold > 1) {
-          throw new Error('Error-rate rule threshold must be between 0 (exclusive) and 1 (inclusive)');
-        }
-        if (!rule.fallbackModels || rule.fallbackModels.length === 0) {
-          throw new Error('Error-rate rule requires at least one fallback model');
-        }
-      } else if (rule.signal === 'score') {
-        if (!rule.scorerId) {
-          throw new Error('Score rule requires a scorerId');
-        }
-        if (!rule.fallbackModels || rule.fallbackModels.length === 0) {
-          throw new Error('Score rule requires at least one fallback model');
-        }
-      } else if (rule.signal === 'feedback') {
-        if (!rule.feedbackType) {
-          throw new Error('Feedback rule requires a feedbackType');
-        }
-        if (!rule.models || rule.models.length < 2) {
-          throw new Error('Feedback rule requires at least two models to compare');
-        }
-      }
-    }
-
-    this.rules = options.rules;
+    this.models = options.models;
+    this.modelIds = options.models.map(m => getModelId(m.model));
     this.scope = options.scope ?? 'resource';
     this.defaultWindow = options.window ?? '24h';
+    this.defaultCooldownMs = parseCooldownMs(options.cooldown ?? '2m');
+
+    if (options.rules && options.rules.length > 0) {
+      for (const rule of options.rules) {
+        if (rule.signal === 'error-rate') {
+          if (rule.threshold <= 0 || rule.threshold > 1) {
+            throw new Error('Error-rate rule threshold must be between 0 (exclusive) and 1 (inclusive)');
+          }
+        } else if (rule.signal === 'score') {
+          if (!rule.scorerId) {
+            throw new Error('Score rule requires a scorerId');
+          }
+        } else if (rule.signal === 'feedback') {
+          if (!rule.feedbackType) {
+            throw new Error('Feedback rule requires a feedbackType');
+          }
+        }
+      }
+      this.rules = options.rules;
+    } else {
+      this.rules = [
+        {
+          signal: 'error-rate',
+          threshold: options.errorRateThreshold ?? 0.3,
+          window: options.window ?? '5m',
+          cooldown: options.cooldown ?? '2m',
+          minRequests: options.minRequests ?? 5,
+        },
+      ];
+    }
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -531,39 +406,29 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     }
   }
 
-  /**
-   * Builds a ProcessInputStepResult for a selected fallback model,
-   * including any per-model settings (modelSettings, providerOptions, headers)
-   * that were configured in the original fallback array.
-   */
-  private buildFallbackResult(fallbackModel: FallbackModel): ProcessInputStepResult {
-    const result: ProcessInputStepResult = { model: fallbackModel };
-    if (this.fallbackSettingsMap) {
-      const modelId = getModelId(fallbackModel);
-      const settings = this.fallbackSettingsMap.get(modelId);
-      if (settings) {
-        if (settings.modelSettings) result.modelSettings = settings.modelSettings;
-        if (settings.providerOptions) result.providerOptions = settings.providerOptions;
-      }
-    }
+  private buildFallbackResult(entry: AdaptiveModelRouterModel): ProcessInputStepResult {
+    const result: ProcessInputStepResult = { model: entry.model };
+    if (entry.modelSettings) result.modelSettings = entry.modelSettings;
+    if (entry.providerOptions) result.providerOptions = entry.providerOptions;
     return result;
   }
 
   /**
-   * Find the first available fallback model that is not in cooldown.
-   * Implements the chained fallback pattern: if fallback A is also in cooldown,
-   * try fallback B, and so on.
+   * Find the first available model in the chain that is not the current model
+   * and is not in cooldown. Implements chained fallback: if fallback A is also
+   * in cooldown, try fallback B, and so on.
    */
   private async findAvailableFallback(
-    fallbackModels: FallbackModel[],
+    currentModelId: string,
     cooldownMs: number,
     scopeKey?: string,
-  ): Promise<FallbackModel | undefined> {
-    for (const model of fallbackModels) {
-      const modelId = getModelId(model);
-      const inCooldown = await this.isModelInCooldown(modelId, cooldownMs, scopeKey);
+  ): Promise<AdaptiveModelRouterModel | undefined> {
+    for (const entry of this.models) {
+      const id = getModelId(entry.model);
+      if (id === currentModelId) continue;
+      const inCooldown = await this.isModelInCooldown(id, cooldownMs, scopeKey);
       if (!inCooldown) {
-        return model;
+        return entry;
       }
     }
     return undefined;
@@ -582,13 +447,12 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
 
     // Check if current model is already in cooldown
     if (await this.isModelInCooldown(currentModelId, cooldownMs, scopeKey)) {
-      const fallback = await this.findAvailableFallback(rule.fallbackModels, cooldownMs, scopeKey);
+      const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey);
       if (fallback) {
-        const selectedId = getModelId(fallback);
+        const selectedId = getModelId(fallback.model);
         await this.notifyViolation('error-rate', currentModelId, selectedId, 'Model in cooldown (circuit open)');
         return this.buildFallbackResult(fallback);
       }
-      // All fallbacks also in cooldown — stay with current model
       return undefined;
     }
 
@@ -605,7 +469,6 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
         filters['timestamp'] = this.getWindowTimestamp(window as RouterWindow);
       }
 
-      // Get breakdown by status label to compute error rate
       const breakdown = await this.observabilityStorage.getMetricBreakdown({
         name: [metric],
         groupBy: ['labels.status'],
@@ -629,11 +492,11 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       const errorRate = errorCount / totalCount;
       if (errorRate <= rule.threshold) return undefined;
 
-      // Error rate exceeded — open circuit and find fallback
+      // Error rate exceeded -- open circuit and find fallback
       await this.openCircuit(currentModelId, scopeKey);
-      const fallback = await this.findAvailableFallback(rule.fallbackModels, cooldownMs, scopeKey);
+      const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey);
       if (fallback) {
-        const selectedId = getModelId(fallback);
+        const selectedId = getModelId(fallback.model);
         const reason = `Error rate ${(errorRate * 100).toFixed(1)}% exceeds threshold ${(rule.threshold * 100).toFixed(1)}%`;
         await this.notifyViolation('error-rate', currentModelId, selectedId, reason);
         return this.buildFallbackResult(fallback);
@@ -659,9 +522,9 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
 
     // Check cooldown for this score rule
     if (await this.isModelInCooldown(cooldownKey, cooldownMs, scopeKey)) {
-      const fallback = await this.findAvailableFallback(rule.fallbackModels, cooldownMs, scopeKey);
+      const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey);
       if (fallback) {
-        const selectedId = getModelId(fallback);
+        const selectedId = getModelId(fallback.model);
         await this.notifyViolation(
           'score',
           currentModelId,
@@ -693,11 +556,11 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       if (result.value === null || result.value === undefined) return undefined;
       if (result.value >= rule.minScore) return undefined;
 
-      // Score below minimum — open circuit and find fallback
+      // Score below minimum -- open circuit and find fallback
       await this.openCircuit(cooldownKey, scopeKey);
-      const fallback = await this.findAvailableFallback(rule.fallbackModels, cooldownMs, scopeKey);
+      const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey);
       if (fallback) {
-        const selectedId = getModelId(fallback);
+        const selectedId = getModelId(fallback.model);
         const reason = `Score '${rule.scorerId}' ${result.value.toFixed(2)} below minimum ${rule.minScore}`;
         await this.notifyViolation('score', currentModelId, selectedId, reason);
         return this.buildFallbackResult(fallback);
@@ -737,18 +600,18 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
 
       if (breakdown.groups.length === 0) return undefined;
 
-      // Build a map of model → score from the breakdown
+      // Build a map of model -> score from the breakdown
       const modelScores = new Map<string, number>();
-      const modelMap = new Map<string, FallbackModel>();
-      for (const model of rule.models) {
-        const id = getModelId(model);
-        modelMap.set(id, model);
+      const modelEntryMap = new Map<string, AdaptiveModelRouterModel>();
+      for (const entry of this.models) {
+        const id = getModelId(entry.model);
+        modelEntryMap.set(id, entry);
       }
 
       let totalSamples = 0;
       for (const group of breakdown.groups) {
         const entityName = group.dimensions['entityName'];
-        if (entityName && modelMap.has(entityName)) {
+        if (entityName && modelEntryMap.has(entityName)) {
           modelScores.set(entityName, group.value ?? 0);
           totalSamples++;
         }
@@ -757,22 +620,22 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       if (totalSamples < minSamples) return undefined;
 
       // Find the best-rated model
-      let bestModel: FallbackModel | undefined;
+      let bestEntry: AdaptiveModelRouterModel | undefined;
       let bestScore = -Infinity;
       let bestId = '';
       for (const [id, score] of modelScores) {
         if (score > bestScore) {
           bestScore = score;
           bestId = id;
-          bestModel = modelMap.get(id);
+          bestEntry = modelEntryMap.get(id);
         }
       }
 
       // Only switch if the best model is different from the current one
-      if (bestModel && bestId !== currentModelId) {
+      if (bestEntry && bestId !== currentModelId) {
         const reason = `Feedback '${rule.feedbackType}' favors '${bestId}' (score: ${bestScore.toFixed(2)})`;
         await this.notifyViolation('feedback', currentModelId, bestId, reason);
-        return this.buildFallbackResult(bestModel);
+        return this.buildFallbackResult(bestEntry);
       }
     } catch {
       // Query errors should not prevent the agent from running
@@ -804,61 +667,6 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     }
   }
 
-  /**
-   * In model-fallback-chain mode (created via fromModelFallbacks), finds the
-   * next available model after the current one in the chain, skipping any
-   * that are in cooldown. This allows the router to jump ahead in the
-   * fallback chain instead of always trying models sequentially.
-   */
-  private async findNextAvailableInChain(
-    currentModelId: string,
-    rule: ErrorRateRule,
-    scopeKey?: string,
-  ): Promise<FallbackModel | undefined> {
-    if (!this.fallbackChainModelIds) return undefined;
-
-    const cooldownMs = parseCooldownMs(rule.cooldown ?? '2m');
-    const currentIndex = this.fallbackChainModelIds.indexOf(currentModelId);
-
-    // If the current model isn't in the chain (shouldn't happen), fall through
-    if (currentIndex === -1) return undefined;
-
-    // Look for the first model AFTER current that isn't in cooldown
-    const allFallbackModels = this.rules[0]?.signal === 'error-rate' ? this.rules[0].fallbackModels : [];
-
-    for (let i = currentIndex + 1; i < this.fallbackChainModelIds.length; i++) {
-      const candidateId = this.fallbackChainModelIds[i]!;
-      const inCooldown = await this.isModelInCooldown(candidateId, cooldownMs, scopeKey);
-      if (!inCooldown) {
-        // Return the matching FallbackModel from the rule's fallbackModels
-        // Index in fallbackModels is (i - 1) because fallbackModels doesn't include the primary
-        const fallbackIndex = i - 1;
-        if (fallbackIndex >= 0 && fallbackIndex < allFallbackModels.length) {
-          return allFallbackModels[fallbackIndex];
-        }
-      }
-    }
-
-    // Also check models before current (wrap around) — in case earlier models recovered
-    for (let i = 0; i < currentIndex; i++) {
-      const candidateId = this.fallbackChainModelIds[i]!;
-      const inCooldown = await this.isModelInCooldown(candidateId, cooldownMs, scopeKey);
-      if (!inCooldown) {
-        if (i === 0) {
-          // Primary model recovered — but we're already in the fallback chain,
-          // so the LLM execution step will try it naturally. Don't override.
-          return undefined;
-        }
-        const fallbackIndex = i - 1;
-        if (fallbackIndex >= 0 && fallbackIndex < allFallbackModels.length) {
-          return allFallbackModels[fallbackIndex];
-        }
-      }
-    }
-
-    return undefined;
-  }
-
   async processInputStep(
     args: ProcessInputStepArgs<AdaptiveModelRouterTripwireMetadata>,
   ): Promise<ProcessInputStepResult | undefined> {
@@ -870,53 +678,30 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     const currentModelId =
       typeof args.model === 'string' ? args.model : 'modelId' in args.model ? getModelId(args.model) : 'unknown';
 
-    // Track the current model and scope key in processor state so processAPIError
-    // and processOutputStep know which model was used for this step.
+    // Track state so processAPIError and processOutputStep know which model was used
     args.state.__adaptiveRouter_currentModelId = currentModelId;
     args.state.__adaptiveRouter_scopeKey = scopeKey;
 
-    // Model-fallback-chain mode: check if the current model is in cooldown
-    // and skip ahead in the chain. This is the key behavior that makes
-    // agent model fallbacks "smart" — instead of always trying A → fail → B → fail → C,
-    // if A is known to be failing, jump directly to B or C.
-    if (this.fallbackChainModelIds && this.rules.length === 1 && this.rules[0]!.signal === 'error-rate') {
-      const rule = this.rules[0] as ErrorRateRule;
-      const cooldownMs = parseCooldownMs(rule.cooldown ?? '2m');
-
-      // If the current model is in cooldown, skip to the next available model
-      if (await this.isModelInCooldown(currentModelId, cooldownMs, scopeKey)) {
-        const nextModel = await this.findNextAvailableInChain(currentModelId, rule, scopeKey);
-        if (nextModel) {
-          const selectedId = getModelId(nextModel);
-          await this.notifyViolation(
-            'error-rate',
-            currentModelId,
-            selectedId,
-            'Model in cooldown (skipping in fallback chain)',
-          );
-          // Update state to reflect the model we actually selected
-          args.state.__adaptiveRouter_currentModelId = selectedId;
-          return this.buildFallbackResult(nextModel);
-        }
-        // All models in cooldown — let the normal chain proceed
-        return undefined;
+    // Quick cooldown check: if the current model is in cooldown (from a prior
+    // processAPIError or processOutputStep), skip to the next available model.
+    if (await this.isModelInCooldown(currentModelId, this.defaultCooldownMs, scopeKey)) {
+      const fallback = await this.findAvailableFallback(currentModelId, this.defaultCooldownMs, scopeKey);
+      if (fallback) {
+        const selectedId = getModelId(fallback.model);
+        await this.notifyViolation(
+          'error-rate',
+          currentModelId,
+          selectedId,
+          'Model in cooldown (skipping in fallback chain)',
+        );
+        args.state.__adaptiveRouter_currentModelId = selectedId;
+        return this.buildFallbackResult(fallback);
       }
-
-      // Current model is NOT in cooldown — check its error rate
-      // and open the circuit if it exceeds the threshold
-      const result = await this.evaluateErrorRateRule(rule, currentModelId, filter, scopeKey);
-      if (result?.model) {
-        args.state.__adaptiveRouter_currentModelId =
-          typeof result.model === 'string'
-            ? result.model
-            : 'modelId' in result.model
-              ? getModelId(result.model as FallbackModel)
-              : currentModelId;
-      }
-      return result;
+      // All models in cooldown -- let the normal chain proceed
+      return undefined;
     }
 
-    // Standard mode: evaluate rules in priority order — first rule that fires wins
+    // Evaluate rules in priority order -- first rule that fires wins
     for (const rule of this.rules) {
       let result: ProcessInputStepResult | undefined;
 
@@ -950,28 +735,19 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
    * model in cooldown and switch to the next fallback in the chain.
    *
    * This provides backwards compatibility with the existing model fallback
-   * behavior — even without observability data, the router can react to
+   * behavior -- even without observability data, the router can react to
    * real-time failures and route to healthy models.
-   *
-   * NOTE: processAPIError currently fires for ALL caught errors in the LLM
-   * execution step (both API rejections like 400/422 AND network/HTTP errors
-   * like 429/500/timeouts). If a `processRequestError` hook is added in the
-   * future to separate network errors from API rejections, this router should
-   * implement that hook as well.
    */
   async processAPIError(
     args: ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata>,
   ): Promise<ProcessAPIErrorResult | void> {
-    // Only applies in model-fallback-chain mode
-    if (!this.fallbackChainModelIds) return undefined;
-
     const failedModelId = args.state.__adaptiveRouter_currentModelId as string | undefined;
     const scopeKey = args.state.__adaptiveRouter_scopeKey as string | undefined;
     if (!failedModelId || !scopeKey) return undefined;
 
     // Don't retry if we've exhausted fallbacks (tracked in state)
     const retriedModels = (args.state.__adaptiveRouter_retriedModels as string[] | undefined) ?? [];
-    const allRetried = this.fallbackChainModelIds.every(id => id === failedModelId || retriedModels.includes(id));
+    const allRetried = this.modelIds.every(id => id === failedModelId || retriedModels.includes(id));
     if (allRetried) return undefined;
 
     // Open the circuit for the failed model so processInputStep skips it on retry
@@ -1004,15 +780,12 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
    * request (the response was already returned). Instead it proactively
    * protects subsequent requests.
    *
-   * Returns the messageList unchanged — this hook is purely for side-effects
+   * Returns the messageList unchanged -- this hook is purely for side-effects
    * (opening circuits in the cache).
    */
   async processOutputStep(
     args: ProcessOutputStepArgs<AdaptiveModelRouterTripwireMetadata>,
   ): Promise<MastraDBMessage[]> {
-    // Only applies in model-fallback-chain mode
-    if (!this.fallbackChainModelIds) return args.messages;
-
     const currentModelId = args.state.__adaptiveRouter_currentModelId as string | undefined;
     const scopeKey = args.state.__adaptiveRouter_scopeKey as string | undefined;
     if (!currentModelId || !scopeKey) return args.messages;
