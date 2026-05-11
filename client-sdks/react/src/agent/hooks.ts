@@ -1,7 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
-import type { BaseMessageListInput } from '@mastra/core/agent/message-list';
+import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -111,12 +111,14 @@ export const useChat = ({
     _requestContext.current = propsRequestContext;
   }, [propsRequestContext]);
 
-  const getSignalContents = (coreUserMessages: CoreUserMessage[]): BaseMessageListInput => {
+  type UserMessageSignalContents = Extract<SendAgentSignalParams['signal'], { type: 'user-message' }>['contents'];
+
+  const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
     if (coreUserMessages.length === 1) {
-      return coreUserMessages[0] as BaseMessageListInput;
+      return coreUserMessages[0] as UserMessageSignalContents;
     }
 
-    return coreUserMessages as BaseMessageListInput;
+    return coreUserMessages as UserMessageSignalContents;
   };
 
   const markThreadSignalsUnsupported = useCallback(() => {
