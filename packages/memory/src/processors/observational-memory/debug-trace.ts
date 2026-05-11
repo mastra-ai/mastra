@@ -53,7 +53,7 @@ export async function withOmDebugSpan<T>(
     span.end({});
     return result;
   } catch (error) {
-    span.error({ error: error instanceof Error ? error : new Error(String(error)) });
+    span.error({ error: error instanceof Error ? error : new Error(String(error)), endSpan: true });
     throw error;
   }
 }
