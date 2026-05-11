@@ -12,8 +12,6 @@ import { storage } from './storage';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
 
-await storage.init();
-
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
   agents: { weatherAgent, omAgent, omAdaptiveAgent },
