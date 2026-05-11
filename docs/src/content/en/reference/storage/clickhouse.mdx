@@ -39,7 +39,7 @@ import { Mastra } from '@mastra/core'
 import { MastraCompositeStore } from '@mastra/core/storage'
 import { PostgresStore } from '@mastra/pg'
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 const observabilityStore = new ObservabilityStorageClickhouseVNext({
   url: process.env.CLICKHOUSE_URL!,
@@ -62,14 +62,14 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
 })
 ```
 
-`DefaultExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/tracing/exporters/default#tracing-strategies) for details.
+`MastraStorageExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/tracing/exporters/mastra-storage#tracing-strategies) for details.
 
 ### Observability with the legacy domain
 
@@ -253,7 +253,7 @@ import { Mastra } from '@mastra/core'
 import { MastraCompositeStore } from '@mastra/core/storage'
 import { PostgresStore } from '@mastra/pg'
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
@@ -274,7 +274,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -316,14 +316,14 @@ In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()
 
 ClickHouse is the recommended backend for production observability:
 
-- **Insert-only strategy**: `DefaultExporter` writes completed spans in batches without per-span updates, which is the highest-throughput strategy available.
+- **Insert-only strategy**: `MastraStorageExporter` writes completed spans in batches without per-span updates, which is the highest-throughput strategy available.
 - **Columnar compression**: Span attributes and log payloads compress well compared to the same data in row-oriented databases.
 
-For the full strategy matrix and production guidance, see the [`DefaultExporter` reference](/docs/observability/tracing/exporters/default#storage-provider-support).
+For the full strategy matrix and production guidance, see the [`MastraStorageExporter` reference](/docs/observability/tracing/exporters/mastra-storage#storage-provider-support).
 
 ## Related
 
 - [Storage overview](/reference/storage/overview)
 - [Composite storage](/reference/storage/composite)
-- [`DefaultExporter`](/docs/observability/tracing/exporters/default)
+- [`MastraStorageExporter`](/docs/observability/tracing/exporters/mastra-storage)
 - [Observability overview](/docs/observability/overview)

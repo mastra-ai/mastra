@@ -1,4 +1,4 @@
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { it, describe, expect } from 'vitest';
 import * as customResolve from 'resolve.exports';
 import { resolve } from 'node:path';

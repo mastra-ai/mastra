@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -10,6 +12,8 @@ import { toStandardSchema } from '../schema';
 import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
+import type { ToolPayloadTransformPhase } from '../tools/types';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
@@ -19,8 +23,17 @@ import {
   DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS,
   DisplayStateScheduler,
 } from './display-state-scheduler';
-import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import {
+  askUserTool,
+  createSubagentTool,
+  submitPlanTool,
+  taskCheckTool,
+  taskCompleteTool,
+  taskUpdateTool,
+  taskWriteTool,
+} from './tools';
+import type { TaskItemSnapshot } from './tools';
+import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -44,10 +57,6 @@ import type {
   ToolCategory,
 } from './types';
 
-function createEmptyTokenUsage(): TokenUsage {
-  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-}
-
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -70,6 +79,11 @@ function addOptionalUsageField(
   if (value !== undefined) {
     usage[key] = (usage[key] ?? 0) + value;
   }
+}
+
+function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase, fallback: unknown) {
+  const transform = getTransformedToolPayload(metadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
 /**
@@ -141,6 +155,7 @@ export class Harness<TState = {}> {
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
   private displayState: HarnessDisplayState = defaultDisplayState();
+  private stateUpdateQueue: Promise<void> = Promise.resolve();
   #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
@@ -316,11 +331,7 @@ export class Harness<TState = {}> {
     return { ...this.state };
   }
 
-  /**
-   * Update harness state. Validates against schema if provided.
-   * Emits state_changed event.
-   */
-  async setState(updates: Partial<TState>): Promise<void> {
+  private async applyStateUpdates(updates: Partial<TState>): Promise<void> {
     const changedKeys = Object.keys(updates);
     const newState = { ...this.state, ...updates };
 
@@ -336,6 +347,44 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
+  }
+
+  /**
+   * Update harness state. Validates against schema if provided.
+   * Emits state_changed event.
+   */
+  async setState(updates: Partial<TState>): Promise<void> {
+    const run = this.stateUpdateQueue.then(() => this.applyStateUpdates(updates));
+    this.stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async updateState<TResult>(
+    updater: (
+      state: Readonly<TState>,
+    ) =>
+      | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
+      | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
+  ): Promise<TResult> {
+    const run = this.stateUpdateQueue.then(async () => {
+      const update = await updater(this.getState());
+      if (update.updates && Object.keys(update.updates).length > 0) {
+        await this.applyStateUpdates(update.updates);
+      }
+      for (const event of update.events ?? []) {
+        this.emit(event);
+      }
+      return update.result;
+    });
+
+    this.stateUpdateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private getSchemaDefaults(): Partial<TState> {
@@ -650,6 +699,11 @@ export class Harness<TState = {}> {
 
   getResourceId(): string {
     return this.resourceId;
+  }
+
+  async getResolvedMemory(): Promise<MastraMemory | null> {
+    if (!this.config.memory) return null;
+    return this.resolveMemory();
   }
 
   setResourceId({ resourceId }: { resourceId: string }): void {
@@ -999,6 +1053,8 @@ export class Harness<TState = {}> {
           promptTokens: savedUsage.promptTokens ?? 0,
           completionTokens: savedUsage.completionTokens ?? 0,
           totalTokens: savedUsage.totalTokens ?? 0,
+          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
         };
       } else {
         this.tokenUsage = createEmptyTokenUsage();
@@ -1007,30 +1063,42 @@ export class Harness<TState = {}> {
       const meta = thread?.metadata as Record<string, unknown> | undefined;
       const updates: Record<string, unknown> = {};
 
-      // Load model ID: per-mode first, then global
-      const modeModelKey = `modeModelId_${this.currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        updates.currentModelId = meta[modeModelKey];
-      } else if (meta?.currentModelId) {
-        updates.currentModelId = meta.currentModelId;
-      }
-
-      // Restore mode
+      // Restore the saved mode FIRST so we resolve currentModelId for the
+      // correct mode. Otherwise we'd look up modeModelId_<defaultMode> first
+      // and then never overwrite it when the saved mode has no per-mode
+      // override persisted (e.g. user only ever used the mode's default
+      // model), leaving the wrong mode's model active on restart.
+      let previousModeIdForEmit: string | undefined;
       if (meta?.currentModeId) {
         const savedModeId = meta.currentModeId as string;
         const modeExists = this.config.modes.some(m => m.id === savedModeId);
         if (modeExists && savedModeId !== this.currentModeId) {
+          previousModeIdForEmit = this.currentModeId;
           this.currentModeId = savedModeId;
-          const restoredModeModelKey = `modeModelId_${savedModeId}`;
-          if (meta[restoredModeModelKey]) {
-            updates.currentModelId = meta[restoredModeModelKey];
-          }
-          this.emit({
-            type: 'mode_changed',
-            modeId: savedModeId,
-            previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
-          });
         }
+      }
+
+      // Resolve the model for the (now-restored) current mode.
+      // Order: per-mode thread metadata → mode's defaultModelId → legacy
+      // global currentModelId (set by createThread).
+      const modeModelKey = `modeModelId_${this.currentModeId}`;
+      if (meta?.[modeModelKey]) {
+        updates.currentModelId = meta[modeModelKey];
+      } else {
+        const currentMode = this.config.modes.find(m => m.id === this.currentModeId);
+        if (currentMode?.defaultModelId) {
+          updates.currentModelId = currentMode.defaultModelId;
+        } else if (meta?.currentModelId) {
+          updates.currentModelId = meta.currentModelId;
+        }
+      }
+
+      if (previousModeIdForEmit !== undefined) {
+        this.emit({
+          type: 'mode_changed',
+          modeId: this.currentModeId,
+          previousModeId: previousModeIdForEmit,
+        });
       }
 
       // Restore observer/reflector model IDs
@@ -1330,16 +1398,18 @@ export class Harness<TState = {}> {
 
   /**
    * Resolve whether a tool call should be auto-approved, denied, or asked.
-   * Resolution chain: yolo → per-tool policy → session tool grant →
+   * Resolution chain: per-tool deny → yolo → per-tool policy → session tool grant →
    * session category grant → category policy → "ask"
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
     const state = this.state as Record<string, unknown>;
-    if (state.yolo === true) return 'allow';
-
     const rules = this.getPermissionRules();
 
     const toolPolicy = rules.tools[toolName];
+    if (toolPolicy === 'deny') return 'deny';
+
+    if (state.yolo === true) return 'allow';
+
     if (toolPolicy) return toolPolicy;
 
     if (this.sessionGrantedTools.has(toolName)) return 'allow';
@@ -1381,6 +1451,7 @@ export class Harness<TState = {}> {
     }
 
     const operationId = ++this.currentOperationId;
+    this.abortRequested = false;
     this.abortController = new AbortController();
     this.currentTraceId = null;
     const agent = this.getCurrentAgent();
@@ -1512,6 +1583,45 @@ export class Harness<TState = {}> {
     return this.listMessagesForThread({ threadId: this.currentThreadId, limit: options?.limit });
   }
 
+  async saveSystemReminderMessage({
+    message,
+    reminderType,
+    role = 'user',
+    metadata,
+  }: {
+    message: string;
+    reminderType: string;
+    role?: 'user' | 'assistant' | 'system';
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessMessage | null> {
+    if (!this.currentThreadId || !this.config.storage) return null;
+
+    const memoryStorage = await this.getMemoryStorage();
+    const dbMessage = {
+      id: randomUUID(),
+      role,
+      threadId: this.currentThreadId,
+      resourceId: this.resourceId,
+      createdAt: new Date(),
+      content: {
+        format: 2 as const,
+        parts: [],
+        content: '',
+        metadata: {
+          systemReminder: {
+            type: reminderType,
+            message,
+            ...metadata,
+          },
+        },
+      },
+    };
+
+    const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
+    const saved = result.messages[0] ?? dbMessage;
+    return this.convertToHarnessMessage(saved);
+  }
+
   async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.config.storage) return [];
 
@@ -1611,6 +1721,14 @@ export class Harness<TState = {}> {
         timestamp:
           'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
             ? systemReminder.timestamp
+            : undefined,
+        goalMaxTurns:
+          'goalMaxTurns' in systemReminder && typeof systemReminder.goalMaxTurns === 'number'
+            ? systemReminder.goalMaxTurns
+            : undefined,
+        judgeModelId:
+          'judgeModelId' in systemReminder && typeof systemReminder.judgeModelId === 'string'
+            ? systemReminder.judgeModelId
             : undefined,
       });
 
@@ -1858,7 +1976,15 @@ export class Harness<TState = {}> {
 
         case 'tool-call-delta': {
           const { toolCallId, argsTextDelta, toolName } = chunk.payload;
-          this.emit({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
+          const transform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
+          if (!transform?.suppress) {
+            this.emit({
+              type: 'tool_input_delta',
+              toolCallId,
+              argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
+              toolName,
+            });
+          }
           break;
         }
 
@@ -1874,13 +2000,13 @@ export class Harness<TState = {}> {
             type: 'tool_call',
             id: toolCall.toolCallId,
             name: toolCall.toolName,
-            args: toolCall.args,
+            args: getDisplayTransform(chunk.metadata, 'input-available', toolCall.args),
           });
           this.emit({
             type: 'tool_start',
             toolCallId: toolCall.toolCallId,
             toolName: toolCall.toolName,
-            args: toolCall.args,
+            args: getDisplayTransform(chunk.metadata, 'input-available', toolCall.args),
           });
           this.emit({ type: 'message_update', message: { ...currentMessage } });
           break;
@@ -1892,13 +2018,13 @@ export class Harness<TState = {}> {
             type: 'tool_result',
             id: toolResult.toolCallId,
             name: toolResult.toolName,
-            result: toolResult.result,
+            result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
             isError: toolResult.isError ?? false,
           });
           this.emit({
             type: 'tool_end',
             toolCallId: toolResult.toolCallId,
-            result: toolResult.result,
+            result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
             isError: toolResult.isError ?? false,
           });
           this.emit({ type: 'message_update', message: { ...currentMessage } });
@@ -1907,14 +2033,22 @@ export class Harness<TState = {}> {
 
         case 'tool-error': {
           const toolError = chunk.payload;
-          this.emit({ type: 'tool_end', toolCallId: toolError.toolCallId, result: toolError.error, isError: true });
+          this.emit({
+            type: 'tool_end',
+            toolCallId: toolError.toolCallId,
+            result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
+            isError: true,
+          });
           break;
         }
 
         case 'tool-call-approval': {
           const toolCallId = chunk.payload.toolCallId;
           const toolName = chunk.payload.toolName;
-          const toolArgs = chunk.payload.args;
+          const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+          const toolArgs = hasTransformedToolPayload(approvalTransform)
+            ? approvalTransform.transformed
+            : getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
 
           const policy = this.resolveToolApproval(toolName);
 
@@ -1960,8 +2094,8 @@ export class Harness<TState = {}> {
         case 'tool-call-suspended': {
           const suspToolCallId = chunk.payload.toolCallId;
           const suspToolName = chunk.payload.toolName;
-          const suspArgs = chunk.payload.args;
-          const suspPayload = chunk.payload.suspendPayload;
+          const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
+          const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
           const suspResumeSchema = chunk.payload.resumeSchema;
 
           this.emit({
@@ -2336,6 +2470,10 @@ export class Harness<TState = {}> {
     return this.currentTraceId;
   }
 
+  private getSubagentDisplayName(agentType: string): string | undefined {
+    return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
+  }
+
   // ===========================================================================
   // Display State
   // ===========================================================================
@@ -2346,6 +2484,17 @@ export class Harness<TState = {}> {
    */
   getDisplayState(): Readonly<HarnessDisplayState> {
     return this.displayState;
+  }
+
+  /**
+   * Restore task display state after a UI replays persisted task tool history.
+   * This updates the Harness-owned display snapshot without emitting a live
+   * `task_updated` event, since no task tool just ran.
+   */
+  restoreDisplayTasks(tasks: TaskItemSnapshot[]): void {
+    this.displayState.previousTasks = [...this.displayState.tasks];
+    this.displayState.tasks = [...tasks];
+    this.dispatchDisplayStateChanged(false);
   }
 
   /**
@@ -2473,7 +2622,7 @@ export class Harness<TState = {}> {
 
   /**
    * Respond to a pending plan approval.
-   * On approval: switches to the default mode, then resolves the promise.
+   * On approval: resolves the suspended plan tool, then switches to the default mode.
    * On rejection: resolves with feedback (stays in current mode).
    */
   async respondToPlanApproval({
@@ -2486,15 +2635,16 @@ export class Harness<TState = {}> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
+    this.pendingPlanApprovals.delete(planId);
+    resolve(response);
+
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
+        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
         await this.switchMode({ modeId: defaultMode.id });
       }
     }
-
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
   }
 
   private async handleToolApprove({
@@ -2641,18 +2791,22 @@ export class Harness<TState = {}> {
 
     this.dispatchToListeners(event);
 
+    if (event.type !== 'display_state_changed') {
+      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
+      this.dispatchDisplayStateChanged(isCritical);
+    }
+  }
+
+  private dispatchDisplayStateChanged(isCritical: boolean): void {
     // After every event, emit display_state_changed so UIs that prefer a single
     // subscribe-and-render pattern can do so. We dispatch directly to listeners
     // (not through emit()) to avoid infinite recursion.
-    if (event.type !== 'display_state_changed') {
-      this.dispatchToListeners({
-        type: 'display_state_changed',
-        displayState: this.displayState,
-      });
-    }
+    this.dispatchToListeners({
+      type: 'display_state_changed',
+      displayState: this.displayState,
+    });
 
-    if (event.type !== 'display_state_changed' && this.displayStateSchedulers.size > 0) {
-      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
+    if (this.displayStateSchedulers.size > 0) {
       for (const scheduler of Array.from(this.displayStateSchedulers)) {
         scheduler.notify(this.displayState, isCritical);
       }
@@ -2853,9 +3007,11 @@ export class Harness<TState = {}> {
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
-      case 'subagent_start':
+      case 'subagent_start': {
+        const displayName = this.getSubagentDisplayName(event.agentType);
         ds.activeSubagents.set(event.toolCallId, {
           agentType: event.agentType,
+          ...(displayName !== undefined ? { displayName } : {}),
           task: event.task,
           modelId: event.modelId,
           forked: event.forked,
@@ -2864,6 +3020,7 @@ export class Harness<TState = {}> {
           status: 'running',
         });
         break;
+      }
 
       case 'subagent_text_delta': {
         const sub = ds.activeSubagents.get(event.toolCallId);
@@ -3076,16 +3233,18 @@ export class Harness<TState = {}> {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
       task_write: taskWriteTool,
+      task_update: taskUpdateTool,
+      task_complete: taskCompleteTool,
       task_check: taskCheckTool,
     };
 
     // Resolve user-configured harness tools (needed for both the harness toolset and subagent allowedHarnessTools)
-    let resolvedHarnessTools = undefined;
+    let resolvedHarnessTools: ToolsInput | undefined = undefined;
     if (this.config.tools) {
       const tools =
         typeof this.config.tools === 'function' ? await this.config.tools({ requestContext }) : this.config.tools;
       if (tools) {
-        resolvedHarnessTools = tools;
+        resolvedHarnessTools = { ...tools };
       }
     }
 
@@ -3148,6 +3307,14 @@ export class Harness<TState = {}> {
       }
     }
 
+    const permissionRules = this.getPermissionRules();
+    for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
+      if (policy === 'deny') {
+        delete builtInTools[toolId];
+        delete resolvedHarnessTools?.[toolId];
+      }
+    }
+
     if (resolvedHarnessTools) {
       return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
     }
@@ -3165,6 +3332,7 @@ export class Harness<TState = {}> {
       state: this.getState(),
       getState: () => this.getState(),
       setState: updates => this.setState(updates),
+      updateState: updater => this.updateState(updater),
       threadId: this.currentThreadId,
       resourceId: this.resourceId,
       modeId: this.currentModeId,

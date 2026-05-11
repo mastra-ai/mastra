@@ -121,13 +121,16 @@ export class EventBuffer {
     }
   }
 
-  /** Re-add failed create events to the buffer, dropping those that exceed max retries. */
-  reAddCreates(events: BufferedEvent[]) {
+  /** Re-add failed create events to the buffer, returning events that exceed max retries. */
+  reAddCreates(events: BufferedEvent[]): BufferedEvent[] {
     const retryable: BufferedEvent[] = [];
+    const dropped: BufferedEvent[] = [];
 
     for (const e of events) {
       if (++e.retryCount <= this.#maxRetries) {
         retryable.push(e);
+      } else {
+        dropped.push(e);
       }
     }
 
@@ -135,15 +138,20 @@ export class EventBuffer {
       this.setFirstEventTime();
       this.#creates.push(...retryable);
     }
+
+    return dropped;
   }
 
-  /** Re-add failed update events to the buffer, dropping those that exceed max retries. */
-  reAddUpdates(events: BufferedEvent[]) {
+  /** Re-add failed update events to the buffer, returning events that exceed max retries. */
+  reAddUpdates(events: BufferedEvent[]): BufferedEvent[] {
     const retryable: BufferedEvent[] = [];
+    const dropped: BufferedEvent[] = [];
 
     for (const e of events) {
       if (++e.retryCount <= this.#maxRetries) {
         retryable.push(e);
+      } else {
+        dropped.push(e);
       }
     }
 
@@ -151,6 +159,8 @@ export class EventBuffer {
       this.setFirstEventTime();
       this.#updates.push(...retryable);
     }
+
+    return dropped;
   }
 
   /** Snapshot of buffered create events. */
