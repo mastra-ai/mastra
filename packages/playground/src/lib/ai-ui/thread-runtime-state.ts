@@ -7,6 +7,7 @@ export type PendingSignalMessage = {
 
 export type ThreadRuntimeState = {
   isStreaming: boolean;
+  canSendWhileStreaming: boolean;
   cancelStream: () => void | Promise<void>;
   pendingSignals: PendingSignalMessage[];
   hasPendingMessages: boolean;
@@ -14,6 +15,7 @@ export type ThreadRuntimeState = {
 
 const ThreadRuntimeStateContext = createContext<ThreadRuntimeState>({
   isStreaming: false,
+  canSendWhileStreaming: false,
   cancelStream: () => {},
   pendingSignals: [],
   hasPendingMessages: false,

@@ -421,6 +421,7 @@ export function MastraRuntimeProvider({
   const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
+  const threadSignalsUnsupportedRef = useRef(false);
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -435,6 +436,7 @@ export function MastraRuntimeProvider({
   useEffect(() => {
     setStreamErrors([]);
     setPendingSignals([]);
+    threadSignalsUnsupportedRef.current = false;
     setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
 
@@ -470,7 +472,10 @@ export function MastraRuntimeProvider({
     requestContext: chatRequestContext,
     onSignalSent: addPendingSignal,
     onSignalEcho: removePendingSignal,
-    onThreadSignalsUnsupported: () => setThreadSignalsUnsupported(true),
+    onThreadSignalsUnsupported: () => {
+      threadSignalsUnsupportedRef.current = true;
+      setThreadSignalsUnsupported(true);
+    },
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -729,7 +734,7 @@ export function MastraRuntimeProvider({
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
-    if (threadSignalsUnsupported && isRunningStream) return;
+    if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return;
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
     const attachments = await convertToAIAttachments(message.attachments);
@@ -1353,7 +1358,8 @@ export function MastraRuntimeProvider({
   return (
     <ThreadRuntimeStateProvider
       value={{
-        isStreaming: isRunningStream,
+        isStreaming: isLegacyRunning || isRunningStream,
+        canSendWhileStreaming: isSupportedModel && !threadSignalsUnsupported,
         cancelStream: onCancel,
         pendingSignals,
         hasPendingMessages: pendingSignals.length > 0,

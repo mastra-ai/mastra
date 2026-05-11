@@ -125,7 +125,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
-  const { isStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
+  const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
   // Track IME composition state to prevent Enter from submitting during CJK input.
   // Without this, pressing Enter to confirm a Chinese/Japanese/Korean character
   // triggers form submission instead of completing the IME composition.
@@ -190,7 +190,11 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
             if (e.target === e.currentTarget) textareaRef.current?.focus();
           }}
         >
-          <ComposerPrimitive.Input asChild className="w-full">
+          <ComposerPrimitive.Input
+            asChild
+            className="w-full"
+            submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
+          >
             <textarea
               ref={textareaRef}
               autoFocus={false}
@@ -206,7 +210,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                 isComposingRef.current = false;
               }}
               onKeyDownCapture={e => {
-                if (isStreaming && e.key === 'Enter' && !e.shiftKey) {
+                if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   e.stopPropagation();
                   composerRuntime.send();
@@ -225,7 +229,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
                   return;
                 }
 
-                if (isStreaming && e.key === 'Enter' && !e.shiftKey) {
+                if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   e.stopPropagation();
                   composerRuntime.send();
@@ -314,9 +318,17 @@ const ComposerActionRow = ({ canExecute = true, agentId, showModelSwitcher }: Co
 };
 
 const ComposerSendButton = ({ canExecute = true }: ComposerActionProps) => {
-  const { isStreaming, cancelStream } = useThreadRuntimeState();
+  const { isStreaming, canSendWhileStreaming, cancelStream } = useThreadRuntimeState();
   const composerRuntime = useComposerRuntime();
   const isComposerEmpty = useComposer(state => state.isEmpty);
+
+  if (isStreaming && !canSendWhileStreaming) {
+    return (
+      <Button variant="default" size="icon-md" tooltip="Cancel" onClick={() => void cancelStream()}>
+        <CircleStopIcon />
+      </Button>
+    );
+  }
 
   return (
     <>
