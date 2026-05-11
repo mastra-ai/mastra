@@ -487,10 +487,8 @@ async function getSerializedAgentDefinition({
       const agents = await agent.listAgents({ requestContext });
       serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
         (acc, [key, agent]) => {
-          return {
-            ...acc,
-            [key]: { id: agent.id, name: agent.name },
-          };
+          acc[key] = { id: agent.id, name: agent.name ?? key };
+          return acc;
         },
         {},
       );
