@@ -4024,20 +4024,38 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(buildRetentionDDL({})).toEqual([]);
     });
 
-    it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
+    it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, trace_branches, and trace cursor tables', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
-      expect(stmts).toHaveLength(3);
+      expect(stmts).toHaveLength(5);
       expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[2]).toBe('ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY');
+      expect(stmts[3]).toBe(
+        'ALTER TABLE mastra_trace_list_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 30 DAY',
+      );
+      expect(stmts[4]).toBe(
+        'ALTER TABLE mastra_branch_list_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 30 DAY',
+      );
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
       const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 });
-      expect(stmts).toHaveLength(4);
+      expect(stmts).toHaveLength(8);
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_log_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 7 DAY',
+      );
       expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_metric_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 14 DAY',
+      );
       expect(stmts).toContain('ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY');
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_score_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 90 DAY',
+      );
       expect(stmts).toContain('ALTER TABLE mastra_score_events MODIFY TTL timestamp + INTERVAL 90 DAY');
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_feedback_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 60 DAY',
+      );
       expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY');
     });
 
@@ -4049,14 +4067,20 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         scores: undefined,
         feedback: 10,
       } as any);
-      expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
+      expect(stmts).toHaveLength(2);
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_feedback_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 10 DAY',
+      );
+      expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
     });
 
     it('buildRetentionDDL floors fractional days', () => {
       const stmts = buildRetentionDDL({ logs: 7.9 });
-      expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
+      expect(stmts).toHaveLength(2);
+      expect(stmts).toContain(
+        'ALTER TABLE mastra_log_cursor_events MODIFY TTL snowflakeIDToDateTime64(cursorId) + INTERVAL 7 DAY',
+      );
+      expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
     });
 
     // --- Integration test: retention is applied during init ---

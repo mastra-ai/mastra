@@ -6,12 +6,81 @@
  */
 
 import type { ClickHouseClient } from '@clickhouse/client';
-import { listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
-import type { GetRootSpanArgs, GetRootSpanResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import { toTraceSpans } from '@mastra/core/storage';
+import type {
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  ListTracesArgs,
+  ListTracesResponse,
+  LiveCursor,
+} from '@mastra/core/storage';
 
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_SPAN_EVENTS, TABLE_TRACE_LIST_CURSOR_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
-import { CH_SETTINGS, rowToSpanRecord } from './helpers';
+import {
+  appendWhereClause,
+  buildFirstSeenCursorSql,
+  CH_SETTINGS,
+  createOpaqueLiveCursor,
+  normalizeObservabilityListArgs,
+  rowToOpaqueLiveCursor,
+  rowToSpanRecord,
+  getOpaqueLiveCursorValue,
+  toBooleanOrUndefined,
+  toDateRangeOrUndefined,
+  toStringOrUndefined,
+  toStringRecordOrUndefined,
+  toUnknownRecordOrUndefined,
+} from './helpers';
+
+type NormalizedTraceFilters = Parameters<typeof buildTraceFilterConditions>[0];
+type TracesOrderBy = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
+type NormalizedTraceStatus = Exclude<NormalizedTraceFilters, undefined>['status'];
+
+const TRACE_FIRST_SEEN_SQL = buildFirstSeenCursorSql(TABLE_TRACE_LIST_CURSOR_EVENTS, ['traceId']);
+
+function normalizeTraceFilters(filters: ListTracesArgs['filters']): NormalizedTraceFilters {
+  const record = toUnknownRecordOrUndefined(filters);
+  if (!record) return undefined;
+
+  return {
+    ...record,
+    traceId: toStringOrUndefined(record.traceId),
+    startedAt: toDateRangeOrUndefined(record.startedAt),
+    endedAt: toDateRangeOrUndefined(record.endedAt),
+    spanType: toStringOrUndefined(record.spanType),
+    entityType: toStringOrUndefined(record.entityType),
+    entityId: toStringOrUndefined(record.entityId),
+    entityName: toStringOrUndefined(record.entityName),
+    entityVersionId: toStringOrUndefined(record.entityVersionId),
+    parentEntityVersionId: toStringOrUndefined(record.parentEntityVersionId),
+    parentEntityType: toStringOrUndefined(record.parentEntityType),
+    parentEntityId: toStringOrUndefined(record.parentEntityId),
+    parentEntityName: toStringOrUndefined(record.parentEntityName),
+    rootEntityVersionId: toStringOrUndefined(record.rootEntityVersionId),
+    rootEntityType: toStringOrUndefined(record.rootEntityType),
+    rootEntityId: toStringOrUndefined(record.rootEntityId),
+    rootEntityName: toStringOrUndefined(record.rootEntityName),
+    experimentId: toStringOrUndefined(record.experimentId),
+    userId: toStringOrUndefined(record.userId),
+    organizationId: toStringOrUndefined(record.organizationId),
+    resourceId: toStringOrUndefined(record.resourceId),
+    runId: toStringOrUndefined(record.runId),
+    sessionId: toStringOrUndefined(record.sessionId),
+    threadId: toStringOrUndefined(record.threadId),
+    requestId: toStringOrUndefined(record.requestId),
+    environment: toStringOrUndefined(record.environment),
+    source: toStringOrUndefined(record.source),
+    serviceName: toStringOrUndefined(record.serviceName),
+    metadata: toStringRecordOrUndefined(record.metadata),
+    hasChildError: toBooleanOrUndefined(record.hasChildError),
+    status: record.status as NormalizedTraceStatus,
+  } as NormalizedTraceFilters;
+}
+
+function rowToTraceLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  return rowToOpaqueLiveCursor(row);
+}
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -58,10 +127,14 @@ export async function getRootSpan(
  * hasChildError is handled via EXISTS subquery against span_events.
  */
 export async function listTraces(client: ClickHouseClient, args: ListTracesArgs): Promise<ListTracesResponse> {
-  // Parse args through schema to apply defaults
-  const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-  const page = pagination?.page ?? 0;
-  const perPage = pagination?.perPage ?? 10;
+  const parsed = normalizeObservabilityListArgs<ListTracesArgs['filters'], NormalizedTraceFilters, TracesOrderBy>(
+    args,
+    {
+      orderBy: { field: 'startedAt', direction: 'DESC' } satisfies TracesOrderBy,
+      normalizeFilters: normalizeTraceFilters,
+    },
+  );
+  const { filters } = parsed;
 
   // Build filter conditions
   const { conditions, params } = buildTraceFilterConditions(filters, 'r');
@@ -86,21 +159,110 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const dedupedRootsSql = `
+    SELECT *
+    FROM ${TABLE_TRACE_ROOTS} r
+    ${whereClause}
+    ORDER BY dedupeKey
+    LIMIT 1 BY dedupeKey
+  `;
+  const traceFirstSeenSql = `
+    ${TRACE_FIRST_SEEN_SQL}
+  `;
+
+  if (parsed.mode === 'delta') {
+    const liveCursorResult = await client.query({
+      query: `
+        SELECT toString(cursor.cursorId) AS cursorId
+        FROM (${dedupedRootsSql}) AS roots
+        INNER JOIN (${traceFirstSeenSql}) AS cursor USING (traceId)
+        ORDER BY cursor.cursorId DESC
+        LIMIT 1
+      `,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    });
+    const liveCursorRows = (await liveCursorResult.json()) as Record<string, unknown>[];
+    const snapshotCursor =
+      (liveCursorRows[0] ? rowToTraceLiveCursor(liveCursorRows[0]) : null) ?? createOpaqueLiveCursor('0');
+
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: snapshotCursor,
+        spans: [],
+      };
+    }
+
+    const deltaResult = await client.query({
+      query: `
+        SELECT roots.*, toString(cursor.cursorId) AS cursorId
+        FROM (${dedupedRootsSql}) AS roots
+        INNER JOIN (${traceFirstSeenSql}) AS cursor USING (traceId)
+        WHERE cursor.cursorId > {afterCursorId:UInt64}
+        ORDER BY cursor.cursorId ASC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        afterCursorId: getOpaqueLiveCursorValue(parsed.after),
+        limit: parsed.limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    });
+
+    const deltaRows = (await deltaResult.json()) as Record<string, any>[];
+    const pageRows = deltaRows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToTraceLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: deltaRows.length > parsed.limit },
+      liveCursor,
+      spans: toTraceSpans(pageRows.map(rowToSpanRecord)),
+    };
+  }
+
+  const pagination = parsed.pagination;
+  const orderBy = parsed.orderBy;
+  const page = pagination?.page ?? 0;
+  const perPage = pagination?.perPage ?? 10;
   // Outer ORDER BY must not use table alias — the outer SELECT wraps an anonymous subquery
   const orderClause = buildTraceOrderByClause(orderBy);
+  const liveCursorResult = await client.query({
+    query: `
+      SELECT toString(cursor.cursorId) AS cursorId
+      FROM (${dedupedRootsSql}) AS roots
+      INNER JOIN (${traceFirstSeenSql}) AS cursor USING (traceId)
+      ORDER BY cursor.cursorId DESC
+      LIMIT 1
+    `,
+    query_params: params,
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_SETTINGS,
+  });
+  const liveCursorRows = (await liveCursorResult.json()) as Record<string, unknown>[];
+  const snapshotCursor = liveCursorRows[0] ? rowToTraceLiveCursor(liveCursorRows[0]) : null;
+  const snapshotCursorWhereClause = snapshotCursor
+    ? appendWhereClause('', `(cursor.cursorId IS NULL OR cursor.cursorId <= {snapshotCursorId:UInt64})`)
+    : '';
+  const snapshotParams = snapshotCursor
+    ? { ...params, snapshotCursorId: getOpaqueLiveCursorValue(snapshotCursor) }
+    : params;
 
   // Count query (deduplicated)
   const countResult = await client.query({
     query: `
       SELECT count() as cnt FROM (
-        SELECT dedupeKey
-        FROM ${TABLE_TRACE_ROOTS} r
-        ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
+        SELECT roots.dedupeKey
+        FROM (${dedupedRootsSql}) AS roots
+        LEFT JOIN (${traceFirstSeenSql}) AS cursor USING (traceId)
+        ${snapshotCursorWhereClause}
       )
     `,
-    query_params: params,
+    query_params: snapshotParams,
     format: 'JSONEachRow',
     clickhouse_settings: CH_SETTINGS,
   });
@@ -111,6 +273,7 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   if (total === 0) {
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
+      liveCursor: createOpaqueLiveCursor('0'),
       spans: [],
     };
   }
@@ -118,19 +281,15 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   // Data query: two-stage dedupe + pagination
   const dataResult = await client.query({
     query: `
-      SELECT * FROM (
-        SELECT *
-        FROM ${TABLE_TRACE_ROOTS} r
-        ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
-      )
+      SELECT roots.* FROM (${dedupedRootsSql}) AS roots
+      LEFT JOIN (${traceFirstSeenSql}) AS cursor USING (traceId)
+      ${snapshotCursorWhereClause}
       ORDER BY ${orderClause}
       LIMIT {limit:UInt32}
       OFFSET {offset:UInt32}
     `,
     query_params: {
-      ...params,
+      ...snapshotParams,
       limit: perPage,
       offset: page * perPage,
     },
@@ -148,6 +307,7 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
+    liveCursor: snapshotCursor ?? createOpaqueLiveCursor('0'),
     spans: toTraceSpans(spans),
   };
 }

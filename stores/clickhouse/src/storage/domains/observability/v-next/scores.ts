@@ -1,5 +1,4 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -16,13 +15,49 @@ import type {
   GetScoreTimeSeriesResponse,
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
+  LiveCursor,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_SCORE_EVENTS } from './ddl';
+import { TABLE_SCORE_CURSOR_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
-import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
+import {
+  CH_INSERT_SETTINGS,
+  CH_SETTINGS,
+  appendWhereClause,
+  buildFirstSeenCursorSql,
+  buildOpaqueLiveCursorUpperBoundCondition,
+  createOpaqueLiveCursor,
+  getOpaqueLiveCursorQueryParams,
+  normalizeObservabilityListArgs,
+  rowToOpaqueLiveCursor,
+  toDateRangeOrUndefined,
+  toStringArrayOrUndefined,
+  toStringOrUndefined,
+  toUnknownRecordOrUndefined,
+  rowToScoreRecord,
+  scoreRecordToRow,
+} from './helpers';
+
+type NormalizedScoresFilters = Parameters<typeof buildScoresFilterConditions>[0];
+type ScoresOrderBy = { field: 'timestamp' | 'score'; direction: 'ASC' | 'DESC' };
+
+function normalizeScoresFilters(filters: ListScoresArgs['filters']): NormalizedScoresFilters {
+  const record = toUnknownRecordOrUndefined(filters);
+  if (!record) return undefined;
+
+  return {
+    ...record,
+    timestamp: toDateRangeOrUndefined(record.timestamp),
+    scorerId: Array.isArray(record.scorerId)
+      ? toStringArrayOrUndefined(record.scorerId)
+      : toStringOrUndefined(record.scorerId),
+    scoreSource: toStringOrUndefined(record.scoreSource),
+    source: toStringOrUndefined(record.source),
+    executionSource: toStringOrUndefined(record.executionSource),
+  } as NormalizedScoresFilters;
+}
 
 // ============================================================================
 // Helpers
@@ -64,6 +99,9 @@ const SCORE_TYPED_COLUMNS = new Set([
 ]);
 
 const GROUP_BY_EXCLUDED = new Set(['metadata', 'scope', 'tags']);
+
+// TODO(2.0): Factor the repeated first-seen cursor join pattern across ClickHouse observability signals.
+const SCORE_FIRST_SEEN_SQL = buildFirstSeenCursorSql(TABLE_SCORE_CURSOR_EVENTS, ['scoreId']);
 
 function getAggregationSql(aggregation: AggregationType, measure = 'score'): string {
   switch (aggregation) {
@@ -153,6 +191,32 @@ async function queryJson<T>(client: ClickHouseClient, query: string, params: Rec
   ).json()) as T[];
 }
 
+function rowToScoreLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  return rowToOpaqueLiveCursor(row);
+}
+
+async function getScoresSnapshotLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<LiveCursor> {
+  const rows = await queryJson<Record<string, unknown>>(
+    client,
+    `
+      SELECT toString(cursor.cursorId) AS cursorId
+      FROM ${TABLE_SCORE_EVENTS} AS s
+      INNER JOIN (${SCORE_FIRST_SEEN_SQL}) AS cursor USING (scoreId)
+      ${whereClause}
+      ORDER BY cursor.cursorId DESC
+      LIMIT 1
+    `,
+    params,
+  );
+
+  const cursor = rows[0] ? rowToScoreLiveCursor(rows[0]) : null;
+  return cursor ?? createOpaqueLiveCursor('0');
+}
+
 // ============================================================================
 // Write
 // ============================================================================
@@ -170,6 +234,13 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+
+  await client.insert({
+    table: TABLE_SCORE_CURSOR_EVENTS,
+    values: args.scores.map(score => ({ scoreId: score.scoreId })),
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_INSERT_SETTINGS,
+  });
 }
 
 // ============================================================================
@@ -177,22 +248,72 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
 // ============================================================================
 
 export async function listScores(client: ClickHouseClient, args: ListScoresArgs): Promise<ListScoresResponse> {
-  const parsed = listScoresArgsSchema.parse(args);
+  const parsed = normalizeObservabilityListArgs<ListScoresArgs['filters'], NormalizedScoresFilters, ScoresOrderBy>(
+    args,
+    {
+      orderBy: { field: 'timestamp', direction: 'DESC' } satisfies ScoresOrderBy,
+      normalizeFilters: normalizeScoresFilters,
+    },
+  );
   const filter = buildScoresFilterConditions(parsed.filters, 's');
+  const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: await getScoresSnapshotLiveCursor(client, whereClause, filter.params),
+        scores: [],
+      };
+    }
+
+    const rows = await queryJson<Record<string, any>>(
+      client,
+      `
+        SELECT s.*, toString(cursor.cursorId) AS cursorId
+        FROM ${TABLE_SCORE_EVENTS} AS s
+        INNER JOIN (${SCORE_FIRST_SEEN_SQL}) AS cursor USING (scoreId)
+        ${appendWhereClause(whereClause, 'cursor.cursorId > {afterCursorId:UInt64}')}
+        ORDER BY cursor.cursorId ASC
+        LIMIT {limit:UInt32}
+      `,
+      {
+        ...filter.params,
+        ...getOpaqueLiveCursorQueryParams(parsed.after, 'after'),
+        limit: parsed.limit + 1,
+      },
+    );
+
+    const pageRows = rows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToScoreLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor,
+      scores: pageRows.map(rowToScoreRecord),
+    };
+  }
+
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');
-  const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+  const snapshotCursor = await getScoresSnapshotLiveCursor(client, whereClause, filter.params);
+  const snapshotWhereClause = appendWhereClause(
+    whereClause,
+    buildOpaqueLiveCursorUpperBoundCondition('cursor.cursorId', 'snapshot', { includeNullCursorId: true }),
+  );
+  const snapshotParams = { ...filter.params, ...getOpaqueLiveCursorQueryParams(snapshotCursor, 'snapshot') };
 
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause}`,
-    filter.params,
+    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s LEFT JOIN (${SCORE_FIRST_SEEN_SQL}) AS cursor USING (scoreId) ${snapshotWhereClause}`,
+    snapshotParams,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-    { ...filter.params, limit: pagination.limit, offset: pagination.offset },
+    `SELECT s.* FROM ${TABLE_SCORE_EVENTS} AS s LEFT JOIN (${SCORE_FIRST_SEEN_SQL}) AS cursor USING (scoreId) ${snapshotWhereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    { ...snapshotParams, limit: pagination.limit, offset: pagination.offset },
   );
 
   const total = Number(countResult[0]?.total ?? 0);
@@ -204,6 +325,7 @@ export async function listScores(client: ClickHouseClient, args: ListScoresArgs)
       perPage: pagination.perPage,
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
+    liveCursor: snapshotCursor,
     scores: rows.map(rowToScoreRecord),
   };
 }

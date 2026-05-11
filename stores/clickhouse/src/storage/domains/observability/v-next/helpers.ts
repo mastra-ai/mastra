@@ -17,6 +17,7 @@ import type {
   CreateScoreRecord,
   FeedbackRecord,
   CreateFeedbackRecord,
+  LiveCursor,
 } from '@mastra/core/storage';
 import { EntityType } from '@mastra/core/storage';
 
@@ -139,6 +140,210 @@ export function toISOString(value: Date | number | string): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'number') return new Date(value).toISOString();
   return value;
+}
+
+export function createOpaqueLiveCursor(value: string): LiveCursor {
+  return value;
+}
+
+export function getOpaqueLiveCursorValue(cursor: LiveCursor): string {
+  return cursor;
+}
+
+export function rowToOpaqueLiveCursor(row: Record<string, unknown>, key = 'cursorId'): LiveCursor | null {
+  const value = row[key];
+  return value == null ? null : createOpaqueLiveCursor(String(value));
+}
+
+export function getOpaqueLiveCursorQueryParams(cursor: LiveCursor, prefix: string): Record<string, unknown> {
+  return {
+    [`${prefix}CursorId`]: getOpaqueLiveCursorValue(cursor),
+  };
+}
+
+export function buildOpaqueLiveCursorUpperBoundCondition(
+  cursorIdSql: string,
+  prefix: string,
+  options?: { includeNullCursorId?: boolean },
+): string {
+  const nullClause = options?.includeNullCursorId ? `${cursorIdSql} IS NULL OR ` : '';
+  return `(${nullClause}${cursorIdSql} <= {${prefix}CursorId:UInt64})`;
+}
+
+export function appendWhereClause(whereClause: string, condition: string): string {
+  return whereClause ? `${whereClause} AND ${condition}` : `WHERE ${condition}`;
+}
+
+export function compareLiveCursors(a: LiveCursor, b: LiveCursor): number {
+  const aValue = BigInt(getOpaqueLiveCursorValue(a));
+  const bValue = BigInt(getOpaqueLiveCursorValue(b));
+  if (aValue === bValue) return 0;
+  return aValue > bValue ? 1 : -1;
+}
+
+export function isLiveCursorAfter(candidate: LiveCursor, after: LiveCursor): boolean {
+  return compareLiveCursors(candidate, after) > 0;
+}
+
+export function maxLiveCursor(cursors: Iterable<LiveCursor>): LiveCursor | null {
+  let maxCursor: LiveCursor | null = null;
+  for (const cursor of cursors) {
+    if (maxCursor === null || compareLiveCursors(cursor, maxCursor) > 0) {
+      maxCursor = cursor;
+    }
+  }
+  return maxCursor;
+}
+
+export function buildFirstSeenCursorSql(table: string, idColumns: readonly string[]): string {
+  const selectColumns = idColumns.join(',\n        ');
+  const groupBy = idColumns.join(', ');
+  return `
+    SELECT
+      ${selectColumns},
+      min(cursorId) AS cursorId
+    FROM ${table}
+    GROUP BY ${groupBy}
+  `;
+}
+
+// TODO(2.0): Replace this local coercion layer with shared observability parsing once runtime core-version compatibility is no longer required.
+export type NormalizedDateRange = {
+  start?: Date;
+  end?: Date;
+  startExclusive?: boolean;
+  endExclusive?: boolean;
+};
+
+export function toStringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+export function toBooleanOrUndefined(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
+export function toStringArrayOrUndefined(value: unknown): string[] | undefined {
+  if (typeof value === 'string') return [value];
+  if (!Array.isArray(value)) return undefined;
+
+  const normalized = value.filter((item): item is string => typeof item === 'string');
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+export function toStringRecordOrUndefined(value: unknown): Record<string, string> | undefined {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const record: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === 'string') {
+      record[key] = entry;
+    }
+  }
+
+  return Object.keys(record).length > 0 ? record : undefined;
+}
+
+export function toUnknownRecordOrUndefined(value: unknown): Record<string, unknown> | undefined {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+export function toDateRangeOrUndefined(value: unknown): NormalizedDateRange | undefined {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const input = value as Record<string, unknown>;
+  const start = input.start == null ? undefined : toDate(input.start);
+  const end = input.end == null ? undefined : toDate(input.end);
+  const startExclusive = toBooleanOrUndefined(input.startExclusive);
+  const endExclusive = toBooleanOrUndefined(input.endExclusive);
+
+  if (!start && !end && startExclusive === undefined && endExclusive === undefined) {
+    return undefined;
+  }
+
+  return {
+    start,
+    end,
+    startExclusive,
+    endExclusive,
+  };
+}
+
+type PaginationArgs = {
+  page?: unknown;
+  perPage?: unknown;
+};
+
+type ObservabilityListArgsLike<TFilters, TOrderBy> = {
+  mode?: 'page' | 'delta';
+  filters?: TFilters;
+  pagination?: PaginationArgs;
+  orderBy?: Partial<TOrderBy> | Record<string, unknown>;
+  after?: LiveCursor | { value?: unknown };
+  limit?: unknown;
+};
+
+type NormalizedObservabilityListArgs<TFilters, TOrderBy> = {
+  mode: 'page' | 'delta';
+  filters: TFilters | undefined;
+  pagination: { page: number; perPage: number };
+  orderBy: TOrderBy;
+  after: LiveCursor | undefined;
+  limit: number;
+};
+
+export function normalizeObservabilityListArgs<
+  TInputFilters,
+  TNormalizedFilters = TInputFilters,
+  TOrderBy extends Record<string, unknown> = Record<string, unknown>,
+>(
+  args: ObservabilityListArgsLike<TInputFilters, TOrderBy>,
+  defaults: {
+    orderBy: TOrderBy;
+    pagination?: { page: number; perPage: number };
+    limit?: number;
+    normalizeFilters?: (filters: TInputFilters | undefined) => TNormalizedFilters | undefined;
+  },
+): NormalizedObservabilityListArgs<TNormalizedFilters, TOrderBy> {
+  const paginationDefaults = defaults.pagination ?? { page: 0, perPage: 10 };
+  const limitDefault = defaults.limit ?? 10;
+  const pagination = args.pagination ?? {};
+  const orderBy = args.orderBy ?? {};
+
+  return {
+    mode: args.mode === 'delta' ? 'delta' : 'page',
+    filters: defaults.normalizeFilters
+      ? defaults.normalizeFilters(args.filters)
+      : (args.filters as TNormalizedFilters | undefined),
+    pagination: {
+      page:
+        typeof pagination.page === 'number' && Number.isInteger(pagination.page) && pagination.page >= 0
+          ? pagination.page
+          : paginationDefaults.page,
+      perPage:
+        typeof pagination.perPage === 'number' &&
+        Number.isInteger(pagination.perPage) &&
+        pagination.perPage >= 1 &&
+        pagination.perPage <= 100
+          ? pagination.perPage
+          : paginationDefaults.perPage,
+    },
+    orderBy: { ...defaults.orderBy, ...orderBy } as TOrderBy,
+    after:
+      typeof args.after === 'string'
+        ? args.after
+        : args.after && typeof args.after.value === 'string'
+          ? args.after.value
+          : undefined,
+    limit:
+      typeof args.limit === 'number' && Number.isInteger(args.limit) && args.limit >= 1 && args.limit <= 100
+        ? args.limit
+        : limitDefault,
+  };
 }
 
 export function buildDedupeKey(traceId: string, spanId: string): string {

@@ -1,11 +1,23 @@
-import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
+import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse, LiveCursor } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import {
+  createIngestedAt,
+  createLiveCursor,
+  createSyntheticNowCursor,
+  getLiveCursorParts,
+  normalizeObservabilityListArgs,
+  parseJson,
+  parseJsonArray,
+  toDate,
+  v,
+  jsonV,
+} from './helpers';
 
 const COLUMNS = [
   'logId',
   'timestamp',
+  'ingestedAt',
   'level',
   'message',
   'data',
@@ -40,6 +52,31 @@ const COLUMNS = [
 ] as const;
 
 const COLUMNS_SQL = COLUMNS.join(', ');
+
+function rowToLogLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  if (row.ingestedAt == null || row.logId == null) return null;
+  return createLiveCursor(row.ingestedAt, String(row.logId));
+}
+
+async function getLogsSnapshotLiveCursor(
+  db: DuckDBConnection,
+  filterClause: string,
+  filterParams: unknown[],
+): Promise<LiveCursor> {
+  const rows = await db.query<Record<string, unknown>>(
+    `
+      SELECT ingestedAt, logId
+      FROM log_events
+      ${filterClause ? `${filterClause} AND ingestedAt IS NOT NULL` : 'WHERE ingestedAt IS NOT NULL'}
+      ORDER BY ingestedAt DESC, logId DESC
+      LIMIT 1
+    `,
+    filterParams,
+  );
+
+  const cursor = rows[0] ? rowToLogLiveCursor(rows[0]) : null;
+  return cursor ?? createSyntheticNowCursor();
+}
 
 function rowToLogRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -82,11 +119,13 @@ function rowToLogRecord(row: Record<string, unknown>): Record<string, unknown> {
 /** Insert multiple log events in a single statement. */
 export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
+  const ingestedAt = createIngestedAt();
 
   const tuples = args.logs.map(log => {
     return `(${[
       v(log.logId),
       v(log.timestamp),
+      v(ingestedAt),
       v(log.level),
       v(log.message),
       jsonV(log.data),
@@ -126,30 +165,71 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
 
 /** Query log events with filtering, ordering, and pagination. */
 export async function listLogs(db: DuckDBConnection, args: ListLogsArgs): Promise<ListLogsResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const parsed = normalizeObservabilityListArgs(args, {
+    orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+  });
+  const filters = parsed.filters ?? {};
+  const filter = buildWhereClause(filters as Record<string, unknown>);
 
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>);
-  const orderByClause = buildOrderByClause(orderBy);
+  if (parsed.mode === 'delta') {
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: await getLogsSnapshotLiveCursor(db, filter.clause, filter.params),
+        logs: [],
+      };
+    }
+
+    const afterCursor = getLiveCursorParts(parsed.after);
+
+    const rows = await db.query<Record<string, unknown>>(
+      `
+        SELECT *
+        FROM log_events
+        ${
+          filter.clause
+            ? `${filter.clause} AND ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND logId > ?))`
+            : 'WHERE ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND logId > ?))'
+        }
+        ORDER BY ingestedAt ASC, logId ASC
+        LIMIT ?
+      `,
+      [...filter.params, afterCursor.ingestedAt, afterCursor.ingestedAt, afterCursor.tieBreaker, parsed.limit + 1],
+    );
+
+    const pageRows = rows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToLogLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor,
+      logs: pageRows.map(row => rowToLogRecord(row)) as ListLogsResponse['logs'],
+    };
+  }
+
+  const page = Number(parsed.pagination.page);
+  const perPage = Number(parsed.pagination.perPage);
+  const orderByClause = buildOrderByClause(parsed.orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
   const countResult = await db.query<{ total: number }>(
-    `SELECT COUNT(*) as total FROM log_events ${filterClause}`,
-    filterParams,
+    `SELECT COUNT(*) as total FROM log_events ${filter.clause}`,
+    filter.params,
   );
   const total = Number(countResult[0]?.total ?? 0);
 
-  const rows = await db.query(`SELECT * FROM log_events ${filterClause} ${orderByClause} ${paginationClause}`, [
-    ...filterParams,
+  const rows = await db.query(`SELECT * FROM log_events ${filter.clause} ${orderByClause} ${paginationClause}`, [
+    ...filter.params,
     ...paginationParams,
   ]);
 
   const logs = rows.map(row => rowToLogRecord(row as Record<string, unknown>)) as ListLogsResponse['logs'];
+  const liveCursor = await getLogsSnapshotLiveCursor(db, filter.clause, filter.params);
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+    liveCursor,
     logs,
   };
 }

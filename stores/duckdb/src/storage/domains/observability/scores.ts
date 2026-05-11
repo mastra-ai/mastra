@@ -14,11 +14,23 @@ import type {
   ScoreRecord,
   AggregationInterval,
   AggregationType,
+  LiveCursor,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import {
+  createIngestedAt,
+  createLiveCursor,
+  createSyntheticNowCursor,
+  getLiveCursorParts,
+  normalizeObservabilityListArgs,
+  v,
+  jsonV,
+  toDate,
+  parseJson,
+  parseJsonArray,
+} from './helpers';
 
 type LegacyScoreRecord = CreateScoreArgs['score'] & {
   source?: string | null;
@@ -195,6 +207,31 @@ function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown>
   };
 }
 
+function rowToScoreLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  if (row.ingestedAt == null || row.scoreId == null) return null;
+  return createLiveCursor(row.ingestedAt, String(row.scoreId));
+}
+
+async function getScoresSnapshotLiveCursor(
+  db: DuckDBConnection,
+  filterClause: string,
+  filterParams: unknown[],
+): Promise<LiveCursor> {
+  const rows = await db.query<Record<string, unknown>>(
+    `
+      SELECT ingestedAt, scoreId
+      FROM score_events
+      ${filterClause ? `${filterClause} AND ingestedAt IS NOT NULL` : 'WHERE ingestedAt IS NOT NULL'}
+      ORDER BY ingestedAt DESC, scoreId DESC
+      LIMIT 1
+    `,
+    filterParams,
+  );
+
+  const cursor = rows[0] ? rowToScoreLiveCursor(rows[0]) : null;
+  return cursor ?? createSyntheticNowCursor();
+}
+
 function getComparisonDateRange(
   comparePeriod: NonNullable<GetScoreAggregateArgs['comparePeriod']>,
   timestamp: NonNullable<NonNullable<GetScoreAggregateArgs['filters']>['timestamp']>,
@@ -231,9 +268,10 @@ function getComparisonDateRange(
 export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): Promise<void> {
   const s = args.score as LegacyScoreRecord;
   const scoreSource = s.scoreSource ?? s.source ?? null;
+  const ingestedAt = createIngestedAt();
   await db.execute(
     `INSERT INTO score_events (
-      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, ingestedAt, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
@@ -241,6 +279,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
      VALUES (${[
        v(s.scoreId),
        v(s.timestamp),
+       v(ingestedAt),
        v(s.traceId),
        v(s.spanId ?? null),
        v(s.experimentId ?? null),
@@ -283,6 +322,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
 /** Insert multiple score events in a single statement. */
 export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateScoresArgs): Promise<void> {
   if (args.scores.length === 0) return;
+  const ingestedAt = createIngestedAt();
 
   const tuples = args.scores.map(s => {
     const legacyScore = s as LegacyScoreRecord;
@@ -290,6 +330,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     return `(${[
       v(legacyScore.scoreId),
       v(legacyScore.timestamp),
+      v(ingestedAt),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
       v(legacyScore.experimentId ?? null),
@@ -329,7 +370,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, ingestedAt, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
@@ -341,30 +382,70 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
 /** Query score events with filtering, ordering, and pagination. */
 export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Promise<ListScoresResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
-
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>, {
+  const parsed = normalizeObservabilityListArgs(args, {
+    orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+  });
+  const filters = parsed.filters ?? {};
+  const filter = buildWhereClause(filters as Record<string, unknown>, {
     source: 'scoreSource',
   });
-  const orderByClause = buildOrderByClause(orderBy);
+
+  if (parsed.mode === 'delta') {
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: await getScoresSnapshotLiveCursor(db, filter.clause, filter.params),
+        scores: [],
+      };
+    }
+
+    const afterCursor = getLiveCursorParts(parsed.after);
+
+    const rows = await db.query<Record<string, unknown>>(
+      `
+        SELECT *
+        FROM score_events
+        ${
+          filter.clause
+            ? `${filter.clause} AND ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND scoreId > ?))`
+            : 'WHERE ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND scoreId > ?))'
+        }
+        ORDER BY ingestedAt ASC, scoreId ASC
+        LIMIT ?
+      `,
+      [...filter.params, afterCursor.ingestedAt, afterCursor.ingestedAt, afterCursor.tieBreaker, parsed.limit + 1],
+    );
+
+    const pageRows = rows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToScoreLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor,
+      scores: pageRows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
+    };
+  }
+
+  const page = Number(parsed.pagination.page);
+  const perPage = Number(parsed.pagination.perPage);
+  const orderByClause = buildOrderByClause(parsed.orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
   const countResult = await db.query<{ total: number }>(
-    `SELECT COUNT(*) as total FROM score_events ${filterClause}`,
-    filterParams,
+    `SELECT COUNT(*) as total FROM score_events ${filter.clause}`,
+    filter.params,
   );
   const total = Number(countResult[0]?.total ?? 0);
 
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT * FROM score_events ${filterClause} ${orderByClause} ${paginationClause}`,
-    [...filterParams, ...paginationParams],
+    `SELECT * FROM score_events ${filter.clause} ${orderByClause} ${paginationClause}`,
+    [...filter.params, ...paginationParams],
   );
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+    liveCursor: await getScoresSnapshotLiveCursor(db, filter.clause, filter.params),
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
   };
 }

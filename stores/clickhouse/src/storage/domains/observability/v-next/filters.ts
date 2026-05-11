@@ -25,11 +25,11 @@ type LogsFilter = z.infer<typeof logsFilterSchema>;
 type MetricsFilter = z.infer<typeof metricsFilterSchema>;
 type ScoresFilter = z.infer<typeof scoresFilterSchema>;
 type FeedbackFilter = z.infer<typeof feedbackFilterSchema>;
-type TracesOrderBy = ListTracesArgs['orderBy'];
-type LogsOrderBy = ListLogsArgs['orderBy'];
-type MetricsOrderBy = ListMetricsArgs['orderBy'];
-type ScoresOrderBy = ListScoresArgs['orderBy'];
-type FeedbackOrderBy = ListFeedbackArgs['orderBy'];
+type TracesOrderBy = Extract<ListTracesArgs, { pagination?: unknown }>['orderBy'];
+type LogsOrderBy = Extract<ListLogsArgs, { pagination?: unknown }>['orderBy'];
+type MetricsOrderBy = Extract<ListMetricsArgs, { pagination?: unknown }>['orderBy'];
+type ScoresOrderBy = Extract<ListScoresArgs, { pagination?: unknown }>['orderBy'];
+type FeedbackOrderBy = Extract<ListFeedbackArgs, { pagination?: unknown }>['orderBy'];
 
 // ---------------------------------------------------------------------------
 // Types

@@ -13,11 +13,23 @@ import type {
   ListFeedbackResponse,
   AggregationInterval,
   AggregationType,
+  LiveCursor,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import {
+  createIngestedAt,
+  createLiveCursor,
+  createSyntheticNowCursor,
+  getLiveCursorParts,
+  normalizeObservabilityListArgs,
+  v,
+  jsonV,
+  toDate,
+  parseJson,
+  parseJsonArray,
+} from './helpers';
 
 type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
@@ -204,6 +216,31 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
   };
 }
 
+function rowToFeedbackLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  if (row.ingestedAt == null || row.feedbackId == null) return null;
+  return createLiveCursor(row.ingestedAt, String(row.feedbackId));
+}
+
+async function getFeedbackSnapshotLiveCursor(
+  db: DuckDBConnection,
+  filterClause: string,
+  filterParams: unknown[],
+): Promise<LiveCursor> {
+  const rows = await db.query<Record<string, unknown>>(
+    `
+      SELECT ingestedAt, feedbackId
+      FROM feedback_events
+      ${filterClause ? `${filterClause} AND ingestedAt IS NOT NULL` : 'WHERE ingestedAt IS NOT NULL'}
+      ORDER BY ingestedAt DESC, feedbackId DESC
+      LIMIT 1
+    `,
+    filterParams,
+  );
+
+  const cursor = rows[0] ? rowToFeedbackLiveCursor(rows[0]) : null;
+  return cursor ?? createSyntheticNowCursor();
+}
+
 function getComparisonDateRange(
   comparePeriod: NonNullable<GetFeedbackAggregateArgs['comparePeriod']>,
   timestamp: NonNullable<NonNullable<GetFeedbackAggregateArgs['filters']>['timestamp']>,
@@ -241,9 +278,10 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
   const f = args.feedback as LegacyFeedbackRecord;
   const feedbackSource = f.feedbackSource ?? f.source ?? '';
   const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
+  const ingestedAt = createIngestedAt();
   await db.execute(
     `INSERT INTO feedback_events (
-      feedbackId, timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, ingestedAt, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
@@ -251,6 +289,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
      VALUES (${[
        v(f.feedbackId),
        v(f.timestamp),
+       v(ingestedAt),
        v(f.traceId),
        v(f.spanId ?? null),
        v(f.experimentId ?? null),
@@ -293,6 +332,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
 /** Insert multiple feedback events in a single statement. */
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
+  const ingestedAt = createIngestedAt();
 
   const tuples = args.feedbacks.map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
@@ -301,6 +341,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
     return `(${[
       v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
+      v(ingestedAt),
       v(legacyFeedback.traceId),
       v(legacyFeedback.spanId ?? null),
       v(legacyFeedback.experimentId ?? null),
@@ -340,7 +381,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
 
   await db.execute(
     `INSERT INTO feedback_events (
-      feedbackId, timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, ingestedAt, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
@@ -352,30 +393,70 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
 
 /** Query feedback events with filtering, ordering, and pagination. */
 export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
-
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>, {
+  const parsed = normalizeObservabilityListArgs(args, {
+    orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+  });
+  const filters = parsed.filters ?? {};
+  const filter = buildWhereClause(filters as Record<string, unknown>, {
     source: 'feedbackSource',
   });
-  const orderByClause = buildOrderByClause(orderBy);
+
+  if (parsed.mode === 'delta') {
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: await getFeedbackSnapshotLiveCursor(db, filter.clause, filter.params),
+        feedback: [],
+      };
+    }
+
+    const afterCursor = getLiveCursorParts(parsed.after);
+
+    const rows = await db.query<Record<string, unknown>>(
+      `
+        SELECT *
+        FROM feedback_events
+        ${
+          filter.clause
+            ? `${filter.clause} AND ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND feedbackId > ?))`
+            : 'WHERE ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND feedbackId > ?))'
+        }
+        ORDER BY ingestedAt ASC, feedbackId ASC
+        LIMIT ?
+      `,
+      [...filter.params, afterCursor.ingestedAt, afterCursor.ingestedAt, afterCursor.tieBreaker, parsed.limit + 1],
+    );
+
+    const pageRows = rows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToFeedbackLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor,
+      feedback: pageRows.map(row => rowToFeedbackRecord(row)) as ListFeedbackResponse['feedback'],
+    };
+  }
+
+  const page = Number(parsed.pagination.page);
+  const perPage = Number(parsed.pagination.perPage);
+  const orderByClause = buildOrderByClause(parsed.orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
   const countResult = await db.query<{ total: number }>(
-    `SELECT COUNT(*) as total FROM feedback_events ${filterClause}`,
-    filterParams,
+    `SELECT COUNT(*) as total FROM feedback_events ${filter.clause}`,
+    filter.params,
   );
   const total = Number(countResult[0]?.total ?? 0);
 
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT * FROM feedback_events ${filterClause} ${orderByClause} ${paginationClause}`,
-    [...filterParams, ...paginationParams],
+    `SELECT * FROM feedback_events ${filter.clause} ${orderByClause} ${paginationClause}`,
+    [...filter.params, ...paginationParams],
   );
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+    liveCursor: await getFeedbackSnapshotLiveCursor(db, filter.clause, filter.params),
     feedback: rows.map(row => rowToFeedbackRecord(row)) as ListFeedbackResponse['feedback'],
   };
 }

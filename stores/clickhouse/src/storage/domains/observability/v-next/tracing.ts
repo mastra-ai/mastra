@@ -11,7 +11,7 @@
  */
 
 import type { ClickHouseClient } from '@clickhouse/client';
-import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
+import { BRANCH_SPAN_TYPES, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -26,13 +26,114 @@ import type {
   LightSpanRecord,
   ListBranchesArgs,
   ListBranchesResponse,
+  LiveCursor,
   SpanRecord,
 } from '@mastra/core/storage';
 
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_ROOTS } from './ddl';
-import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
+import {
+  TABLE_BRANCH_LIST_CURSOR_EVENTS,
+  TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_LIST_CURSOR_EVENTS,
+  TABLE_TRACE_ROOTS,
+} from './ddl';
+import {
+  CH_SETTINGS,
+  CH_INSERT_SETTINGS,
+  appendWhereClause,
+  buildFirstSeenCursorSql,
+  createOpaqueLiveCursor,
+  normalizeObservabilityListArgs,
+  rowToOpaqueLiveCursor,
+  spanRecordToRow,
+  rowToSpanRecord,
+  getOpaqueLiveCursorValue,
+  toDateRangeOrUndefined,
+  toStringOrUndefined,
+  toStringRecordOrUndefined,
+  toUnknownRecordOrUndefined,
+} from './helpers';
 
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
+const BRANCH_SPAN_TYPE_SET = new Set<string>(BRANCH_SPAN_TYPES);
+type BranchesOrderBy = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
+const BRANCH_FIRST_SEEN_SQL = buildFirstSeenCursorSql(TABLE_BRANCH_LIST_CURSOR_EVENTS, ['traceId', 'spanId']);
+type NormalizedBranchFilters = {
+  spanType?: string;
+  startedAt?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean };
+  endedAt?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean };
+  traceId?: string;
+  entityType?: string;
+  entityId?: string;
+  entityName?: string;
+  entityVersionId?: string;
+  parentEntityVersionId?: string;
+  parentEntityType?: string;
+  parentEntityId?: string;
+  parentEntityName?: string;
+  rootEntityVersionId?: string;
+  rootEntityType?: string;
+  rootEntityId?: string;
+  rootEntityName?: string;
+  experimentId?: string;
+  userId?: string;
+  organizationId?: string;
+  resourceId?: string;
+  runId?: string;
+  sessionId?: string;
+  threadId?: string;
+  requestId?: string;
+  environment?: string;
+  source?: string;
+  serviceName?: string;
+  tags?: string[];
+  metadata?: Record<string, string>;
+  scope?: Record<string, unknown>;
+  status?: TraceStatus;
+};
+
+function rowToBranchLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  return rowToOpaqueLiveCursor(row);
+}
+
+function normalizeBranchFilters(filters: ListBranchesArgs['filters']): NormalizedBranchFilters | undefined {
+  const record = toUnknownRecordOrUndefined(filters);
+  if (!record) return undefined;
+
+  return {
+    ...record,
+    spanType: toStringOrUndefined(record.spanType),
+    startedAt: toDateRangeOrUndefined(record.startedAt),
+    endedAt: toDateRangeOrUndefined(record.endedAt),
+    traceId: toStringOrUndefined(record.traceId),
+    entityType: toStringOrUndefined(record.entityType),
+    entityId: toStringOrUndefined(record.entityId),
+    entityName: toStringOrUndefined(record.entityName),
+    entityVersionId: toStringOrUndefined(record.entityVersionId),
+    parentEntityVersionId: toStringOrUndefined(record.parentEntityVersionId),
+    parentEntityType: toStringOrUndefined(record.parentEntityType),
+    parentEntityId: toStringOrUndefined(record.parentEntityId),
+    parentEntityName: toStringOrUndefined(record.parentEntityName),
+    rootEntityVersionId: toStringOrUndefined(record.rootEntityVersionId),
+    rootEntityType: toStringOrUndefined(record.rootEntityType),
+    rootEntityId: toStringOrUndefined(record.rootEntityId),
+    rootEntityName: toStringOrUndefined(record.rootEntityName),
+    experimentId: toStringOrUndefined(record.experimentId),
+    userId: toStringOrUndefined(record.userId),
+    organizationId: toStringOrUndefined(record.organizationId),
+    resourceId: toStringOrUndefined(record.resourceId),
+    runId: toStringOrUndefined(record.runId),
+    sessionId: toStringOrUndefined(record.sessionId),
+    threadId: toStringOrUndefined(record.threadId),
+    requestId: toStringOrUndefined(record.requestId),
+    environment: toStringOrUndefined(record.environment),
+    source: toStringOrUndefined(record.source),
+    serviceName: toStringOrUndefined(record.serviceName),
+    metadata: toStringRecordOrUndefined(record.metadata),
+    scope: toUnknownRecordOrUndefined(record.scope),
+    status: record.status as TraceStatus | undefined,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Write operations
@@ -40,13 +141,7 @@ const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', '
 
 /** Insert a single completed span. */
 export async function createSpan(client: ClickHouseClient, args: CreateSpanArgs): Promise<void> {
-  const row = spanRecordToRow(args.span);
-  await client.insert({
-    table: TABLE_SPAN_EVENTS,
-    values: [row],
-    format: 'JSONEachRow',
-    clickhouse_settings: CH_INSERT_SETTINGS,
-  });
+  await batchCreateSpans(client, { records: [args.span] });
 }
 
 /** Insert a batch of completed spans. */
@@ -60,6 +155,30 @@ export async function batchCreateSpans(client: ClickHouseClient, args: BatchCrea
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+
+  const rootCursorRows = args.records
+    .filter(span => span.parentSpanId == null)
+    .map(span => ({ traceId: span.traceId }));
+  if (rootCursorRows.length > 0) {
+    await client.insert({
+      table: TABLE_TRACE_LIST_CURSOR_EVENTS,
+      values: rootCursorRows,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_INSERT_SETTINGS,
+    });
+  }
+
+  const branchCursorRows = args.records
+    .filter(span => BRANCH_SPAN_TYPE_SET.has(span.spanType))
+    .map(span => ({ traceId: span.traceId, spanId: span.spanId }));
+  if (branchCursorRows.length > 0) {
+    await client.insert({
+      table: TABLE_BRANCH_LIST_CURSOR_EVENTS,
+      values: branchCursorRows,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_INSERT_SETTINGS,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +347,14 @@ export async function batchDeleteTraces(client: ClickHouseClient, args: BatchDel
       query: `DELETE FROM ${TABLE_TRACE_ROOTS} WHERE traceId IN (${traceInList}) AND ${dedupeCondition}`,
       query_params: params,
     }),
+    client.command({
+      query: `DELETE FROM ${TABLE_TRACE_LIST_CURSOR_EVENTS} WHERE traceId IN (${traceInList})`,
+      query_params: params,
+    }),
+    client.command({
+      query: `DELETE FROM ${TABLE_BRANCH_LIST_CURSOR_EVENTS} WHERE traceId IN (${traceInList})`,
+      query_params: params,
+    }),
   ]);
 }
 
@@ -236,6 +363,8 @@ export async function dangerouslyClearSpanEvents(client: ClickHouseClient): Prom
   await Promise.all([
     client.command({ query: `TRUNCATE TABLE IF EXISTS ${TABLE_SPAN_EVENTS}` }),
     client.command({ query: `TRUNCATE TABLE IF EXISTS ${TABLE_TRACE_ROOTS}` }),
+    client.command({ query: `TRUNCATE TABLE IF EXISTS ${TABLE_TRACE_LIST_CURSOR_EVENTS}` }),
+    client.command({ query: `TRUNCATE TABLE IF EXISTS ${TABLE_BRANCH_LIST_CURSOR_EVENTS}` }),
   ]);
 }
 
@@ -253,9 +382,14 @@ export async function dangerouslyClearSpanEvents(client: ClickHouseClient): Prom
  * which is the whole point of this surface.
  */
 export async function listBranches(client: ClickHouseClient, args: ListBranchesArgs): Promise<ListBranchesResponse> {
-  const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
-  const page = pagination?.page ?? 0;
-  const perPage = pagination?.perPage ?? 10;
+  const parsed = normalizeObservabilityListArgs<ListBranchesArgs['filters'], NormalizedBranchFilters, BranchesOrderBy>(
+    args,
+    {
+      orderBy: { field: 'startedAt', direction: 'DESC' } satisfies BranchesOrderBy,
+      normalizeFilters: normalizeBranchFilters,
+    },
+  );
+  const { filters } = parsed;
 
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
@@ -378,21 +512,109 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const dedupedBranchesSql = `
+    SELECT *
+    FROM ${TABLE_TRACE_BRANCHES}
+    ${whereClause}
+    ORDER BY dedupeKey
+    LIMIT 1 BY dedupeKey
+  `;
+  const branchFirstSeenSql = `
+    ${BRANCH_FIRST_SEEN_SQL}
+  `;
+
+  if (parsed.mode === 'delta') {
+    const liveCursorResult = await client.query({
+      query: `
+        SELECT toString(cursor.cursorId) AS cursorId
+        FROM (${dedupedBranchesSql}) AS branches
+        INNER JOIN (${branchFirstSeenSql}) AS cursor USING (traceId, spanId)
+        ORDER BY cursor.cursorId DESC
+        LIMIT 1
+      `,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    });
+    const liveCursorRows = (await liveCursorResult.json()) as Record<string, unknown>[];
+    const snapshotCursor =
+      (liveCursorRows[0] ? rowToBranchLiveCursor(liveCursorRows[0]) : null) ?? createOpaqueLiveCursor('0');
+
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: snapshotCursor,
+        branches: [],
+      };
+    }
+
+    const deltaResult = await client.query({
+      query: `
+        SELECT branches.*, toString(cursor.cursorId) AS cursorId
+        FROM (${dedupedBranchesSql}) AS branches
+        INNER JOIN (${branchFirstSeenSql}) AS cursor USING (traceId, spanId)
+        WHERE cursor.cursorId > {afterCursorId:UInt64}
+        ORDER BY cursor.cursorId ASC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: {
+        ...params,
+        afterCursorId: getOpaqueLiveCursorValue(parsed.after),
+        limit: parsed.limit + 1,
+      },
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    });
+    const deltaRows = (await deltaResult.json()) as Record<string, any>[];
+    const pageRows = deltaRows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToBranchLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: deltaRows.length > parsed.limit },
+      liveCursor,
+      branches: toTraceSpans(pageRows.map(rowToSpanRecord)),
+    };
+  }
+
+  const pagination = parsed.pagination;
+  const orderBy = parsed.orderBy;
+  const page = pagination?.page ?? 0;
+  const perPage = pagination?.perPage ?? 10;
   const sortField = orderBy?.field === 'endedAt' ? 'endedAt' : 'startedAt';
   const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
+  const liveCursorResult = await client.query({
+    query: `
+      SELECT toString(cursor.cursorId) AS cursorId
+      FROM (${dedupedBranchesSql}) AS branches
+      INNER JOIN (${branchFirstSeenSql}) AS cursor USING (traceId, spanId)
+      ORDER BY cursor.cursorId DESC
+      LIMIT 1
+    `,
+    query_params: params,
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_SETTINGS,
+  });
+  const liveCursorRows = (await liveCursorResult.json()) as Record<string, unknown>[];
+  const snapshotCursor = liveCursorRows[0] ? rowToBranchLiveCursor(liveCursorRows[0]) : null;
+  const snapshotWhereClause = snapshotCursor
+    ? appendWhereClause('', `(cursor.cursorId IS NULL OR cursor.cursorId <= {snapshotCursorId:UInt64})`)
+    : '';
+  const snapshotParams = snapshotCursor
+    ? { ...params, snapshotCursorId: getOpaqueLiveCursorValue(snapshotCursor) }
+    : params;
 
   // Count (deduplicated)
   const countResult = await client.query({
     query: `
       SELECT count() as cnt FROM (
         SELECT dedupeKey
-        FROM ${TABLE_TRACE_BRANCHES}
-        ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
+        FROM (${dedupedBranchesSql}) AS branches
+        LEFT JOIN (${branchFirstSeenSql}) AS cursor USING (traceId, spanId)
+        ${snapshotWhereClause}
       )
     `,
-    query_params: params,
+    query_params: snapshotParams,
     format: 'JSONEachRow',
     clickhouse_settings: CH_SETTINGS,
   });
@@ -402,25 +624,22 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
   if (total === 0) {
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
+      liveCursor: createOpaqueLiveCursor('0'),
       branches: [],
     };
   }
 
   const dataResult = await client.query({
     query: `
-      SELECT * FROM (
-        SELECT *
-        FROM ${TABLE_TRACE_BRANCHES}
-        ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
-      )
+      SELECT branches.* FROM (${dedupedBranchesSql}) AS branches
+      LEFT JOIN (${branchFirstSeenSql}) AS cursor USING (traceId, spanId)
+      ${snapshotWhereClause}
       ORDER BY ${sortField} ${sortDirection}, dedupeKey ASC
       LIMIT {limit:UInt32}
       OFFSET {offset:UInt32}
     `,
     query_params: {
-      ...params,
+      ...snapshotParams,
       limit: perPage,
       offset: page * perPage,
     },
@@ -437,6 +656,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
+    liveCursor: snapshotCursor ?? createOpaqueLiveCursor('0'),
     branches: toTraceSpans(spans),
   };
 }

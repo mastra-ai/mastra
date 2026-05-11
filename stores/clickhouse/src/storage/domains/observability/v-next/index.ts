@@ -157,6 +157,19 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#retention = config.retention;
   }
 
+  override getListCapabilities() {
+    return {
+      delta: {
+        traces: true,
+        branches: true,
+        logs: true,
+        metrics: true,
+        scores: true,
+        feedback: true,
+      },
+    } as const;
+  }
+
   // -------------------------------------------------------------------------
   // Initialization
   // -------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import type {
   BatchCreateMetricsArgs,
   ListMetricsArgs,
   ListMetricsResponse,
+  LiveCursor,
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -24,7 +25,18 @@ import type {
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereClause } from './filters';
-import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
+import {
+  createIngestedAt,
+  createLiveCursor,
+  createSyntheticNowCursor,
+  getLiveCursorParts,
+  normalizeObservabilityListArgs,
+  parseJson,
+  parseJsonArray,
+  toDate,
+  v,
+  jsonV,
+} from './helpers';
 
 // ============================================================================
 // Helpers
@@ -97,6 +109,7 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
 const METRIC_COLUMNS = [
   'metricId',
   'timestamp',
+  'ingestedAt',
   'name',
   'value',
   'traceId',
@@ -138,6 +151,30 @@ const METRIC_COLUMNS = [
 type MetricColumn = (typeof METRIC_COLUMNS)[number];
 
 const METRIC_COLUMNS_SQL = METRIC_COLUMNS.join(', ');
+
+function rowToMetricLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  if (row.ingestedAt == null || row.metricId == null) return null;
+  return createLiveCursor(row.ingestedAt, String(row.metricId));
+}
+
+async function getMetricsSnapshotLiveCursor(
+  db: DuckDBConnection,
+  filterClause: string,
+  filterParams: unknown[],
+): Promise<LiveCursor> {
+  const rows = await db.query<Record<string, unknown>>(
+    `
+      SELECT ingestedAt, metricId
+      FROM metric_events
+      ${filterClause ? `${filterClause} AND ingestedAt IS NOT NULL` : 'WHERE ingestedAt IS NOT NULL'}
+      ORDER BY ingestedAt DESC, metricId DESC
+      LIMIT 1
+    `,
+    filterParams,
+  );
+  const cursor = rows[0] ? rowToMetricLiveCursor(rows[0]) : null;
+  return cursor ?? createSyntheticNowCursor();
+}
 const METRIC_COLUMN_SET = new Set<string>(METRIC_COLUMNS);
 const METRIC_LABEL_ONLY_GROUP_BY_EXCLUDED = new Set<MetricColumn>(['metadata', 'scope', 'costMetadata', 'tags']);
 
@@ -275,11 +312,13 @@ function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown
 /** Insert multiple metric events in a single statement. */
 export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreateMetricsArgs): Promise<void> {
   if (args.metrics.length === 0) return;
+  const ingestedAt = createIngestedAt();
 
   const tuples = args.metrics.map(m => {
     return `(${[
       v(m.metricId),
       v(m.timestamp),
+      v(ingestedAt),
       v(m.name),
       v(m.value),
       v(m.traceId ?? null),
@@ -326,28 +365,68 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
 /** Query metric events with filtering, ordering, and pagination. */
 export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): Promise<ListMetricsResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const parsed = normalizeObservabilityListArgs(args, {
+    orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+  });
+  const filters = parsed.filters ?? {};
+  const filter = buildWhereClause(filters as Record<string, unknown>);
 
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>);
-  const orderByClause = buildOrderByClause(orderBy);
+  if (parsed.mode === 'delta') {
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: await getMetricsSnapshotLiveCursor(db, filter.clause, filter.params),
+        metrics: [],
+      };
+    }
+
+    const afterCursor = getLiveCursorParts(parsed.after);
+
+    const rows = await db.query<Record<string, unknown>>(
+      `
+        SELECT *
+        FROM metric_events
+        ${
+          filter.clause
+            ? `${filter.clause} AND ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND metricId > ?))`
+            : 'WHERE ingestedAt IS NOT NULL AND (ingestedAt > ? OR (ingestedAt = ? AND metricId > ?))'
+        }
+        ORDER BY ingestedAt ASC, metricId ASC
+        LIMIT ?
+      `,
+      [...filter.params, afterCursor.ingestedAt, afterCursor.ingestedAt, afterCursor.tieBreaker, parsed.limit + 1],
+    );
+
+    const pageRows = rows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToMetricLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor,
+      metrics: pageRows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
+    };
+  }
+
+  const page = Number(parsed.pagination.page);
+  const perPage = Number(parsed.pagination.perPage);
+  const orderByClause = buildOrderByClause(parsed.orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
   const countResult = await db.query<{ total: number }>(
-    `SELECT COUNT(*) AS total FROM metric_events ${filterClause}`,
-    filterParams,
+    `SELECT COUNT(*) AS total FROM metric_events ${filter.clause}`,
+    filter.params,
   );
   const total = Number(countResult[0]?.total ?? 0);
 
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT * FROM metric_events ${filterClause} ${orderByClause} ${paginationClause}`,
-    [...filterParams, ...paginationParams],
+    `SELECT * FROM metric_events ${filter.clause} ${orderByClause} ${paginationClause}`,
+    [...filter.params, ...paginationParams],
   );
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+    liveCursor: await getMetricsSnapshotLiveCursor(db, filter.clause, filter.params),
     metrics: rows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
   };
 }

@@ -1,5 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { listMetricsArgsSchema, METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
+import { METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -21,13 +21,50 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
   MetricDistinctColumn,
+  LiveCursor,
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_METRIC_EVENTS, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
+import { TABLE_METRIC_CURSOR_EVENTS, TABLE_METRIC_EVENTS, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
 import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
-import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
+import {
+  CH_INSERT_SETTINGS,
+  CH_SETTINGS,
+  appendWhereClause,
+  buildFirstSeenCursorSql,
+  buildOpaqueLiveCursorUpperBoundCondition,
+  createOpaqueLiveCursor,
+  getOpaqueLiveCursorQueryParams,
+  normalizeObservabilityListArgs,
+  rowToOpaqueLiveCursor,
+  toDateRangeOrUndefined,
+  toStringArrayOrUndefined,
+  toStringOrUndefined,
+  toStringRecordOrUndefined,
+  toUnknownRecordOrUndefined,
+  metricRecordToRow,
+  rowToMetricRecord,
+} from './helpers';
+
+type NormalizedMetricsFilters = Parameters<typeof buildMetricsFilterConditions>[0];
+
+function normalizeMetricsFilters(filters: ListMetricsArgs['filters']): NormalizedMetricsFilters {
+  const record = toUnknownRecordOrUndefined(filters);
+  if (!record) return undefined;
+
+  return {
+    ...record,
+    timestamp: toDateRangeOrUndefined(record.timestamp),
+    name: toStringArrayOrUndefined(record.name),
+    source: toStringOrUndefined(record.source),
+    executionSource: toStringOrUndefined(record.executionSource),
+    provider: toStringOrUndefined(record.provider),
+    model: toStringOrUndefined(record.model),
+    costUnit: toStringOrUndefined(record.costUnit),
+    labels: toStringRecordOrUndefined(record.labels),
+  } as NormalizedMetricsFilters;
+}
 
 // ============================================================================
 // Helpers
@@ -71,6 +108,9 @@ const METRIC_TYPED_COLUMNS = new Set([
 
 /** Columns excluded from groupBy because they are complex types. */
 const GROUP_BY_EXCLUDED = new Set(['metadata', 'scope', 'costMetadata', 'tags']);
+
+// TODO(2.0): Factor the repeated first-seen cursor join pattern across ClickHouse observability signals.
+const METRIC_FIRST_SEEN_SQL = buildFirstSeenCursorSql(TABLE_METRIC_CURSOR_EVENTS, ['metricId']);
 
 function resolveDistinctColumnSql(distinctColumn: MetricDistinctColumn | undefined): string {
   if (!distinctColumn) {
@@ -238,6 +278,32 @@ async function queryJson<T>(client: ClickHouseClient, query: string, params: Rec
   ).json()) as T[];
 }
 
+function rowToMetricLiveCursor(row: Record<string, unknown>): LiveCursor | null {
+  return rowToOpaqueLiveCursor(row);
+}
+
+async function getMetricsSnapshotLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<LiveCursor> {
+  const rows = await queryJson<Record<string, unknown>>(
+    client,
+    `
+      SELECT toString(cursor.cursorId) AS cursorId
+      FROM ${TABLE_METRIC_EVENTS} AS m
+      INNER JOIN (${METRIC_FIRST_SEEN_SQL}) AS cursor USING (metricId)
+      ${whereClause}
+      ORDER BY cursor.cursorId DESC
+      LIMIT 1
+    `,
+    params,
+  );
+
+  const cursor = rows[0] ? rowToMetricLiveCursor(rows[0]) : null;
+  return cursor ?? createOpaqueLiveCursor('0');
+}
+
 // ============================================================================
 // Write
 // ============================================================================
@@ -251,6 +317,13 @@ export async function batchCreateMetrics(client: ClickHouseClient, args: BatchCr
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+
+  await client.insert({
+    table: TABLE_METRIC_CURSOR_EVENTS,
+    values: args.metrics.map(metric => ({ metricId: metric.metricId })),
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_INSERT_SETTINGS,
+  });
 }
 
 // ============================================================================
@@ -258,22 +331,73 @@ export async function batchCreateMetrics(client: ClickHouseClient, args: BatchCr
 // ============================================================================
 
 export async function listMetrics(client: ClickHouseClient, args: ListMetricsArgs): Promise<ListMetricsResponse> {
-  const parsed = listMetricsArgsSchema.parse(args);
+  const parsed = normalizeObservabilityListArgs<
+    ListMetricsArgs['filters'],
+    NormalizedMetricsFilters,
+    { field: 'timestamp'; direction: 'ASC' | 'DESC' }
+  >(args, {
+    orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    normalizeFilters: normalizeMetricsFilters,
+  });
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
+  const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    if (!parsed.after) {
+      return {
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: await getMetricsSnapshotLiveCursor(client, whereClause, filter.params),
+        metrics: [],
+      };
+    }
+
+    const rows = await queryJson<Record<string, any>>(
+      client,
+      `
+        SELECT m.*, toString(cursor.cursorId) AS cursorId
+        FROM ${TABLE_METRIC_EVENTS} AS m
+        INNER JOIN (${METRIC_FIRST_SEEN_SQL}) AS cursor USING (metricId)
+        ${appendWhereClause(whereClause, 'cursor.cursorId > {afterCursorId:UInt64}')}
+        ORDER BY cursor.cursorId ASC
+        LIMIT {limit:UInt32}
+      `,
+      {
+        ...filter.params,
+        ...getOpaqueLiveCursorQueryParams(parsed.after, 'after'),
+        limit: parsed.limit + 1,
+      },
+    );
+
+    const pageRows = rows.slice(0, parsed.limit);
+    const liveCursor =
+      (pageRows.length > 0 ? rowToMetricLiveCursor(pageRows[pageRows.length - 1]!) : null) ?? parsed.after;
+
+    return {
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor,
+      metrics: pageRows.map(rowToMetricRecord),
+    };
+  }
+
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');
-  const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+  const snapshotCursor = await getMetricsSnapshotLiveCursor(client, whereClause, filter.params);
+  const snapshotWhereClause = appendWhereClause(
+    whereClause,
+    buildOpaqueLiveCursorUpperBoundCondition('cursor.cursorId', 'snapshot', { includeNullCursorId: true }),
+  );
+  const snapshotParams = { ...filter.params, ...getOpaqueLiveCursorQueryParams(snapshotCursor, 'snapshot') };
 
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_METRIC_EVENTS} AS m ${whereClause}`,
-    filter.params,
+    `SELECT count() AS total FROM ${TABLE_METRIC_EVENTS} AS m LEFT JOIN (${METRIC_FIRST_SEEN_SQL}) AS cursor USING (metricId) ${snapshotWhereClause}`,
+    snapshotParams,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_METRIC_EVENTS} AS m ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-    { ...filter.params, limit: pagination.limit, offset: pagination.offset },
+    `SELECT m.* FROM ${TABLE_METRIC_EVENTS} AS m LEFT JOIN (${METRIC_FIRST_SEEN_SQL}) AS cursor USING (metricId) ${snapshotWhereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    { ...snapshotParams, limit: pagination.limit, offset: pagination.offset },
   );
 
   const total = Number(countResult[0]?.total ?? 0);
@@ -285,6 +409,7 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       perPage: pagination.perPage,
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
+    liveCursor: snapshotCursor,
     metrics: rows.map(rowToMetricRecord),
   };
 }

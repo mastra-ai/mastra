@@ -1,4 +1,8 @@
 import {
+  // Metrics list
+  metricsFilterSchema,
+  metricsOrderBySchema,
+  listMetricsResponseSchema,
   // Logs
   logsFilterSchema,
   logsOrderBySchema,
@@ -55,16 +59,20 @@ import {
   getEnvironmentsResponseSchema,
   getTagsArgsSchema,
   getTagsResponseSchema,
+  liveCursorSchema,
   paginationArgsSchema,
 } from '@internal/core/storage';
-import { coreFeatures } from '@mastra/core/features';
 import { generateSignalId } from '@mastra/core/observability';
 import { z } from 'zod/v4';
-import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { getObservabilityStore, NEW_ROUTE_DEFS } from './observability-shared';
+import {
+  assertObservabilityDeltaSupported,
+  createObservabilityListQuerySchema,
+  getObservabilityStore,
+  NEW_ROUTE_DEFS,
+} from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
 function createNewRoute<
@@ -90,12 +98,6 @@ function createNewRoute<
     tags: ['Observability'],
     requiresAuth: true,
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
-      if (!coreFeatures.has('observability:v1.13.2')) {
-        throw new HTTPException(501, {
-          message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
-        });
-      }
-
       try {
         return await handler(params);
       } catch (error) {
@@ -110,21 +112,60 @@ function createNewRoute<
 }
 
 // ============================================================================
+// Metric Routes
+// ============================================================================
+
+export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
+  queryParamSchema: createObservabilityListQuerySchema(metricsFilterSchema, metricsOrderBySchema),
+  responseSchema: listMetricsResponseSchema,
+  handler: async ({ mastra, mode, after, limit, ...params }) => {
+    const filters = pickParams(metricsFilterSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+
+    if (mode === 'delta') {
+      assertObservabilityDeltaSupported(observabilityStore, 'metrics');
+      return await observabilityStore.listMetrics({
+        mode,
+        filters,
+        after: liveCursorSchema.optional().parse(after),
+        limit,
+      });
+    }
+
+    const pagination = pickParams(paginationArgsSchema, params);
+    const orderBy = pickParams(metricsOrderBySchema, params);
+    return await observabilityStore.listMetrics(
+      mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
+    );
+  },
+});
+
+// ============================================================================
 // Log Routes
 // ============================================================================
 
 export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
-  queryParamSchema: wrapSchemaForQueryParams(
-    logsFilterSchema.extend(paginationArgsSchema.shape).extend(logsOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: createObservabilityListQuerySchema(logsFilterSchema, logsOrderBySchema),
   responseSchema: listLogsResponseSchema,
-  handler: async ({ mastra, ...params }) => {
+  handler: async ({ mastra, mode, after, limit, ...params }) => {
     const filters = pickParams(logsFilterSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+
+    if (mode === 'delta') {
+      assertObservabilityDeltaSupported(observabilityStore, 'logs');
+      return await observabilityStore.listLogs({
+        mode,
+        filters,
+        after: liveCursorSchema.optional().parse(after),
+        limit,
+      });
+    }
+
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(logsOrderBySchema, params);
-
-    const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.listLogs({ filters, pagination, orderBy });
+    return await observabilityStore.listLogs(
+      mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
+    );
   },
 });
 
@@ -133,17 +174,27 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
 // ============================================================================
 
 export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
-  queryParamSchema: wrapSchemaForQueryParams(
-    scoresFilterSchema.extend(paginationArgsSchema.shape).extend(scoresOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: createObservabilityListQuerySchema(scoresFilterSchema, scoresOrderBySchema),
   responseSchema: obsListScoresResponseSchema,
-  handler: async ({ mastra, ...params }) => {
+  handler: async ({ mastra, mode, after, limit, ...params }) => {
     const filters = pickParams(scoresFilterSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+
+    if (mode === 'delta') {
+      assertObservabilityDeltaSupported(observabilityStore, 'scores');
+      return await observabilityStore.listScores({
+        mode,
+        filters,
+        after: liveCursorSchema.optional().parse(after),
+        limit,
+      });
+    }
+
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(scoresOrderBySchema, params);
-
-    const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.listScores({ filters, pagination, orderBy });
+    return await observabilityStore.listScores(
+      mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
+    );
   },
 });
 
@@ -214,17 +265,27 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 // ============================================================================
 
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
-  queryParamSchema: wrapSchemaForQueryParams(
-    feedbackFilterSchema.extend(paginationArgsSchema.shape).extend(feedbackOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
-  handler: async ({ mastra, ...params }) => {
+  handler: async ({ mastra, mode, after, limit, ...params }) => {
     const filters = pickParams(feedbackFilterSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+
+    if (mode === 'delta') {
+      assertObservabilityDeltaSupported(observabilityStore, 'feedback');
+      return await observabilityStore.listFeedback({
+        mode,
+        filters,
+        after: liveCursorSchema.optional().parse(after),
+        limit,
+      });
+    }
+
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(feedbackOrderBySchema, params);
-
-    const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.listFeedback({ filters, pagination, orderBy });
+    return await observabilityStore.listFeedback(
+      mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
+    );
   },
 });
 
@@ -411,6 +472,7 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
 });
 
 export const NEW_ROUTES = {
+  LIST_METRICS,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,

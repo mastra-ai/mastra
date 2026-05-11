@@ -87,6 +87,12 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
+export type ObservabilityListEndpoint = 'traces' | 'branches' | 'logs' | 'metrics' | 'scores' | 'feedback';
+
+export interface ObservabilityListCapabilities {
+  delta?: Partial<Record<ObservabilityListEndpoint, true>>;
+}
+
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
  * Not abstract -- provides default implementations that throw "not implemented" errors.
@@ -141,6 +147,15 @@ export class ObservabilityStorage extends StorageDomain {
   public get runtimeTracingStrategy(): TracingStorageStrategy | undefined {
     const supportedStrategies = this.observabilityStrategy.supported;
     return supportedStrategies.length === 1 ? supportedStrategies[0] : undefined;
+  }
+
+  /**
+   * Optional per-endpoint capabilities for observability list APIs.
+   * Stores that implement delta polling should override this and opt in explicitly.
+   * Older stores and older package versions will simply omit it, which keeps page mode working.
+   */
+  public getListCapabilities(): ObservabilityListCapabilities | undefined {
+    return undefined;
   }
 
   /**

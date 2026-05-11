@@ -131,6 +131,19 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     this.db = config.db;
   }
 
+  override getListCapabilities() {
+    return {
+      delta: {
+        traces: true,
+        branches: true,
+        logs: true,
+        metrics: true,
+        scores: true,
+        feedback: true,
+      },
+    } as const;
+  }
+
   /** Create all observability tables if they don't exist. */
   async init(): Promise<void> {
     const migrationStatus = await checkSignalTablesMigrationStatus(this.db);
@@ -182,7 +195,15 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   /** Delete all rows from every observability table. Use with caution. */
   async dangerouslyClearAll(): Promise<void> {
-    for (const table of ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events']) {
+    for (const table of [
+      'span_events',
+      'trace_list_cursor_events',
+      'branch_list_cursor_events',
+      'metric_events',
+      'log_events',
+      'score_events',
+      'feedback_events',
+    ]) {
       await this.db.execute(`TRUNCATE TABLE ${table}`);
     }
   }

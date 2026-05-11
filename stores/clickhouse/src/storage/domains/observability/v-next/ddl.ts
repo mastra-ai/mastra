@@ -27,9 +27,15 @@
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
 export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
 export const TABLE_TRACE_BRANCHES = 'mastra_trace_branches';
+export const TABLE_TRACE_LIST_CURSOR_EVENTS = 'mastra_trace_list_cursor_events';
+export const TABLE_BRANCH_LIST_CURSOR_EVENTS = 'mastra_branch_list_cursor_events';
+export const TABLE_METRIC_CURSOR_EVENTS = 'mastra_metric_cursor_events';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
+export const TABLE_LOG_CURSOR_EVENTS = 'mastra_log_cursor_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
+export const TABLE_SCORE_CURSOR_EVENTS = 'mastra_score_cursor_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
+export const TABLE_FEEDBACK_CURSOR_EVENTS = 'mastra_feedback_cursor_events';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
 export const TABLE_DISCOVERY_VALUES = 'mastra_discovery_values';
 export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
@@ -309,6 +315,34 @@ FROM ${TABLE_SPAN_EVENTS}
 WHERE spanType IN (${BRANCH_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
 `;
 
+export const TRACE_LIST_CURSOR_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_LIST_CURSOR_EVENTS} (
+  traceId            String,
+  cursorId           UInt64 DEFAULT generateSnowflakeID()
+)
+ENGINE = MergeTree
+ORDER BY (cursorId, traceId)
+`;
+
+export const BRANCH_LIST_CURSOR_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_BRANCH_LIST_CURSOR_EVENTS} (
+  traceId            String,
+  spanId             String,
+  cursorId           UInt64 DEFAULT generateSnowflakeID()
+)
+ENGINE = MergeTree
+ORDER BY (cursorId, traceId, spanId)
+`;
+
+export const METRIC_CURSOR_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_CURSOR_EVENTS} (
+  metricId           String,
+  cursorId           UInt64 DEFAULT generateSnowflakeID()
+)
+ENGINE = MergeTree
+ORDER BY (cursorId, metricId)
+`;
+
 // ---------------------------------------------------------------------------
 // metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
@@ -387,6 +421,15 @@ PARTITION BY toDate(timestamp)
 ORDER BY (name, timestamp, metricId)
 `;
 
+export const LOG_CURSOR_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_LOG_CURSOR_EVENTS} (
+  logId              String,
+  cursorId           UInt64 DEFAULT generateSnowflakeID()
+)
+ENGINE = MergeTree
+ORDER BY (cursorId, logId)
+`;
+
 // ---------------------------------------------------------------------------
 // log_events — ReplacingMergeTree with logId dedup
 // ---------------------------------------------------------------------------
@@ -443,6 +486,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (timestamp, logId)
+`;
+
+export const SCORE_CURSOR_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_CURSOR_EVENTS} (
+  scoreId            String,
+  cursorId           UInt64 DEFAULT generateSnowflakeID()
+)
+ENGINE = MergeTree
+ORDER BY (cursorId, scoreId)
 `;
 
 // ---------------------------------------------------------------------------
@@ -509,6 +561,15 @@ ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const FEEDBACK_CURSOR_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_CURSOR_EVENTS} (
+  feedbackId         String,
+  cursorId           UInt64 DEFAULT generateSnowflakeID()
+)
+ENGINE = MergeTree
+ORDER BY (cursorId, feedbackId)
 `;
 
 // ---------------------------------------------------------------------------
@@ -691,9 +752,15 @@ export const ALL_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
   TRACE_BRANCHES_DDL,
+  TRACE_LIST_CURSOR_EVENTS_DDL,
+  BRANCH_LIST_CURSOR_EVENTS_DDL,
+  METRIC_CURSOR_EVENTS_DDL,
   METRIC_EVENTS_DDL,
+  LOG_CURSOR_EVENTS_DDL,
   LOG_EVENTS_DDL,
+  SCORE_CURSOR_EVENTS_DDL,
   SCORE_EVENTS_DDL,
+  FEEDBACK_CURSOR_EVENTS_DDL,
   FEEDBACK_EVENTS_DDL,
   DISCOVERY_VALUES_DDL,
   DISCOVERY_PAIRS_DDL,
@@ -718,6 +785,10 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Trace branches
+  `ALTER TABLE ${TABLE_TRACE_BRANCHES} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_TRACE_BRANCHES} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_TRACE_BRANCHES} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Metrics
   `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
@@ -772,9 +843,15 @@ export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_LIST_CURSOR_EVENTS,
+  TABLE_BRANCH_LIST_CURSOR_EVENTS,
+  TABLE_METRIC_CURSOR_EVENTS,
   TABLE_METRIC_EVENTS,
+  TABLE_LOG_CURSOR_EVENTS,
   TABLE_LOG_EVENTS,
+  TABLE_SCORE_CURSOR_EVENTS,
   TABLE_SCORE_EVENTS,
+  TABLE_FEEDBACK_CURSOR_EVENTS,
   TABLE_FEEDBACK_EVENTS,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
@@ -810,19 +887,31 @@ const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_SPAN_EVENTS]: 'endedAt',
   [TABLE_TRACE_ROOTS]: 'endedAt',
   [TABLE_TRACE_BRANCHES]: 'endedAt',
+  [TABLE_TRACE_LIST_CURSOR_EVENTS]: 'snowflakeIDToDateTime64(cursorId)',
+  [TABLE_BRANCH_LIST_CURSOR_EVENTS]: 'snowflakeIDToDateTime64(cursorId)',
+  [TABLE_METRIC_CURSOR_EVENTS]: 'snowflakeIDToDateTime64(cursorId)',
   [TABLE_METRIC_EVENTS]: 'timestamp',
+  [TABLE_LOG_CURSOR_EVENTS]: 'snowflakeIDToDateTime64(cursorId)',
   [TABLE_LOG_EVENTS]: 'timestamp',
+  [TABLE_SCORE_CURSOR_EVENTS]: 'snowflakeIDToDateTime64(cursorId)',
   [TABLE_SCORE_EVENTS]: 'timestamp',
+  [TABLE_FEEDBACK_CURSOR_EVENTS]: 'snowflakeIDToDateTime64(cursorId)',
   [TABLE_FEEDBACK_EVENTS]: 'timestamp',
 };
 
 /** Maps each signal key to the table(s) it controls. */
 const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
-  tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES],
-  logs: [TABLE_LOG_EVENTS],
-  metrics: [TABLE_METRIC_EVENTS],
-  scores: [TABLE_SCORE_EVENTS],
-  feedback: [TABLE_FEEDBACK_EVENTS],
+  tracing: [
+    TABLE_SPAN_EVENTS,
+    TABLE_TRACE_ROOTS,
+    TABLE_TRACE_BRANCHES,
+    TABLE_TRACE_LIST_CURSOR_EVENTS,
+    TABLE_BRANCH_LIST_CURSOR_EVENTS,
+  ],
+  logs: [TABLE_LOG_EVENTS, TABLE_LOG_CURSOR_EVENTS],
+  metrics: [TABLE_METRIC_EVENTS, TABLE_METRIC_CURSOR_EVENTS],
+  scores: [TABLE_SCORE_EVENTS, TABLE_SCORE_CURSOR_EVENTS],
+  feedback: [TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_CURSOR_EVENTS],
 };
 
 /**
