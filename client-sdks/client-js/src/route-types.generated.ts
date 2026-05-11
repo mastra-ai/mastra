@@ -16094,6 +16094,70 @@ export interface GetObservabilityDiscoveryTags_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /observability/discovery/root-span-keys
+// ============================================================================
+export type GetObservabilityDiscoveryRootSpanKeys_QueryParams = {
+  field?: ('metadata' | 'attributes') | undefined;
+  limit?: (number | undefined) | undefined;
+};
+
+export type GetObservabilityDiscoveryRootSpanKeys_Response = {
+  /** Distinct top-level keys present on root-span JSON field */
+  keys: string[];
+};
+
+export type GetObservabilityDiscoveryRootSpanKeys_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryRootSpanKeys_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryRootSpanKeys_QueryParams
+        ? { query?: GetObservabilityDiscoveryRootSpanKeys_QueryParams }
+        : { query: GetObservabilityDiscoveryRootSpanKeys_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityDiscoveryRootSpanKeys_RouteContract {
+  pathParams: never;
+  queryParams: GetObservabilityDiscoveryRootSpanKeys_QueryParams;
+  body: never;
+  request: GetObservabilityDiscoveryRootSpanKeys_Request;
+  response: GetObservabilityDiscoveryRootSpanKeys_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /observability/discovery/log-keys
+// ============================================================================
+export type GetObservabilityDiscoveryLogKeys_QueryParams = {
+  field?: ('metadata' | 'data') | undefined;
+  limit?: (number | undefined) | undefined;
+};
+
+export type GetObservabilityDiscoveryLogKeys_Response = {
+  /** Distinct top-level keys present on log JSON field */
+  keys: string[];
+};
+
+export type GetObservabilityDiscoveryLogKeys_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryLogKeys_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryLogKeys_QueryParams
+        ? { query?: GetObservabilityDiscoveryLogKeys_QueryParams }
+        : { query: GetObservabilityDiscoveryLogKeys_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetObservabilityDiscoveryLogKeys_RouteContract {
+  pathParams: never;
+  queryParams: GetObservabilityDiscoveryLogKeys_QueryParams;
+  body: never;
+  request: GetObservabilityDiscoveryLogKeys_Request;
+  response: GetObservabilityDiscoveryLogKeys_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /logs/transports
 // ============================================================================
 export type GetLogsTransports_Response = {
@@ -75472,6 +75536,8 @@ export interface RouteTypes {
   'GET /observability/discovery/service-names': GetObservabilityDiscoveryServiceNames_RouteContract;
   'GET /observability/discovery/environments': GetObservabilityDiscoveryEnvironments_RouteContract;
   'GET /observability/discovery/tags': GetObservabilityDiscoveryTags_RouteContract;
+  'GET /observability/discovery/root-span-keys': GetObservabilityDiscoveryRootSpanKeys_RouteContract;
+  'GET /observability/discovery/log-keys': GetObservabilityDiscoveryLogKeys_RouteContract;
   'GET /logs/transports': GetLogsTransports_RouteContract;
   'GET /logs': GetLogs_RouteContract;
   'GET /logs/:runId': GetLogsRunId_RouteContract;
@@ -76041,6 +76107,9 @@ export interface Client {
   '/observability/discovery/environments': {
     GET: GetObservabilityDiscoveryEnvironments_RouteContract;
   };
+  '/observability/discovery/log-keys': {
+    GET: GetObservabilityDiscoveryLogKeys_RouteContract;
+  };
   '/observability/discovery/metric-label-keys': {
     GET: GetObservabilityDiscoveryMetricLabelKeys_RouteContract;
   };
@@ -76049,6 +76118,9 @@ export interface Client {
   };
   '/observability/discovery/metric-names': {
     GET: GetObservabilityDiscoveryMetricNames_RouteContract;
+  };
+  '/observability/discovery/root-span-keys': {
+    GET: GetObservabilityDiscoveryRootSpanKeys_RouteContract;
   };
   '/observability/discovery/service-names': {
     GET: GetObservabilityDiscoveryServiceNames_RouteContract;

@@ -1,7 +1,9 @@
 import {
   ButtonWithTooltip,
+  ColumnsConfigurator,
   DateTimeRangePicker,
   LogDetailsView,
+  LogsDataList,
   LogsErrorContent,
   LogsLayout,
   LogsListView,
@@ -13,8 +15,11 @@ import {
   SpanDetailsView,
   TraceDetailsView,
   buildLogsListFilters,
+  buildVisibleColumnDefs,
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
+  useColumnPreferences,
+  useCustomColumns,
   useEntityNames,
   useEnvironments,
   useLogs,
@@ -26,9 +31,47 @@ import {
   useTags,
   useTraceLightSpans,
 } from '@mastra/playground-ui';
+import type { CustomColumnSource, LogRecord } from '@mastra/playground-ui';
 import { BookIcon, LogsIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import {
+  ALL_BUILT_IN_LOG_COLUMN_DEFS,
+  LOGS_COLUMN_CONFIGS,
+  LOGS_COLUMN_NAMES,
+  LOG_COLUMN_DEFS,
+  LOG_CUSTOM_COLUMN_SOURCES,
+  OPTIONAL_LOGS_COLUMN_CONFIGS,
+  formatLogCellValue,
+  resolveLogCustomColumnValue,
+} from '@/domains/logs/components/log-columns';
+import type { LogCustomColumnSource } from '@/domains/logs/components/log-columns';
+import { useLogJsonKeys } from '@/domains/observability/hooks/use-log-json-keys';
+
+const LOGS_COLUMNS_STORAGE_KEY = 'logs:columns:visible';
+const LOGS_CUSTOM_COLUMNS_STORAGE_KEY = 'logs:columns:custom';
+const LOGS_REQUIRED_COLUMNS = ['date'];
+
+/**
+ * Per-column grid sizes used by the virtualized list. Built-in columns use
+ * fixed widths to avoid horizontal jitter as rows enter/leave the virtualizer
+ * window; only flex columns expand. `other` is the fallback for optional
+ * built-ins and custom columns.
+ */
+const LOGS_COLUMN_WIDTHS: Record<string, string> = {
+  date: '6rem',
+  time: '9rem',
+  level: '5rem',
+  entityId: '10rem',
+  message: 'minmax(8rem,1fr)',
+  data: 'minmax(8rem,1fr)',
+  other: '10rem',
+};
+
+const CUSTOM_SOURCE_LABELS: Record<LogCustomColumnSource, string> = {
+  metadata: 'Metadata',
+  data: 'Data',
+};
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -37,6 +80,14 @@ export default function LogsPage() {
 
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
   const [logDetailsCollapsed, setLogDetailsCollapsed] = useState(false);
+
+  const [visibleColumnNames, setVisibleColumnNames] = useColumnPreferences(LOGS_COLUMNS_STORAGE_KEY, LOGS_COLUMN_NAMES);
+  const { customColumns, addCustomColumn, removeCustomColumn } = useCustomColumns(LOGS_CUSTOM_COLUMNS_STORAGE_KEY);
+
+  // Autocomplete hints come from the backend's project-wide distinct-keys discovery
+  // (see /observability/discovery/log-keys). Same shape as the traces variant.
+  const { data: discoveredMetadataKeys = [] } = useLogJsonKeys('metadata');
+  const { data: discoveredDataKeys = [] } = useLogJsonKeys('data');
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
@@ -105,6 +156,32 @@ export default function LogsPage() {
     url.featuredSpanId ?? '',
   );
 
+  const customColumnSources: CustomColumnSource[] = useMemo(
+    () =>
+      LOG_CUSTOM_COLUMN_SOURCES.map(id => ({
+        id,
+        label: CUSTOM_SOURCE_LABELS[id],
+        discoveredKeys: id === 'metadata' ? discoveredMetadataKeys : discoveredDataKeys,
+      })),
+    [discoveredMetadataKeys, discoveredDataKeys],
+  );
+
+  const visibleColumnDefs = useMemo(
+    () =>
+      buildVisibleColumnDefs<LogRecord>({
+        visibleNames: visibleColumnNames,
+        defaultDefs: LOG_COLUMN_DEFS,
+        allBuiltInDefs: ALL_BUILT_IN_LOG_COLUMN_DEFS,
+        customColumns,
+        widths: LOGS_COLUMN_WIDTHS,
+        customSources: LOG_CUSTOM_COLUMN_SOURCES,
+        renderCustomCell: (log, source, key) => (
+          <LogsDataList.MessageCell message={formatLogCellValue(resolveLogCustomColumnValue(log, source, key)) ?? ''} />
+        ),
+      }),
+    [visibleColumnNames, customColumns],
+  );
+
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),
     [filterFields, url],
@@ -152,6 +229,19 @@ export default function LogsPage() {
             onTokensChange={url.handleFilterTokensChange}
             disabled={isLoadingLogs}
             onStartTextFilter={setAutoFocusFilterFieldId}
+          />
+          <ColumnsConfigurator
+            columns={LOGS_COLUMN_CONFIGS}
+            optionalColumns={OPTIONAL_LOGS_COLUMN_CONFIGS}
+            visibleColumns={visibleColumnNames}
+            onVisibleColumnsChange={setVisibleColumnNames}
+            requiredColumns={LOGS_REQUIRED_COLUMNS}
+            customColumns={customColumns}
+            customColumnSources={customColumnSources}
+            onAddCustomColumn={addCustomColumn}
+            onRemoveCustomColumn={removeCustomColumn}
+            disabled={isLoadingLogs}
+            defaultVisibleColumns={LOGS_COLUMN_NAMES}
           />
           <ButtonWithTooltip
             as="a"
@@ -219,6 +309,7 @@ export default function LogsPage() {
             logIdMap={logIdMap}
             featuredLogId={url.featuredLogId}
             onLogClick={handleLogClick}
+            columnDefs={visibleColumnDefs}
           />
         }
         logPanelSlot={

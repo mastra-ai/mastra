@@ -146,9 +146,11 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // ---------------------------------------------------------------------------
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: Colors.accent2 },
-  ok: { label: 'OK', color: Colors.accent2 },
-  error: { label: 'ERR', color: Colors.error },
+  success: { label: 'Success', color: Colors.neutral4 },
+  completed: { label: 'Completed', color: Colors.neutral4 },
+  ok: { label: 'OK', color: Colors.neutral4 },
+  running: { label: 'Running', color: Colors.neutral4 },
+  error: { label: 'Error', color: Colors.error },
   unset: { label: '-', color: Colors.neutral4 },
 };
 
@@ -162,7 +164,7 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
 
   return (
     <DataListCell height="compact">
-      <span className="uppercase text-ui-sm font-semibold" style={{ color: config.color }}>
+      <span className="text-ui-sm font-semibold" style={{ color: config.color }}>
         {config.label}
       </span>
     </DataListCell>
