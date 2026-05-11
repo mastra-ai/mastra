@@ -39,37 +39,34 @@ npm install -g @aws/agentcore
 ## Create the AgentCore project
 
 <Steps>
-<StepItem>
+  <StepItem>
+    Initialize the AgentCore project at the root of your Mastra application. The `--no-agent` flag skips agent selection so you can add a bring-your-own-code TypeScript agent in the next step:
 
-Initialize the AgentCore project at the root of your Mastra application. The `--no-agent` flag skips agent selection so you can add a bring-your-own-code TypeScript agent in the next step:
+    ```bash
+    agentcore create --name MastraOnAgentCore --no-agent
+    ```
 
-```bash
-agentcore create --name MastraOnAgentCore --no-agent
-```
+    The command creates an `agentcore/` directory with `agentcore.json` and `aws-targets.json`.
+  </StepItem>
 
-The command creates an `agentcore/` directory with `agentcore.json` and `aws-targets.json`.
+  <StepItem>
+    Add a bring-your-own-code (BYO) TypeScript agent. The CLI generates a code directory under `app/MastraAgent/` and registers the agent in `agentcore.json`:
 
-</StepItem>
-<StepItem>
+    ```bash
+    agentcore add agent \
+      --name MastraAgent \
+      --type byo \
+      --build Container \
+      --language TypeScript \
+      --framework Strands \
+      --model-provider Bedrock \
+      --code-location app/MastraAgent
+    ```
 
-Add a bring-your-own-code (BYO) TypeScript agent. The CLI generates a code directory under `app/MastraAgent/` and registers the agent in `agentcore.json`:
-
-```bash
-agentcore add agent \
-  --name MastraAgent \
-  --type byo \
-  --build Container \
-  --language TypeScript \
-  --framework Strands \
-  --model-provider Bedrock \
-  --code-location app/MastraAgent
-```
-
-:::note
-`--framework Strands` is required by the CLI but does not constrain your code. The bring-your-own-code mode runs whatever your `Dockerfile` starts.
-:::
-
-</StepItem>
+    :::note
+    `--framework Strands` is required by the CLI but does not constrain your code. The bring-your-own-code mode runs whatever your `Dockerfile` starts.
+    :::
+  </StepItem>
 </Steps>
 
 ## Add the Mastra integration
@@ -77,128 +74,122 @@ agentcore add agent \
 The `agentcore add agent` command generates an empty `app/MastraAgent/` directory. Fill it with the files below to wire Mastra into the AgentCore Runtime service contract (`POST /invocations` on port `8080`).
 
 <Steps>
-<StepItem>
+  <StepItem>
+    Switch into the generated agent directory:
 
-Switch into the generated agent directory:
+    ```bash
+    cd app/MastraAgent
+    ```
 
-```bash
-cd app/MastraAgent
-```
+    Install the AgentCore TypeScript SDK and your Mastra dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html):
 
-Install the AgentCore TypeScript SDK and your Mastra dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html):
+    ```bash npm2yarn
+    npm install bedrock-agentcore @mastra/core @opentelemetry/auto-instrumentations-node --legacy-peer-deps
+    ```
 
-```bash npm2yarn
-npm install bedrock-agentcore @mastra/core @opentelemetry/auto-instrumentations-node --legacy-peer-deps
-```
+    Then install the TypeScript build tools as dev dependencies:
 
-Then install the TypeScript build tools as dev dependencies:
+    ```bash npm2yarn
+    npm install --save-dev typescript @types/node tsx
+    ```
 
-```bash npm2yarn
-npm install --save-dev typescript @types/node tsx
-```
+    Add the providers and any other Mastra packages your agent uses, for example `@ai-sdk/openai` or `@mastra/memory`.
+  </StepItem>
 
-Add the providers and any other Mastra packages your agent uses, for example `@ai-sdk/openai` or `@mastra/memory`.
+  <StepItem>
+    Create `tsconfig.json`:
 
-</StepItem>
-<StepItem>
+    ```json title="app/MastraAgent/tsconfig.json"
+    {
+      "compilerOptions": {
+        "target": "ES2022",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "outDir": "./dist",
+        "rootDir": ".",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "declaration": true
+      },
+      "include": ["**/*.ts"],
+      "exclude": ["node_modules", "dist"]
+    }
+    ```
+  </StepItem>
 
-Create `tsconfig.json`:
+  <StepItem>
+    Set the build and start scripts in `package.json`:
 
-```json title="app/MastraAgent/tsconfig.json"
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "outDir": "./dist",
-    "rootDir": ".",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "declaration": true
-  },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist"]
-}
-```
+    ```json title="app/MastraAgent/package.json"
+    {
+      "name": "mastra-agent",
+      "version": "1.0.0",
+      "type": "module",
+      "main": "dist/agent.js",
+      "scripts": {
+        "build": "tsc",
+        "start": "node dist/agent.js"
+      },
+      "engines": {
+        "node": ">=20.0.0"
+      }
+    }
+    ```
+  </StepItem>
 
-</StepItem>
-<StepItem>
+  <StepItem>
+    Create `agent.ts`. The handler is called for every `POST /invocations` request. Resolve the Mastra agent and call it inside the handler:
 
-Set the build and start scripts in `package.json`:
+    ```ts title="app/MastraAgent/agent.ts"
+    import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
+    import { mastra } from './mastra'
 
-```json title="app/MastraAgent/package.json"
-{
-  "name": "mastra-agent",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "dist/agent.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/agent.js"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  }
-}
-```
+    const app = new BedrockAgentCoreApp({
+      invocationHandler: {
+        process: async (payload, context) => {
+          const { prompt } = payload as { prompt: string }
 
-</StepItem>
-<StepItem>
+          const agent = mastra.getAgentById('weatherAgent')
+          const response = await agent.generate(prompt, {
+            runId: context.sessionId,
+          })
 
-Create `agent.ts`. The handler is called for every `POST /invocations` request. Resolve the Mastra agent and call it inside the handler:
+          return { text: response.text }
+        },
+      },
+    })
 
-```typescript title="app/MastraAgent/agent.ts"
-import { BedrockAgentCoreApp } from "bedrock-agentcore/runtime";
-import { mastra } from "./mastra";
+    app.run()
+    ```
 
-const app = new BedrockAgentCoreApp({
-  invocationHandler: {
-    process: async (payload, context) => {
-      const { prompt } = payload as { prompt: string };
+    `context.sessionId` is provided by AgentCore Runtime and persists across requests within the same session. Pass it to Mastra as `runId` so traces and memory stay aligned with the AgentCore session.
+  </StepItem>
 
-      const agent = mastra.getAgentById("weatherAgent");
-      const response = await agent.generate(prompt, {
-        runId: context.sessionId,
-      });
+  <StepItem>
+    Replace the generated `Dockerfile` with a Node.js multi-stage build:
 
-      return { text: response.text };
-    },
-  },
-});
+    ```dockerfile title="app/MastraAgent/Dockerfile"
+    FROM node:20-slim AS builder
+    WORKDIR /app
+    COPY package*.json ./
+    RUN npm ci
+    COPY . .
+    RUN npm run build
 
-app.run();
-```
+    FROM node:20-slim
+    WORKDIR /app
+    COPY --from=builder /app/dist ./dist
+    COPY --from=builder /app/node_modules ./node_modules
+    COPY --from=builder /app/package*.json ./
 
-`context.sessionId` is provided by AgentCore Runtime and persists across requests within the same session. Pass it to Mastra as `runId` so traces and memory stay aligned with the AgentCore session.
+    RUN useradd -m -u 1000 bedrock_agentcore
+    USER bedrock_agentcore
 
-</StepItem>
-<StepItem>
-
-Replace the generated `Dockerfile` with a Node.js multi-stage build:
-
-```dockerfile title="app/MastraAgent/Dockerfile"
-FROM node:20-slim AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM node:20-slim
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-
-RUN useradd -m -u 1000 bedrock_agentcore
-USER bedrock_agentcore
-
-EXPOSE 8080
-CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "dist/agent.js"]
-```
-
-</StepItem>
+    EXPOSE 8080
+    CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "dist/agent.js"]
+    ```
+  </StepItem>
 </Steps>
 
 ## Test locally
@@ -218,34 +209,31 @@ agentcore dev "What is the weather in Tokyo?"
 ## Deploy
 
 <Steps>
-<StepItem>
+  <StepItem>
+    Set the AWS account and region in `agentcore/aws-targets.json`:
 
-Set the AWS account and region in `agentcore/aws-targets.json`:
+    ```json title="agentcore/aws-targets.json"
+    [
+      {
+        "name": "default",
+        "account": "123456789012",
+        "region": "us-east-1"
+      }
+    ]
+    ```
+  </StepItem>
 
-```json title="agentcore/aws-targets.json"
-[
-  {
-    "name": "default",
-    "account": "123456789012",
-    "region": "us-east-1"
-  }
-]
-```
+  <StepItem>
+    Deploy to AgentCore Runtime. The CLI builds the image with AWS CodeBuild, pushes it to Amazon ECR, and creates the runtime and a `DEFAULT` endpoint:
 
-</StepItem>
-<StepItem>
+    ```bash
+    agentcore deploy
+    ```
 
-Deploy to AgentCore Runtime. The CLI builds the image with AWS CodeBuild, pushes it to Amazon ECR, and creates the runtime and a `DEFAULT` endpoint:
-
-```bash
-agentcore deploy
-```
-
-:::note
-Set provider API keys and other secrets in `agentcore/agentcore.json` under the agent's `environmentVariables` field before deploying.
-:::
-
-</StepItem>
+    :::note
+    Set provider API keys and other secrets in `agentcore/agentcore.json` under the agent's `environmentVariables` field before deploying.
+    :::
+  </StepItem>
 </Steps>
 
 ## Verify your deployment
@@ -264,27 +252,26 @@ agentcore invoke --stream "Plan a 3-day trip to Tokyo"
 
 To invoke the runtime from another service, use the [`@aws-sdk/client-bedrock-agentcore`](https://www.npmjs.com/package/@aws-sdk/client-bedrock-agentcore) package with the agent ARN from `agentcore status`:
 
-```typescript title="invoke-agent.ts"
+```ts title="invoke-agent.ts"
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand,
-} from "@aws-sdk/client-bedrock-agentcore";
-import { randomUUID } from "crypto";
+} from '@aws-sdk/client-bedrock-agentcore'
+import { randomUUID } from 'crypto'
 
-const client = new BedrockAgentCoreClient({ region: "us-east-1" });
+const client = new BedrockAgentCoreClient({ region: 'us-east-1' })
 
 const command = new InvokeAgentRuntimeCommand({
-  agentRuntimeArn:
-    "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/MastraAgent-XXXXXXXX",
+  agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/MastraAgent-XXXXXXXX',
   runtimeSessionId: randomUUID(),
-  payload: JSON.stringify({ prompt: "What is the weather in Tokyo?" }),
-  contentType: "application/json",
-  qualifier: "DEFAULT",
-});
+  payload: JSON.stringify({ prompt: 'What is the weather in Tokyo?' }),
+  contentType: 'application/json',
+  qualifier: 'DEFAULT',
+})
 
-const response = await client.send(command);
-const text = await response.response?.transformToString();
-console.log(text);
+const response = await client.send(command)
+const text = await response.response?.transformToString()
+console.log(text)
 ```
 
 Reuse the same `runtimeSessionId` across calls to keep server-side session state and Mastra memory aligned within a single conversation.
