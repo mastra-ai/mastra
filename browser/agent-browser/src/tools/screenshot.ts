@@ -29,8 +29,6 @@ export function createScreenshotTool(browser: AgentBrowser) {
         };
       }
 
-      const label = result.title ?? result.url ?? 'current page';
-      const location = result.title && result.url ? ` (${result.url})` : '';
       return {
         type: 'content' as const,
         value: [
@@ -38,10 +36,6 @@ export function createScreenshotTool(browser: AgentBrowser) {
             type: 'media' as const,
             mediaType: 'image/png',
             data: result.base64,
-          },
-          {
-            type: 'text' as const,
-            text: `Screenshot of: ${label}${location}. Use snapshot when you need structured data instead of visual interpretation.`,
           },
         ],
       };
