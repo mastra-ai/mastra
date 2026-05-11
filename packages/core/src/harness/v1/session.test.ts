@@ -234,6 +234,7 @@ describe('Session — surface area (M1)', () => {
         '_completeQueuedTurn',
         '_drainStreamToEvents',
         '_emit',
+        '_emitSubagentEvent',
         '_emitTurnEvent',
         '_endTurn',
         '_failQueuedTurn',

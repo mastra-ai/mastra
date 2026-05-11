@@ -39,6 +39,11 @@ import type {
   HarnessEvent,
   HarnessEventListener,
   HarnessEventUnsubscribe,
+  SubagentEndEvent,
+  SubagentStartEvent,
+  SubagentTextDeltaEvent,
+  SubagentToolEndEvent,
+  SubagentToolStartEvent,
   TaskUpdatedEvent,
 } from './events';
 import type { Harness } from './harness';
@@ -267,6 +272,34 @@ export class Session {
       return this._emitter.emit({ ...event, queuedItemId: this._currentQueuedItemId } as EmitInput);
     }
     return this._emitter.emit(event);
+  }
+
+  /**
+   * @internal — publish a `subagent_*` event on this session's emitter.
+   * Called by the spawn-subagent bridge when forwarding a child session's
+   * own `agent_start` / `text_delta` / `tool_start` / `tool_end` /
+   * `agent_end` into the parent's subscriber stream as the corresponding
+   * `subagent_*` event (§10.6).
+   *
+   * Auto-stamps `parentId` (this session's id) and `queuedItemId` from
+   * `_currentQueuedItemId` so a subscriber can correlate every nested
+   * event back to the parent's `queue()` item that spawned it. Callers
+   * supply `depth` (child's depth in the subagent tree) and the rest of
+   * the event payload.
+   */
+  _emitSubagentEvent(
+    event:
+      | Omit<SubagentStartEvent, 'id' | 'timestamp' | 'sessionId' | 'parentId'>
+      | Omit<SubagentTextDeltaEvent, 'id' | 'timestamp' | 'sessionId' | 'parentId'>
+      | Omit<SubagentToolStartEvent, 'id' | 'timestamp' | 'sessionId' | 'parentId'>
+      | Omit<SubagentToolEndEvent, 'id' | 'timestamp' | 'sessionId' | 'parentId'>
+      | Omit<SubagentEndEvent, 'id' | 'timestamp' | 'sessionId' | 'parentId'>,
+  ): HarnessEvent {
+    const stamped = { ...event, parentId: this.id } as EmitInput;
+    if (this._currentQueuedItemId !== undefined && (stamped as { queuedItemId?: string }).queuedItemId === undefined) {
+      return this._emitter.emit({ ...stamped, queuedItemId: this._currentQueuedItemId } as EmitInput);
+    }
+    return this._emitter.emit(stamped);
   }
 
   /** @internal — number of registered listeners (for tests). */

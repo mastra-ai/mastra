@@ -318,6 +318,79 @@ export interface ThreadClonedEvent extends HarnessEventBase {
   title?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Subagent events (§10.2 / §10.6 — parent-session attribution).
+//
+// Emitted on the *parent* session's subscriber when a subagent session
+// makes progress. `toolCallId` is the parent's `spawn_subagent` tool-call
+// handle (stable for the subagent's lifetime). `subagentSessionId` is the
+// child session id, addressable for response routing. `agentType` is the
+// child's registered subagent type from `HarnessConfig.subagents.types`.
+// `depth` is the child's depth in the subagent tree (`>= 1` for any
+// subagent event; parent session itself is depth 0).
+//
+// `parentId` is the parent's session id, repeated on every subagent event
+// to make routing trivial in flat consumers that see events from many
+// sessions.
+// ---------------------------------------------------------------------------
+
+export interface SubagentStartEvent extends HarnessEventBase {
+  type: 'subagent_start';
+  toolCallId: string;
+  subagentSessionId: string;
+  agentType: string;
+  task: string;
+  modelId: string;
+  parentId?: string;
+  depth: number;
+}
+
+export interface SubagentTextDeltaEvent extends HarnessEventBase {
+  type: 'subagent_text_delta';
+  toolCallId: string;
+  subagentSessionId: string;
+  agentType: string;
+  delta: string;
+  parentId?: string;
+  depth: number;
+}
+
+export interface SubagentToolStartEvent extends HarnessEventBase {
+  type: 'subagent_tool_start';
+  toolCallId: string;
+  subagentSessionId: string;
+  agentType: string;
+  innerToolCallId: string;
+  toolName: string;
+  parentId?: string;
+  depth: number;
+}
+
+export interface SubagentToolEndEvent extends HarnessEventBase {
+  type: 'subagent_tool_end';
+  toolCallId: string;
+  subagentSessionId: string;
+  agentType: string;
+  innerToolCallId: string;
+  toolName: string;
+  output: unknown;
+  isError: boolean;
+  parentId?: string;
+  depth: number;
+}
+
+export interface SubagentEndEvent extends HarnessEventBase {
+  type: 'subagent_end';
+  toolCallId: string;
+  subagentSessionId: string;
+  agentType: string;
+  output: unknown;
+  isError: boolean;
+  durationMs: number;
+  parentId?: string;
+  depth: number;
+}
+
 export type HarnessEvent =
   | SessionCreatedEvent
   | SessionClosedEvent
@@ -346,6 +419,11 @@ export type HarnessEvent =
   | ThreadRenamedEvent
   | ThreadDeletedEvent
   | ThreadClonedEvent
+  | SubagentStartEvent
+  | SubagentTextDeltaEvent
+  | SubagentToolStartEvent
+  | SubagentToolEndEvent
+  | SubagentEndEvent
   | CustomEvent;
 
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
