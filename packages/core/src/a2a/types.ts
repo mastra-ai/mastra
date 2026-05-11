@@ -1,11 +1,7 @@
-import type {
-  AgentCard,
-  JSONRPCMessage,
-  Message,
-  Task,
-  TaskArtifactUpdateEvent,
-  TaskStatusUpdateEvent,
-} from '@a2a-js/sdk';
+import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type { AgentExecutionOptions, AgentInstructions } from '../agent';
+import type { AgentBackgroundConfig } from '../background-tasks';
+import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 
 /**
  * Represents a JSON-RPC error object.
@@ -151,8 +147,6 @@ export type KnownErrorCode =
 
 export type RequestCredentialsMode = 'omit' | 'same-origin' | 'include';
 
-export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
-
 export interface A2AAgentCardVerificationContext {
   cardUrl: string;
   fetchedAt: Date;
@@ -164,6 +158,12 @@ export interface A2AAgentVerificationOptions {
 
 export interface A2AAgentOptions {
   url: string;
+  id?: string;
+  name?: string;
+  description?: string;
+  instructions?: AgentInstructions;
+  defaultOptions?: AgentExecutionOptions<unknown>;
+  backgroundTasks?: AgentBackgroundConfig;
   headers?: Record<string, string>;
   retries?: number;
   backoffMs?: number;
@@ -195,26 +195,16 @@ export interface A2AAgentResumePayload {
   task?: Task;
 }
 
-export interface A2AAgentGenerateResult {
-  runId: string;
-  text: string;
+export type A2AAgentGenerateResult = FullOutput<undefined> & {
   task?: Task;
   message?: Message;
   resumePayload?: A2AAgentResumePayload;
   resumeSchema?: string;
-}
+};
 
-export interface A2AAgentStreamEvent {
-  type: 'message' | 'task' | 'artifact-update' | 'status-update';
-  data: A2AStreamEventData;
-}
-
-export interface A2AAgentStreamResult {
-  runId: string;
-  fullStream: AsyncIterable<A2AAgentStreamEvent>;
-  text: Promise<string>;
+export type A2AAgentStreamResult = MastraModelOutput<undefined> & {
   task: Promise<Task | undefined>;
   suspendPayload: Promise<A2AAgentResumePayload | undefined>;
   resumeSchema: Promise<string | undefined>;
   getResult(): Promise<A2AAgentGenerateResult>;
-}
+};

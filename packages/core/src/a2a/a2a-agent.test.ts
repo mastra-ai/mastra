@@ -1,5 +1,6 @@
 import type { AgentCard, Message, Task } from '@a2a-js/sdk';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { SubAgent } from '../agent';
 
 import { A2AAgent } from './a2a-agent';
 
@@ -140,6 +141,21 @@ afterEach(() => {
 });
 
 describe('A2AAgent', () => {
+  it('is assignable as a SubAgent and retains injected memory', async () => {
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+    });
+
+    expectTypeOf(agent).toExtend<SubAgent>();
+    expect(agent.hasOwnMemory()).toBe(false);
+
+    const memory = {} as any;
+    agent.__setMemory(memory);
+
+    expect(agent.hasOwnMemory()).toBe(true);
+    await expect(agent.getMemory()).resolves.toBe(memory);
+  });
+
   it('caches the fetched agent card in memory', async () => {
     const fetchMock = createFetchMock([new Response(JSON.stringify(baseCard), { status: 200 })]);
 
@@ -324,8 +340,7 @@ describe('A2AAgent', () => {
       events.push(event);
     }
 
-    expect(events).toHaveLength(1);
-    expect(events[0]?.type).toBe('message');
+    expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
     expect(await stream.text).toBe('Buffered remote response');
     expect((await stream.getResult()).text).toBe('Buffered remote response');
   });
@@ -371,7 +386,7 @@ describe('A2AAgent', () => {
       events.push(event);
     }
 
-    expect(events.map(event => event.type)).toEqual(['task', 'artifact-update', 'status-update']);
+    expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
     expect(await stream.text).toBe('Hello from stream');
     expect((await stream.task)?.status.state).toBe('completed');
   });
@@ -418,8 +433,12 @@ describe('A2AAgent', () => {
       events.push(event.type);
     }
 
-    expect(events).toEqual(['task', 'artifact-update']);
+    expect(events).toEqual(['text-start', 'text-delta', 'text-end', 'tool-call-suspended']);
     expect(await stream.text).toBe('Hello later');
+    expect(await stream.suspendPayload).toMatchObject({
+      taskId: 'task-1',
+      waitingForInput: false,
+    });
   });
 
   it('concatenates streamed artifact text chunks without inserting newlines', async () => {

@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk';
-import type { AgentExecutionOptionsBase } from '../agent/agent.types';
-import type { MessageListInput } from '../agent/message-list';
+import type { AgentExecutionOptionsBase, SubAgent } from '../agent/agent.types';
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageListInput } from '../agent/message-list';
 import { convertMessages } from '../agent/message-list/utils/convert-messages';
+import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
+import { RequestContext } from '../request-context';
+import type { DynamicArgument } from '../types';
 import { MastraA2AError } from './error';
 import type {
   A2AAgentCardVerificationContext,
@@ -10,9 +15,7 @@ import type {
   A2AAgentOptions,
   A2AAgentResumePayload,
   A2AAgentRunState,
-  A2AAgentStreamEvent,
   A2AAgentStreamResult,
-  A2AStreamEventData,
   JSONRPCResponse,
   RequestCredentialsMode,
 } from './types';
@@ -59,7 +62,6 @@ type TerminalEvaluation =
 
 type StreamConsumptionResult = {
   text: string;
-  events: A2AAgentStreamEvent[];
   task?: Task;
   suspended?: {
     payload: A2AAgentResumePayload;
@@ -67,10 +69,18 @@ type StreamConsumptionResult = {
   };
 };
 
+type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+
 type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason?: unknown) => void;
+};
+
+const EMPTY_USAGE = {
+  inputTokens: undefined,
+  outputTokens: undefined,
+  totalTokens: undefined,
 };
 
 function isTask(result: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent): result is Task {
@@ -260,6 +270,78 @@ function createResumeSchema(): string {
   });
 }
 
+function createResponseMessages(text: string): MastraDBMessage[] {
+  if (!text) {
+    return [];
+  }
+
+  return new MessageList()
+    .add(
+      {
+        role: 'assistant',
+        content: text,
+      },
+      'response',
+    )
+    .get.response.db();
+}
+
+function createGenerateResult({
+  runId,
+  text,
+  task,
+  message,
+  resumePayload,
+  resumeSchema,
+}: {
+  runId: string;
+  text: string;
+  task?: Task;
+  message?: Message;
+  resumePayload?: A2AAgentResumePayload;
+  resumeSchema?: string;
+}): A2AAgentGenerateResult {
+  const responseMessages = createResponseMessages(text);
+
+  return {
+    text,
+    usage: EMPTY_USAGE,
+    steps: [],
+    finishReason: resumePayload ? 'suspended' : 'stop',
+    warnings: [],
+    providerMetadata: undefined,
+    request: {},
+    reasoning: [],
+    reasoningText: undefined,
+    toolCalls: [],
+    toolResults: [],
+    sources: [],
+    files: [],
+    response: {
+      id: message?.messageId ?? task?.id ?? runId,
+      timestamp: new Date(),
+      modelId: 'a2a/remote-agent',
+      messages: [],
+      uiMessages: [],
+      dbMessages: responseMessages,
+    },
+    totalUsage: EMPTY_USAGE,
+    object: undefined,
+    error: undefined,
+    tripwire: undefined,
+    traceId: undefined,
+    spanId: undefined,
+    runId,
+    suspendPayload: resumePayload,
+    resumeSchema,
+    messages: responseMessages,
+    rememberedMessages: [],
+    task,
+    message,
+    resumePayload,
+  };
+}
+
 function unwrapA2AResult(result: unknown): Message | Task {
   if (!result || typeof result !== 'object') {
     throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned an invalid response.');
@@ -292,11 +374,15 @@ async function requireResponseBody(response: Response, operation: string) {
   return response.body;
 }
 
-export class A2AAgent {
+export class A2AAgent implements SubAgent {
   readonly id: string;
   readonly name: string;
 
   readonly #url: string;
+  readonly #description: string;
+  readonly #instructions: A2AAgentOptions['instructions'];
+  readonly #defaultOptions?: A2AAgentOptions['defaultOptions'];
+  readonly #backgroundTasks?: A2AAgentOptions['backgroundTasks'];
   readonly #headers: Record<string, string>;
   readonly #fetch: FetchLike;
   readonly #retries: number;
@@ -306,12 +392,23 @@ export class A2AAgent {
   readonly #abortSignal?: AbortSignal;
   readonly #timeoutMs?: number;
   readonly #verifyAgentCard?: A2AAgentOptions['verifyAgentCard'];
+  readonly #model = {
+    modelId: 'a2a/remote-agent',
+    provider: 'a2a',
+    specificationVersion: 'v2',
+  } as const;
 
   #cachedBootstrap?: AgentBootstrap;
   readonly #runState = new Map<string, A2AAgentRunState>();
+  #memory?: DynamicArgument<MastraMemory>;
+  #mastra?: Mastra;
 
-  constructor(options: A2AAgentOptions & { id?: string; name?: string }) {
+  constructor(options: A2AAgentOptions) {
     this.#url = options.url.replace(/\/$/, '');
+    this.#description = options.description ?? `Remote A2A agent at ${this.#url}`;
+    this.#instructions = options.instructions;
+    this.#defaultOptions = options.defaultOptions;
+    this.#backgroundTasks = options.backgroundTasks;
     this.#headers = options.headers ?? {};
     this.#fetch = options.fetch ?? fetch;
     this.#retries = options.retries ?? 0;
@@ -322,11 +419,54 @@ export class A2AAgent {
     this.#timeoutMs = options.timeoutMs;
     this.#verifyAgentCard = options.verifyAgentCard;
     this.id = options.id ?? `a2a-${randomUUID()}`;
-    this.name = options.name ?? 'A2A Agent';
+    this.name = options.name ?? options.description ?? 'A2A Agent';
   }
 
   async getAgentCard({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<AgentCard> {
     return (await this.#getBootstrap({ forceRefresh })).card;
+  }
+
+  getDescription(): string {
+    return this.#description;
+  }
+
+  getModel: SubAgent['getModel'] = async () => this.#model as Awaited<ReturnType<SubAgent['getModel']>>;
+
+  getDefaultOptions() {
+    return this.#defaultOptions;
+  }
+
+  hasOwnMemory(): boolean {
+    return Boolean(this.#memory);
+  }
+
+  __setMemory(memory: DynamicArgument<MastraMemory>): void {
+    this.#memory = memory;
+  }
+
+  async getMemory({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}) {
+    if (!this.#memory) {
+      return undefined;
+    }
+
+    if (typeof this.#memory !== 'function') {
+      return this.#memory;
+    }
+
+    return await this.#memory({
+      requestContext,
+      mastra: this.#mastra,
+    });
+  }
+
+  getInstructions: SubAgent['getInstructions'] = async () => this.#instructions ?? '';
+
+  __registerMastra(mastra: Mastra): void {
+    this.#mastra = mastra;
+  }
+
+  getBackgroundTasksConfig() {
+    return this.#backgroundTasks;
   }
 
   async generate(
@@ -557,11 +697,11 @@ export class A2AAgent {
 
     if (isMessage(response)) {
       this.#runState.delete(runId);
-      return {
+      return createGenerateResult({
         runId,
         text: extractMessageText(response),
         message: response,
-      };
+      });
     }
 
     return this.#resolveTaskToGenerateResult({
@@ -624,12 +764,12 @@ export class A2AAgent {
       if (evaluation.kind === 'completed') {
         this.#runState.delete(runId);
 
-        return {
+        return createGenerateResult({
           runId,
           text: evaluation.text,
           task: evaluation.task,
           message: evaluation.message,
-        };
+        });
       }
 
       this.#runState.set(runId, {
@@ -644,13 +784,13 @@ export class A2AAgent {
       });
 
       if (evaluation.task.status.state === 'input-required') {
-        return {
+        return createGenerateResult({
           runId,
           text: evaluation.text,
           task: evaluation.task,
           resumePayload: evaluation.resumePayload,
           resumeSchema: evaluation.resumeSchema,
-        };
+        });
       }
 
       await this.#delay();
@@ -799,6 +939,7 @@ export class A2AAgent {
     const taskDeferred = createDeferred<Task | undefined>();
     const suspendPayloadDeferred = createDeferred<A2AAgentResumePayload | undefined>();
     const resumeSchemaDeferred = createDeferred<string | undefined>();
+    const messageList = new MessageList();
 
     void this.#collectStreamEvents({
       bootstrap,
@@ -825,17 +966,28 @@ export class A2AAgent {
         taskDeferred.resolve(consumed.task);
         suspendPayloadDeferred.resolve(consumed.suspended?.payload);
         resumeSchemaDeferred.resolve(consumed.suspended?.resumeSchema);
-        resultDeferred.resolve({
-          runId,
-          text: consumed.text,
-          task: consumed.task,
-          ...(consumed.suspended
-            ? {
-                resumePayload: consumed.suspended.payload,
-                resumeSchema: consumed.suspended.resumeSchema,
-              }
-            : {}),
-        });
+        if (consumed.text) {
+          messageList.add(
+            {
+              role: 'assistant',
+              content: consumed.text,
+            },
+            'response',
+          );
+        }
+        resultDeferred.resolve(
+          createGenerateResult({
+            runId,
+            text: consumed.text,
+            task: consumed.task,
+            ...(consumed.suspended
+              ? {
+                  resumePayload: consumed.suspended.payload,
+                  resumeSchema: consumed.suspended.resumeSchema,
+                }
+              : {}),
+          }),
+        );
       })
       .catch(error => {
         textDeferred.reject(error);
@@ -847,19 +999,34 @@ export class A2AAgent {
 
     return {
       runId,
-      fullStream: this.#streamEvents(consumerStream),
+      fullStream: this.#streamEvents({ bootstrap, runId, stream: consumerStream }),
       text: textDeferred.promise,
+      toolResults: Promise.resolve([]),
+      messageList,
       task: taskDeferred.promise,
       suspendPayload: suspendPayloadDeferred.promise,
       resumeSchema: resumeSchemaDeferred.promise,
       getResult: async () => resultDeferred.promise,
-    };
+    } as unknown as A2AAgentStreamResult;
   }
 
-  async *#streamEvents(stream: ReadableStream<Uint8Array>): AsyncIterable<A2AAgentStreamEvent> {
+  async *#streamEvents({
+    bootstrap,
+    runId,
+    stream,
+  }: {
+    bootstrap: AgentBootstrap;
+    runId: string;
+    stream: ReadableStream<Uint8Array>;
+  }): AsyncIterable<any> {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let textId: string | undefined;
+    let textStarted = false;
+    let task: Task | undefined;
+    let suspended: A2AAgentResumePayload | undefined;
+    let receivedDone = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -874,20 +1041,71 @@ export class A2AAgent {
       while (next.eventBlock !== undefined) {
         const parsed = parseEventBlock(next.eventBlock);
         if ('done' in parsed && parsed.done) {
-          return;
+          receivedDone = true;
+          buffer = next.rest;
+          break;
         }
 
         if ('event' in parsed && parsed.event) {
           const event = parsed.event;
 
           if (isTask(event)) {
-            yield { type: 'task', data: event };
+            task = event;
+            if (event.status.state === 'input-required') {
+              suspended = {
+                taskId: event.id,
+                contextId: event.contextId,
+                executionUrl: bootstrap.executionUrl,
+                cardUrl: bootstrap.cardUrl,
+                waitingForInput: true,
+                task: structuredClone(event),
+              };
+            }
           } else if (isMessage(event)) {
-            yield { type: 'message', data: event };
+            const text = extractMessageText(event);
+            if (text) {
+              textId ??= `${runId}-text`;
+              if (textId) {
+                if (!textStarted) {
+                  yield { type: 'text-start', payload: { id: textId } };
+                  textStarted = true;
+                }
+                yield { type: 'text-delta', payload: { id: textId, text } };
+              }
+            }
           } else if (event.kind === 'artifact-update') {
-            yield { type: 'artifact-update', data: event };
+            const text = event.artifact.parts
+              ?.flatMap(part =>
+                part.kind === 'text' && 'text' in part && typeof part.text === 'string' ? [part.text] : [],
+              )
+              .join('');
+            if (text) {
+              textId ??= `${runId}-text`;
+              if (textId) {
+                if (!textStarted) {
+                  yield { type: 'text-start', payload: { id: textId } };
+                  textStarted = true;
+                }
+                yield { type: 'text-delta', payload: { id: textId, text } };
+              }
+            }
           } else if (event.kind === 'status-update') {
-            yield { type: 'status-update', data: event };
+            task = task
+              ? {
+                  ...task,
+                  status: event.status,
+                }
+              : task;
+            if (event.status.state === 'input-required' && task) {
+              suspended = {
+                taskId: task.id,
+                contextId: task.contextId,
+                executionUrl: bootstrap.executionUrl,
+                cardUrl: bootstrap.cardUrl,
+                waitingForInput: true,
+                task: structuredClone(task),
+              };
+            }
           }
         }
 
@@ -895,7 +1113,42 @@ export class A2AAgent {
         next = splitNextEvent(buffer);
       }
 
-      if (done) {
+      if (done || receivedDone) {
+        if (textId && textStarted) {
+          yield { type: 'text-end', payload: { id: textId } };
+        }
+
+        if (!suspended && task && !isTerminalTaskState(task.status.state)) {
+          suspended = {
+            taskId: task.id,
+            contextId: task.contextId,
+            executionUrl: bootstrap.executionUrl,
+            cardUrl: bootstrap.cardUrl,
+            waitingForInput: false,
+            task: structuredClone(task),
+          };
+        }
+
+        if (suspended) {
+          yield {
+            type: 'tool-call-suspended',
+            payload: {
+              toolCallId: runId,
+              toolName: this.id,
+              args: {},
+              suspendPayload: suspended,
+              resumeSchema: createResumeSchema(),
+            },
+          };
+        } else {
+          yield {
+            type: 'finish',
+            payload: {
+              finishReason: 'stop',
+              usage: EMPTY_USAGE,
+            },
+          };
+        }
         return;
       }
     }
@@ -915,7 +1168,6 @@ export class A2AAgent {
     let buffer = '';
     let textBuffer = '';
     let task: Task | undefined = initialTask ? structuredClone(initialTask) : undefined;
-    const events: A2AAgentStreamEvent[] = [];
     let suspended: StreamConsumptionResult['suspended'];
 
     while (true) {
@@ -940,7 +1192,6 @@ export class A2AAgent {
           if (isTask(event)) {
             task = event;
             textBuffer = extractTaskArtifactText(event) || textBuffer;
-            events.push({ type: 'task', data: event });
 
             if (event.status.state === 'input-required') {
               suspended = {
@@ -960,7 +1211,6 @@ export class A2AAgent {
             if (messageText) {
               textBuffer = messageText;
             }
-            events.push({ type: 'message', data: event });
           } else if (event.kind === 'artifact-update') {
             task = task
               ? {
@@ -980,7 +1230,6 @@ export class A2AAgent {
             if (artifactText) {
               textBuffer += artifactText;
             }
-            events.push({ type: 'artifact-update', data: event });
           } else if (event.kind === 'status-update') {
             task = task
               ? {
@@ -988,8 +1237,6 @@ export class A2AAgent {
                   status: event.status,
                 }
               : task;
-
-            events.push({ type: 'status-update', data: event });
 
             if (event.status.state === 'input-required' && task) {
               suspended = {
@@ -1031,7 +1278,6 @@ export class A2AAgent {
 
     return {
       text: textBuffer,
-      events,
       task,
       suspended,
     };
@@ -1044,27 +1290,59 @@ export class A2AAgent {
     runId: string;
     result: A2AAgentGenerateResult;
   }): A2AAgentStreamResult {
-    const events: A2AAgentStreamEvent[] = [];
-
-    if (result.message) {
-      events.push({ type: 'message', data: result.message });
-    } else if (result.task) {
-      events.push({ type: 'task', data: result.task });
+    const messageList = new MessageList();
+    const toolName = this.id;
+    if (result.text) {
+      messageList.add(
+        {
+          role: 'assistant',
+          content: result.text,
+        },
+        'response',
+      );
     }
+
+    const fullStream = (async function* () {
+      if (result.text) {
+        yield { type: 'text-start', payload: { id: `${runId}-text` } };
+        yield { type: 'text-delta', payload: { id: `${runId}-text`, text: result.text } };
+        yield { type: 'text-end', payload: { id: `${runId}-text` } };
+      }
+
+      if (result.resumePayload) {
+        yield {
+          type: 'tool-call-suspended',
+          payload: {
+            toolCallId: runId,
+            toolName,
+            args: {},
+            suspendPayload: result.resumePayload,
+            resumeSchema: result.resumeSchema ?? createResumeSchema(),
+          },
+        };
+        return;
+      }
+
+      yield {
+        type: 'finish',
+        payload: {
+          finishReason: 'stop',
+          usage: EMPTY_USAGE,
+        },
+      };
+    })();
 
     return {
       runId,
-      fullStream: (async function* () {
-        for (const event of events) {
-          yield event;
-        }
-      })(),
+      fullStream,
       text: Promise.resolve(result.text),
+      toolResults: Promise.resolve([]),
+      messageList,
       task: Promise.resolve(result.task),
       suspendPayload: Promise.resolve(result.resumePayload),
       resumeSchema: Promise.resolve(result.resumeSchema),
       getResult: async () => result,
-    };
+    } as unknown as A2AAgentStreamResult;
   }
 
   async #request(
