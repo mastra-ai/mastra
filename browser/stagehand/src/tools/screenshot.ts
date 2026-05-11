@@ -29,7 +29,7 @@ export function createScreenshotTool(browser: StagehandBrowser) {
         };
       }
 
-      const label = result.title ?? 'current page';
+      const label = result.title ?? result.url ?? 'current page';
       const location = result.title && result.url ? ` (${result.url})` : '';
       return {
         type: 'content' as const,
