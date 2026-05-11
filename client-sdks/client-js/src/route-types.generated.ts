@@ -76278,6 +76278,11 @@ export type GetEditorBuilderInfrastructure_Response = {
       value: string;
     }[];
   };
+  registries: {
+    skillsSh: {
+      enabled: boolean;
+    };
+  };
 };
 
 export type GetEditorBuilderInfrastructure_Request = Simplify<
@@ -76292,6 +76297,222 @@ export interface GetEditorBuilderInfrastructure_RouteContract {
   body: never;
   request: GetEditorBuilderInfrastructure_Request;
   response: GetEditorBuilderInfrastructure_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /editor/builder/registries
+// ============================================================================
+export type GetEditorBuilderRegistries_Response = {
+  registries: {
+    /** Stable registry identifier */
+    id: 'skills-sh';
+    /** Whether this registry is enabled in the running deployment */
+    enabled: boolean;
+    /** Human-readable registry name */
+    label: string;
+  }[];
+};
+
+export type GetEditorBuilderRegistries_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderRegistries_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorBuilderRegistries_Request;
+  response: GetEditorBuilderRegistries_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /editor/builder/registries/:registryId/search
+// ============================================================================
+export type GetEditorBuilderRegistriesRegistryIdSearch_PathParams = {
+  /** Registry identifier (e.g. "skills-sh") */
+  registryId: string;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdSearch_QueryParams = {
+  /** Search query */
+  q: string;
+  /** Maximum number of results */
+  limit: number | undefined;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdSearch_Response = {
+  query: string;
+  searchType: string;
+  skills: {
+    id: string;
+    name: string;
+    installs: number;
+    topSource: string;
+  }[];
+  count: number;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdSearch_Request = Simplify<
+  (GetEditorBuilderRegistriesRegistryIdSearch_PathParams extends never
+    ? {}
+    : { params: GetEditorBuilderRegistriesRegistryIdSearch_PathParams }) &
+    (GetEditorBuilderRegistriesRegistryIdSearch_QueryParams extends never
+      ? {}
+      : {} extends GetEditorBuilderRegistriesRegistryIdSearch_QueryParams
+        ? { query?: GetEditorBuilderRegistriesRegistryIdSearch_QueryParams }
+        : { query: GetEditorBuilderRegistriesRegistryIdSearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderRegistriesRegistryIdSearch_RouteContract {
+  pathParams: GetEditorBuilderRegistriesRegistryIdSearch_PathParams;
+  queryParams: GetEditorBuilderRegistriesRegistryIdSearch_QueryParams;
+  body: never;
+  request: GetEditorBuilderRegistriesRegistryIdSearch_Request;
+  response: GetEditorBuilderRegistriesRegistryIdSearch_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /editor/builder/registries/:registryId/popular
+// ============================================================================
+export type GetEditorBuilderRegistriesRegistryIdPopular_PathParams = {
+  /** Registry identifier (e.g. "skills-sh") */
+  registryId: string;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdPopular_QueryParams = {
+  /** Maximum number of results */
+  limit: number | undefined;
+  /** Offset for pagination */
+  offset: number | undefined;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdPopular_Response = {
+  skills: {
+    id: string;
+    name: string;
+    installs: number;
+    topSource: string;
+  }[];
+  count: number;
+  limit: number;
+  offset: number;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdPopular_Request = Simplify<
+  (GetEditorBuilderRegistriesRegistryIdPopular_PathParams extends never
+    ? {}
+    : { params: GetEditorBuilderRegistriesRegistryIdPopular_PathParams }) &
+    (GetEditorBuilderRegistriesRegistryIdPopular_QueryParams extends never
+      ? {}
+      : {} extends GetEditorBuilderRegistriesRegistryIdPopular_QueryParams
+        ? { query?: GetEditorBuilderRegistriesRegistryIdPopular_QueryParams }
+        : { query: GetEditorBuilderRegistriesRegistryIdPopular_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderRegistriesRegistryIdPopular_RouteContract {
+  pathParams: GetEditorBuilderRegistriesRegistryIdPopular_PathParams;
+  queryParams: GetEditorBuilderRegistriesRegistryIdPopular_QueryParams;
+  body: never;
+  request: GetEditorBuilderRegistriesRegistryIdPopular_Request;
+  response: GetEditorBuilderRegistriesRegistryIdPopular_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /editor/builder/registries/:registryId/preview
+// ============================================================================
+export type GetEditorBuilderRegistriesRegistryIdPreview_PathParams = {
+  /** Registry identifier (e.g. "skills-sh") */
+  registryId: string;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdPreview_QueryParams = {
+  /** GitHub repository owner */
+  owner: string;
+  /** GitHub repository name */
+  repo: string;
+  /** Skill name within repo */
+  path: string;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdPreview_Response = {
+  content: string;
+};
+
+export type GetEditorBuilderRegistriesRegistryIdPreview_Request = Simplify<
+  (GetEditorBuilderRegistriesRegistryIdPreview_PathParams extends never
+    ? {}
+    : { params: GetEditorBuilderRegistriesRegistryIdPreview_PathParams }) &
+    (GetEditorBuilderRegistriesRegistryIdPreview_QueryParams extends never
+      ? {}
+      : {} extends GetEditorBuilderRegistriesRegistryIdPreview_QueryParams
+        ? { query?: GetEditorBuilderRegistriesRegistryIdPreview_QueryParams }
+        : { query: GetEditorBuilderRegistriesRegistryIdPreview_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderRegistriesRegistryIdPreview_RouteContract {
+  pathParams: GetEditorBuilderRegistriesRegistryIdPreview_PathParams;
+  queryParams: GetEditorBuilderRegistriesRegistryIdPreview_QueryParams;
+  body: never;
+  request: GetEditorBuilderRegistriesRegistryIdPreview_Request;
+  response: GetEditorBuilderRegistriesRegistryIdPreview_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /editor/builder/registries/:registryId/install
+// ============================================================================
+export type PostEditorBuilderRegistriesRegistryIdInstall_PathParams = {
+  /** Registry identifier (e.g. "skills-sh") */
+  registryId: string;
+};
+
+export type PostEditorBuilderRegistriesRegistryIdInstall_Body = {
+  /** GitHub repository owner */
+  owner: string;
+  /** GitHub repository name */
+  repo: string;
+  /** Skill name from the registry */
+  skillName: string;
+  /** Visibility for the new stored skill */
+  visibility?: ('private' | 'public') | undefined;
+};
+
+export type PostEditorBuilderRegistriesRegistryIdInstall_Response = {
+  /** Id of the newly created stored skill */
+  storedSkillId: string;
+  /** Resolved skill name */
+  name: string;
+  /** Number of files materialized into the skill version snapshot */
+  filesWritten: number;
+};
+
+export type PostEditorBuilderRegistriesRegistryIdInstall_Request = Simplify<
+  (PostEditorBuilderRegistriesRegistryIdInstall_PathParams extends never
+    ? {}
+    : { params: PostEditorBuilderRegistriesRegistryIdInstall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostEditorBuilderRegistriesRegistryIdInstall_Body extends never
+      ? {}
+      : {} extends PostEditorBuilderRegistriesRegistryIdInstall_Body
+        ? { body?: PostEditorBuilderRegistriesRegistryIdInstall_Body }
+        : { body: PostEditorBuilderRegistriesRegistryIdInstall_Body })
+>;
+
+export interface PostEditorBuilderRegistriesRegistryIdInstall_RouteContract {
+  pathParams: PostEditorBuilderRegistriesRegistryIdInstall_PathParams;
+  queryParams: never;
+  body: PostEditorBuilderRegistriesRegistryIdInstall_Body;
+  request: PostEditorBuilderRegistriesRegistryIdInstall_Request;
+  response: PostEditorBuilderRegistriesRegistryIdInstall_Response;
   responseType: 'json';
 }
 
@@ -77153,6 +77374,11 @@ export interface RouteTypes {
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
+  'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
+  'GET /editor/builder/registries/:registryId/search': GetEditorBuilderRegistriesRegistryIdSearch_RouteContract;
+  'GET /editor/builder/registries/:registryId/popular': GetEditorBuilderRegistriesRegistryIdPopular_RouteContract;
+  'GET /editor/builder/registries/:registryId/preview': GetEditorBuilderRegistriesRegistryIdPreview_RouteContract;
+  'POST /editor/builder/registries/:registryId/install': PostEditorBuilderRegistriesRegistryIdInstall_RouteContract;
   'GET /schedules': GetSchedules_RouteContract;
   'GET /schedules/:scheduleId': GetSchedulesScheduleId_RouteContract;
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
@@ -77447,6 +77673,21 @@ export interface Client {
   };
   '/editor/builder/infrastructure': {
     GET: GetEditorBuilderInfrastructure_RouteContract;
+  };
+  '/editor/builder/registries': {
+    GET: GetEditorBuilderRegistries_RouteContract;
+  };
+  '/editor/builder/registries/:registryId/install': {
+    POST: PostEditorBuilderRegistriesRegistryIdInstall_RouteContract;
+  };
+  '/editor/builder/registries/:registryId/popular': {
+    GET: GetEditorBuilderRegistriesRegistryIdPopular_RouteContract;
+  };
+  '/editor/builder/registries/:registryId/preview': {
+    GET: GetEditorBuilderRegistriesRegistryIdPreview_RouteContract;
+  };
+  '/editor/builder/registries/:registryId/search': {
+    GET: GetEditorBuilderRegistriesRegistryIdSearch_RouteContract;
   };
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;

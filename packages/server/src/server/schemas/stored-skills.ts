@@ -66,6 +66,54 @@ const fileNodeSchema: z.ZodType<FileNode> = z.object({
   children: z.lazy(() => z.array(fileNodeSchema)).optional(),
 });
 
+// ============================================================================
+// Origin Schema (metadata.origin)
+// ============================================================================
+
+/**
+ * Identifies where a stored skill came from.
+ * Persisted as `metadata.origin` on the stored skill so that registry-installed
+ * skills can be distinguished from skills authored directly in the Builder.
+ */
+export const skillOriginSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('skills-sh'),
+    owner: z.string().describe('Repository owner on skills.sh'),
+    repo: z.string().describe('Repository name on skills.sh'),
+    skillName: z.string().describe('Original skill name on skills.sh'),
+    installedAt: z.string().describe('ISO-8601 timestamp of the install'),
+  }),
+  z.object({
+    type: z.literal('library-copy'),
+    sourceSkillId: z.string().describe('ID of the public Library skill this was copied from'),
+    sourceSkillName: z.string().describe('Name of the source skill at copy time'),
+    sourceAuthorId: z.string().optional().describe('Author of the source skill at copy time, when known'),
+    copiedAt: z.string().describe('ISO-8601 timestamp of the copy'),
+  }),
+]);
+
+export type SkillOrigin = z.infer<typeof skillOriginSchema>;
+
+/** Metadata key under which origin information is persisted on a stored skill. */
+export const SKILL_ORIGIN_METADATA_KEY = 'origin';
+
+/**
+ * Read a typed origin off a stored skill's metadata blob, if present and valid.
+ * Returns null when the skill has no origin (i.e., authored directly in the Builder).
+ */
+export function readSkillOrigin(metadata: Record<string, unknown> | undefined): SkillOrigin | null {
+  if (!metadata) return null;
+  const raw = metadata[SKILL_ORIGIN_METADATA_KEY];
+  if (!raw) return null;
+  const parsed = skillOriginSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Build a metadata patch for an origin, suitable for spreading into the create body. */
+export function buildOriginMetadata(origin: SkillOrigin): Record<string, unknown> {
+  return { [SKILL_ORIGIN_METADATA_KEY]: origin };
+}
+
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the skill'),
   description: z.string().describe('Description of what the skill does and when to use it'),

@@ -1,8 +1,9 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
-import { LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
+import { CopyIcon, DownloadIcon, LockIcon, SearchIcon, SparklesIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillStarButton } from '@/domains/agents/components/skill-star-button';
+import { getSkillOrigin } from '@/domains/agents/utils/skill-origin';
 
 function formatRelativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -81,6 +82,32 @@ export function SkillBuilderList({ skills, search, onSkillClick, showStars = tru
                     <TooltipContent>Only visible to you</TooltipContent>
                   </Tooltip>
                 )}
+                {(() => {
+                  const origin = getSkillOrigin(skill.metadata);
+                  if (!origin) return null;
+                  const isCopy = origin.type === 'library-copy';
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface5 text-neutral4 shrink-0"
+                          aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
+                          data-testid="skill-builder-origin-badge"
+                        >
+                          {isCopy ? <CopyIcon className="h-2.5 w-2.5" /> : <DownloadIcon className="h-2.5 w-2.5" />}
+                          {origin.type === 'skills-sh' ? 'skills.sh' : isCopy ? 'copied' : 'imported'}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {origin.type === 'skills-sh'
+                          ? `Imported from ${origin.owner}/${origin.repo}`
+                          : isCopy
+                            ? `Copied from "${origin.sourceSkillName}"`
+                            : 'Imported from external registry'}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })()}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>

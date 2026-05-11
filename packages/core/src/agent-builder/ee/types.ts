@@ -284,6 +284,24 @@ export interface AgentBuilderOptions {
   configuration?: {
     agent?: BuilderAgentDefaults;
   };
+
+  /**
+   * Skill registries the Agent Builder is allowed to browse and install from.
+   *
+   * Each registry is opt-in. When no registries are enabled, the Builder hides
+   * registry browse UI entirely. When at least one is enabled, the Builder
+   * shows a "Browse registries" entry alongside "Create skill".
+   */
+  registries?: {
+    /**
+     * The public skills.sh registry (https://skills.sh).
+     * Off by default — admins must explicitly opt in.
+     */
+    skillsSh?: {
+      /** When true, the Builder may browse and install from skills.sh. */
+      enabled: boolean;
+    };
+  };
 }
 
 /**
@@ -294,6 +312,11 @@ export interface IAgentBuilder {
   readonly enabled: boolean;
   getFeatures(): AgentBuilderOptions['features'];
   getConfiguration(): AgentBuilderOptions['configuration'];
+  /**
+   * The opt-in skill registries this Builder is allowed to browse and install
+   * from. Returns `undefined` when the admin has not configured any registries.
+   */
+  getRegistries?(): AgentBuilderOptions['registries'];
   /**
    * Optional warnings produced during construction-time validation
    * (e.g. allowlist entries with unknown providers that lack `kind: 'custom'`).

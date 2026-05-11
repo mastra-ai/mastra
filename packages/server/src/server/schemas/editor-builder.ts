@@ -213,6 +213,11 @@ export const infrastructureStatusResponseSchema = z.object({
     sandboxProvider: z.string().nullable(),
     config: z.array(z.object({ key: z.string(), value: z.string() })),
   }),
+  registries: z.object({
+    skillsSh: z.object({
+      enabled: z.boolean(),
+    }),
+  }),
 });
 
 export type InfrastructureStatus = z.infer<typeof infrastructureStatusResponseSchema>;

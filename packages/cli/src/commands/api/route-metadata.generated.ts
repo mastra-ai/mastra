@@ -4978,6 +4978,90 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /editor/builder/registries": {
+    "method": "GET",
+    "path": "/editor/builder/registries",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "registries"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/search": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/search",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "limit",
+      "q"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/popular": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/popular",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "limit",
+      "offset"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/preview": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/preview",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "owner",
+      "path",
+      "repo"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /editor/builder/registries/:registryId/install": {
+    "method": "POST",
+    "path": "/editor/builder/registries/:registryId/install",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "owner",
+      "repo",
+      "skillName",
+      "visibility"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /schedules": {
     "method": "GET",
     "path": "/schedules",

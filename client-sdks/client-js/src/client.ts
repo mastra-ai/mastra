@@ -147,6 +147,12 @@ import type {
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
   InfrastructureStatusResponse,
+  ListBuilderRegistriesResponse,
+  BuilderRegistrySearchResponse,
+  BuilderRegistryPopularResponse,
+  BuilderRegistryPreviewResponse,
+  BuilderRegistryInstallBody,
+  BuilderRegistryInstallResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -1571,6 +1577,78 @@ export class MastraClient extends BaseResource {
    */
   public getInfrastructureStatus(): Promise<InfrastructureStatusResponse> {
     return this.request('/editor/builder/infrastructure');
+  }
+
+  /**
+   * Lists known skill registries surfaced by the Agent Builder config.
+   * Each entry reports whether the registry is enabled. Disabled or unknown
+   * registries return 404 from registry-scoped routes.
+   * Requires `stored-skills:read` permission.
+   */
+  public listBuilderRegistries(): Promise<ListBuilderRegistriesResponse> {
+    return this.request('/editor/builder/registries');
+  }
+
+  /**
+   * Search a builder skill registry. The registry must be enabled or the
+   * server returns 404.
+   * Requires `stored-skills:read` permission.
+   */
+  public searchBuilderRegistry(
+    registryId: string,
+    params: { q: string; limit?: number },
+  ): Promise<BuilderRegistrySearchResponse> {
+    const search = new URLSearchParams({ q: params.q });
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/search?${search.toString()}`);
+  }
+
+  /**
+   * Fetch the popular skills feed from a builder skill registry.
+   * Requires `stored-skills:read` permission.
+   */
+  public getBuilderRegistryPopular(
+    registryId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<BuilderRegistryPopularResponse> {
+    const search = new URLSearchParams();
+    if (params?.limit !== undefined) search.set('limit', String(params.limit));
+    if (params?.offset !== undefined) search.set('offset', String(params.offset));
+    const query = search.toString();
+    return this.request(
+      `/editor/builder/registries/${encodeURIComponent(registryId)}/popular${query ? `?${query}` : ''}`,
+    );
+  }
+
+  /**
+   * Fetch the rendered preview content for a single registry skill.
+   * Requires `stored-skills:read` permission.
+   */
+  public getBuilderRegistryPreview(
+    registryId: string,
+    params: { owner: string; repo: string; path: string },
+  ): Promise<BuilderRegistryPreviewResponse> {
+    const search = new URLSearchParams({
+      owner: params.owner,
+      repo: params.repo,
+      path: params.path,
+    });
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/preview?${search.toString()}`);
+  }
+
+  /**
+   * Install a registry skill into the builder's stored-skills DB.
+   * Returns 409 when a stored skill with the derived id already exists.
+   * Requires `stored-skills:write` permission.
+   */
+  public installBuilderRegistrySkill(
+    registryId: string,
+    body: BuilderRegistryInstallBody,
+  ): Promise<BuilderRegistryInstallResponse> {
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/install`, {
+      method: 'POST',
+      body,
+    });
   }
 
   // ============================================================================
