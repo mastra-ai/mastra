@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.33.0-alpha.11
+
+### Patch Changes
+
+- Fixed ToolCallFilter so assistant messages with top-level text are preserved when tool parts are removed. ([#16077](https://github.com/mastra-ai/mastra/pull/16077))
+
+- Fixed tool result media content not reaching the model. Tools using `toModelOutput` to return images or files (e.g. screenshot tools) now work correctly with all AI SDK providers (Anthropic, OpenAI, Google). ([#16449](https://github.com/mastra-ai/mastra/pull/16449))
+
+- Added subagent display names to Harness display state so UIs can render configured subagent names without duplicating agent type lookup. ([#16237](https://github.com/mastra-ai/mastra/pull/16237))
+
+- Fixed agent requests to Anthropic failing with `400 unexpected tool_use_id` when recalled history contained an incomplete `tool_use` / `tool_result` pair. This most commonly hit agents using parallel tool calls when an earlier run was interrupted before every tool finished — pulling that broken exchange into a new prompt no longer crashes the next request. ([#16201](https://github.com/mastra-ai/mastra/pull/16201))
+
+  Closes #16193
+
+- Fixed FGA EE license gating so production servers require an Enterprise license when FGA is configured. ([#16362](https://github.com/mastra-ai/mastra/pull/16362))
+
+- Fixed a bug where message-level `providerOptions` could be lost or applied to the wrong turn after tool calls. Anthropic `cacheControl` markers now stay attached to the intended message in tool-using conversations. ([#16133](https://github.com/mastra-ai/mastra/pull/16133))
+
 ## 1.33.0-alpha.10
 
 ### Minor Changes

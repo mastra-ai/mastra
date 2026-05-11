@@ -131,6 +131,20 @@ describe('AgentBuilder.runs', () => {
     expect(params.get('page')).toBe('10');
     expect(params.get('resourceId')).toBe('test-resource-456');
   });
+
+  it('stream should require a runId and serialize it as a query param', async () => {
+    await agentBuilder.stream({ inputData: { foo: 'bar' } }, 'run-stream-1');
+
+    expect(lastRequest.method).toBe('POST');
+    expect(lastRequest.url).toBe('/api/agent-builder/test-action-id/stream?runId=run-stream-1');
+  });
+
+  it('stream should throw when runId is missing', async () => {
+    await expect(
+      // @ts-expect-error: runId is now required, the cast intentionally exercises the runtime guard
+      agentBuilder.stream({ inputData: { foo: 'bar' } }, undefined),
+    ).rejects.toThrow(/runId is required/);
+  });
 });
 
 describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
