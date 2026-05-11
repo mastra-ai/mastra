@@ -25,6 +25,7 @@ export interface MastraChatProps {
   requestContext?: RequestContext;
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
+  onThreadSignalsUnsupported?: () => void;
 }
 
 interface SharedArgs {
@@ -72,6 +73,7 @@ export const useChat = ({
   requestContext: propsRequestContext,
   onSignalSent,
   onSignalEcho,
+  onThreadSignalsUnsupported,
 }: MastraChatProps) => {
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
@@ -116,6 +118,11 @@ export const useChat = ({
 
     return coreUserMessages as BaseMessageListInput;
   };
+
+  const markThreadSignalsUnsupported = useCallback(() => {
+    _threadSignalsUnsupportedRef.current = true;
+    onThreadSignalsUnsupported?.();
+  }, [onThreadSignalsUnsupported]);
 
   const getSignalPreview = (coreUserMessages: CoreUserMessage[]) => {
     const preview = coreUserMessages
@@ -210,7 +217,7 @@ export const useChat = ({
         })
         .catch(error => {
           if (isThreadSignalUnsupportedError(error)) {
-            _threadSignalsUnsupportedRef.current = true;
+            markThreadSignalsUnsupported();
             if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
               _threadSubscriptionAbortRef.current = null;
               _threadSubscriptionKeyRef.current = undefined;
@@ -228,7 +235,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, processStreamChunk],
+    [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
   );
 
   useEffect(() => closeThreadSubscription, [agentId, resourceId, threadId, closeThreadSubscription]);
@@ -473,7 +480,8 @@ export const useChat = ({
     } catch (error) {
       onSignalEcho?.(resolvedSignalId);
       if (isThreadSignalUnsupportedError(error)) {
-        _threadSignalsUnsupportedRef.current = true;
+        markThreadSignalsUnsupported();
+        setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToUIMessage)] as MastraUIMessage[]);
         await streamWithLegacyRoute();
         return;
       }
@@ -761,7 +769,8 @@ export const useChat = ({
     }
 
     const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
-    const signalId = mode === 'stream' && args.threadId ? uiMessages[0]?.id : undefined;
+    const signalId =
+      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current ? uiMessages[0]?.id : undefined;
     if (!signalId) {
       setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
     }

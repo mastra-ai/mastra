@@ -420,6 +420,7 @@ export function MastraRuntimeProvider({
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
   const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
+  const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -434,6 +435,7 @@ export function MastraRuntimeProvider({
   useEffect(() => {
     setStreamErrors([]);
     setPendingSignals([]);
+    setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
 
   useEffect(() => {
@@ -468,6 +470,7 @@ export function MastraRuntimeProvider({
     requestContext: chatRequestContext,
     onSignalSent: addPendingSignal,
     onSignalEcho: removePendingSignal,
+    onThreadSignalsUnsupported: () => setThreadSignalsUnsupported(true),
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -726,6 +729,7 @@ export function MastraRuntimeProvider({
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
+    if (threadSignalsUnsupported && isRunningStream) return;
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
     const attachments = await convertToAIAttachments(message.attachments);
@@ -1332,7 +1336,7 @@ export function MastraRuntimeProvider({
   });
 
   const runtime = useExternalStoreRuntime({
-    isRunning: isLegacyRunning,
+    isRunning: isLegacyRunning || (isSupportedModel && threadSignalsUnsupported && isRunningStream),
     messages: isSupportedModel ? vnextmessages : legacyMessages,
     convertMessage: x => x,
     onNew,
