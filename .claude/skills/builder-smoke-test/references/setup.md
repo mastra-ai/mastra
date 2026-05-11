@@ -41,9 +41,11 @@ Required for Prompt 7 (auth-on) only:
 - `AUTH_PROVIDER=workos` in `examples/agent/.env`.
 - `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` in `.env`.
 
-If preflight reports any failure, **do not auto-edit `.env`**. Surface the
-diagnosis to the user, ask whether they'll edit `.env` themselves or want
-you to do it for them. Restart `mastra dev` if `.env` changed.
+If preflight reports any failure on an existing `.env`, **do not edit it
+without explicit user say-so**. Surface the diagnosis, ask whether they'll
+edit `.env` themselves or want you to do it. Restart `mastra dev` after
+any `.env` change. If `examples/agent/.env` doesn't exist at all, you may
+create it; still ask the user to dictate values rather than guessing.
 
 ### 1. Zombie port check
 

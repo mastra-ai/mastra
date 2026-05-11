@@ -150,7 +150,10 @@ Preflight is **detect-only**. It never edits `.env`, never sources rc files, nev
 | `Expected auth-on mode, but examples/agent/.env has no AUTH_PROVIDER` | Running `--expect on` against an auth-off `.env` | Ask the user to add `AUTH_PROVIDER=workos` + the three WORKOS_* vars to `.env` (they can do it themselves or dictate values for you to write). Restart `mastra dev`. |
 | `AUTH_PROVIDER=workos but these WorkOS vars are missing` | Partial auth-on config | List the missing vars to the user. Ask them to add the values to `.env` (or dictate them). |
 
-**Default behavior: ask the user, don't auto-edit.** Targeted `.env` edits are allowed only when the user explicitly says "go ahead, comment that line out" or "yes, set those four vars to these values." Never write secrets into `.env` without the user dictating them.
+**Default behavior:**
+
+- **Existing `.env`** — never edit without the user's say-so. Targeted edits are allowed only when the user explicitly says "go ahead, comment that line out" or "yes, set those four vars to these values." Never write secrets into an existing `.env` without the user dictating them.
+- **Missing `.env`** — if `examples/agent/.env` doesn't exist at all, you may create it with the minimum required vars (`OPENAI_API_KEY`, plus auth vars for `--expect on`). Still ask the user to dictate the actual values; don't invent or guess them.
 
 When the user has fixed the issue (either themselves or via your edit), they'll tell you it's good. Restart `mastra dev` if you edited `.env` — the env file is only read at boot — then re-run preflight.
 
