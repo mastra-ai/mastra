@@ -2,124 +2,145 @@
 
 Test star/unstar functionality for stored agents and skills.
 
-The star endpoints (`PUT|DELETE /stored/{agents,skills}/:id/star`) return `200` with a JSON body of shape `{ starred: boolean, starCount: number }`. Both star and unstar are idempotent — calling them twice returns the same body the second time. The endpoint requires auth; if auth is off it runs as the dev caller. Stars are gated by the `stars` builder feature (404 if disabled).
+The star endpoints (`PUT|DELETE /stored/{agents,skills}/:id/star`) return `200` with a JSON body of shape `{ starred: boolean, starCount: number }`. Both star and unstar are idempotent — calling them twice returns the same body the second time. Stars are gated by the `stars` builder feature (404 if disabled).
 
-## Prerequisites
+## Auth requirement
 
-Create test entities first (or use entities from the Agents/Skills sections):
+**This section requires `--auth on`.** Stars are scoped per caller (the row in `stored_stars` is keyed on `(entityId, authorId)`). With `--auth off`, there is no caller to attach the star to and the route rejects with `401 Unauthorized`.
+
+If you're running with `--auth off`, do this and move on:
 
 ```bash
-# Create a test agent
+# Sanity: confirm stars are gated by auth
+curl -s -o /dev/null -w "%{http_code}\n" -X PUT $BASE/stored/agents/$AGENT_ID/star
+# → 401
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/agents/$AGENT_ID/star
+# → 401
+```
+
+- [ ] Both calls return `401`
+- [ ] Skip the rest of this file; report the section as `Skipped (requires --auth on)`
+
+## Prerequisites (auth-on)
+
+You need a logged-in session (`$SESSION` should be a `Cookie:` header). Create test entities first:
+
+```bash
+# Test agent
 AGENT_RESP=$(curl -s -X POST $BASE/stored/agents \
+  -H "$SESSION" \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Star Test Agent",
     "instructions": "Test agent for star testing",
-    "model": {"provider": "openai", "modelId": "gpt-4o-mini"}
+    "model": {"provider": "openai", "name": "gpt-4o-mini"}
   }')
-AGENT_ID=$(echo $AGENT_RESP | jq -r '.id // .agent.id // empty')
+AGENT_ID=$(echo "$AGENT_RESP" | jq -r '.id')
 
-# Create a test skill
+# Test skill
 SKILL_RESP=$(curl -s -X POST $BASE/stored/skills \
+  -H "$SESSION" \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Star Test Skill",
-    "description": "Test skill for star testing"
+    "description": "Test skill for star testing",
+    "instructions": "Star test instructions."
   }')
-SKILL_ID=$(echo $SKILL_RESP | jq -r '.id // .skill.id // empty')
+SKILL_ID=$(echo "$SKILL_RESP" | jq -r '.id')
 ```
 
 ## Steps
 
-### 1. Star an Agent
+### 1. Star an agent
 
 ```bash
-curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star | jq .
+curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
 ```
 
 - [ ] HTTP `200`
-- [ ] Response body: `{ "starred": true, "starCount": <n> }` where `n >= 1`
+- [ ] Body is `{ "starred": true, "starCount": <n> }` with `n >= 1`
 
-### 2. Verify Agent is Starred
+### 2. Verify the agent is starred
 
 ```bash
-curl -s $BASE/stored/agents/$AGENT_ID | jq '{ starred, starCount }'
+curl -s $BASE/stored/agents/$AGENT_ID -H "$SESSION" | jq '{ starred, starCount }'
 ```
 
-- [ ] `starred` is `true`
-- [ ] `starCount` matches the count returned by step 1
+- [ ] `starred == true`
+- [ ] `starCount` matches the value from step 1
 
-### 3. Unstar the Agent
+### 3. Unstar the agent
 
 ```bash
-curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star | jq .
+curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
 ```
 
 - [ ] HTTP `200`
-- [ ] Response: `{ "starred": false, "starCount": <n - 1> }`
+- [ ] Body is `{ "starred": false, "starCount": <previous - 1> }`
 - [ ] `GET /stored/agents/$AGENT_ID` now shows `starred: false`
 
-### 4. Star a Skill
+### 4. Star a skill
 
 ```bash
-curl -s -X PUT $BASE/stored/skills/$SKILL_ID/star | jq .
+curl -s -X PUT $BASE/stored/skills/$SKILL_ID/star -H "$SESSION" | jq .
 ```
 
 - [ ] HTTP `200`
-- [ ] Response body: `{ "starred": true, "starCount": <n> }`
+- [ ] Body is `{ "starred": true, "starCount": <n> }`
 
-### 5. Verify Skill is Starred
+### 5. Verify the skill is starred
 
 ```bash
-curl -s $BASE/stored/skills/$SKILL_ID | jq '{ starred, starCount }'
+curl -s $BASE/stored/skills/$SKILL_ID -H "$SESSION" | jq '{ starred, starCount }'
 ```
 
-- [ ] `starred` is `true`
+- [ ] `starred == true`
 - [ ] `starCount` matches step 4
 
-### 6. Unstar the Skill
+### 6. Unstar the skill
 
 ```bash
-curl -s -X DELETE $BASE/stored/skills/$SKILL_ID/star | jq .
+curl -s -X DELETE $BASE/stored/skills/$SKILL_ID/star -H "$SESSION" | jq .
 ```
 
 - [ ] HTTP `200`
-- [ ] Response: `{ "starred": false, "starCount": <n - 1> }`
+- [ ] Body is `{ "starred": false, "starCount": <previous - 1> }`
 
-### 7. Idempotent Star (Star Twice)
-
-```bash
-curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star | jq .
-curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star | jq .
-```
-
-- [ ] Both calls return HTTP `200`
-- [ ] Both response bodies are identical (`starCount` does not increment on the second call)
-
-### 8. Idempotent Unstar (Unstar Twice)
+### 7. Idempotent star (star twice)
 
 ```bash
-curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star | jq .
-curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star | jq .
+curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
+curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
 ```
 
-- [ ] Both calls return HTTP `200`
-- [ ] Both response bodies are identical (`starred: false`, `starCount` unchanged on the second call)
+- [ ] Both calls return `200`
+- [ ] Both bodies are identical (`starCount` does not increment on the second call)
+
+### 8. Idempotent unstar (unstar twice)
+
+```bash
+curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
+curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
+```
+
+- [ ] Both calls return `200`
+- [ ] Both bodies are identical (`starred: false`, `starCount` unchanged on the second call)
 
 ### Cleanup
 
 ```bash
-curl -s -X DELETE $BASE/stored/agents/$AGENT_ID
-curl -s -X DELETE $BASE/stored/skills/$SKILL_ID
+curl -s -X DELETE $BASE/stored/agents/$AGENT_ID -H "$SESSION" -o /dev/null -w "%{http_code}\n"  # → 200
+curl -s -X DELETE $BASE/stored/skills/$SKILL_ID -H "$SESSION" -o /dev/null -w "%{http_code}\n"  # → 200
 ```
 
 ## Checklist
 
-- [ ] Star agent (200 + `starred: true`)
-- [ ] Verify agent starred state on `GET`
+- [ ] Auth-off path: PUT/DELETE star return `401` (no other assertions)
+- [ ] Auth-on: star agent (200 + `starred: true`)
+- [ ] Verify agent starred on GET
 - [ ] Unstar agent (200 + `starred: false`)
 - [ ] Star skill (200 + `starred: true`)
-- [ ] Verify skill starred state on `GET`
+- [ ] Verify skill starred on GET
 - [ ] Unstar skill (200 + `starred: false`)
-- [ ] Idempotent star (second call same body)
-- [ ] Idempotent unstar (second call same body)
+- [ ] Idempotent star (second body identical)
+- [ ] Idempotent unstar (second body identical)

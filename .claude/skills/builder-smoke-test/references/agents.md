@@ -4,9 +4,15 @@ Test stored agent create, read, update, delete, skill attachment, and model conf
 
 The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid under the example's admin policy, which allows any `openai` model via wildcard plus exactly `anthropic/claude-opus-4-7` (see `examples/agent/src/mastra/index.ts` → `models.allowed`). If you've changed the policy, swap these for something allowed.
 
+> **Server schema reminder:** `model` is `{ provider, name }` — **not** `{ provider, modelId }`. The schema lives in `packages/server/src/server/schemas/stored-agents.ts`. Posting `modelId` returns `400 model: Invalid input`.
+
+> **Pagination is 0-indexed.** `page=0` is the first page; `page=1` is the second. Default `perPage` varies by endpoint; pass it explicitly if it matters.
+
+> **Visibility is auth-on-only.** With `--auth off`, the server has no caller to attribute ownership to, so it forces `visibility: "public"` regardless of what you send. Don't assert on visibility under auth off; verify it under `--auth on` in `references/auth.md`.
+
 ## Steps
 
-### 1. Create a Stored Agent
+### 1. Create a stored agent
 
 ```bash
 curl -s -X POST $BASE/stored/agents \
@@ -16,91 +22,84 @@ curl -s -X POST $BASE/stored/agents \
     "instructions": "You are a helpful test agent created during smoke testing.",
     "model": {
       "provider": "openai",
-      "modelId": "gpt-4o-mini"
-    },
-    "visibility": "private"
+      "name": "gpt-4o-mini"
+    }
   }' | jq .
 ```
 
 **Verify:**
 
-- [ ] Returns 200/201 with the created agent
-- [ ] `name` matches
+- [ ] Returns 200 with the created agent
+- [ ] `name` matches the request
 - [ ] `workspaceId` is auto-assigned to the builder workspace (from config)
-- [ ] `visibility` is `"private"`
-- [ ] `authorId` is set
-- [ ] `status` is `"draft"`
-- [ ] `id` is generated (record it)
+- [ ] `id` is a UUID; record it as `AGENT_ID=<id>`
 
-Record the agent ID: `AGENT_ID=<returned id>`
+Notes (don't assert under `--auth off`):
+- `visibility` will be `"public"` regardless of request (see auth-on path).
+- `authorId` will be `null` (no caller).
+- `starCount` will be `null` (no enrichment without a caller).
 
-### 2. Get the Agent
+### 2. Get the agent
 
 ```bash
 curl -s $BASE/stored/agents/$AGENT_ID | jq .
 ```
 
-- [ ] Returns agent with all fields
-- [ ] `model.provider` and `model.modelId` present
-- [ ] `instructions` present
-- [ ] `createdAt` and `updatedAt` present
+- [ ] Returns 200 with the agent
+- [ ] `model.provider == "openai"` and `model.name == "gpt-4o-mini"`
+- [ ] `instructions` matches
+- [ ] `createdAt` and `updatedAt` are ISO timestamps
 
-### 3. List Agents
+### 3. List agents
 
 ```bash
-curl -s $BASE/stored/agents | jq .
+# Page 0 is the first page
+curl -s "$BASE/stored/agents?page=0&perPage=50" | jq '{ total, page, perPage, count: (.agents | length) }'
 ```
 
-- [ ] Response has `agents` array
-- [ ] The created agent appears in the list
-- [ ] Each agent has `name`, `visibility`, `status`, `workspaceId`
+- [ ] `total >= 1`
+- [ ] `agents` array length matches `total` (assuming `total <= perPage`)
+- [ ] The created `$AGENT_ID` appears in the array
 
-### 4. Create a Skill for Attachment
-
-Create a skill to attach to the agent:
+### 4. Create a skill for attachment
 
 ```bash
 SKILL_RESP=$(curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Agent Smoke Skill",
-    "description": "Skill to attach to smoke test agent"
+    "description": "Skill to attach to smoke test agent",
+    "instructions": "Skill-level instructions for the smoke test."
   }')
-echo $SKILL_RESP | jq .
-SKILL_ID=$(echo $SKILL_RESP | jq -r '.id // .skill.id // empty')
+echo "$SKILL_RESP" | jq .
+SKILL_ID=$(echo "$SKILL_RESP" | jq -r '.id')
+echo "SKILL_ID=$SKILL_ID"
 ```
 
-### 5. Attach Skill to Agent
+- [ ] Response is 200 with a UUID `id`
+
+> `instructions` is required by the schema today. Creating a skill without it returns 400.
+
+### 5. Attach skill to agent
 
 ```bash
 curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
-  -d "{\"skills\": [\"$SKILL_ID\"]}" | jq .
+  -d "{\"skills\": {\"$SKILL_ID\": {}}}" | jq '.skills'
 ```
 
-- [ ] Returns updated agent
-- [ ] `skills` array contains the skill ID
+- [ ] PATCH returns 200
+- [ ] `skills` object contains a key `$SKILL_ID`
 
-### 6. Verify Skill Cross-Reference
+### 6. Verify skill cross-reference
 
 ```bash
 curl -s $BASE/stored/agents/$AGENT_ID | jq '.skills'
 ```
 
-- [ ] Skills array includes the attached skill ID
+- [ ] Skills object includes `$SKILL_ID`
 
-### 7. Update Agent Visibility
-
-```bash
-curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
-  -H 'Content-Type: application/json' \
-  -d '{"visibility": "public"}' | jq .
-```
-
-- [ ] `visibility` is now `"public"`
-- [ ] `updatedAt` changed
-
-### 8. Update Agent Model
+### 7. Update agent model
 
 ```bash
 curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
@@ -108,44 +107,42 @@ curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -d '{
     "model": {
       "provider": "openai",
-      "modelId": "gpt-4o"
+      "name": "gpt-4o"
     }
-  }' | jq .
+  }' | jq '.model'
 ```
 
-- [ ] `model.modelId` is now `"gpt-4o"`
-- [ ] Other fields unchanged
+- [ ] `model.name == "gpt-4o"`
+- [ ] `model.provider == "openai"`
 
-### 9. Update Agent Instructions
+### 8. Update agent instructions
 
 ```bash
 curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
-  -d '{"instructions": "Updated instructions for smoke testing."}' | jq .
+  -d '{"instructions": "Updated instructions for smoke testing."}' | jq '.instructions'
 ```
 
-- [ ] `instructions` updated
-- [ ] Other fields preserved
+- [ ] Returns the new instructions string verbatim
 
-### 10. Detach Skill from Agent
+### 9. Detach skill from agent
 
 ```bash
 curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
-  -d '{"skills": []}' | jq .
+  -d '{"skills": {}}' | jq '.skills'
 ```
 
-- [ ] `skills` array is now empty
+- [ ] `skills` is now an empty object
 
-### 11. Delete Agent and Skill (Cleanup)
+### 10. Delete agent and skill (cleanup)
 
 ```bash
-curl -s -X DELETE $BASE/stored/agents/$AGENT_ID | jq .
-curl -s -X DELETE $BASE/stored/skills/$SKILL_ID | jq .
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/agents/$AGENT_ID  # → 200
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/skills/$SKILL_ID  # → 200
+curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/agents/$AGENT_ID            # → 404
+curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID            # → 404
 ```
-
-- [ ] Both return success
-- [ ] `GET` on either returns 404
 
 ## Delete from edit / view (#16199)
 
@@ -158,7 +155,7 @@ Open the agent in the Builder edit page (`/agent-builder/agents/$AGENT_ID`):
 
 ## Avatar upload (owner-only, #15877 / #16264)
 
-Owners may upload an avatar; non-owners (even admins) cannot.
+Owners may upload an avatar; non-owners (even admins) cannot. This step requires `--auth on`.
 
 ```bash
 curl -s -X POST "$BASE/stored/agents/$AGENT_ID/avatar" \
@@ -174,27 +171,26 @@ curl -s -X POST "$BASE/stored/agents/$AGENT_ID/avatar" \
 
 For full coverage of `applyBuilderDefaults()`, see `references/defaults.md`. Short version: when you POST `/stored/agents` with no `workspace`/`memory`/`browser`/`model`, the response should include the configured defaults.
 
-## Model Dropdown Verification
+## Model dropdown verification
 
 The builder config defines which models are allowed. Verify via the settings endpoint:
 
 ```bash
-curl -s $BASE/editor/builder/settings | jq '.models // .modelPolicy'
+curl -s $BASE/editor/builder/settings | jq '{ models: .configuration.agent.models, modelPolicy }'
 ```
 
-- [ ] Lists allowed providers/models
-- [ ] Creating an agent with a disallowed model should fail or be restricted (depends on implementation)
+- [ ] `configuration.agent.models.allowed` and `modelPolicy.allowed` agree on the same allow-list
+- [ ] Both include the entry you used in step 1 (`{ "provider": "openai" }` wildcard covers `gpt-4o-mini`)
 
 ## Checklist
 
-- [ ] Create stored agent with auto-workspace assignment
-- [ ] Get agent by ID
-- [ ] List agents
-- [ ] Create and attach skill to agent
-- [ ] Verify skill cross-reference
-- [ ] Update visibility (private → public)
-- [ ] Update model
+- [ ] Create stored agent (`model.name`, not `modelId`) with auto-workspace assignment
+- [ ] Get agent by ID returns 200 with matching fields
+- [ ] List agents with `page=0` includes the new agent
+- [ ] Create + attach skill (skill `instructions` required)
+- [ ] Skill cross-reference visible on GET
+- [ ] Update model (provider + name)
 - [ ] Update instructions
 - [ ] Detach skill
-- [ ] Delete agent and skill
-- [ ] Model policy verified via settings
+- [ ] Delete agent + skill, follow-up GET returns 404
+- [ ] Model policy in settings matches what was accepted on create

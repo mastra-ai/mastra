@@ -37,7 +37,7 @@ AGENT_ID=$(echo "$RESP" | jq -r '.id // .agent.id')
 Verify the response (or a follow-up `GET /stored/agents/$AGENT_ID`):
 
 - [ ] `workspaceId` is `"builder-workspace"` (from `workspace.type=id`)
-- [ ] `model.provider` is `"openai"` and `model.modelId` is `"gpt-5.4"` (default model)
+- [ ] `model.provider` is `"openai"` and `model.name` is `"gpt-5.4"` (default model — API persists the config's `modelId` under the `name` field)
 - [ ] `memory.options.lastMessages` is `10`
 - [ ] `browser.config.provider` is `"stagehand"` (inline provider)
 - [ ] `authorId` set (or undefined if auth is off)
@@ -50,7 +50,7 @@ curl -s -X POST "$BASE/stored/agents" \
   -d '{
     "name": "Overrides Smoke Agent",
     "instructions": "Smoke test for explicit overrides.",
-    "model": { "provider": "anthropic", "modelId": "claude-opus-4-7" },
+    "model": { "provider": "anthropic", "name": "claude-opus-4-7" },
     "memory": { "options": { "lastMessages": 3 } },
     "visibility": "private"
   }' | jq .

@@ -2,6 +2,8 @@
 
 The builder's `configuration.agent.models.allowed` array constrains which models can be used. The `models.default` entry seeds new agents. Studio + Agent Builder dropdowns must respect the allowlist.
 
+> **Two shapes, same concept.** Builder *config* (TypeScript, `examples/agent/src/mastra/index.ts`) uses `{ provider, modelId }`. Stored-agents *API* (`POST /stored/agents`, schema in `packages/server/src/server/schemas/stored-agents.ts`) uses `{ provider, name }`. When you POST to create an agent, use `name`. When you read the policy from the settings endpoint or the TS source, you'll see `modelId`.
+
 ## Source-of-truth
 
 In `examples/agent`:
@@ -35,11 +37,11 @@ curl -s -X POST "$BASE/stored/agents" \
   -d '{
     "name": "Policy OK Agent",
     "instructions": "test",
-    "model": { "provider": "openai", "modelId": "gpt-4o-mini" }
+    "model": { "provider": "openai", "name": "gpt-4o-mini" }
   }' | jq .
 ```
 
-- [ ] 200/201; `model.modelId` is `gpt-4o-mini` (allowed via wildcard)
+- [ ] 200; `model.name` is `gpt-4o-mini` (allowed via wildcard)
 
 ### 3. Create with the allowed exact model
 
@@ -49,11 +51,11 @@ curl -s -X POST "$BASE/stored/agents" \
   -d '{
     "name": "Policy Exact Agent",
     "instructions": "test",
-    "model": { "provider": "anthropic", "modelId": "claude-opus-4-7" }
+    "model": { "provider": "anthropic", "name": "claude-opus-4-7" }
   }' | jq .
 ```
 
-- [ ] 200/201; model accepted
+- [ ] 200; model accepted
 
 ### 4. Create with a disallowed model
 
@@ -64,7 +66,7 @@ curl -s -o /tmp/policy-err.json -w '%{http_code}\n' \
   -d '{
     "name": "Policy Reject Agent",
     "instructions": "test",
-    "model": { "provider": "anthropic", "modelId": "claude-haiku-3" }
+    "model": { "provider": "anthropic", "name": "claude-haiku-3" }
   }'
 cat /tmp/policy-err.json | jq .
 ```
@@ -98,7 +100,7 @@ In the agent-create form:
 
 - [ ] Settings exposes `allowed` + `default`
 - [ ] Wildcard provider allows any model
-- [ ] Exact `(provider, modelId)` entry restricts to that model
+- [ ] Exact `(provider, modelId)` policy entry restricts to that model on create
 - [ ] Disallowed model rejected at create
 - [ ] UI dropdown reflects allowlist exactly
 - [ ] Default model pre-selected on agent create

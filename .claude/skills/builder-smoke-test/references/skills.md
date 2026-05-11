@@ -2,9 +2,15 @@
 
 Test stored skill create, read, update, delete, visibility, and filesystem writes.
 
+> **Visibility is auth-on-only.** With `--auth off`, the server forces `visibility: "public"` and `authorId: null` on every create / PATCH, regardless of what you send. The `visibility`-toggle and visibility assertions below live in `references/auth.md`. Under `--auth off`, treat any `visibility` field on responses as fixed at `"public"` and don't assert on it.
+
+> **Pagination is 0-indexed.** `page=0` is the first page.
+
+> **Known broken: partial PATCH (#TBD).** `PATCH /stored/skills/:id` with only `{ name }`, `{ description }`, or `{ instructions }` currently returns `500`. The handler passes `undefined` for unset fields through to the storage layer, which triggers a `NOT NULL` violation on `mastra_skill_versions.instructions` when the patch creates a new version row. Treat the PATCH steps below as expected-fail (assert `500`) until that bug is fixed.
+
 ## Steps
 
-### 1. Create a Skill
+### 1. Create a skill
 
 ```bash
 curl -s -X POST $BASE/stored/skills \
@@ -12,115 +18,106 @@ curl -s -X POST $BASE/stored/skills \
   -d '{
     "name": "Smoke Test Skill",
     "description": "A test skill created during smoke testing",
-    "visibility": "private"
+    "instructions": "Skill instructions for the smoke test."
   }' | jq .
 ```
 
 **Verify:**
 
-- [ ] Returns 200/201 with the created skill
-- [ ] `name` matches
-- [ ] `workspaceId` is set to the builder workspace ID
-- [ ] `visibility` is `"private"`
-- [ ] `authorId` is set (should be a user ID from the session, or a default if no auth)
-- [ ] `id` is generated (record it for subsequent steps)
+- [ ] Returns 200 with the created skill
+- [ ] `name` and `description` match
+- [ ] `workspaceId` is auto-assigned to the builder workspace
+- [ ] `id` is a UUID; record it as `SKILL_ID=<id>`
 
-Record the skill ID: `SKILL_ID=<returned id>`
+> `instructions` is required by the schema. Omitting it returns 400.
 
-### 2. Get the Skill
+### 2. Get the skill
 
 ```bash
 curl -s $BASE/stored/skills/$SKILL_ID | jq .
 ```
 
-- [ ] Returns the skill with all fields matching
+- [ ] Returns 200 with the skill
 - [ ] `workspaceId` present
-- [ ] `createdAt` and `updatedAt` present
+- [ ] `createdAt` and `updatedAt` are ISO timestamps
 
-### 3. List Skills
+### 3. List skills
 
 ```bash
-curl -s $BASE/stored/skills | jq .
+curl -s "$BASE/stored/skills?page=0&perPage=50" | jq '{ total, page, perPage, count: (.skills | length) }'
 ```
 
-- [ ] Response has `skills` array
-- [ ] The created skill appears in the list
-- [ ] Each skill has `name`, `description`, `visibility`, `workspaceId`
+- [ ] `total >= 1`
+- [ ] The created `$SKILL_ID` appears in `skills`
 
-### 4. Update Visibility (Private → Public)
+### 4. Update skill metadata (known-broken under partial PATCH)
 
 ```bash
-curl -s -X PATCH $BASE/stored/skills/$SKILL_ID \
+curl -s -o /tmp/skill-patch.json -w "%{http_code}\n" -X PATCH $BASE/stored/skills/$SKILL_ID \
   -H 'Content-Type: application/json' \
-  -d '{"visibility": "public"}' | jq .
+  -d '{"name": "Updated Smoke Skill"}'
+cat /tmp/skill-patch.json | jq .
 ```
 
-- [ ] Returns updated skill
-- [ ] `visibility` is now `"public"`
-- [ ] `updatedAt` changed
+Expected today:
+- [ ] HTTP `500`
+- [ ] Body mentions a `NOT NULL` constraint violation on `instructions` (or a similar storage error)
+- [ ] Log this as a known regression in the run report and move on
 
-### 5. Update Skill Metadata
+Once the bug is fixed, this should return `200` with the updated `name` and an unchanged `description` / `instructions`. A full-body PATCH (sending `name` + `description` + `instructions` together) is the current workaround and should still return 200.
 
-```bash
-curl -s -X PATCH $BASE/stored/skills/$SKILL_ID \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "Updated Smoke Skill",
-    "description": "Updated description for smoke testing"
-  }' | jq .
-```
-
-- [ ] `name` updated
-- [ ] `description` updated
-- [ ] `visibility` still `"public"` (not reset)
-
-### 6. Create a Second Skill (Public)
+### 5. Create a second skill
 
 ```bash
 curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -d '{
-    "name": "Public Smoke Skill",
-    "description": "A public skill for smoke testing",
-    "visibility": "public"
-  }' | jq .
+    "name": "Second Smoke Skill",
+    "description": "Another skill for smoke testing",
+    "instructions": "Second skill instructions."
+  }' | jq '.id'
 ```
 
-Record the second skill ID: `SKILL_ID_2=<returned id>`
+Record the second ID: `SKILL_ID_2=<returned id>`
 
-- [ ] Created successfully with `visibility: "public"`
+- [ ] Returns 200 with a UUID
 
-### 7. List Skills — Verify Both
+### 6. List skills — verify both
 
 ```bash
-curl -s $BASE/stored/skills | jq '.skills | length'
+curl -s "$BASE/stored/skills?page=0&perPage=50" | jq '[.skills[].id] | map(select(. == $a or . == $b)) | length' \
+  --arg a "$SKILL_ID" --arg b "$SKILL_ID_2"
 ```
 
-- [ ] Count includes both new skills
+- [ ] Returns `2`
 
-### 8. Publish Skill
+### 7. Publish skill
+
+The publish endpoint requires a `skillPath` pointing at a directory on the server filesystem that contains a `SKILL.md`. The schema lives at `packages/server/src/server/schemas/stored-skills.ts` → `publishStoredSkillBodySchema`. The server validates the path is under the allowed base (path-traversal guard).
 
 ```bash
+# Derive the on-disk path for this skill (slugified name under the builder workspace)
+SKILL_NAME_SLUG=$(curl -s "$BASE/stored/skills/$SKILL_ID" | jq -r '.name' | tr '[:upper:] ' '[:lower:]-')
+SKILL_PATH="$(pwd)/examples/agent/.mastra/workspace/skills/$SKILL_NAME_SLUG"
+
 curl -s -X POST $BASE/stored/skills/$SKILL_ID/publish \
   -H 'Content-Type: application/json' \
-  -d '{}' | jq .
+  -d "{\"skillPath\": \"$SKILL_PATH\"}" | jq .
 ```
 
-- [ ] HTTP `200` or `201`
-- [ ] Response includes a new `versionId` (or `activeVersionId`) on the returned skill
-- [ ] `GET /stored/skills/$SKILL_ID` shows `activeVersionId` matching the publish response
-- [ ] If the skill has no on-disk files yet, the endpoint still returns the persisted skill record with a fresh version snapshot — a `400` here means the request body was malformed, not that the endpoint is unimplemented.
+- [ ] HTTP `200` with the persisted skill record
+- [ ] Response includes a fresh `activeVersionId` (or `versionId`)
+- [ ] `GET /stored/skills/$SKILL_ID` reflects the new active version
+- [ ] If the directory doesn't exist yet (no filesystem persistence configured for this skill), the call returns `404` with `Skill "..." not found at <path>` — that's expected, log it and move on
+- [ ] Posting without `skillPath` returns `400` (`skillPath: Required`)
 
-### 9. Delete Skills (Cleanup)
+### 8. Delete skills (cleanup)
 
 ```bash
-curl -s -X DELETE $BASE/stored/skills/$SKILL_ID | jq .
-curl -s -X DELETE $BASE/stored/skills/$SKILL_ID_2 | jq .
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/skills/$SKILL_ID    # → 200
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE $BASE/stored/skills/$SKILL_ID_2  # → 200
+curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID              # → 404
 ```
-
-- [ ] Both return HTTP `200` or `204`
-- [ ] `GET /stored/skills/$SKILL_ID` returns `404`
-- [ ] Skills list count decreased
 
 ## Filesystem persistence (#16000)
 
@@ -128,7 +125,7 @@ When a skill is created or installed, files persist under the workspace filesyst
 
 ### F1. Inspect the persisted file
 
-After step 1 above (or after an install from the registry):
+After step 1 (or after an install from the registry):
 
 ```bash
 SKILL_NAME=$(curl -s "$BASE/stored/skills/$SKILL_ID" | jq -r '.name' | tr '[:upper:] ' '[:lower:]-')
@@ -136,8 +133,8 @@ ls -la "examples/agent/.mastra/workspace/skills/$SKILL_NAME/"
 cat "examples/agent/.mastra/workspace/skills/$SKILL_NAME/SKILL.md"
 ```
 
-- [ ] `SKILL.md` exists
-- [ ] Frontmatter block at top includes `name`, `description`
+- [ ] `SKILL.md` exists at that path
+- [ ] Frontmatter block at the top includes `name`, `description`
 - [ ] Body matches the stored `instructions`
 
 ### F2. Files array on response
@@ -146,16 +143,15 @@ cat "examples/agent/.mastra/workspace/skills/$SKILL_NAME/SKILL.md"
 curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
 ```
 
-- [ ] `files` is an array (or tree) of `{ path, ... }` entries
-- [ ] At minimum, `SKILL.md` is present
-- [ ] No raw `instructions` in the array's `SKILL.md` (the tree shape should reflect persisted content)
+- [ ] `files` is an array of `{ path, ... }` entries
+- [ ] `SKILL.md` is present
+- [ ] No raw `instructions` block embedded inside the `files` entry — instructions live in the top-level `instructions` field
 
 ### F3. Auto-publish on visibility flip
 
-Set visibility to `public` (step 4 above). After the flip:
+Requires `--auth on` (visibility flips are no-ops under auth off; see `references/auth.md`). After flipping `visibility` from `private` to `public`:
 
-- [ ] `POST /stored/skills/:id/publish` is auto-invoked (or visible side-effect)
-- [ ] The skill's `publishedAt` (if exposed) is set
+- [ ] A new active version is created (visible via `activeVersionId` change on GET)
 - [ ] No 5xx errors
 
 ## Frontmatter handling (skills.sh + library copies)
@@ -165,41 +161,31 @@ If this skill was installed from skills.sh or copied from the library:
 - [ ] `instructions` does NOT begin with `---` (frontmatter stripped at install/copy)
 - [ ] `metadata.origin.type` is `skills-sh` or `library-copy` (see `references/registry.md`)
 
-## Edge Cases (Optional)
+## Edge cases (optional)
 
-### Duplicate Skill Name
-
-```bash
-curl -s -X POST $BASE/stored/skills \
-  -H 'Content-Type: application/json' \
-  -d '{"name": "Dupe Skill"}' | jq .
-
-curl -s -X POST $BASE/stored/skills \
-  -H 'Content-Type: application/json' \
-  -d '{"name": "Dupe Skill"}' | jq .
-```
-
-- [ ] Second create either succeeds (unique IDs) or returns a meaningful error
-- [ ] No server crash
-
-### Skill Without Workspace
+### Duplicate skill name
 
 ```bash
 curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
-  -d '{"name": "No Workspace Skill"}' | jq .
+  -d '{"name": "Dupe Skill", "description": "first", "instructions": "first instructions"}' | jq '.id'
+
+curl -s -X POST $BASE/stored/skills \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "Dupe Skill", "description": "second", "instructions": "second instructions"}' | jq .
 ```
 
-- [ ] Returns error or creates with null workspace
+- [ ] Second create either succeeds (different IDs, slugified path collision handled) or returns a `4xx` with a clear message
 - [ ] No server crash
 
 ## Checklist
 
-- [ ] Create skill with workspace and visibility
+- [ ] Create skill (`instructions` required)
 - [ ] Get skill by ID
-- [ ] List skills returns all skills
-- [ ] Update visibility (private → public)
-- [ ] Update metadata (name, description)
-- [ ] Delete skill
-- [ ] (Optional) Duplicate name handling
-- [ ] (Optional) Skill without workspace
+- [ ] List skills with `page=0`
+- [ ] Partial PATCH returns `500` (known regression)
+- [ ] Create second skill
+- [ ] Publish requires `skillPath` in body; happy path returns 200, missing `skillPath` returns 400, missing directory returns 404
+- [ ] Delete returns 200; follow-up GET returns 404
+- [ ] Filesystem persistence under `.mastra/workspace/skills/...`
+- [ ] (Optional) Duplicate-name handling
