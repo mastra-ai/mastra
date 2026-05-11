@@ -53,7 +53,7 @@
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai-v5": "npm:ai@5.0.183",
+    "ai-v5": "npm:ai@5.0.185",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
