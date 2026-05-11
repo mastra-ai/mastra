@@ -33,7 +33,7 @@ import type { UserMessageComponent } from './components/user-message.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
-import { imageManager } from './components/image-manager.js';
+import { imageManager } from './components/images/index.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
