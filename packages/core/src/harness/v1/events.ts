@@ -18,7 +18,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import type { PendingResume, SessionRecord } from '../../storage/domains/harness';
+import type { GoalJudgeDecision, GoalState, PendingResume, SessionRecord } from '../../storage/domains/harness';
 import type { TaskItem } from '../../tools/builtin/shared';
 
 import { HarnessEventSerializationError, HarnessValidationError } from './errors';
@@ -391,6 +391,51 @@ export interface SubagentEndEvent extends HarnessEventBase {
   depth: number;
 }
 
+// ---------------------------------------------------------------------------
+// Goal events (§4.7 / §10.2).
+//
+// Goals are a standing objective attached to a session that survives across
+// turns. While a goal is `active`, the harness invokes a separate judge
+// model after every assistant turn and dispatches its verdict
+// (`done` / `continue` / `waiting`). See §4.7 for the full lifecycle.
+// ---------------------------------------------------------------------------
+
+export interface GoalSetEvent extends HarnessEventBase {
+  type: 'goal_set';
+  goal: GoalState;
+}
+
+export interface GoalJudgedEvent extends HarnessEventBase {
+  type: 'goal_judged';
+  goalId: string;
+  decision: GoalJudgeDecision;
+  turnsUsed: number;
+  maxTurns: number;
+}
+
+export interface GoalDoneEvent extends HarnessEventBase {
+  type: 'goal_done';
+  goalId: string;
+  reason: string;
+  turnsUsed: number;
+}
+
+export interface GoalPausedEvent extends HarnessEventBase {
+  type: 'goal_paused';
+  goalId: string;
+  reason: 'requested' | 'budget_exhausted' | 'judge_failed';
+}
+
+export interface GoalResumedEvent extends HarnessEventBase {
+  type: 'goal_resumed';
+  goalId: string;
+}
+
+export interface GoalClearedEvent extends HarnessEventBase {
+  type: 'goal_cleared';
+  goalId: string;
+}
+
 export type HarnessEvent =
   | SessionCreatedEvent
   | SessionClosedEvent
@@ -424,6 +469,12 @@ export type HarnessEvent =
   | SubagentToolStartEvent
   | SubagentToolEndEvent
   | SubagentEndEvent
+  | GoalSetEvent
+  | GoalJudgedEvent
+  | GoalDoneEvent
+  | GoalPausedEvent
+  | GoalResumedEvent
+  | GoalClearedEvent
   | CustomEvent;
 
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
@@ -608,6 +659,7 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'goal_judged',
   'goal_done',
   'goal_paused',
+  'goal_resumed',
   'goal_cleared',
   'workspace_status_changed',
   'workspace_error',

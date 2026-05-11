@@ -223,7 +223,19 @@ export interface HarnessConfigCommon {
     types: Record<string, SubagentDefinition>;
   };
 
-  // Remaining fields (workspace, skills, goals, files, intervals,
+  /**
+   * Goal-loop defaults (§4.7). When a session calls `setGoal({ objective })`
+   * without an explicit judge model or budget, these defaults are used.
+   *
+   * `defaultJudgeModel` falls back to the session's current model id when
+   * unset. `defaultMaxTurns` defaults to 50.
+   */
+  goals?: {
+    defaultJudgeModel?: string;
+    defaultMaxTurns?: number;
+  };
+
+  // Remaining fields (workspace, skills, files, intervals,
   // observationalMemory) land here as we wire them up.
 
   [key: string]: unknown;
@@ -706,4 +718,25 @@ export interface HarnessRequestContext<TState = unknown> {
    * workspace. Tools should null-check before use.
    */
   workspace?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Goals (§4.7).
+// ---------------------------------------------------------------------------
+
+/**
+ * Options accepted by `Session.setGoal(...)`. `objective` is the only
+ * required field. `judgeModel` and `maxTurns` fall back to the harness's
+ * `goals.defaultJudgeModel` / `goals.defaultMaxTurns` (in turn defaulting
+ * to the session's current model and `50` respectively).
+ *
+ * `kickoff` controls whether `setGoal` immediately enqueues an initial
+ * continuation turn so the agent starts working toward the goal without
+ * an explicit `message()` from the caller. Defaults to `true`.
+ */
+export interface GoalOptions {
+  objective: string;
+  judgeModel?: string;
+  maxTurns?: number;
+  kickoff?: boolean;
 }

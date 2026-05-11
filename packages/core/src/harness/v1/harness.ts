@@ -69,6 +69,7 @@ import type {
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
 const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
+const DEFAULT_GOAL_MAX_TURNS = 50;
 
 export class Harness {
   /** Process-scoped owner id used as the lease holder for all sessions. */
@@ -93,6 +94,7 @@ export class Harness {
   private readonly _maxQueueDepth: number;
   private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
   private readonly _subagentMaxDepth: number;
+  private readonly _goalDefaults: { defaultJudgeModel?: string; defaultMaxTurns: number };
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -130,6 +132,16 @@ export class Harness {
       this._subagentMaxDepth = DEFAULT_SUBAGENT_MAX_DEPTH;
     }
     this._subagentTypes = subagentTypes;
+
+    // Goal-loop defaults (§4.7). Optional; resolved per-call at setGoal().
+    const goalsCfg = config.goals;
+    if (goalsCfg?.defaultMaxTurns !== undefined && goalsCfg.defaultMaxTurns < 1) {
+      throw new HarnessConfigError('goals.defaultMaxTurns', 'must be a positive integer');
+    }
+    this._goalDefaults = {
+      ...(goalsCfg?.defaultJudgeModel !== undefined ? { defaultJudgeModel: goalsCfg.defaultJudgeModel } : {}),
+      defaultMaxTurns: goalsCfg?.defaultMaxTurns ?? DEFAULT_GOAL_MAX_TURNS,
+    };
 
     // Validate mode shape (uniqueness, tools/additionalTools mutual
     // exclusion, transitionsTo resolution) up front. Agent-existence
@@ -1083,6 +1095,11 @@ export class Harness {
   /** @internal — accessor for `Session.queue()` admission caps. */
   get _internalMaxQueueDepth(): number {
     return this._maxQueueDepth;
+  }
+
+  /** @internal — goal-loop defaults, consumed by `Session.setGoal()` (§4.7). */
+  get _internalGoalDefaults(): Readonly<{ defaultJudgeModel?: string; defaultMaxTurns: number }> {
+    return this._goalDefaults;
   }
 }
 

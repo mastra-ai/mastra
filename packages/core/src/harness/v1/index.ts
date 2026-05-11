@@ -15,6 +15,12 @@ export type {
   AgentEndEvent,
   AgentStartEvent,
   CustomEvent as HarnessCustomEvent,
+  GoalClearedEvent,
+  GoalDoneEvent,
+  GoalJudgedEvent,
+  GoalPausedEvent,
+  GoalResumedEvent,
+  GoalSetEvent,
   HarnessEvent,
   HarnessEventBase,
   HarnessEventListener,
@@ -57,10 +63,18 @@ export {
  */
 export type { HarnessMessage, HarnessMessageContent } from '../types';
 
+/**
+ * Goal-loop primitive types (§4.7). `GoalState` lives in `SessionRecord.goal`
+ * and is returned by `Session.getGoal()` / `setGoal(...)`. `GoalJudgeDecision`
+ * captures one judge verdict.
+ */
+export type { GoalJudgeDecision, GoalState } from '../../storage/domains/harness';
+
 export type {
   AttachmentDeleteOptions,
   AttachmentRef,
   AttachmentUploadOptions,
+  GoalOptions,
   HarnessConfig,
   HarnessMode,
   ListMessagesOptions,

@@ -19,12 +19,19 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { ToolsInput } from '../../agent/types';
 import { RequestContext } from '../../request-context';
-import type { HarnessStorage, PendingResume, QueuedItem, SessionRecord } from '../../storage/domains/harness';
+import type {
+  GoalJudgeDecision,
+  GoalState,
+  HarnessStorage,
+  PendingResume,
+  QueuedItem,
+  SessionRecord,
+} from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
 import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID } from '../../tools/builtin';
@@ -51,6 +58,7 @@ import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagen
 import type {
   AgentResult,
   AgentStream,
+  GoalOptions,
   HarnessMode,
   HarnessRequestContext,
   ListMessagesOptions,
@@ -71,6 +79,12 @@ const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 
 export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
+
+/** Structured-output schema used by the goal judge call (§4.7). */
+const GoalJudgeSchema = z.object({
+  decision: z.enum(['done', 'continue', 'waiting']),
+  reason: z.string().min(1),
+});
 
 /**
  * Active-tool tracking for `SessionDisplayState.activeTools`. One entry per
@@ -195,6 +209,9 @@ export class Session {
   >();
   /** `queuedItem.id` of the turn currently running (live or suspended). */
   private _currentQueuedItemId?: string;
+  /** `queuedItem.source` of the turn currently running. Used by the goal
+   *  judge loop to skip re-judging on goal-driven continuation turns. */
+  private _currentQueuedItemSource?: 'user' | 'goal';
   /** True while `_maybeDrainQueue` is running so re-entrant kicks are no-ops. */
   private _draining = false;
   /**
@@ -542,6 +559,7 @@ export class Session {
           reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
           runId: full.runId,
         });
+        await this._runGoalJudge(full, false);
         return full.object;
       } finally {
         this._endTurn(turnAbortController);
@@ -582,6 +600,7 @@ export class Session {
         reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
         runId: full.runId,
       });
+      await this._runGoalJudge(full, false);
       return full;
     } finally {
       this._endTurn(turnAbortController);
@@ -1050,6 +1069,309 @@ export class Session {
   }
 
   // -------------------------------------------------------------------------
+  // Goals — §4.7.
+  //
+  // A goal is a standing objective attached to the session that survives
+  // across turns. While the goal is `active`, the harness invokes a separate
+  // judge model after every assistant turn (`_recordTurnCompletion` hook)
+  // and dispatches its verdict (`done` / `continue` / `waiting`). On
+  // `continue`, the harness self-enqueues a continuation turn via the
+  // session's own `pendingQueue` so user follow-ups preempt it cleanly.
+  //
+  // Goals are session-scoped (not thread-scoped) and are forbidden on
+  // subagent sessions — subagents are bounded units of work that already
+  // terminate at task completion.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Attach a goal to this session. Replaces any existing goal (emits
+   * `goal_cleared` for the prior goal first, then `goal_set`). Resets the
+   * turn counter and persists to `SessionRecord.goal`.
+   *
+   * When `kickoff` is `true` (default), an initial continuation turn is
+   * enqueued so the agent starts working without an explicit `message()`.
+   */
+  async setGoal(opts: GoalOptions): Promise<GoalState> {
+    this._assertLive('setGoal()');
+    if (this.parentSessionId !== undefined || this._record.origin === 'subagent-tool') {
+      throw new HarnessValidationError('setGoal', 'goals cannot be set on subagent sessions (parent owns the loop)');
+    }
+    if (typeof opts.objective !== 'string' || opts.objective.length === 0) {
+      throw new HarnessValidationError('setGoal.objective', 'must be a non-empty string');
+    }
+    if (opts.maxTurns !== undefined && (!Number.isInteger(opts.maxTurns) || opts.maxTurns < 1)) {
+      throw new HarnessValidationError('setGoal.maxTurns', 'must be a positive integer');
+    }
+
+    const defaults = this._harness._internalGoalDefaults;
+    const judgeModelId = opts.judgeModel ?? defaults.defaultJudgeModel;
+    if (typeof judgeModelId !== 'string' || judgeModelId.length === 0) {
+      throw new HarnessValidationError(
+        'setGoal.judgeModel',
+        'no judge model provided and `goals.defaultJudgeModel` is not configured',
+      );
+    }
+
+    const priorId = this._record.goal?.id;
+    const goal: GoalState = {
+      id: `goal-${randomUUID()}`,
+      objective: opts.objective,
+      status: 'active',
+      turnsUsed: 0,
+      maxTurns: opts.maxTurns ?? defaults.defaultMaxTurns,
+      judgeModelId,
+      createdAt: Date.now(),
+    };
+
+    await this._flushUpdate(prev => ({ ...prev, goal }));
+    if (priorId !== undefined) {
+      this._emit({ type: 'goal_cleared', goalId: priorId });
+    }
+    this._emit({ type: 'goal_set', goal });
+
+    if (opts.kickoff !== false) {
+      await this._enqueueGoalContinuation(goal, opts.objective);
+    }
+
+    return goal;
+  }
+
+  /** Return the active goal, if any. */
+  getGoal(): GoalState | undefined {
+    this._assertLive('getGoal()');
+    return this._record.goal;
+  }
+
+  /** Pause auto-continuations without losing the goal. Emits `goal_paused`. */
+  async pauseGoal(): Promise<GoalState | undefined> {
+    this._assertLive('pauseGoal()');
+    const goal = this._record.goal;
+    if (!goal || goal.status === 'paused') return goal;
+    const updated: GoalState = { ...goal, status: 'paused' };
+    await this._flushUpdate(prev => ({ ...prev, goal: updated }));
+    this._emit({ type: 'goal_paused', goalId: goal.id, reason: 'requested' });
+    return updated;
+  }
+
+  /**
+   * Resume an inactive goal. Re-emits `goal_resumed` and enqueues a fresh
+   * continuation turn so the agent picks up where it left off.
+   */
+  async resumeGoal(): Promise<GoalState | undefined> {
+    this._assertLive('resumeGoal()');
+    const goal = this._record.goal;
+    if (!goal) return undefined;
+    if (goal.status === 'active') return goal;
+    const updated: GoalState = { ...goal, status: 'active' };
+    await this._flushUpdate(prev => ({ ...prev, goal: updated }));
+    this._emit({ type: 'goal_resumed', goalId: goal.id });
+    await this._enqueueGoalContinuation(updated, updated.objective);
+    return updated;
+  }
+
+  /** Drop the goal entirely. Emits `goal_cleared`. */
+  async clearGoal(): Promise<void> {
+    this._assertLive('clearGoal()');
+    const goal = this._record.goal;
+    if (!goal) return;
+    await this._flushUpdate(prev => {
+      const next = { ...prev };
+      delete next.goal;
+      return next;
+    });
+    this._emit({ type: 'goal_cleared', goalId: goal.id });
+  }
+
+  /**
+   * @internal — enqueue a goal-driven continuation turn. Marked with
+   * `source: 'goal'` so the judge loop knows to skip re-judging on the
+   * resulting turn (otherwise the loop would never terminate).
+   */
+  private async _enqueueGoalContinuation(goal: GoalState, prompt: string): Promise<void> {
+    const cap = this._harness._internalMaxQueueDepth;
+    if ((this._record.pendingQueue?.length ?? 0) >= cap) {
+      // Drop continuation silently — user activity has filled the queue,
+      // we'll re-judge after they drain. Better than failing the judge call.
+      return;
+    }
+    const wrapped = `<system-reminder type="goal-judge">${prompt}</system-reminder>`;
+    const item: QueuedItem = {
+      id: `q-${randomUUID()}`,
+      enqueuedAt: Date.now(),
+      content: wrapped,
+      attachments: [],
+      source: 'goal',
+      goalId: goal.id,
+    };
+    await this._flushUpdate(prev => ({
+      ...prev,
+      pendingQueue: [...(prev.pendingQueue ?? []), item],
+    }));
+    void this._maybeDrainQueue();
+  }
+
+  /**
+   * @internal — invoked from `_recordTurnCompletion` after every assistant
+   * turn settles. Implements the judge loop (§4.7).
+   *
+   * Triple stale-goal gate: we capture the goal id before fetching context,
+   * before calling the judge, and before enqueueing the continuation. If
+   * any check fails the verdict is discarded silently (no event, no state
+   * change) — the user has already moved on.
+   */
+  private async _runGoalJudge(turn: FullOutput<unknown>, wasGoalDriven: boolean): Promise<void> {
+    // Skip re-judging on goal-driven continuation turns to avoid a tight
+    // loop where every continuation triggers another judge call. The
+    // judge only runs after user-driven turns; continuations are auto-
+    // generated from the prior judge call.
+    if (wasGoalDriven) return;
+
+    const goal = this._record.goal;
+    if (!goal || goal.status !== 'active') return;
+
+    const goalId = goal.id;
+    const evaluatedGoalId = goalId;
+
+    // Suspended turns don't count toward the judge loop — wait for resume.
+    if (turn.finishReason === 'suspended') return;
+
+    let decision: GoalJudgeDecision;
+    try {
+      decision = await this._callJudge(goal, turn);
+    } catch {
+      // Stale check: goal might have changed during the judge call.
+      if (this._record.goal?.id !== evaluatedGoalId) return;
+      await this._flushUpdate(prev =>
+        prev.goal && prev.goal.id === evaluatedGoalId
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          : prev,
+      );
+      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'judge_failed' });
+      return;
+    }
+
+    // Stale check: goal might have changed during the judge call.
+    if (this._record.goal?.id !== evaluatedGoalId) return;
+
+    const turnsUsed = decision.decision === 'waiting' ? goal.turnsUsed : goal.turnsUsed + 1;
+    const updated: GoalState = { ...goal, turnsUsed, lastDecision: decision };
+
+    await this._flushUpdate(prev =>
+      prev.goal && prev.goal.id === evaluatedGoalId ? { ...prev, goal: updated } : prev,
+    );
+
+    this._emit({
+      type: 'goal_judged',
+      goalId: evaluatedGoalId,
+      decision,
+      turnsUsed,
+      maxTurns: updated.maxTurns,
+    });
+
+    if (decision.decision === 'done') {
+      await this._flushUpdate(prev =>
+        prev.goal && prev.goal.id === evaluatedGoalId
+          ? { ...prev, goal: { ...prev.goal, status: 'done' as const } }
+          : prev,
+      );
+      this._emit({ type: 'goal_done', goalId: evaluatedGoalId, reason: decision.reason, turnsUsed });
+      return;
+    }
+
+    if (decision.decision === 'waiting') return;
+
+    // decision.decision === 'continue'
+    if (turnsUsed >= updated.maxTurns) {
+      await this._flushUpdate(prev =>
+        prev.goal && prev.goal.id === evaluatedGoalId
+          ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+          : prev,
+      );
+      this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'budget_exhausted' });
+      return;
+    }
+
+    // Final stale check before enqueueing.
+    if (this._record.goal?.id !== evaluatedGoalId || this._record.goal.status !== 'active') return;
+    await this._enqueueGoalContinuation(updated, decision.reason);
+  }
+
+  /**
+   * @internal — execute the judge model. Returns a `GoalJudgeDecision`.
+   *
+   * Test-injection hook: when `__testJudge` is set on this session, it
+   * runs in place of the real judge call so unit tests can drive verdicts
+   * deterministically without standing up a live model.
+   */
+  private async _callJudge(goal: GoalState, _turn: FullOutput<unknown>): Promise<GoalJudgeDecision> {
+    const hook = this.__testJudge;
+    if (hook) {
+      const verdict = await hook(goal);
+      return { ...verdict, judgedAt: Date.now() };
+    }
+    // Real judge path. Build a one-shot Agent-style call against the
+    // configured judge model with structured output. Mode-aware agents
+    // bring instructions + processor chain; here we want a lightweight
+    // judge so we go through the default mode's agent with a per-call
+    // model override + structuredOutput. The judge only sees the goal
+    // objective + the assistant's last message; we don't replay the
+    // full thread so judge latency stays bounded.
+    const lastAssistantText = await this._lastAssistantText();
+    const judgeAgent = this._harness.getAgentForMode(this._record.modeId);
+    const prompt = this._buildJudgePrompt(goal.objective, lastAssistantText);
+    const result = await judgeAgent.generate(prompt, {
+      model: goal.judgeModelId,
+      structuredOutput: {
+        schema: GoalJudgeSchema,
+      },
+    } as never);
+    const obj = (result as { object?: unknown }).object as
+      | { decision: 'done' | 'continue' | 'waiting'; reason: string }
+      | undefined;
+    if (!obj || typeof obj !== 'object') {
+      throw new Error('judge returned no structured output');
+    }
+    return { decision: obj.decision, reason: obj.reason, judgedAt: Date.now() };
+  }
+
+  /** @internal — test-only hook used by `session.goal.test.ts`. */
+  __testJudge?: (goal: GoalState) => Promise<Omit<GoalJudgeDecision, 'judgedAt'>>;
+
+  private async _lastAssistantText(): Promise<string> {
+    try {
+      const msgs = await this.listMessages({ limit: 4 });
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i] as { role?: string; content?: unknown };
+        if (m?.role === 'assistant') {
+          if (typeof m.content === 'string') return m.content;
+          if (Array.isArray(m.content)) {
+            return m.content
+              .map(part => (typeof part === 'string' ? part : ((part as { text?: string })?.text ?? '')))
+              .join('');
+          }
+        }
+      }
+    } catch {
+      // listMessages can fail in ad-hoc-thread setups; the judge prompt
+      // tolerates an empty assistant message.
+    }
+    return 'No response yet, keep working.';
+  }
+
+  private _buildJudgePrompt(objective: string, lastAssistant: string): string {
+    return [
+      'You are a goal-progress judge. Decide whether the agent has finished, should continue, or should wait.',
+      '',
+      `Objective: ${objective}`,
+      '',
+      'Most recent assistant turn:',
+      lastAssistant,
+      '',
+      'Reply with one of: done / continue / waiting, plus a one-sentence reason.',
+    ].join('\n');
+  }
+
+  // -------------------------------------------------------------------------
   // Suspend / resume — §4.2.
   //
   // When `message()` (or a queued turn) finishes with `finishReason
@@ -1231,9 +1553,11 @@ export class Session {
       // If this was the terminal completion of a queued turn, settle the
       // resolver, remove the head item, clear current, then kick the drain
       // for the next item.
+      const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
       if (this._currentQueuedItemId !== undefined) {
         await this._completeQueuedTurn(this._currentQueuedItemId, full as AgentResult);
       }
+      await this._runGoalJudge(full, wasGoalDriven);
     }
     this._endTurn(turnAbortController);
     return full as AgentResult;
@@ -1348,6 +1672,7 @@ export class Session {
         const head = this._record.pendingQueue?.[0];
         if (!head) return;
         this._currentQueuedItemId = head.id;
+        this._currentQueuedItemSource = head.source ?? 'user';
         const isReplay = !this._queueResolvers.has(head.id);
         this._emitter.emit(
           isReplay
@@ -1418,6 +1743,7 @@ export class Session {
         reason: full.finishReason === 'suspended' ? 'suspended' : 'complete',
         runId: full.runId,
       });
+      await this._runGoalJudge(full, (item.source ?? 'user') === 'goal');
       return full;
     } finally {
       this._endTurn(turnAbortController);
@@ -1436,6 +1762,7 @@ export class Session {
       pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
     }));
     this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
     const resolver = this._queueResolvers.get(itemId);
     if (resolver) {
       this._queueResolvers.delete(itemId);
@@ -1452,6 +1779,7 @@ export class Session {
       pendingQueue: (prev.pendingQueue ?? []).filter(x => x.id !== itemId),
     }));
     this._currentQueuedItemId = undefined;
+    this._currentQueuedItemSource = undefined;
     const resolver = this._queueResolvers.get(itemId);
     if (resolver) {
       this._queueResolvers.delete(itemId);

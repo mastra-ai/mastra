@@ -22,6 +22,8 @@ export interface HarnessTestSetupOptions {
   defaultModeId?: string;
   /** Optional overrides forwarded to HarnessConfig.sessions. */
   sessions?: HarnessConfig['sessions'];
+  /** Optional goal-loop defaults. */
+  goals?: HarnessConfig['goals'];
 }
 
 export interface HarnessTestSetup {
@@ -45,6 +47,7 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     modes,
     defaultModeId: opts.defaultModeId ?? modes[0]!.id,
     sessions: { storage, ...(opts.sessions ?? {}) },
+    ...(opts.goals ? { goals: opts.goals } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;
   return { harness, agent: firstAgent, agents, storage };

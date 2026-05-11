@@ -70,6 +70,15 @@ export interface QueuedItem {
   model?: string;
   mode?: string;
   yolo?: boolean;
+  /**
+   * Origin of this queued item. `'user'` (default) for items enqueued by
+   * `session.queue(...)`, `'goal'` for harness-enqueued goal continuations.
+   * The harness uses this marker to skip re-judging on continuation turns
+   * (otherwise the judge loop would never terminate). See §4.7.
+   */
+  source?: 'user' | 'goal';
+  /** Set when `source === 'goal'`. Identifies which goal produced the item. */
+  goalId?: string;
 }
 
 /**
@@ -133,6 +142,16 @@ export interface PendingResume {
 }
 
 /**
+ * Verdict returned by the goal judge model after evaluating an assistant turn
+ * against the current goal objective. See HARNESS_V1_SPEC.md §4.7.
+ */
+export interface GoalJudgeDecision {
+  decision: 'done' | 'continue' | 'waiting';
+  reason: string;
+  judgedAt: number;
+}
+
+/**
  * Active goal state. Set via `session.setGoal(...)`, evaluated by the judge
  * model after each assistant turn. See HARNESS_V1_SPEC.md §4.7.
  */
@@ -142,8 +161,10 @@ export interface GoalState {
   status: 'active' | 'paused' | 'done';
   turnsUsed: number;
   maxTurns: number;
-  judgeModelId?: string;
-  judgeAnswersQuestions?: boolean;
+  judgeModelId: string;
+  createdAt: number;
+  /** Most recent judge verdict, persisted so subscribers can read it. */
+  lastDecision?: GoalJudgeDecision;
 }
 
 /**
