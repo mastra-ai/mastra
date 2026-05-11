@@ -14,7 +14,7 @@ Mastra provides two Cloudflare storage implementations:
 
 :::warning[Observability Not Supported]
 
-Cloudflare storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted, and [Studio's](/docs/studio/overview) observability features won't work with Cloudflare as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+Cloudflare storage **doesn't support the observability domain**. Traces from the `MastraStorageExporter` can't be persisted, and [Studio's](/docs/studio/overview) observability features won't work with Cloudflare as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse.
 
 :::
 

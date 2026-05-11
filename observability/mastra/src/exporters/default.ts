@@ -26,7 +26,13 @@ import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
 
-/** Configuration for the DefaultExporter's batching, retry, and strategy behavior. */
+/**
+ * Configuration for the DefaultExporter's batching, retry, and strategy behavior.
+ *
+ * @deprecated Use `MastraStorageExporterConfig` from `@mastra/observability` instead.
+ * This interface is kept for backward compatibility and will be removed in a
+ * future major version.
+ */
 interface DefaultExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBufferSize?: number; // Default: 10000 spans
@@ -66,6 +72,11 @@ function resolveTracingStorageStrategy(
 type Resolve = (value: void | PromiseLike<void>) => void;
 
 /**
+ * @deprecated Use `MastraStorageExporter` from `@mastra/observability` instead.
+ * This class is preserved unchanged so existing integrations (including code
+ * that matches on the `mastra-default-observability-exporter` exporter name)
+ * keep working. It will be removed in a future major version.
+ *
  * Default storage-backed exporter. Buffers observability events and flushes them
  * in batches to the configured ObservabilityStorage backend with retry support.
  */
