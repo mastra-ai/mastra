@@ -1,5 +1,5 @@
 ---
-'@mastra/dsql': major
+'@mastra/dsql': minor
 ---
 
 add @mastra/dsql - Amazon Aurora DSQL storage provider
