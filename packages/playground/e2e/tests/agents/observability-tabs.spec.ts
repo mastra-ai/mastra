@@ -11,7 +11,16 @@ import { resetStorage } from '../__utils__/reset-storage';
  * This capability is runtime state from the Mastra instance and does not need to persist in browser storage.
  */
 
-test.afterEach(async () => {
+const SAVED_FILTERS_KEYS = [
+  'mastra:traces:saved-filters',
+  'mastra:traces:saved-filters:agent:weather-agent',
+  'mastra:traces:saved-filters:agent:om-agent',
+];
+
+test.afterEach(async ({ page }) => {
+  await page
+    .evaluate(keys => keys.forEach(key => localStorage.removeItem(key)), SAVED_FILTERS_KEYS)
+    .catch(() => undefined);
   await resetStorage();
 });
 
@@ -133,6 +142,48 @@ test('agent traces tab locks the scope filter pills and hides them from the crea
   await expect(page.getByRole('menuitem', { name: /Primitive Name/i })).toHaveCount(0);
   // A non-scope field is still listed so the filter dropdown remains useful.
   await expect(page.getByRole('menuitem', { name: /Trace ID/i })).toBeVisible();
+});
+
+test('saved filters in an agent-scoped traces tab do not leak to other agents or the global view', async ({ page }) => {
+  // Why this matters: TracesPage passes a per-agent localStorage key
+  // (`mastra:traces:saved-filters:agent:<id>`) so that filter preferences saved
+  // while reviewing weather-agent traces never bleed into another agent's tab
+  // or the global /observability view. If someone reverts the scoped key (or
+  // hardcodes the default), this test fails — the regression is otherwise
+  // silent and only surfaces when two users blame each other for "ghost"
+  // filters.
+  await mockSystemPackages(page, true);
+  await page.route('**/api/observability/traces?**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
+
+  // Land on a page first so we have an origin to seed localStorage against.
+  await page.goto('/observability');
+  await page.evaluate(() => {
+    localStorage.setItem('mastra:traces:saved-filters:agent:weather-agent', 'filterEnvironment=weather-prod');
+  });
+
+  // Weather-agent should hydrate its own saved filter alongside the scope.
+  await page.goto('/agents/weather-agent/traces');
+  await expect(page).toHaveURL(/filterEnvironment=weather-prod/);
+  await expect(page).toHaveURL(/filterEntityId=weather-agent/);
+
+  // Another agent must NOT see weather-agent's saved filter.
+  await page.goto('/agents/om-agent/traces');
+  await expect(page).toHaveURL(/filterEntityId=om-agent/);
+  await expect(page).not.toHaveURL(/filterEnvironment=weather-prod/);
+
+  // The global view uses the default (unscoped) key, so it must not read the
+  // agent-scoped saved set either.
+  await page.goto('/observability');
+  await expect(page).not.toHaveURL(/filterEnvironment=weather-prod/);
 });
 
 test('global /observability traces page keeps the filter pills editable', async ({ page }) => {
