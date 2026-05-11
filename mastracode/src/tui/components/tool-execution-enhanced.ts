@@ -4,47 +4,112 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text, renderImage, getImageDimensions, imageFallback, getCapabilities, getCellDimensions } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, renderImage, allocateImageId, getImageDimensions, imageFallback, getCapabilities, getCellDimensions } from '@mariozechner/pi-tui';
 import type { Component, TUI } from '@mariozechner/pi-tui';
+import { imageManager, type ImageOwner } from './image-manager.js';
 
 /**
- * Minimal Component that returns pre-computed lines verbatim.
+ * Inline image component for tool result boxes.
  *
- * Used for inline images: the kitty/iTerm2 escape sequence is a single
- * "line" (no \n) that visually occupies multiple terminal rows. We must
- * not pass it through `Text` (which wraps based on visibleWidth) because
- * pi-tui's CSI parser misidentifies `\x1b[NA` (cursor-up) when it's
- * adjacent to a kitty `\x1b_G` APC start, which corrupts visibleWidth and
- * causes the wrapping logic to slice the image escape mid-payload.
+ * Layout problem
+ * --------------
+ * The kitty/iTerm2 image escape is a single string with no newlines that
+ * visually occupies N terminal rows. We must reserve N rows in the TUI's
+ * line stream or the input box overlaps the image. We cannot wrap that
+ * line through pi-tui's `Text` (its `visibleWidth` mis-parses cursor-up
+ * `\x1b[NA` adjacent to a kitty `\x1b_G` APC start and slices the kitty
+ * payload). We emit (rows-1) empty bordered lines plus a final line
+ * containing a cursor-up + image escape — exactly what pi-tui's built-in
+ * `Image` component does.
  *
- * Box still calls visibleWidth on the line for padding, but that only
- * affects trailing spaces — it does not mangle the escape sequence.
+ * Active/superseded
+ * -----------------
+ * To avoid stale kitty placements piling up in the terminal, only the
+ * MOST RECENT image is rendered with the actual escape sequence. Older
+ * images downgrade to a one-line text fallback (`[Image: image/png ...]`).
+ * This is coordinated by `imageManager`.
+ *
+ * Overlay coordination
+ * --------------------
+ * pi-tui's `compositeLineAt` short-circuits on image-bearing lines so
+ * popups can't paint over them. While any overlay is up we therefore:
+ *   - return only the bordered empty rows from `render()` (no kitty
+ *     escape) so popup compositing produces clean cells, and
+ *   - separately send a kitty `delete-by-id` to the terminal the moment
+ *     the overlay opens (handled by `imageManager`) so any previously-
+ *     placed graphics layer is cleared underneath the popup.
+ * When the overlay closes the kitty escape returns to the line stream,
+ * the diff renderer notices the line changed, and the image is re-placed.
  */
-class RawLinesComponent implements Component {
-  constructor(private readonly lines: string[]) {}
-  render(): string[] {
-    return this.lines;
+class InlineImageComponent implements Component, ImageOwner {
+  /** Total terminal rows this component reserves. Stable across frames. */
+  private readonly rows: number;
+  /** Border-only prefix used on every line ("│ " with theme color). */
+  private readonly borderPrefix: string;
+  /** Full kitty/iterm2 escape (already chunked); empty for fallback path. */
+  private readonly sequence: string;
+  /** Cursor-up escape applied on the final line so the image draws at row 0. */
+  private readonly moveUp: string;
+  /** Kitty image id (omitted for iTerm2 / fallback). */
+  private readonly kittyImageId?: number;
+  /** Single-line fallback used when this component has been superseded. */
+  private readonly fallbackLine: string;
+  /** Cached "empty bordered" lines reused while suppressed. */
+  private readonly emptyLines: string[];
+
+  private demoted = false;
+  private onDemotedCallback?: () => void;
+
+  constructor(args: {
+    rows: number;
+    borderPrefix: string;
+    sequence: string;
+    moveUp: string;
+    kittyImageId?: number;
+    fallbackLine: string;
+    onDemoted?: () => void;
+  }) {
+    this.rows = args.rows;
+    this.borderPrefix = args.borderPrefix;
+    this.sequence = args.sequence;
+    this.moveUp = args.moveUp;
+    this.kittyImageId = args.kittyImageId;
+    this.fallbackLine = args.fallbackLine;
+    this.onDemotedCallback = args.onDemoted;
+
+    this.emptyLines = [];
+    for (let i = 0; i < this.rows; i++) this.emptyLines.push(this.borderPrefix);
+
+    imageManager.register(this, this.kittyImageId);
   }
-  invalidate(): void {}
-}
 
-/**
- * Inject `z=<value>` into the first kitty APC sequence's control params.
- *
- * pi-tui's `encodeKitty` does not expose a z-index option. The kitty
- * protocol only requires control params on the first APC chunk (the
- * `a=T,...` introducer); continuation chunks use `m=0|1` only. So we
- * splice into the first chunk's param list, before the `;` separator
- * that introduces the base64 payload.
- *
- * If the sequence does not look like a kitty APC (e.g. iTerm2's
- * `\x1b]1337;File=...`), return it unchanged.
- */
-function injectKittyZIndex(sequence: string, z: number): string {
-  if (!sequence.startsWith('\x1b_G')) return sequence;
-  const semi = sequence.indexOf(';');
-  if (semi < 0) return sequence;
-  return sequence.slice(0, semi) + `,z=${z}` + sequence.slice(semi);
+  onDemoted(): void {
+    // Called by imageManager when a newer image takes over. Switch this
+    // component to its text-fallback presentation. Notifying the parent
+    // gives it a chance to rebuild so the row count shrinks to 1.
+    this.demoted = true;
+    this.onDemotedCallback?.();
+  }
+
+  render(): string[] {
+    if (this.demoted || !imageManager.isActive(this)) {
+      // Single bordered line so the box still says "an image was here".
+      return [this.fallbackLine];
+    }
+    if (imageManager.imageSuppressedByOverlay()) {
+      // Reserve rows but emit nothing graphical. Lines differ from the
+      // "active + visible" frame, so pi-tui's diff renderer will repaint
+      // them next frame when the overlay closes (the kitty escape will
+      // be on the last line and trigger re-placement).
+      return this.emptyLines;
+    }
+    const last = this.borderPrefix + this.moveUp + this.sequence;
+    const lines = this.emptyLines.slice(0, this.rows - 1);
+    lines.push(last);
+    return lines;
+  }
+
+  invalidate(): void {}
 }
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
@@ -155,6 +220,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
+  /**
+   * Set to true when a newer screenshot supersedes this tool's image.
+   * On subsequent rebuilds we skip emitting an InlineImageComponent and
+   * fall back to a text placeholder so we don't re-register and steal
+   * "active" from the newer image.
+   */
+  private imageSuperseded = false;
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -184,6 +256,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   updateResult(result: ToolResult, isPartial = false): void {
     this.result = result;
     this.isPartial = isPartial;
+    // A fresh result may bring a new image; let it claim "active" again.
+    this.imageSuperseded = false;
     // Keep streaming output for colored display in final result
     this.rebuild();
   }
@@ -1570,7 +1644,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         continue;
       }
 
-      if (!caps.images) {
+      if (!caps.images || this.imageSuperseded) {
+        // No graphics capability, OR a newer screenshot has demoted us:
+        // either way render a compact text placeholder so we don't claim
+        // multiple rows or re-register as the active image.
         this.contentBox.addChild(
           new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
         );
@@ -1587,43 +1664,39 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const widthForMaxHeight = Math.floor((dims.widthPx * scale) / cellDims.widthPx);
       const maxW = Math.min(maxWidthCells, Math.floor(termWidth / 2), widthForMaxHeight);
 
+      // Allocate a stable kitty image id so we can delete this placement
+      // explicitly when overlays open or when a newer image supersedes us.
+      // (renderImage will only attach the id to kitty sequences; iTerm2
+      // builds its own escape and ignores it.)
+      const kittyImageId = caps.images === 'kitty' ? allocateImageId() : undefined;
       const rendered = renderImage(img.data, dims, {
         maxWidthCells: maxW,
         preserveAspectRatio: true,
+        imageId: kittyImageId,
       });
       if (rendered) {
-        // The image escape sequence draws across `rendered.rows` cell rows on
-        // the terminal but is a single string with no newlines. If we treated
-        // it as one line, the TUI layout would only reserve one row and any
-        // following UI (e.g. the input box) would overlap the image.
-        //
-        // Mirror what pi-tui's built-in Image component does:
-        //   - emit (rows - 1) empty bordered lines so layout reserves space
-        //   - emit the image sequence on the final line, prefixed with a
-        //     cursor-up escape so the terminal draws the image back at the
-        //     first reserved row.
-        //
-        // Emit these via a RawLinesComponent rather than Text instances:
-        // pi-tui's Text wraps via visibleWidth, and visibleWidth misparses
-        // `\x1b[NA` immediately followed by a kitty `\x1b_G` APC start
-        // (its CSI scanner stops at `G`, swallowing the APC introducer).
-        // That makes Text think the line is thousands of columns wide and
-        // slice the kitty payload, which renders raw base64.
         const borderPrefix = borderFn('│') + ' ';
-        const lines: string[] = [];
-        for (let i = 0; i < rendered.rows - 1; i++) {
-          lines.push(borderPrefix);
-        }
         const moveUp = rendered.rows > 1 ? `\x1b[${rendered.rows - 1}A` : '';
-        // Inject a deeply-negative z-index into the first kitty APC's
-        // parameters so popups/modals (which have non-default cell
-        // background colors) render on top of the image. The kitty
-        // protocol places images under text at any z<0, but only places
-        // them under cell backgrounds when z is below INT32_MIN/2
-        // (-1,073,741,824). iTerm2 ignores z= and is unaffected.
-        const sequence = injectKittyZIndex(rendered.sequence, -1073741825);
-        lines.push(borderPrefix + moveUp + sequence);
-        this.contentBox.addChild(new RawLinesComponent(lines));
+        const fallbackLine = borderPrefix + theme.fg('muted', imageFallback(img.mimeType, dims));
+        this.contentBox.addChild(
+          new InlineImageComponent({
+            rows: rendered.rows,
+            borderPrefix,
+            sequence: rendered.sequence,
+            moveUp,
+            kittyImageId: rendered.imageId,
+            fallbackLine,
+            onDemoted: () => {
+              // Flip BEFORE rebuilding so the upcoming rebuild renders a
+              // text placeholder instead of constructing a new
+              // InlineImageComponent (which would re-register and steal
+              // "active" from the new image that just demoted us).
+              this.imageSuperseded = true;
+              this.rebuild();
+              this.ui.requestRender();
+            },
+          }),
+        );
       } else {
         this.contentBox.addChild(
           new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),

@@ -33,6 +33,7 @@ import type { UserMessageComponent } from './components/user-message.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+import { imageManager } from './components/image-manager.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -214,6 +215,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
   });
   const ui = new TUI(terminal);
+  imageManager.attachTui(ui);
 
   // Perf profiling removed
 
