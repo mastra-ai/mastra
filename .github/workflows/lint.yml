@@ -5,6 +5,12 @@ on:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions: {}
+
 jobs:
   changes:
     name: Detect code changes
@@ -43,6 +49,7 @@ jobs:
     name: Lint
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -67,6 +74,7 @@ jobs:
     name: Validate build outputs
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -85,6 +93,9 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+      - name: Validate generated files are committed
+        run: bash .github/scripts/check-clean-worktree.bash
+
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm install --ignore-workspace
@@ -97,6 +108,7 @@ jobs:
     name: Validate examples packages.json
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read
@@ -112,14 +124,36 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
-        run: pnpm add -w --no-lockfile globby
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile globby
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
 
+  agents-md-check:
+    name: Validate AGENTS.md files
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == 'mastra-ai/mastra'
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          package-manager-cache: false
+
+      - name: Run AGENTS.md validator
+        run: node .github/scripts/validate-agents-md.mjs
+
   peerdeps-check:
     name: Validate peer dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Run on main repository or for trusted bot PRs
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     permissions:
@@ -137,10 +171,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
         with:
           package-manager-cache: false
-          install-dependencies: false
-
-      - name: Install dependencies
-        run: pnpm add -w --no-lockfile semver
+          install-dependencies: true
 
       - name: bump versions
         run: npx changeset version
@@ -156,6 +187,9 @@ jobs:
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
 
+      - name: Check @mastra/core import floor
+        run: pnpm --filter ./packages/server check:core-imports
+
       - name: Check for git changes
         run: |
           if ! git diff --quiet --ignore-space-at-eol -- ':!package.json' || ! git diff --cached --quiet --ignore-space-at-eol -- ':!package.json'; then
@@ -169,6 +203,7 @@ jobs:
     name: Validate package.json files
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read

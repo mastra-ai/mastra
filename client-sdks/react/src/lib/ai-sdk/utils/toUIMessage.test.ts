@@ -2,8 +2,8 @@ import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
-import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import { z } from 'zod/v4';
+import type { MastraExtendedTextPart, MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { toUIMessage, mapWorkflowStreamChunkToWatchResult } from './toUIMessage';
 
 describe('toUIMessage', () => {
@@ -820,6 +820,71 @@ describe('toUIMessage', () => {
         metadata: baseMetadata,
       });
       expect(result[0].id).toMatch(/^reasoning-run-123/);
+    });
+
+    it('should create separate reasoning parts when interleaved with tool calls and text', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'First thought.',
+              state: 'streaming',
+            },
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+            {
+              type: 'reasoning',
+              text: 'Second thought.',
+              state: 'streaming',
+            },
+            {
+              type: 'text',
+              text: 'Partial answer.',
+              state: 'streaming',
+              textId: 'text-1',
+            } as MastraExtendedTextPart,
+          ],
+        },
+      ];
+
+      const result = toUIMessage({
+        chunk: {
+          type: 'reasoning-delta',
+          payload: {
+            id: 'reasoning-1',
+            text: 'Third thought.',
+            providerMetadata: { model: { name: 'o1' } },
+          },
+          runId: 'run-123',
+          from: ChunkFrom.AGENT,
+        },
+        conversation,
+        metadata: baseMetadata,
+      });
+
+      expect(result[0].parts.map(part => part.type)).toEqual([
+        'reasoning',
+        'dynamic-tool',
+        'reasoning',
+        'text',
+        'reasoning',
+      ]);
+      expect(result[0].parts[0]).toMatchObject({ text: 'First thought.' });
+      expect(result[0].parts[2]).toMatchObject({ text: 'Second thought.' });
+      expect(result[0].parts[4]).toMatchObject({
+        type: 'reasoning',
+        text: 'Third thought.',
+        state: 'streaming',
+        providerMetadata: { model: { name: 'o1' } },
+      });
     });
   });
 
@@ -1700,6 +1765,88 @@ describe('toUIMessage', () => {
     });
   });
 
+  describe('toUIMessage - tool-call-suspended chunk', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    it('should add suspendedTools metadata with runId for page-refresh resume', () => {
+      const chunk: ChunkType = {
+        type: 'tool-call-suspended',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'workflow-my-workflow',
+          suspendPayload: { question: 'What is your name?' },
+          args: { input: 'test' },
+          resumeSchema: '{}',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Running workflow...' }],
+          metadata: { mode: 'stream' },
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // The suspendedTools metadata must include runId so the frontend
+      // can resume after a page refresh (issue #14875)
+      expect((result[0].metadata as any)?.suspendedTools?.['workflow-my-workflow']).toMatchObject({
+        toolCallId: 'call-1',
+        toolName: 'workflow-my-workflow',
+        suspendPayload: { question: 'What is your name?' },
+        runId: 'run-123',
+      });
+    });
+
+    it('should preserve runId when merging with existing suspendedTools', () => {
+      const chunk: ChunkType = {
+        type: 'tool-call-suspended',
+        payload: {
+          toolCallId: 'call-2',
+          toolName: 'workflow-second',
+          suspendPayload: { question: 'Step 2 question' },
+          args: {},
+          resumeSchema: '{}',
+        },
+        runId: 'run-456',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Running...' }],
+          metadata: {
+            mode: 'stream',
+            suspendedTools: {
+              'workflow-first': {
+                toolCallId: 'call-1',
+                toolName: 'workflow-first',
+                suspendPayload: { question: 'Step 1' },
+                runId: 'run-456',
+              },
+            },
+          } as any,
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Both suspended tools should have their runId preserved
+      const suspended = (result[0].metadata as any)?.suspendedTools;
+      expect(suspended?.['workflow-first']?.runId).toBe('run-456');
+      expect(suspended?.['workflow-second']?.runId).toBe('run-456');
+    });
+  });
+
   describe('toUIMessage - finish chunk', () => {
     const baseMetadata: MastraUIMessageMetadata = {
       mode: 'stream',
@@ -2260,6 +2407,95 @@ describe('toUIMessage', () => {
       });
     });
 
+    it('should preserve streamed childMessages when agent tool-result adds backend subagent data', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'agent',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: {},
+              output: {
+                childMessages: [{ type: 'text', content: 'Hello from stream' }],
+              },
+            } as any,
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'agent',
+          result: {
+            text: 'final text',
+            subAgentThreadId: 'thread-123',
+            subAgentToolResults: [{ toolCallId: 'nested-call-1', toolName: 'calculator', result: 42 }],
+          },
+          isError: false,
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      const toolPart = result[0].parts[0] as any;
+      expect(toolPart.output).toMatchObject({
+        text: 'final text',
+        subAgentThreadId: 'thread-123',
+        subAgentToolResults: [{ toolCallId: 'nested-call-1', toolName: 'calculator', result: 42 }],
+      });
+      expect(toolPart.output.childMessages).toEqual([{ type: 'text', content: 'Hello from stream' }]);
+    });
+
+    it('should preserve backend childMessages when streamed childMessages are empty', () => {
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'agent',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: {},
+              output: {
+                childMessages: [],
+              },
+            } as any,
+          ],
+        },
+      ];
+
+      const chunk: ChunkType = {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'agent',
+          result: {
+            childMessages: [{ type: 'text', content: 'Restored from backend' }],
+            subAgentThreadId: 'thread-1',
+          } as any,
+          isError: false,
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      const toolPart = result[0].parts[0] as any;
+      expect(toolPart.output.childMessages).toEqual([{ type: 'text', content: 'Restored from backend' }]);
+      expect(toolPart.output.subAgentThreadId).toBe('thread-1');
+    });
+
     it('should return unchanged if no tool part found', () => {
       const agentChunk: any = {
         type: 'text-delta',
@@ -2679,6 +2915,38 @@ describe('toUIMessage', () => {
       });
     });
 
+    it('should preserve the id when adding a data-* part to an existing assistant message', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: {
+          taskName: 'test-task',
+          progress: 50,
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Processing...', state: 'streaming' }],
+        metadata: baseMetadata,
+      };
+
+      const result = toUIMessage({ chunk, conversation: [existingMessage], metadata: baseMetadata });
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+
+      expect(dataPart).toMatchObject({
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: {
+          taskName: 'test-task',
+          progress: 50,
+        },
+      });
+    });
+
     it('should handle multiple data-* chunks accumulating in the same message', () => {
       const chunk1: ChunkType = {
         type: 'data-progress',
@@ -2712,6 +2980,42 @@ describe('toUIMessage', () => {
       expect(dataParts.length).toBe(2);
       expect((dataParts[0] as any).data.progress).toBe(25);
       expect((dataParts[1] as any).data.progress).toBe(75);
+    });
+
+    it('should preserve stable ids across multiple data-* chunks', () => {
+      const chunk1: ChunkType = {
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: { progress: 25 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const chunk2: ChunkType = {
+        type: 'data-progress',
+        id: 'progress-stable-id',
+        data: { progress: 75 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      let conversation: MastraUIMessage[] = [existingMessage];
+      conversation = toUIMessage({ chunk: chunk1, conversation, metadata: baseMetadata });
+      conversation = toUIMessage({ chunk: chunk2, conversation, metadata: baseMetadata });
+
+      const lastMessage = conversation[conversation.length - 1];
+      const dataParts = lastMessage.parts.filter((p: any) => p.type === 'data-progress');
+
+      expect(dataParts).toHaveLength(2);
+      expect(dataParts.map((part: any) => part.id)).toEqual(['progress-stable-id', 'progress-stable-id']);
+      expect(dataParts.map((part: any) => part.data.progress)).toEqual([25, 75]);
     });
 
     it('should handle data-* chunks with different types', () => {
@@ -2767,6 +3071,24 @@ describe('toUIMessage', () => {
       const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
       expect(dataPart).toBeDefined();
       expect((dataPart as any).data.progress).toBe(50);
+    });
+
+    it('should preserve the id when creating a new assistant message for a data-* chunk', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        id: 'new-message-stable-id',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const result = toUIMessage({ chunk, conversation: [], metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toMatchObject({
+        type: 'data-progress',
+        id: 'new-message-stable-id',
+        data: { progress: 50 },
+      });
     });
 
     it('should create new assistant message for data-* chunk when last message is user message', () => {

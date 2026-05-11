@@ -1,4 +1,4 @@
-import { RequestContext } from '../../di';
+import type { RequestContext } from '../../di';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
@@ -10,6 +10,7 @@ import type {
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  StepFailure,
   StepFlowEntry,
   StepResult,
   TimeTravelExecutionParams,
@@ -56,15 +57,26 @@ function buildResumedBlockResult(
       }, {}),
     };
   } else {
-    const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
-    const suspendData =
-      stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
-    result = {
-      status: 'suspended',
-      payload: suspendData,
-      suspendPayload: suspendData,
-      suspendedAt: Date.now(),
-    };
+    // Check for failed steps before assuming suspended
+    const failedStep = stepsToCheck.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'failed');
+    if (failedStep && failedStep.type === 'step') {
+      const failedResult = stepResults[failedStep.step.id] as StepFailure<any, any, any, any> | undefined;
+      result = {
+        status: 'failed',
+        error: failedResult?.error ?? new Error('Workflow step failed after resume'),
+        tripwire: failedResult?.tripwire,
+      };
+    } else {
+      const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
+      const suspendData =
+        stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
+      result = {
+        status: 'suspended',
+        payload: suspendData,
+        suspendPayload: suspendData,
+        suspendedAt: Date.now(),
+      };
+    }
   }
 
   if (result.status === 'suspended') {
@@ -78,6 +90,25 @@ function buildResumedBlockResult(
   return result;
 }
 
+function getResumeStepPrevOutput({
+  isResumedStep,
+  stepId,
+  stepResults,
+  prevOutput,
+}: {
+  isResumedStep: boolean;
+  stepId: string;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  prevOutput: any;
+}) {
+  if (!isResumedStep) {
+    return prevOutput;
+  }
+
+  const stepResult = stepResults[stepId];
+  return stepResult && Object.prototype.hasOwnProperty.call(stepResult, 'payload') ? stepResult.payload : prevOutput;
+}
+
 export interface PersistStepUpdateParams {
   workflowId: string;
   runId: string;
@@ -89,6 +120,15 @@ export interface PersistStepUpdateParams {
   result?: Record<string, any>;
   error?: SerializedError;
   requestContext: RequestContext;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * When provided, this will be persisted to the snapshot for use on resume.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 export async function persistStepUpdate(
@@ -106,6 +146,7 @@ export async function persistStepUpdate(
     result,
     error,
     requestContext,
+    tracingContext,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`;
@@ -117,8 +158,7 @@ export async function persistStepUpdate(
       return;
     }
 
-    const ctx = requestContext instanceof RequestContext ? requestContext : new RequestContext(requestContext);
-    const requestContextObj: Record<string, any> = ctx.toJSON();
+    const requestContextObj = engine.serializeRequestContext(requestContext);
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
@@ -141,6 +181,8 @@ export async function persistStepUpdate(
         error,
         requestContext: requestContextObj,
         timestamp: Date.now(),
+        // Persist tracing context for span continuity on resume
+        tracingContext,
       },
     });
   });
@@ -207,6 +249,12 @@ export async function executeEntry(
       executionContext.stepExecutionPath?.push(entry.step.id);
     }
     const { step } = entry;
+    const stepPrevOutput = getResumeStepPrevOutput({
+      isResumedStep,
+      stepId: step.id,
+      stepResults,
+      prevOutput,
+    });
     const stepExecResult = await engine.executeStep({
       workflowId,
       runId,
@@ -217,7 +265,7 @@ export async function executeEntry(
       timeTravel,
       restart,
       resume,
-      prevOutput,
+      prevOutput: stepPrevOutput,
       ...observabilityContext,
       pubsub,
       abortController,
@@ -280,6 +328,7 @@ export async function executeEntry(
     execResults = await engine.executeParallel({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       stepResults,
@@ -336,10 +385,12 @@ export async function executeEntry(
         perStep,
       });
     } else {
-      // Use the step's stored payload from the snapshot as prevOutput, since the previous
-      // step (e.g., a .map() step) may have a non-deterministic ID that doesn't match
-      // between workflow constructions.
-      const resumePrevOutput = stepResults[branchStep.step.id]?.payload ?? prevOutput;
+      const resumePrevOutput = getResumeStepPrevOutput({
+        isResumedStep: true,
+        stepId: branchStep.step.id,
+        stepResults,
+        prevOutput,
+      });
 
       branchResult = await engine.executeStep({
         workflowId,
@@ -391,6 +442,7 @@ export async function executeEntry(
     execResults = await engine.executeConditional({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevOutput,
       stepResults,
@@ -411,6 +463,7 @@ export async function executeEntry(
     execResults = await engine.executeLoop({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
       prevOutput,
@@ -429,12 +482,20 @@ export async function executeEntry(
       perStep,
     });
   } else if (entry.type === 'foreach') {
+    const foreachPrevOutput = getResumeStepPrevOutput({
+      isResumedStep: resume?.steps?.includes(entry.step.id) ?? false,
+      stepId: entry.step.id,
+      stepResults,
+      prevOutput,
+    });
+
     execResults = await engine.executeForeach({
       workflowId,
       runId,
+      resourceId,
       entry,
       prevStep,
-      prevOutput,
+      prevOutput: foreachPrevOutput,
       stepResults,
       timeTravel,
       restart,

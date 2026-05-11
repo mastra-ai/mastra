@@ -4,9 +4,11 @@ import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
+import type { VersionOverrides } from '../../mastra/types';
+import { resolveObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
-import type { Workflow } from '../../workflows';
+import type { StepResult, Workflow } from '../../workflows';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -42,10 +44,16 @@ export interface ExecutionResult {
   error: { message: string; stack?: string; code?: string } | null;
   /** Trace ID from agent/workflow execution (null for scorers or errors) */
   traceId: string | null;
+  /** Root span ID from agent/workflow execution (null when not traced) */
+  spanId?: string | null;
   /** Structured input for scorers (extracted from agent scoring data) */
   scorerInput?: ScorerRunInputForAgent;
   /** Structured output for scorers (extracted from agent scoring data) */
   scorerOutput?: ScorerRunOutputForAgent;
+  /** Per-step results from a workflow run, keyed by step ID */
+  stepResults?: Record<string, StepResult<any, any, any, any>>;
+  /** Order in which workflow steps actually executed */
+  stepExecutionPath?: string[];
 }
 
 /**
@@ -97,7 +105,12 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: { input: unknown; groundTruth?: unknown },
-  options?: { signal?: AbortSignal; requestContext?: Record<string, unknown> },
+  options?: {
+    signal?: AbortSignal;
+    requestContext?: Record<string, unknown>;
+    experimentId?: string;
+    versions?: VersionOverrides;
+  },
 ): Promise<ExecutionResult> {
   try {
     const signal = options?.signal;
@@ -110,10 +123,17 @@ export async function executeTarget(
     let executionPromise: Promise<ExecutionResult>;
     switch (targetType) {
       case 'agent':
-        executionPromise = executeAgent(target as Agent, item, signal, options?.requestContext);
+        executionPromise = executeAgent(
+          target as Agent,
+          item,
+          signal,
+          options?.requestContext,
+          options?.experimentId,
+          options?.versions,
+        );
         break;
       case 'workflow':
-        executionPromise = executeWorkflow(target as Workflow, item);
+        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext);
         break;
       case 'scorer':
         executionPromise = executeScorer(target as MastraScorer<any, any, any, any>, item);
@@ -180,6 +200,8 @@ async function executeAgent(
   item: { input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
+  experimentId?: string,
+  versions?: VersionOverrides,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -191,17 +213,23 @@ async function executeAgent(
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
 
+  // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
+  const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
+
   const rawResult = isSupportedLanguageModel(model)
     ? await agent.generate(input, {
         scorers: {},
         returnScorerData: true,
         abortSignal: signal,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...(tracingOptions ? { tracingOptions } : {}),
+        ...(versions ? { versions } : {}),
       })
     : await agent.generateLegacy(input, {
         scorers: {},
         returnScorerData: true,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...(tracingOptions ? { tracingOptions } : {}),
       });
 
   // Narrow to the common fields we need — both v1 and v2 results share these
@@ -237,21 +265,40 @@ async function executeAgent(
 /**
  * Execute a dataset item against a workflow.
  * Creates a run with scorers disabled to avoid double-scoring.
+ *
+ * Mirrors `executeWorkflow` in evals/run so dataset experiments and runEvals
+ * produce the same observability spans and scoring data for workflow targets.
  */
 async function executeWorkflow(
   workflow: Workflow,
   item: { input: unknown; groundTruth?: unknown },
+  requestContext?: Record<string, unknown>,
 ): Promise<ExecutionResult> {
+  const reqCtx: RequestContext | undefined = requestContext
+    ? new RequestContext(Object.entries(requestContext))
+    : undefined;
+  const observabilityContext = resolveObservabilityContext({});
+
   const run = await workflow.createRun({ disableScorers: true });
   const result = await run.start({
     inputData: item.input,
+    ...(reqCtx ? { requestContext: reqCtx } : {}),
+    ...observabilityContext,
   });
 
   // TracingProperties is intersected on every WorkflowResult variant
   const traceId = result.traceId ?? null;
+  const spanId = result.spanId ?? null;
 
   if (result.status === 'success') {
-    return { output: result.result, error: null, traceId };
+    return {
+      output: result.result,
+      error: null,
+      traceId,
+      spanId,
+      stepResults: result.steps as Record<string, StepResult<any, any, any, any>>,
+      stepExecutionPath: result.stepExecutionPath,
+    };
   }
 
   // Handle all non-success statuses (still include traceId for debugging)
@@ -260,6 +307,9 @@ async function executeWorkflow(
       output: null,
       error: { message: result.error?.message ?? 'Workflow failed', stack: result.error?.stack },
       traceId,
+      spanId,
+      stepResults: result.steps as Record<string, StepResult<any, any, any, any>>,
+      stepExecutionPath: result.stepExecutionPath,
     };
   }
 
@@ -268,6 +318,9 @@ async function executeWorkflow(
       output: null,
       error: { message: `Workflow tripwire: ${result.tripwire?.reason ?? 'Unknown reason'}` },
       traceId,
+      spanId,
+      stepResults: result.steps as Record<string, StepResult<any, any, any, any>>,
+      stepExecutionPath: result.stepExecutionPath,
     };
   }
 
@@ -276,11 +329,21 @@ async function executeWorkflow(
       output: null,
       error: { message: 'Workflow suspended - not yet supported in dataset experiments' },
       traceId,
+      spanId,
+      stepResults: result.steps as Record<string, StepResult<any, any, any, any>>,
+      stepExecutionPath: result.stepExecutionPath,
     };
   }
 
   if (result.status === 'paused') {
-    return { output: null, error: { message: 'Workflow paused - not yet supported in dataset experiments' }, traceId };
+    return {
+      output: null,
+      error: { message: 'Workflow paused - not yet supported in dataset experiments' },
+      traceId,
+      spanId,
+      stepResults: result.steps as Record<string, StepResult<any, any, any, any>>,
+      stepExecutionPath: result.stepExecutionPath,
+    };
   }
 
   // Exhaustive check - should never reach here
@@ -289,5 +352,6 @@ async function executeWorkflow(
     output: null,
     error: { message: `Workflow ended with unexpected status: ${(_exhaustiveCheck as any).status}` },
     traceId,
+    spanId,
   };
 }

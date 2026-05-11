@@ -5,7 +5,7 @@ import type { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import * as jsonSchemaUtils from './json-schema/utils';
-import type { PublicSchema } from './schema';
+import type { PublicSchema, StandardSchemaWithJSON } from './schema';
 import * as v3 from './schema-compatibility-v3';
 import { SchemaCompatLayer as SchemaCompatLayerV3 } from './schema-compatibility-v3';
 import * as v4 from './schema-compatibility-v4';
@@ -58,6 +58,9 @@ export abstract class SchemaCompatLayer {
     this.v3Layer = new SchemaCompatLayerV3(model, this);
     this.v4Layer = new SchemaCompatLayerV4(model, this);
   }
+
+  public preProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
+  public postProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
 
   /**
    * Gets the language model associated with this compatibility layer.
@@ -158,12 +161,17 @@ export abstract class SchemaCompatLayer {
     }
   }
 
+  isIntersection(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any> {
+    if ('_zod' in v) {
+      return this.v4Layer.isIntersection(v as any);
+    } else {
+      return this.v3Layer.isIntersection(v as any);
+    }
+  }
+
   abstract shouldApply(): boolean;
   abstract getSchemaTarget(): Targets | undefined;
   abstract processZodType(value: ZodType): ZodType;
-
-  public preProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
-  public postProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
 
   public defaultZodObjectHandler(
     value: zV3.ZodObject<any, any, any, any, any> | zV4.ZodObject<any, any>,
@@ -307,14 +315,33 @@ export abstract class SchemaCompatLayer {
     }
   }
 
+  public defaultZodIntersectionHandler(
+    value: zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any>,
+  ): zV3.ZodType | zV4.ZodType {
+    if ('_zod' in value) {
+      return this.v4Layer.defaultZodIntersectionHandler(value as any);
+    } else {
+      return this.v3Layer.defaultZodIntersectionHandler(value as any);
+    }
+  }
+
+  /**
+   * @deprecated please use processToCompatSchema to usse StandardSchemaWithJSON
+   * @param zodSchema
+   * @returns
+   */
   public processToAISDKSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): Schema {
     const processedSchema = this.processZodType(zodSchema);
 
     return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
   }
 
-  public processToJSONSchema(zodSchema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
-    const standardSchema = toStandardSchema(zodSchema);
+  /**
+   * @param schema
+   * @returns
+   */
+  public processToJSONSchema(schema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
+    const standardSchema = toStandardSchema(schema);
 
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
       target: 'draft-07',
@@ -335,6 +362,24 @@ export abstract class SchemaCompatLayer {
     return jsonSchema;
   }
 
+  public processToCompatSchema<T>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
+    return {
+      '~standard': {
+        version: 1,
+        vendor: 'mastra',
+        validate: (value: unknown) => toStandardSchema(schema)['~standard'].validate(value),
+        jsonSchema: {
+          input: () => {
+            return this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
+          },
+          output: () => {
+            return this.processToJSONSchema(schema, 'output') as Record<string, unknown>;
+          },
+        },
+      },
+    };
+  }
+
   // ==========================================
   // JSON Schema Default Handlers
   // ==========================================
@@ -348,6 +393,11 @@ export abstract class SchemaCompatLayer {
     if (schema.properties && schema.additionalProperties === undefined) {
       schema.additionalProperties = false;
     }
+
+    if (!Object.keys(schema.properties ?? {}).length) {
+      schema.required = [];
+    }
+
     return schema;
   }
 
@@ -521,6 +571,36 @@ export abstract class SchemaCompatLayer {
   }
 
   /**
+   * Default handler for JSON Schema allOf (intersection) types.
+   * Flattens allOf sub-schemas by merging properties and required arrays into a single object schema.
+   */
+  protected defaultAllOfHandler(schema: JSONSchema7): JSONSchema7 {
+    if (!schema.allOf || !Array.isArray(schema.allOf)) return schema;
+
+    const mergedProperties: Record<string, JSONSchema7> = {};
+    const mergedRequired: string[] = [];
+
+    for (const subSchema of schema.allOf as JSONSchema7[]) {
+      if (subSchema.properties) {
+        Object.assign(mergedProperties, subSchema.properties);
+      }
+      if (Array.isArray(subSchema.required)) {
+        mergedRequired.push(...subSchema.required);
+      }
+    }
+
+    delete schema.allOf;
+    schema.type = 'object';
+    schema.properties = mergedProperties;
+    if (mergedRequired.length > 0) {
+      schema.required = [...new Set(mergedRequired)];
+    }
+    schema.additionalProperties = false;
+
+    return schema;
+  }
+
+  /**
    * Default handler for JSON Schema nullable types.
    * Ensures nullable types are represented correctly.
    */
@@ -589,6 +669,10 @@ export abstract class SchemaCompatLayer {
     return jsonSchemaUtils.isUnionSchema(schema);
   }
 
+  protected isAllOfSchema(schema: JSONSchema7): schema is JSONSchema7 & { allOf: JSONSchema7[] } {
+    return jsonSchemaUtils.isAllOfSchema(schema);
+  }
+
   /**
    * Checks if a property is optional within a parent object schema.
    * A property is optional if it's not in the parent's `required` array.
@@ -604,10 +688,16 @@ export abstract class SchemaCompatLayer {
    * and applies pre/post processing via traverse.
    *
    * Uses 'input' io mode so that fields with defaults are optional (appropriate for tool parameters).
+   * @deprecated please use processToCompatSchema
    */
   public toJSONSchema(zodSchema: ZodType): JSONSchema7 {
-    const target =
-      this.getSchemaTarget() === 'jsonSchema7' ? ('draft-07' as StandardJSONSchemaV1.Target) : this.getSchemaTarget();
+    const SCHEMA_TARGET_TO_STANDARD: Record<string, StandardJSONSchemaV1.Target> = {
+      jsonSchema7: 'draft-07',
+      'jsonSchema2019-09': 'draft-2020-12',
+      openApi3: 'openapi-3.0',
+    };
+    const schemaTarget = this.getSchemaTarget();
+    const target = (schemaTarget && SCHEMA_TARGET_TO_STANDARD[schemaTarget]) ?? schemaTarget;
     const standardSchema = toStandardSchema(zodSchema);
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
       target,

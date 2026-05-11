@@ -516,7 +516,9 @@ function createMockLogEvent(overrides: Partial<ExportedLog> = {}): LogEvent {
   return {
     type: 'log',
     log: {
+      logId: 'log-test-fixture',
       timestamp: new Date(),
+      traceId: 'trace-123',
       level: 'info',
       message: 'test log message',
       ...overrides,
@@ -528,9 +530,9 @@ function createMockMetricEvent(overrides: Partial<ExportedMetric> = {}): MetricE
   return {
     type: 'metric',
     metric: {
+      metricId: 'metric-test-fixture',
       timestamp: new Date(),
-      name: 'mastra_test_counter',
-      metricType: 'counter',
+      name: 'mastra_test_metric',
       value: 1,
       labels: { env: 'test' },
       ...overrides,
@@ -542,9 +544,10 @@ function createMockScoreEvent(overrides: Partial<ExportedScore> = {}): ScoreEven
   return {
     type: 'score',
     score: {
+      scoreId: 'score-test-fixture',
       timestamp: new Date(),
       traceId: 'trace-123',
-      scorerName: 'relevance',
+      scorerId: 'relevance',
       score: 0.85,
       ...overrides,
     },
@@ -555,6 +558,7 @@ function createMockFeedbackEvent(overrides: Partial<ExportedFeedback> = {}): Fee
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: 'feedback-test-fixture',
       timestamp: new Date(),
       traceId: 'trace-123',
       source: 'user',
@@ -636,44 +640,29 @@ describe('TestExporter - Metric Events', () => {
 
   it('should collect metric events', async () => {
     await exporter.onMetricEvent(createMockMetricEvent());
-    await exporter.onMetricEvent(
-      createMockMetricEvent({ name: 'mastra_agent_duration_ms', metricType: 'histogram', value: 1500 }),
-    );
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_duration_ms', value: 1500 }));
 
     expect(exporter.getMetricEvents()).toHaveLength(2);
     expect(exporter.getAllMetrics()).toHaveLength(2);
   });
 
   it('should filter metrics by name', async () => {
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_runs_started' }));
-    await exporter.onMetricEvent(
-      createMockMetricEvent({ name: 'mastra_agent_duration_ms', metricType: 'histogram', value: 1500 }),
-    );
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_runs_started' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_duration_ms', value: 1500 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_duration_ms', value: 2000 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_model_duration_ms', value: 500 }));
 
-    const startedMetrics = exporter.getMetricsByName('mastra_agent_runs_started');
-    expect(startedMetrics).toHaveLength(2);
-  });
-
-  it('should filter metrics by type', async () => {
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'counter' }));
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'histogram', name: 'duration', value: 100 }));
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'counter' }));
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'gauge', name: 'active', value: 5 }));
-
-    expect(exporter.getMetricsByType('counter')).toHaveLength(2);
-    expect(exporter.getMetricsByType('histogram')).toHaveLength(1);
-    expect(exporter.getMetricsByType('gauge')).toHaveLength(1);
+    const agentMetrics = exporter.getMetricsByName('mastra_agent_duration_ms');
+    expect(agentMetrics).toHaveLength(2);
   });
 
   it('should store debug logs for metric events', async () => {
     await exporter.onMetricEvent(
-      createMockMetricEvent({ name: 'mastra_test', metricType: 'counter', value: 42, labels: { agent: 'test-agent' } }),
+      createMockMetricEvent({ name: 'mastra_test', value: 42, labels: { agent: 'test-agent' } }),
     );
 
     const debugLogs = exporter.getLogs();
     expect(debugLogs).toHaveLength(1);
-    expect(debugLogs[0]).toContain('metric.counter');
+    expect(debugLogs[0]).toContain('metric:');
     expect(debugLogs[0]).toContain('mastra_test=42');
     expect(debugLogs[0]).toContain('agent=test-agent');
   });
@@ -696,16 +685,16 @@ describe('TestExporter - Score Events', () => {
 
   it('should collect score events', async () => {
     await exporter.onScoreEvent(createMockScoreEvent());
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality', score: 0.92 }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'factuality', score: 0.92 }));
 
     expect(exporter.getScoreEvents()).toHaveLength(2);
     expect(exporter.getAllScores()).toHaveLength(2);
   });
 
   it('should filter scores by scorer name', async () => {
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance', score: 0.85 }));
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality', score: 0.92 }));
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance', score: 0.9 }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'relevance', score: 0.85 }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'factuality', score: 0.92 }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'relevance', score: 0.9 }));
 
     const relevanceScores = exporter.getScoresByScorer('relevance');
     expect(relevanceScores).toHaveLength(2);
@@ -714,9 +703,9 @@ describe('TestExporter - Score Events', () => {
   });
 
   it('should filter scores by traceId', async () => {
-    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-A', scorerName: 'relevance' }));
-    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-B', scorerName: 'relevance' }));
-    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-A', scorerName: 'factuality' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-A', scorerId: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-B', scorerId: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-A', scorerId: 'factuality' }));
 
     const scoresA = exporter.getScoresByTraceId('trace-A');
     expect(scoresA).toHaveLength(2);
@@ -724,7 +713,7 @@ describe('TestExporter - Score Events', () => {
 
   it('should store debug logs for score events', async () => {
     await exporter.onScoreEvent(
-      createMockScoreEvent({ traceId: 'abcdef1234567890', scorerName: 'relevance', score: 0.85 }),
+      createMockScoreEvent({ traceId: 'abcdef1234567890', scorerId: 'relevance', score: 0.85 }),
     );
 
     const debugLogs = exporter.getLogs();
@@ -812,7 +801,7 @@ describe('TestExporter - Cross-Signal Integration', () => {
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
     await exporter.onLogEvent(createMockLogEvent({ traceId, message: 'correlated log' }));
-    await exporter.onScoreEvent(createMockScoreEvent({ traceId, scorerName: 'accuracy' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId, scorerId: 'accuracy' }));
     await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId }));
 
     const result = exporter.getByTraceId(traceId);
@@ -822,7 +811,7 @@ describe('TestExporter - Cross-Signal Integration', () => {
     expect(result.logs).toHaveLength(1);
     expect(result.logs[0]?.message).toBe('correlated log');
     expect(result.scores).toHaveLength(1);
-    expect(result.scores[0]?.scorerName).toBe('accuracy');
+    expect(result.scores[0]?.scorerId).toBe('accuracy');
     expect(result.feedback).toHaveLength(1);
   });
 
@@ -848,7 +837,7 @@ describe('TestExporter - Cross-Signal Integration', () => {
     await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
     await exporter.onLogEvent(createMockLogEvent({ message: 'test log' }));
     await exporter.onMetricEvent(createMockMetricEvent({ name: 'test_metric' }));
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'test_scorer' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'test_scorer' }));
     await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'test_feedback' }));
 
     const json = exporter.toJSON();
@@ -860,7 +849,7 @@ describe('TestExporter - Cross-Signal Integration', () => {
     expect(parsed.metrics).toHaveLength(1);
     expect(parsed.metrics[0].name).toBe('test_metric');
     expect(parsed.scores).toHaveLength(1);
-    expect(parsed.scores[0].scorerName).toBe('test_scorer');
+    expect(parsed.scores[0].scorerId).toBe('test_scorer');
     expect(parsed.feedback).toHaveLength(1);
     expect(parsed.feedback[0].feedbackType).toBe('test_feedback');
   });
@@ -915,12 +904,12 @@ describe('TestExporter - Statistics with All Signals', () => {
     await exporter.onLogEvent(createMockLogEvent({ level: 'error' }));
     await exporter.onLogEvent(createMockLogEvent({ level: 'info' }));
 
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'counter_a', metricType: 'counter' }));
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'hist_a', metricType: 'histogram', value: 100 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'metric_a' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'metric_b', value: 100 }));
 
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance' }));
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality' }));
-    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'factuality' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerId: 'relevance' }));
 
     await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'thumbs' }));
     await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'rating' }));
@@ -940,10 +929,8 @@ describe('TestExporter - Statistics with All Signals', () => {
 
     // Metric stats
     expect(stats.totalMetrics).toBe(2);
-    expect(stats.metricsByType.counter).toBe(1);
-    expect(stats.metricsByType.histogram).toBe(1);
-    expect(stats.metricsByName.counter_a).toBe(1);
-    expect(stats.metricsByName.hist_a).toBe(1);
+    expect(stats.metricsByName.metric_a).toBe(1);
+    expect(stats.metricsByName.metric_b).toBe(1);
 
     // Score stats
     expect(stats.totalScores).toBe(3);

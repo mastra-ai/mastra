@@ -1,30 +1,32 @@
 import type { DatasetItem } from '@mastra/client-js';
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
   Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
-  useDataset,
-  useDatasetItem,
-  useDatasetItems,
-  SelectField,
-  DatasetItemHeader,
-  DatasetItemContent,
-  CodeDiff,
-  useLinkComponent,
-  Columns,
-  Column,
+  Button,
   ButtonsGroup,
+  CodeDiff,
+  Column,
+  Columns,
+  Crumb,
+  Header,
+  HeaderAction,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
+  PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
+import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { SelectField } from '@/lib/form/components/select-field';
+import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
 function itemToText(item: DatasetItem): string {
@@ -43,12 +45,32 @@ function DatasetItemsComparePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const itemIds = searchParams.get('items')?.split(',').filter(Boolean) ?? [];
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
   const { Link: FrameworkLink } = useLinkComponent();
   const [isDiffView, setIsDiffView] = useState<boolean>(false);
 
   const { data: itemA } = useDatasetItem(datasetId ?? '', itemIds[0] ?? '');
   const { data: itemB } = useDatasetItem(datasetId ?? '', itemIds[1] ?? '');
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || itemIds.length < 2) {
     return (
@@ -125,11 +147,11 @@ function DatasetItemsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+                <Button as={Link} to={`/datasets/${datasetId}`}>
                   <ArrowLeftIcon />
                   Back to Dataset
                 </Button>
-                <Button variant="cta" size="default" onClick={() => setIsDiffView(v => !v)}>
+                <Button variant="primary" onClick={() => setIsDiffView(v => !v)}>
                   {isDiffView ? (
                     <>
                       <ColumnsIcon /> Default View
@@ -208,11 +230,9 @@ function CompareItemColumn({
           onValueChange={onItemChange}
           options={options}
           placeholder="Select item"
-          variant="experimental"
-          size="default"
           labelIsHidden={true}
         />
-        <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="standard" size="default">
+        <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
           <History />
           Versions
         </Button>

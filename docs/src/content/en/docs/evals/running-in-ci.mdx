@@ -1,19 +1,19 @@
 ---
-title: "Running Scorers in CI | Evals"
+title: "Running scorers in CI | Evals"
 description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
 packages:
   - "@mastra/core"
 ---
 
-# Running Scorers in CI
+# Running scorers in CI
 
 Running scorers in your CI pipeline provides quantifiable metrics for measuring agent quality over time. The `runEvals` function processes multiple test cases through your agent or workflow and returns aggregate scores.
 
-## Basic Setup
+## Basic setup
 
 You can use any testing framework that supports ESM modules, such as [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/), or [Mocha](https://mochajs.org/).
 
-## Creating Test Cases
+## Creating test cases
 
 Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
 
@@ -51,7 +51,7 @@ describe('Weather Agent Tests', () => {
 })
 ```
 
-## Understanding Results
+## Understanding results
 
 The `runEvals` function returns an object with:
 
@@ -70,7 +70,7 @@ The `runEvals` function returns an object with:
 }
 ```
 
-## Multiple Test Scenarios
+## Multiple test scenarios
 
 Create separate test cases for different evaluation scenarios:
 
@@ -124,7 +124,7 @@ describe('Weather Agent Tests', () => {
 })
 ```
 
-## Next Steps
+## Next steps
 
 - Learn about [creating custom scorers](/docs/evals/custom-scorers)
 - Explore [built-in scorers](/docs/evals/built-in-scorers)

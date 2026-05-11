@@ -74,13 +74,29 @@ await vectorDB.deleteVectors({
 
 ## Configuration
 
-The ElasticSearchVector store can be initialized with:
+The ElasticSearchVector store accepts either connection parameters or a pre-configured client:
 
-- `url`: The ElasticSearch node URL (required)
+### Using connection parameters
+
 - `id`: A unique identifier for the vector store instance (required)
-- `auth` : The authentication mechanism (HTTP basic or API key)
-  - HTTP basic: { auth: { username : 'insert-username', password : 'insert-password' }}
-  - API key: { auth: { apiKey: 'insert-api-key' }}
+- `url`: The ElasticSearch node URL (required)
+- `auth`: The authentication mechanism (optional)
+  - HTTP basic: `{ auth: { username: 'insert-username', password: 'insert-password' } }`
+  - API key: `{ auth: { apiKey: 'insert-api-key' } }`
+  - Bearer token: `{ auth: { bearer: 'insert-token' } }`
+
+### Using a pre-configured client
+
+- `id`: A unique identifier for the vector store instance (required)
+- `client`: An existing `@elastic/elasticsearch` `Client` instance (required)
+
+```typescript
+import { Client } from '@elastic/elasticsearch';
+import { ElasticSearchVector } from '@mastra/elasticsearch';
+
+const client = new Client({ node: 'http://localhost:9200' });
+const vectorDB = new ElasticSearchVector({ id: 'my-vector-store', client });
+```
 
 ## Features
 

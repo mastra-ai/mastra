@@ -17,7 +17,7 @@ Sends Tracing data to LangSmith for observability.
 new LangSmithExporter(config: LangSmithExporterConfig)
 ```
 
-## LangSmithExporterConfig
+## `LangSmithExporterConfig`
 
 ```typescript
 interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
@@ -86,7 +86,7 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -123,7 +123,7 @@ const exporter = new LangSmithExporter({
 })
 ```
 
-## Environment Variables
+## Environment variables
 
 | Variable | Description |
 | - | - |
@@ -131,7 +131,7 @@ const exporter = new LangSmithExporter({
 | `LANGCHAIN_PROJECT` | Default project name for traces (used if `projectName` not specified) |
 | `LANGSMITH_BASE_URL` | API URL for self-hosted instances |
 
-## Span Type Mapping
+## Span type mapping
 
 | Span Type | LangSmith Type |
 | - | - |
@@ -141,7 +141,7 @@ const exporter = new LangSmithExporter({
 | `MCP_TOOL_CALL` | `tool` |
 | All others | `chain` |
 
-## withLangsmithMetadata
+## `withLangsmithMetadata`
 
 Helper function to add LangSmith-specific metadata to tracing options.
 
@@ -149,7 +149,7 @@ Helper function to add LangSmith-specific metadata to tracing options.
 function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptionsUpdater
 ```
 
-### LangSmithMetadataInput
+### `LangSmithMetadataInput`
 
 <PropertiesTable
   props={[

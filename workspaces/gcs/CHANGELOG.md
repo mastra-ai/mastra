@@ -1,5 +1,63 @@
 # @mastra/gcs
 
+## 0.2.1
+
+### Patch Changes
+
+- Fix `toKey()` to resolve `"."` and `"./"` as the root path ([#14824](https://github.com/mastra-ai/mastra/pull/14824))
+
+  Both `GCSFilesystem` and `S3Filesystem` produced invalid object keys when called with `path: "."` (e.g. `prefix/.` instead of `prefix/`). Since the built-in `mastra_workspace_list_files` tool and Mastra Studio both default to `path: "."`, workspace directory listings returned empty results when backed by GCS or S3.
+
+  `toKey()` now normalises `"."` and `"./"` to empty string before prepending the prefix, matching the existing behaviour of `"/"`. Dotfiles like `.env` or `.gitignore` are unaffected.
+
+- Updated dependencies [[`733bf53`](https://github.com/mastra-ai/mastra/commit/733bf53d9352aedd3ef38c3d501edb275b65b43c), [`5405b3b`](https://github.com/mastra-ai/mastra/commit/5405b3b35325c5b8fb34fc7ac109bd2feb7bb6fe), [`45e29cb`](https://github.com/mastra-ai/mastra/commit/45e29cb5b5737f3083eb3852db02b944b9cf37ed), [`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9), [`c321127`](https://github.com/mastra-ai/mastra/commit/c3211275fc195de9ad1ead2746b354beb8eae6e8), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1), [`696694e`](https://github.com/mastra-ai/mastra/commit/696694e00f29241a25dd1a1b749afa06c3a626b4), [`b084a80`](https://github.com/mastra-ai/mastra/commit/b084a800db0f82d62e1fc3d6e3e3480da1ba5a53), [`82b7a96`](https://github.com/mastra-ai/mastra/commit/82b7a964169636c1d1e0c694fc892a213b0179d5), [`df97812`](https://github.com/mastra-ai/mastra/commit/df97812bd949dcafeb074b80ecab501724b49c3b), [`8bbe360`](https://github.com/mastra-ai/mastra/commit/8bbe36042af7fc4be0244dffd8913f6795179421), [`f6b8ba8`](https://github.com/mastra-ai/mastra/commit/f6b8ba8dbf533b7a8db90c72b6805ddc804a3a72), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1)]:
+  - @mastra/core@1.28.0
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Fix `toKey()` to resolve `"."` and `"./"` as the root path ([#14824](https://github.com/mastra-ai/mastra/pull/14824))
+
+  Both `GCSFilesystem` and `S3Filesystem` produced invalid object keys when called with `path: "."` (e.g. `prefix/.` instead of `prefix/`). Since the built-in `mastra_workspace_list_files` tool and Mastra Studio both default to `path: "."`, workspace directory listings returned empty results when backed by GCS or S3.
+
+  `toKey()` now normalises `"."` and `"./"` to empty string before prepending the prefix, matching the existing behaviour of `"/"`. Dotfiles like `.env` or `.gitignore` are unaffected.
+
+- Updated dependencies [[`733bf53`](https://github.com/mastra-ai/mastra/commit/733bf53d9352aedd3ef38c3d501edb275b65b43c), [`5405b3b`](https://github.com/mastra-ai/mastra/commit/5405b3b35325c5b8fb34fc7ac109bd2feb7bb6fe), [`c321127`](https://github.com/mastra-ai/mastra/commit/c3211275fc195de9ad1ead2746b354beb8eae6e8), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1), [`b084a80`](https://github.com/mastra-ai/mastra/commit/b084a800db0f82d62e1fc3d6e3e3480da1ba5a53), [`82b7a96`](https://github.com/mastra-ai/mastra/commit/82b7a964169636c1d1e0c694fc892a213b0179d5), [`df97812`](https://github.com/mastra-ai/mastra/commit/df97812bd949dcafeb074b80ecab501724b49c3b), [`8bbe360`](https://github.com/mastra-ai/mastra/commit/8bbe36042af7fc4be0244dffd8913f6795179421), [`f6b8ba8`](https://github.com/mastra-ai/mastra/commit/f6b8ba8dbf533b7a8db90c72b6805ddc804a3a72), [`a07bcef`](https://github.com/mastra-ai/mastra/commit/a07bcefea77c03d6d322caad973dca49b4b15fa1)]:
+  - @mastra/core@1.28.0-alpha.0
+
+## 0.2.0
+
+### Minor Changes
+
+- Added public `storage` and `bucket` getters to access the underlying Google Cloud Storage instances directly. Use these when you need GCS features not exposed through the `WorkspaceFilesystem` interface. ([#14166](https://github.com/mastra-ai/mastra/pull/14166))
+
+  ```typescript
+  const gcsStorage = filesystem.storage;
+  const gcsBucket = filesystem.bucket;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`cddf895`](https://github.com/mastra-ai/mastra/commit/cddf895532b8ee7f9fa814136ec672f53d37a9ba), [`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf), [`a59f126`](https://github.com/mastra-ai/mastra/commit/a59f1269104f54726699c5cdb98c72c93606d2df), [`ed8fd75`](https://github.com/mastra-ai/mastra/commit/ed8fd75cbff03bb5e19971ddb30ab7040fc60447), [`c510833`](https://github.com/mastra-ai/mastra/commit/c5108333e8cbc19dafee5f8bfefbcb5ee935335c), [`c4c7dad`](https://github.com/mastra-ai/mastra/commit/c4c7dadfe2e4584f079f6c24bfabdb8c4981827f), [`45c3112`](https://github.com/mastra-ai/mastra/commit/45c31122666a0cc56b94727099fcb1871ed1b3f6), [`7296fcc`](https://github.com/mastra-ai/mastra/commit/7296fcc599c876a68699a71c7054a16d5aaf2337), [`00c27f9`](https://github.com/mastra-ai/mastra/commit/00c27f9080731433230a61be69c44e39a7a7b4c7), [`5e7c287`](https://github.com/mastra-ai/mastra/commit/5e7c28701f2bce795dd5c811e4c3060bf2ea2242), [`7e17d3f`](https://github.com/mastra-ai/mastra/commit/7e17d3f656fdda2aad47c4beb8c491636d70820c), [`ee19c9b`](https://github.com/mastra-ai/mastra/commit/ee19c9ba3ec3ed91feb214ad539bdc766c53bb01)]:
+  - @mastra/core@1.12.0
+
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Added public `storage` and `bucket` getters to access the underlying Google Cloud Storage instances directly. Use these when you need GCS features not exposed through the `WorkspaceFilesystem` interface. ([#14166](https://github.com/mastra-ai/mastra/pull/14166))
+
+  ```typescript
+  const gcsStorage = filesystem.storage;
+  const gcsBucket = filesystem.bucket;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf), [`a59f126`](https://github.com/mastra-ai/mastra/commit/a59f1269104f54726699c5cdb98c72c93606d2df), [`c510833`](https://github.com/mastra-ai/mastra/commit/c5108333e8cbc19dafee5f8bfefbcb5ee935335c), [`7296fcc`](https://github.com/mastra-ai/mastra/commit/7296fcc599c876a68699a71c7054a16d5aaf2337), [`00c27f9`](https://github.com/mastra-ai/mastra/commit/00c27f9080731433230a61be69c44e39a7a7b4c7), [`ee19c9b`](https://github.com/mastra-ai/mastra/commit/ee19c9ba3ec3ed91feb214ad539bdc766c53bb01)]:
+  - @mastra/core@1.12.0-alpha.1
+
 ## 0.1.1
 
 ### Patch Changes

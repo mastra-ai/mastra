@@ -1,8 +1,7 @@
 import pMap from 'p-map';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { InternalSpans, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext } from '../../observability';
+import { getEntityTypeForSpan } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
@@ -22,8 +21,7 @@ const getTraceStep = createStep({
     scorerId: z.string(),
   }),
   outputSchema: z.any(),
-  execute: async ({ inputData, mastra, ...rest }) => {
-    const observabilityContext = resolveObservabilityContext(rest);
+  execute: async ({ inputData, mastra }) => {
     const logger = mastra.getLogger();
     if (!logger) {
       console.warn(
@@ -42,7 +40,6 @@ const getTraceStep = createStep({
           scorerId: inputData.scorerId,
         },
       });
-      logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;
     }
@@ -63,7 +60,6 @@ const getTraceStep = createStep({
         },
         error,
       );
-      logger?.error(mastraError.toString());
       logger?.trackException(mastraError);
       return;
     }
@@ -72,7 +68,7 @@ const getTraceStep = createStep({
       inputData.targets,
       async target => {
         try {
-          await runScorerOnTarget({ storage, scorer, target, ...observabilityContext });
+          await runScorerOnTarget({ storage, scorer, target });
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -87,7 +83,6 @@ const getTraceStep = createStep({
             },
             error,
           );
-          logger?.error(mastraError.toString());
           logger?.trackException(mastraError);
         }
       },
@@ -100,12 +95,11 @@ export async function runScorerOnTarget({
   storage,
   scorer,
   target,
-  ...observabilityContext
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
-} & Partial<ObservabilityContext>) {
+}) {
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -136,12 +130,18 @@ export async function runScorerOnTarget({
 
   const scorerRun = buildScorerRun({
     scorerType: scorer.type === 'agent' ? 'agent' : undefined,
-    ...observabilityContext,
     trace,
     targetSpan: span,
   });
+  const result = await scorer.run({
+    ...scorerRun,
+    scoreSource: 'trace',
+    targetScope: 'span',
+    targetEntityType: getEntityTypeForSpan(span),
+    targetTraceId: target.traceId,
+    targetSpanId: span.spanId,
+  });
 
-  const result = await scorer.run(scorerRun);
   const scorerResult = {
     ...result,
     scorer: {
@@ -151,7 +151,7 @@ export async function runScorerOnTarget({
       hasJudge: !!scorer.judge,
     },
     traceId: target.traceId,
-    spanId: target.spanId,
+    spanId: span.spanId,
     entityId: span.entityId || span.entityName || 'unknown',
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
@@ -159,10 +159,14 @@ export async function runScorerOnTarget({
     scorerId: scorer.id,
   };
 
+  // Legacy score-store emission. This path is being deprecated.
   const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
 }
 
+/**
+ * @deprecated Legacy scores-store path. New score emission should use `mastra.observability.addScore()`.
+ */
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
   const scoresStore = await storage.getStore('scores');
   if (!scoresStore) {
@@ -182,19 +186,22 @@ function buildScorerRun({
   scorerType,
   trace,
   targetSpan,
-  ...observabilityContext
 }: {
   scorerType?: string;
   trace: TraceRecord;
   targetSpan: SpanRecord;
-} & Partial<ObservabilityContext>): ScorerRun {
+}): ScorerRun {
   if (scorerType === 'agent') {
     const { input, output } = transformTraceToScorerInputAndOutput(trace);
-    return { input, output, ...observabilityContext };
+    return { input, output };
   }
-  return { input: targetSpan.input, output: targetSpan.output, ...observabilityContext };
+  return { input: targetSpan.input, output: targetSpan.output };
 }
 
+/**
+ * @deprecated Legacy score-attach path. New score emission should use `mastra.observability.addScore()`
+ * which autmatically attach scores to spans.
+ */
 async function attachScoreToSpan({
   storage,
   span,
@@ -213,19 +220,25 @@ async function attachScoreToSpan({
       text: 'Observability storage domain is not available',
     });
   }
-  const existingLinks = span.links || [];
-  const link = {
-    type: 'score',
-    scoreId: scoreRecord.id,
-    scorerName: scoreRecord.scorer.id,
-    score: scoreRecord.score,
-    createdAt: scoreRecord.createdAt,
-  };
-  await observabilityStore.updateSpan({
-    spanId: span.spanId,
-    traceId: span.traceId,
-    updates: { links: [...existingLinks, link] },
-  });
+
+  // Path 1: Legacy — attach score link to span
+  try {
+    const existingLinks = span.links || [];
+    const link = {
+      type: 'score',
+      scoreId: scoreRecord.id,
+      scorerId: scoreRecord.scorerId ?? scoreRecord.scorer?.id,
+      score: scoreRecord.score,
+      createdAt: scoreRecord.createdAt,
+    };
+    await observabilityStore.updateSpan({
+      spanId: span.spanId,
+      traceId: span.traceId,
+      updates: { links: [...existingLinks, link] },
+    });
+  } catch {
+    // Expected for event-sourced stores (e.g. DuckDB) that don't support updateSpan
+  }
 }
 
 export const scoreTracesWorkflow = createWorkflow({
@@ -242,9 +255,6 @@ export const scoreTracesWorkflow = createWorkflow({
   outputSchema: z.any(),
   steps: [getTraceStep],
   options: {
-    tracingPolicy: {
-      internal: InternalSpans.ALL,
-    },
     validateInputs: false,
   },
 });

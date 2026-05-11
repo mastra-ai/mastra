@@ -26,6 +26,7 @@ A sandbox provider executes commands in a controlled environment:
 - [`BlaxelSandbox`](/reference/workspace/blaxel-sandbox): Executes commands in isolated Blaxel cloud sandboxes
 - [`DaytonaSandbox`](/reference/workspace/daytona-sandbox): Executes commands in isolated Daytona cloud sandboxes
 - [`E2BSandbox`](/reference/workspace/e2b-sandbox): Executes commands in isolated E2B cloud sandboxes
+- [`ModalSandbox`](/reference/workspace/modal-sandbox): Executes commands in isolated Modal cloud sandboxes
 
 ## Basic usage
 
@@ -46,7 +47,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'dev-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   instructions: 'You are a helpful development assistant.',
   workspace,
 })
@@ -117,7 +118,7 @@ const workspace = new Workspace({
 })
 ```
 
-Use `null` or `false` for cloud sandboxes (for example, E2B or Daytona) where processes should outlive the agent.
+Use `null` or `false` for cloud sandboxes (for example, E2B, Daytona, or Modal) where processes should outlive the agent.
 
 :::note
 For the full `SandboxProcessManager` API (spawning processes programmatically, reading output, sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
@@ -127,6 +128,7 @@ For the full `SandboxProcessManager` API (spawning processes programmatically, r
 
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
 - [`LocalSandbox` reference](/reference/workspace/local-sandbox)
+- [`ModalSandbox` reference](/reference/workspace/modal-sandbox)
 - [`DaytonaSandbox` reference](/reference/workspace/daytona-sandbox)
 - [`E2BSandbox` reference](/reference/workspace/e2b-sandbox)
 - [Workspace overview](/docs/workspace/overview)
