@@ -112,7 +112,10 @@ export type TabsInput = z.output<typeof tabsInputSchema>;
  * stagehand_screenshot - Capture a screenshot of the current page
  */
 export const screenshotInputSchema = z.object({
-  fullPage: z.boolean().optional().describe('Capture the full scrollable page instead of just the viewport (default: false)'),
+  fullPage: z
+    .boolean()
+    .optional()
+    .describe('Capture the full scrollable page instead of just the viewport (default: false)'),
 });
 export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
 
