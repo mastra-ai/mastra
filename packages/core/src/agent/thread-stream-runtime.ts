@@ -175,7 +175,7 @@ export class AgentThreadStreamRuntime {
     if (this.#watchedThreadRunIds.has(record.runId)) return;
     this.#watchedThreadRunIds.add(record.runId);
 
-    void record.output.getFullOutput().finally(() => {
+    void record.output._waitUntilFinished().finally(() => {
       this.#watchedThreadRunIds.delete(record.runId);
       this.#threadRunsById.delete(record.runId);
       this.#threadKeysByRunId.delete(record.runId);
@@ -277,7 +277,7 @@ export class AgentThreadStreamRuntime {
       const activeRunId = this.#activeThreadRunIds.get(key);
       const activeRecord = activeRunId ? this.#threadRunsById.get(activeRunId) : undefined;
       if (!activeRecord || activeRecord.agent.id === agent.id || activeRecord.output.status !== 'running') return;
-      await activeRecord.output.getFullOutput().catch(() => {});
+      await activeRecord.output._waitUntilFinished().catch(() => {});
     }
   }
 

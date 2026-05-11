@@ -118,6 +118,33 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * When toModelOutput is defined, the transform runs under a MAPPING child span so
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
+      /**
+       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
+       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
+       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
+       * but Mastra calls toModelOutput directly and stores the result, bypassing
+       * that normalization.
+       */
+      function normalizeModelOutput(output: unknown): unknown {
+        if (output == null || typeof output !== 'object') return output;
+
+        const obj = output as Record<string, unknown>;
+        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
+
+        return {
+          ...obj,
+          value: (obj.value as unknown[]).map(item => {
+            if (item == null || typeof item !== 'object') return item;
+            const part = item as Record<string, unknown>;
+            if (part.type !== 'media') return part;
+            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
+              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+            }
+            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+          }),
+        };
+      }
+
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         toolCallId?: string;
@@ -146,6 +173,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           });
           try {
             modelOutput = await tool.toModelOutput(toolCall.result);
+            // Normalize media parts to image-data/file-data as AI SDK expects
+            modelOutput = normalizeModelOutput(modelOutput);
             mappingSpan?.end({ output: modelOutput });
           } catch (err) {
             mappingSpan?.error({ error: err as Error, endSpan: true });

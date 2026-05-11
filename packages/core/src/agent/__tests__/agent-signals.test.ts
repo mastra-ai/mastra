@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -996,13 +996,34 @@ describe('Agent signals', () => {
       {
         runId: 'abort-run',
         status: 'running',
-        getFullOutput: () => neverFinishes,
+        _waitUntilFinished: () => neverFinishes,
       } as any,
       options,
     );
 
     expect(runtime.abortThread({ threadId: 'abort-thread', resourceId: 'abort-user' })).toBe(true);
     expect(options.abortSignal?.aborted).toBe(true);
+  });
+
+  it('does not consume active run output while watching for completion', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const getFullOutput = vi.fn();
+
+    runtime.registerRun(
+      { id: 'watch-agent' } as any,
+      {
+        runId: 'watch-run',
+        status: 'running',
+        getFullOutput,
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      {
+        runId: 'watch-run',
+        memory: { thread: 'watch-thread', resource: 'watch-user' },
+      } as any,
+    );
+
+    expect(getFullOutput).not.toHaveBeenCalled();
   });
 
   it('delivers a future thread run to multiple subscribers', async () => {
