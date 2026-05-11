@@ -41,7 +41,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
-import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolAction, ToolPayloadTransformPolicy, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
@@ -419,6 +419,11 @@ export interface AgentConfig<
    * Controls which tools can run in the background and their behavior.
    */
   backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Optional agent-level transform policy for tool payloads before they are
+   * serialized into display streams or user-visible transcripts.
+   */
+  transform?: ToolPayloadTransformPolicy;
 }
 
 export type AgentMemoryOption = {

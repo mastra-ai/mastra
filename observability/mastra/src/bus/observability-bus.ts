@@ -14,13 +14,14 @@ import type {
   ObservabilityExporter,
   ObservabilityBridge,
   ObservabilityEvent,
+  ObservabilityDropEvent,
   SerializationOptions,
 } from '@mastra/core/observability';
 
 import type { DeepCleanOptions } from '../spans/serialization';
 import { deepClean, mergeSerializationOptions } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
-import { routeToHandler } from './route-event';
+import { routeDropToHandler, routeToHandler } from './route-event';
 
 /**
  * Apply deepClean() to non-tracing observability events. Tracing events are
@@ -67,6 +68,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
+
+  private handlerBufferFlushDepth = 0;
+  private dropEventsEmittedDuringHandlerFlush = 0;
 
   /** Resolved deepClean options applied to non-tracing events before fan-out. */
   private deepCleanOptions: DeepCleanOptions;
@@ -173,6 +177,26 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /**
+   * Emit exporter pipeline drop events to exporters and the bridge.
+   *
+   * Drop events describe exporter health, not user observability data, so they
+   * are intentionally not delivered to generic event-bus subscribers.
+   */
+  emitDropEvent(event: ObservabilityDropEvent): void {
+    if (this.handlerBufferFlushDepth > 0) {
+      this.dropEventsEmittedDuringHandlerFlush++;
+    }
+
+    for (const exporter of this.exporters) {
+      this.trackPromise(routeDropToHandler(exporter, event, this.logger));
+    }
+
+    if (this.bridge) {
+      this.trackPromise(routeDropToHandler(this.bridge, event, this.logger));
+    }
+  }
+
+  /**
    * Track an async handler promise so flush() can await it.
    * No-ops for sync (void) results.
    */
@@ -184,20 +208,8 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     }
   }
 
-  /**
-   * Two-phase flush to ensure all observability data is fully exported.
-   *
-   * **Phase 1 — Delivery:** Await all in-flight handler promises (exporters,
-   * bridge, and base-class subscribers). After this resolves, all event data
-   * has been delivered to handler methods.
-   *
-   * **Phase 2 — Buffer drain:** Call flush() on each exporter and bridge to
-   * drain their SDK-internal buffers (e.g., OTEL BatchSpanProcessor, Langfuse
-   * client queue). Phases are sequential — Phase 2 must not start until
-   * Phase 1 completes, otherwise exporters would flush empty buffers.
-   */
-  async flush(): Promise<void> {
-    // Phase 1: Await in-flight handler delivery promises, draining until empty.
+  /** Await in-flight routed handler promises, draining until empty. */
+  private async drainPendingHandlers(): Promise<void> {
     let iterations = 0;
     while (this.pendingHandlers.size > 0) {
       await Promise.allSettled([...this.pendingHandlers]);
@@ -208,23 +220,68 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
             `${this.pendingHandlers.size} promises still pending. Handlers may be re-emitting during flush.`,
         );
         // Final settlement pass: ensure every remaining promise has settled
-        // before moving to Phase 2, even if new promises keep appearing.
+        // before moving on, even if new promises keep appearing.
         if (this.pendingHandlers.size > 0) {
           await Promise.allSettled([...this.pendingHandlers]);
         }
         break;
       }
     }
+  }
+
+  /** Drain exporter and bridge SDK-internal buffers. */
+  private async flushHandlerBuffers(): Promise<boolean> {
+    const initialDropCount = this.dropEventsEmittedDuringHandlerFlush;
+    this.handlerBufferFlushDepth++;
+    try {
+      const bufferFlushPromises: Promise<void>[] = this.exporters.map(e => e.flush());
+      if (this.bridge) {
+        bufferFlushPromises.push(this.bridge.flush());
+      }
+      if (bufferFlushPromises.length > 0) {
+        await Promise.allSettled(bufferFlushPromises);
+      }
+      return this.dropEventsEmittedDuringHandlerFlush > initialDropCount;
+    } finally {
+      this.handlerBufferFlushDepth--;
+    }
+  }
+
+  /**
+   * Multi-phase flush to ensure all observability data is fully exported.
+   *
+   * **Phase 1 — Delivery:** Await all in-flight handler promises (exporters,
+   * bridge, and base-class subscribers). After this resolves, all event data
+   * has been delivered to handler methods.
+   *
+   * **Phase 2 — Buffer drain:** Call flush() on each exporter and bridge to
+   * drain their SDK-internal buffers (e.g., OTEL BatchSpanProcessor, Langfuse
+   * client queue). Phases are sequential — buffer drains must not start until
+   * delivery completes, otherwise exporters would flush empty buffers.
+   *
+   * Exporter flushes can emit drop events. When that happens, flush loops
+   * through delivery and buffer drain again so alerting integrations that buffer
+   * drop notifications are drained before returning.
+   */
+  async flush(): Promise<void> {
+    // Phase 1: Await in-flight handler delivery promises, draining until empty.
+    await this.drainPendingHandlers();
     await super.flush();
 
-    // Phase 2: Drain exporter and bridge SDK-internal buffers.
-    const bufferFlushPromises: Promise<void>[] = this.exporters.map(e => e.flush());
-    if (this.bridge) {
-      bufferFlushPromises.push(this.bridge.flush());
+    for (let iterations = 0; iterations < MAX_FLUSH_ITERATIONS; iterations++) {
+      const emittedDropEvents = await this.flushHandlerBuffers();
+      if (!emittedDropEvents && this.pendingHandlers.size === 0) {
+        return;
+      }
+
+      await this.drainPendingHandlers();
+      await super.flush();
     }
-    if (bufferFlushPromises.length > 0) {
-      await Promise.allSettled(bufferFlushPromises);
-    }
+
+    this.logger.error(
+      `[ObservabilityBus] flush() exceeded ${MAX_FLUSH_ITERATIONS} buffer drain iterations. ` +
+        `Handlers may be emitting drop events during every flush.`,
+    );
   }
 
   /** Flush all pending events and exporter buffers, then clear subscribers. */

@@ -33,15 +33,6 @@
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
-  *:focus,
-  *:focus-visible {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-  }
-  *:focus-visible {
-    outline-style: solid;
-    outline-color: var(--accent1);
-  }
 }
 
 ::-webkit-scrollbar {

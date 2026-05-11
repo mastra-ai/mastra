@@ -31,6 +31,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
+import { attachCavemanThreadStatePersistence, restoreCavemanForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
@@ -53,6 +54,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
+import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
@@ -72,6 +74,7 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
   openai: 'openai-codex',
+  'github-copilot': 'github-copilot',
 };
 
 export interface MastraCodeConfig {
@@ -131,6 +134,7 @@ export function createAuthStorage() {
   const authStorage = new AuthStorage();
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
+  setGitHubCopilotAuthStorage(authStorage);
   return authStorage;
 }
 
@@ -409,6 +413,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Also scan the full provider registry so configured API keys satisfy access checks.
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
+  const githubCopilotCred = authStorage.get('github-copilot');
   const startupAccess: ProviderAccess = {
     anthropic:
       anthropicCred?.type === 'oauth'
@@ -425,6 +430,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
+    'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
   };
   // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
   if (mgApiKey) {
@@ -453,6 +459,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
+  const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -498,6 +505,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   if (effectiveReflectionThreshold !== undefined) {
     globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
+  }
+  if (effectiveCavemanObservations !== undefined) {
+    globalInitialState.cavemanObservations = effectiveCavemanObservations;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
@@ -583,7 +593,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         console.error('Failed to persist model usage count', error);
       }
     },
-    customModelCatalogProvider: () => {
+    customModelCatalogProvider: async () => {
       const settings = loadSettings();
       const customModels: CustomAvailableModel[] = [];
       for (const provider of settings.customProviders) {
@@ -598,6 +608,30 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           });
         }
       }
+
+      // GitHub Copilot exposes its model list dynamically via `/models` since the
+      // available models depend on the user's subscription tier and any org policies.
+      // The catalog is cached + refreshed in the background, so steady-state cost is
+      // a single Map lookup.
+      //
+      // The provider uses the generic OpenAI-compatible adapter pointed at
+      // GitHub Copilot's API, so expose the full live model catalog returned by
+      // Copilot instead of filtering by vendor family here.
+      try {
+        const copilotModels = await getCopilotModelCatalog({ authStorage });
+        for (const m of copilotModels) {
+          customModels.push({
+            id: `github-copilot/${m.id}`,
+            provider: 'github-copilot',
+            modelName: m.id,
+            hasApiKey: true,
+            apiKeyEnvVar: undefined,
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to load GitHub Copilot model catalog:', error);
+      }
+
       return customModels;
     },
     threadLock: {
@@ -616,6 +650,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
     });
   }
+
+  // Persist /om caveman-observations toggle per-thread (mastracode-only concern;
+  // intentionally not in core's harness loadThreadMetadata).
+  const cavemanHarness = harness as unknown as Harness<Record<string, unknown>>;
+  attachCavemanThreadStatePersistence(cavemanHarness);
+  await restoreCavemanForCurrentThread(cavemanHarness).catch(() => {
+    // Persistence is best-effort; don't crash startup if storage hiccups.
+  });
 
   return {
     harness,

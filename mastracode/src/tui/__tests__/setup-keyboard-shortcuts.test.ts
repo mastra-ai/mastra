@@ -81,6 +81,11 @@ function createState(isRunning: boolean) {
     allSystemReminderComponents: [],
     allShellComponents: [],
     ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
+    goalManager: {
+      isActive: vi.fn(() => false),
+      pause: vi.fn(),
+      saveToThread: vi.fn(),
+    },
   } as any;
 
   return { state, editor, actions };
@@ -175,6 +180,25 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
     expect(queueFollowUpMessage).not.toHaveBeenCalled();
     expect(showInfo).toHaveBeenCalledWith(state, GOAL_JUDGE_INPUT_LOCK_MESSAGE);
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('does not pause an active goal when clearing empty idle input', () => {
+    const { state, editor, actions } = createState(false);
+    editor.getText.mockReturnValue('');
+    state.goalManager.isActive.mockReturnValue(true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.goalManager.pause).not.toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
 

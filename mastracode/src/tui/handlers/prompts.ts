@@ -3,13 +3,13 @@
  * ask_question, sandbox_access_request, plan_approval_required.
  */
 import { savePlanToDisk } from '../../utils/plans.js';
+import { createGoalReminderXml } from '../commands/goal.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
-import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
 import { showModalOverlay } from '../overlay.js';
 import type { TUIState } from '../state.js';
-import { getMarkdownTheme, theme } from '../theme.js';
+import { theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -38,38 +38,6 @@ export async function handleAskQuestion(
   options?: Array<{ label: string; description?: string }>,
 ): Promise<void> {
   const { state } = ctx;
-  const activeGoal = state.goalManager?.getGoal();
-  if (activeGoal?.status === 'active') {
-    state.activeGoalJudge = { modelId: activeGoal.judgeModelId };
-    state.gradientAnimator?.start();
-    ctx.updateStatusLine();
-    try {
-      const answer = await state.goalManager.answerQuestion(state, question, options);
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question,
-          options,
-          multiline: true,
-          onSubmit: () => {},
-          onCancel: () => {},
-        },
-        state.ui,
-      );
-      questionComponent.answer(Array.isArray(answer) ? answer.join(', ') : answer);
-      ctx.addChildBeforeFollowUps(questionComponent);
-      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-      ctx.addChildBeforeFollowUps(state.streamingComponent);
-      state.ui.requestRender();
-      state.harness.respondToQuestion({ questionId, answer });
-    } finally {
-      state.activeGoalJudge = undefined;
-      if (!state.harness.getDisplayState().isRunning) {
-        state.gradientAnimator?.stop();
-      }
-      ctx.updateStatusLine();
-    }
-    return;
-  }
 
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
@@ -309,7 +277,16 @@ export async function handlePlanApproval(
         onGoal: async () => {
           state.activeInlinePlanApproval = undefined;
           await approvePlan(ctx, planId, title, plan);
-          await ctx.startGoal(formatPlanGoalObjective(title, plan), 'Goal cancelled.');
+
+          const objective = formatPlanGoalObjective(title, plan);
+          await ctx.startGoal(objective, 'Goal cancelled.', { trigger: 'none' });
+
+          // Match the normal approval path: inject the trigger through the TUI
+          // instead of harness follow-up queueing, while goal state is already active.
+          setTimeout(() => {
+            ctx.fireMessage(createGoalReminderXml(objective));
+          }, 50);
+
           resolve();
         },
         onReject: async (feedback?: string) => {

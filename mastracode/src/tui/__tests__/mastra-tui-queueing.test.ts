@@ -22,7 +22,7 @@ vi.mock('../display.js', () => ({
 }));
 
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { handleAgentEnd } from '../handlers/agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
 import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
@@ -345,6 +345,26 @@ describe('MastraTUI queueing', () => {
     });
   });
 
+  it('does not pause an active goal when a user-initiated abort ends the agent turn', () => {
+    const goalManager = {
+      isActive: vi.fn(() => true),
+      pause: vi.fn(),
+      saveToThread: vi.fn(),
+    };
+    const state = createQueueState({
+      userInitiatedAbort: true,
+      goalManager: goalManager as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentAborted(ctx);
+
+    expect(goalManager.pause).not.toHaveBeenCalled();
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(state.userInitiatedAbort).toBe(false);
+    expect(mocks.showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
+  });
+
   it('waits for harness-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
       harness: { getFollowUpCount: vi.fn(() => 1) } as any,
@@ -362,11 +382,11 @@ describe('MastraTUI queueing', () => {
 });
 
 describe('syncInitialThreadState', () => {
-  it('loads persisted goal metadata for the initially selected thread', async () => {
+  it('reconnects active goal metadata for the initially selected thread without prompting the agent', async () => {
     const persistedGoal = {
       id: 'goal-1',
       objective: 'finish pr triage',
-      status: 'paused' as const,
+      status: 'active' as const,
       turnsUsed: 1,
       maxTurns: 50,
       judgeModelId: 'openai/gpt-5.5',
@@ -378,6 +398,7 @@ describe('syncInitialThreadState', () => {
           { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
           { id: 'thread-2', title: 'Other thread', metadata: {} },
         ]),
+        sendMessage: vi.fn(),
       },
       goalManager: { loadFromThreadMetadata: vi.fn() },
       currentThreadTitle: undefined,
@@ -387,6 +408,7 @@ describe('syncInitialThreadState', () => {
 
     expect(state.currentThreadTitle).toBe('PR triage');
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
+    expect(state.harness.sendMessage).not.toHaveBeenCalled();
   });
 });
 

@@ -136,6 +136,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => c.req.header(name),
+      });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);

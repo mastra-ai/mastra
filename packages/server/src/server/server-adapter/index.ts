@@ -10,13 +10,13 @@ import { z } from 'zod/v4';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
 import {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
-  MASTRA_CLIENT_TYPE_HEADER,
-  MASTRA_IS_STUDIO_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';

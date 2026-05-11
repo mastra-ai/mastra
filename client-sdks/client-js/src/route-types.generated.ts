@@ -8988,6 +8988,100 @@ export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteC
 }
 
 // ============================================================================
+// Route: POST /workflows/:workflowId/runs/:runId/steps/execute
+// ============================================================================
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams = {
+  /** Unique identifier for the workflow */
+  workflowId: string;
+  /** Unique identifier for the workflow run */
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
+  stepId: string;
+  executionPath: number[];
+  stepResults: {
+    [key: string]: any;
+  };
+  state: {
+    [key: string]: any;
+  };
+  requestContext: {
+    [key: string]: any;
+  };
+  input?: any | undefined;
+  resumeData?: any | undefined;
+  retryCount?: number | undefined;
+  foreachIdx?: number | undefined;
+  format?: ('legacy' | 'vnext') | undefined;
+  perStep?: boolean | undefined;
+  validateInputs?: boolean | undefined;
+};
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = any;
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request = Simplify<
+  (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams extends never
+    ? {}
+    : { params: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body
+        ? { body?: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body }
+        : { body: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body })
+>;
+
+export interface PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract {
+  pathParams: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams;
+  queryParams: never;
+  body: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body;
+  request: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request;
+  response: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /workflows/events
+// ============================================================================
+export type PostWorkflowsEvents_Body = {
+  event: {
+    id: string;
+    type: string;
+    data: unknown;
+    runId: string;
+    createdAt: string;
+    index?: number | undefined;
+    deliveryAttempt?: number | undefined;
+    [x: string]: unknown;
+  };
+};
+
+export type PostWorkflowsEvents_Response = {
+  ok: boolean;
+  retry?: boolean | undefined;
+};
+
+export type PostWorkflowsEvents_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostWorkflowsEvents_Body extends never
+      ? {}
+      : {} extends PostWorkflowsEvents_Body
+        ? { body?: PostWorkflowsEvents_Body }
+        : { body: PostWorkflowsEvents_Body })
+>;
+
+export interface PostWorkflowsEvents_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostWorkflowsEvents_Body;
+  request: PostWorkflowsEvents_Request;
+  response: PostWorkflowsEvents_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tools
 // ============================================================================
 export type GetTools_Response = {
@@ -11428,6 +11522,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'generic'
             | 'model_generation'
             | 'model_step'
+            | 'model_inference'
             | 'model_chunk'
             | 'mcp_tool_call'
             | 'processor_run'
@@ -11447,6 +11542,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11593,6 +11689,7 @@ export type GetObservabilityTraces_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11611,7 +11708,8 @@ export type GetObservabilityTraces_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11798,6 +11896,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'generic'
             | 'model_generation'
             | 'model_step'
+            | 'model_inference'
             | 'model_chunk'
             | 'mcp_tool_call'
             | 'processor_run'
@@ -11817,6 +11916,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11964,6 +12064,7 @@ export type GetObservabilityBranches_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11982,7 +12083,8 @@ export type GetObservabilityBranches_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12153,6 +12255,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12171,7 +12274,8 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12335,6 +12439,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12353,7 +12458,8 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12511,6 +12617,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12529,7 +12636,8 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12608,6 +12716,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12626,7 +12735,8 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12911,6 +13021,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'generic'
           | 'model_generation'
           | 'model_step'
+          | 'model_inference'
           | 'model_chunk'
           | 'mcp_tool_call'
           | 'processor_run'
@@ -12930,6 +13041,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'rag_vector_operation'
           | 'rag_action'
           | 'graph_action'
+          | 'mapping'
         )
       | undefined;
     structuredOutput?: boolean | undefined;
@@ -76795,6 +76907,8 @@ export interface RouteTypes {
   'POST /workflows/:workflowId/restart-async': PostWorkflowsWorkflowIdRestartAsync_RouteContract;
   'POST /workflows/:workflowId/restart-all-active-workflow-runs': PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_RouteContract;
   'POST /workflows/:workflowId/restart-all-active-workflow-runs-async': PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteContract;
+  'POST /workflows/:workflowId/runs/:runId/steps/execute': PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract;
+  'POST /workflows/events': PostWorkflowsEvents_RouteContract;
   'GET /tools': GetTools_RouteContract;
   'GET /tools/:toolId': GetToolsToolId_RouteContract;
   'POST /tools/:toolId/execute': PostToolsToolIdExecute_RouteContract;
@@ -77840,6 +77954,9 @@ export interface Client {
   '/workflows/:workflowId/runs/:runId/cancel': {
     POST: PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract;
   };
+  '/workflows/:workflowId/runs/:runId/steps/execute': {
+    POST: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract;
+  };
   '/workflows/:workflowId/start': {
     POST: PostWorkflowsWorkflowIdStart_RouteContract;
   };
@@ -77860,6 +77977,9 @@ export interface Client {
   };
   '/workflows/:workflowId/time-travel-stream': {
     POST: PostWorkflowsWorkflowIdTimeTravelStream_RouteContract;
+  };
+  '/workflows/events': {
+    POST: PostWorkflowsEvents_RouteContract;
   };
   '/workspaces': {
     GET: GetWorkspaces_RouteContract;

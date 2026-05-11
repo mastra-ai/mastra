@@ -48,6 +48,7 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   }
   state.followUpComponents = [];
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -120,13 +121,6 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Pause the goal loop on user-initiated abort
-  if (state.userInitiatedAbort && state.goalManager.isActive()) {
-    state.goalManager.pause();
-    state.goalManager.saveToThread(state).catch(() => {});
-    showInfo(state, 'Goal paused (interrupted). Use /goal resume to continue.');
-  }
-
   // Update streaming message to show it was interrupted
   if (state.streamingComponent && state.streamingMessage) {
     state.streamingMessage.stopReason = 'aborted';
@@ -146,6 +140,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -167,6 +162,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   state.ui.requestRender();

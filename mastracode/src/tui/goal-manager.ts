@@ -70,12 +70,6 @@ const judgeSchema = z.object({
   reason: z.string().describe('Brief explanation of what was accomplished or what remains to be done'),
 });
 
-const questionAnswerSchema = z.object({
-  answer: z
-    .string()
-    .describe('The answer to give the assistant. If choices are provided, use exactly one choice label.'),
-});
-
 // =============================================================================
 // GoalManager
 // =============================================================================
@@ -182,19 +176,6 @@ export class GoalManager {
    * Called after each agent turn completes. Evaluates whether to continue.
    * Returns a GoalEvaluationResult with continuation prompt and judge result.
    */
-  async answerQuestion(
-    state: TUIState,
-    question: string,
-    options?: Array<{ label: string; description?: string }>,
-  ): Promise<string> {
-    if (!this.goal || this.goal.status !== 'active') {
-      return '(skipped)';
-    }
-
-    const result = await this.callJudgeForQuestion(state, question, options);
-    return result.answer;
-  }
-
   async evaluateAfterTurn(state: TUIState): Promise<GoalEvaluationResult> {
     if (!this.goal || this.goal.status !== 'active') {
       return { continuation: null, judgeResult: null };
@@ -302,57 +283,6 @@ export class GoalManager {
         .join('\n');
     }
     return String(content ?? '');
-  }
-
-  private async callJudgeForQuestion(
-    state: TUIState,
-    question: string,
-    options?: Array<{ label: string; description?: string }>,
-  ): Promise<{ answer: string }> {
-    try {
-      const memory = await this.getJudgeMemory(state);
-      const judgeAgent = this.createJudgeAgent(memory);
-      if (!judgeAgent) {
-        return { answer: '(judge could not answer: Judge model could not be initialized.)' };
-      }
-
-      const optionLabels = options?.map(option => option.label) ?? [];
-      const optionsText = optionLabels.length
-        ? `\n\nAvailable answers (choose exactly one label):\n${options!
-            .map(option => `- ${option.label}${option.description ? `: ${option.description}` : ''}`)
-            .join('\n')}`
-        : '';
-      const answerSchema = optionLabels.length
-        ? z.object({
-            answer: z
-              .enum(optionLabels as [string, ...string[]])
-              .describe('Exactly one label from the available answers.'),
-          })
-        : questionAnswerSchema;
-      const stream = await judgeAgent.stream(
-        `Goal: ${this.goal!.objective}\n\nThe assistant asked a question while goal mode is active. Answer it as the goal judge so the assistant can continue without waiting for the human user. If the question asks for verification, verify it yourself unless the goal explicitly requires human/user verification.\n\nQuestion:\n${question}${optionsText}`,
-        {
-          ...(memory
-            ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
-            : {}),
-          structuredOutput: {
-            schema: answerSchema,
-          },
-        },
-      );
-
-      await stream.consumeStream();
-      const output = (await stream.getFullOutput()).object as z.infer<typeof questionAnswerSchema> | undefined;
-      if (!output?.answer) {
-        return { answer: '(judge could not answer: no structured answer returned.)' };
-      }
-      if (optionLabels.length && !optionLabels.includes(output.answer)) {
-        return { answer: `(judge could not answer: returned "${output.answer}" outside available answers.)` };
-      }
-      return { answer: output.answer };
-    } catch (error) {
-      return { answer: `(judge could not answer: ${formatError(error)})` };
-    }
   }
 
   private async callJudge(
