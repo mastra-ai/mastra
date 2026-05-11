@@ -1,8 +1,9 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { cva, type VariantProps } from 'class-variance-authority';
+import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-export const tabListVariants = cva('flex items-center relative text-ui-lg', {
+const tabListVariants = cva('flex items-center relative text-ui-lg', {
   variants: {
     variant: {
       line: 'w-max min-w-full border-b border-border1',

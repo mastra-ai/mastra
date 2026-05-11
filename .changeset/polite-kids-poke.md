@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Migrated Tabs component to Base UI. Added `pill` variant on `TabList` with an animated background indicator that slides behind the active trigger. The default `line` variant now animates its underline smoothly between tabs as well.
+Added a new `pill` variant on `TabList` with an animated background indicator that slides behind the active trigger. The default `line` variant now animates its underline smoothly between tabs as well. Implemented by migrating the underlying Tabs component from Radix UI to Base UI.
 
 ```tsx
 // Before — only the line (underline) style was available
