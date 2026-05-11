@@ -2,10 +2,14 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build": {
-      "dependsOn": ["^build", "typecheck"],
+    "build:lib": {
+      "dependsOn": ["^build"],
       "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./vite.config.ts"]
+    },
+    "build": {
+      "dependsOn": ["^build", "build:lib", "typecheck"],
+      "outputs": ["dist/**"]
     }
   }
 }

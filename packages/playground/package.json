@@ -29,9 +29,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:lib": "vite build",
     "build:watch": "vite build --watch",
     "lint": "eslint --no-warn-ignored .",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "preview": "vite preview",
     "test:e2e": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts",
     "test:e2e:ui": "pnpm test:e2e:setup && playwright test -c e2e/playwright.config.ts --ui",

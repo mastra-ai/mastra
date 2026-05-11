@@ -43,13 +43,13 @@ async function writeDtsFiles() {
           await mkdir(dirname(targetPath), { recursive: true });
 
           const relPath = slash(relative(dirname(targetPath), file)).replace('/index.d.ts', '');
-          await writeFile(targetPath, `export * from './${relPath}';\n`);
+          await writeFile(targetPath, `export * from './${relPath}';`);
         } else {
           const targetPath = join(rootPath, key) + '.d.ts';
           await mkdir(dirname(targetPath), { recursive: true });
 
           const relPath = slash(relative(dirname(targetPath), file)).replace('/index.d.ts', '');
-          await writeFile(targetPath, `export * from './${relPath}';\n`);
+          await writeFile(targetPath, `export * from './${relPath}';`);
         }
       }
     }
