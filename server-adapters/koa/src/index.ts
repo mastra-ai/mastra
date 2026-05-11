@@ -454,7 +454,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     if (authConfig) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
-        const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+        const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
         const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
         if (permissionError) {
@@ -888,7 +888,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           if (authConfig) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {
-              const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+              const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
               const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
               if (permissionError) {
                 ctx.status = permissionError.status;

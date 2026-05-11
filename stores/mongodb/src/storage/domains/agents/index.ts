@@ -243,13 +243,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       await collection.insertOne(this.serializeAgent(newAgent));
 
       // Extract config fields from the flat input
-      const {
-        id: _id,
-        authorId: _authorId,
-        visibility: _visibility,
-        metadata: _metadata,
-        ...snapshotConfig
-      } = agent;
+      const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
       const versionId = randomUUID();
