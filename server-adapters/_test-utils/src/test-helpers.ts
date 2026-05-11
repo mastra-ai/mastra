@@ -516,6 +516,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     createProcessor: vi.fn(),
   };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    hasEnabledBuilderConfig: () => true,
+    resolveBuilder: async () => ({
+      enabled: true,
+      getFeatures: () => ({ agent: { stars: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
