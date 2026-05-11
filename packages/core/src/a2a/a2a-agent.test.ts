@@ -14,6 +14,17 @@ type StreamEventWithOptionalId = {
   };
 };
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+}
+
 const baseCard: AgentCard = {
   name: 'Remote Agent',
   description: 'A remote agent',
@@ -126,37 +137,6 @@ function createSseResponse(events: unknown[]) {
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
-      },
-    }),
-    {
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-      },
-    },
-  );
-}
-
-function createDelayedSseResponse(
-  chunks: Array<{ delayMs: number; event: unknown }>,
-  { finalDone = true }: { finalDone?: boolean } = {},
-) {
-  const encoder = new TextEncoder();
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        void (async () => {
-          for (const chunk of chunks) {
-            await new Promise(resolve => setTimeout(resolve, chunk.delayMs));
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ result: chunk.event })}\n\n`));
-          }
-
-          if (finalDone) {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          }
-
-          controller.close();
-        })();
       },
     }),
     {
@@ -563,27 +543,46 @@ describe('A2AAgent', () => {
 
   it('returns a live stream result before the remote SSE completes', async () => {
     const streamTask = createTask();
+    const finalChunkEnqueued = createDeferred<'sse-completed'>();
     const fetchMock = createFetchMock([
       new Response(JSON.stringify(baseCard), { status: 200 }),
-      createDelayedSseResponse(
-        [
-          { delayMs: 25, event: streamTask },
-          {
-            delayMs: 25,
-            event: {
-              kind: 'artifact-update',
-              taskId: 'task-1',
-              contextId: 'ctx-1',
-              lastChunk: true,
-              artifact: {
-                artifactId: 'response:text',
-                name: 'response.txt',
-                parts: [{ kind: 'text', text: 'Hello later' }],
-              },
-            },
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            const encoder = new TextEncoder();
+            void (async () => {
+              await new Promise(resolve => setTimeout(resolve, 25));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ result: streamTask })}\n\n`));
+              await new Promise(resolve => setTimeout(resolve, 25));
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    result: {
+                      kind: 'artifact-update',
+                      taskId: 'task-1',
+                      contextId: 'ctx-1',
+                      lastChunk: true,
+                      artifact: {
+                        artifactId: 'response:text',
+                        name: 'response.txt',
+                        parts: [{ kind: 'text', text: 'Hello later' }],
+                      },
+                    },
+                  })}\n\n`,
+                ),
+              );
+              finalChunkEnqueued.resolve('sse-completed');
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            })();
           },
-        ],
-        { finalDone: true },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'text/event-stream',
+          },
+        },
       ),
     ]);
 
@@ -592,11 +591,15 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const startedAt = Date.now();
-    const stream = await agent.stream('Live stream please', { runId: 'stream-run-live' });
-    const elapsedMs = Date.now() - startedAt;
+    const streamPromise = agent.stream('Live stream please', { runId: 'stream-run-live' });
+    const winner = await Promise.race([
+      streamPromise.then(() => 'stream-resolved' as const),
+      finalChunkEnqueued.promise,
+    ]);
 
-    expect(elapsedMs).toBeLessThan(40);
+    expect(winner).toBe('stream-resolved');
+
+    const stream = await streamPromise;
 
     const events: string[] = [];
     for await (const event of stream.fullStream) {
@@ -609,6 +612,57 @@ describe('A2AAgent', () => {
       taskId: 'task-1',
       waitingForInput: false,
     });
+  });
+
+  it('skips malformed SSE frames and continues processing later valid events', async () => {
+    const streamTask = createTask();
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            const encoder = new TextEncoder();
+            controller.enqueue(encoder.encode('data: {"result":\n\n'));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ result: streamTask })}\n\n`));
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  result: {
+                    kind: 'artifact-update',
+                    taskId: 'task-1',
+                    contextId: 'ctx-1',
+                    lastChunk: true,
+                    artifact: {
+                      artifactId: 'response:text',
+                      name: 'response.txt',
+                      parts: [{ kind: 'text', text: 'Recovered text' }],
+                    },
+                  },
+                })}\n\n`,
+              ),
+            );
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'text/event-stream',
+          },
+        },
+      ),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const stream = await agent.stream('Recover after malformed frame', { runId: 'stream-run-malformed' });
+
+    expect(await stream.text).toBe('Recovered text');
+    expect((await stream.task)?.status.state).toBe('working');
   });
 
   it('concatenates streamed artifact text chunks without inserting newlines', async () => {
@@ -650,6 +704,28 @@ describe('A2AAgent', () => {
     const stream = await agent.stream('Chunked stream', { runId: 'stream-run-chunked' });
 
     expect(await stream.text).toBe('Hello world');
+  });
+
+  it('does not retry non-transient 4xx request failures', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      new Response(JSON.stringify({ error: 'bad request' }), { status: 400 }),
+      jsonRpcResult(createMessage('should not retry')),
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+      retries: 2,
+    });
+
+    await expect(agent.generate('Do not retry 400')).rejects.toMatchObject({
+      name: 'MastraA2AError',
+      data: {
+        status: 400,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('does not mix task progress status text into the final streamed text', async () => {

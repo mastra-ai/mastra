@@ -70,6 +70,27 @@ type StreamConsumptionResult = {
 };
 
 type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+type A2AAgentFullStreamChunk =
+  | { type: 'text-start'; payload: { id: string } }
+  | { type: 'text-delta'; payload: { id: string; text: string } }
+  | { type: 'text-end'; payload: { id: string } }
+  | {
+      type: 'tool-call-suspended';
+      payload: {
+        toolCallId: string;
+        toolName: string;
+        args: Record<string, never>;
+        suspendPayload: A2AAgentResumePayload;
+        resumeSchema: string;
+      };
+    }
+  | {
+      type: 'finish';
+      payload: {
+        finishReason: 'stop';
+        usage: typeof EMPTY_USAGE;
+      };
+    };
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -124,7 +145,13 @@ function parseEventBlock(eventBlock: string): { done: true } | { event?: A2AStre
     return { done: true };
   }
 
-  const parsed = JSON.parse(payload) as JSONRPCResponse<A2AStreamEventData> | A2AStreamEventData;
+  let parsed: JSONRPCResponse<A2AStreamEventData> | A2AStreamEventData;
+
+  try {
+    parsed = JSON.parse(payload) as JSONRPCResponse<A2AStreamEventData> | A2AStreamEventData;
+  } catch {
+    return {};
+  }
 
   if ('result' in parsed && parsed.result) {
     return { event: parsed.result };
@@ -1049,7 +1076,7 @@ export class A2AAgent implements SubAgent {
         resultDeferred.reject(error);
       });
 
-    return {
+    const streamResult = {
       runId,
       fullStream: this.#streamEvents({ bootstrap, runId, stream: consumerStream }),
       text: textDeferred.promise,
@@ -1059,7 +1086,9 @@ export class A2AAgent implements SubAgent {
       suspendPayload: suspendPayloadDeferred.promise,
       resumeSchema: resumeSchemaDeferred.promise,
       getResult: async () => resultDeferred.promise,
-    } as unknown as A2AAgentStreamResult;
+    };
+
+    return streamResult as unknown as A2AAgentStreamResult;
   }
 
   async *#streamEvents({
@@ -1070,7 +1099,7 @@ export class A2AAgent implements SubAgent {
     bootstrap: AgentBootstrap;
     runId: string;
     stream: ReadableStream<Uint8Array>;
-  }): AsyncIterable<any> {
+  }): AsyncIterable<A2AAgentFullStreamChunk> {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1359,7 +1388,7 @@ export class A2AAgent implements SubAgent {
       );
     }
 
-    const fullStream = (async function* () {
+    const fullStream = (async function* (): AsyncIterable<A2AAgentFullStreamChunk> {
       if (result.text) {
         yield { type: 'text-start', payload: { id: textId } };
         yield { type: 'text-delta', payload: { id: textId, text: result.text } };
@@ -1389,7 +1418,7 @@ export class A2AAgent implements SubAgent {
       };
     })();
 
-    return {
+    const streamResult = {
       runId,
       fullStream,
       text: Promise.resolve(result.text),
@@ -1399,7 +1428,9 @@ export class A2AAgent implements SubAgent {
       suspendPayload: Promise.resolve(result.resumePayload),
       resumeSchema: Promise.resolve(result.resumeSchema),
       getResult: async () => result,
-    } as unknown as A2AAgentStreamResult;
+    };
+
+    return streamResult as unknown as A2AAgentStreamResult;
   }
 
   async #request(
@@ -1440,6 +1471,10 @@ export class A2AAgent implements SubAgent {
       } catch (error) {
         lastError = error;
 
+        if (!shouldRetryRequest(error)) {
+          throw lastError;
+        }
+
         if (attempts === this.#retries) {
           break;
         }
@@ -1475,4 +1510,37 @@ export class A2AAgent implements SubAgent {
 
     return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
   }
+}
+
+function shouldRetryRequest(error: unknown): boolean {
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true;
+  }
+
+  const status =
+    typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number'
+      ? error.status
+      : typeof error === 'object' &&
+          error !== null &&
+          'data' in error &&
+          typeof error.data === 'object' &&
+          error.data !== null &&
+          'status' in error.data &&
+          typeof error.data.status === 'number'
+        ? error.data.status
+        : undefined;
+
+  if (status === undefined) {
+    return true;
+  }
+
+  return status === 408 || status === 429 || status >= 500;
 }

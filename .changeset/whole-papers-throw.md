@@ -6,10 +6,10 @@ Added an experimental A2AAgent class for calling remote A2A agents from @mastra/
 
 **What changed**
 
-- Added A2AAgent with generate, resumeGenerate, stream, and resumeStream methods for remote A2A execution.
-- Added in-memory Agent Card caching and optional Agent Card verification hooks.
-- Added typed generate and stream result objects for wrappers that want to adapt remote A2A agents into other Mastra primitives.
-- Added a dedicated `@mastra/core/a2a/client` subpath for browser-safe shared A2A types and errors.
+- Remote A2A execution is now available through `A2AAgent.generate`, `resumeGenerate`, `stream`, and `resumeStream`.
+- Agent Cards can be cached and verified with pluggable verification hooks before remote execution begins.
+- Wrapper integrations can consume typed generate and stream results when adapting remote A2A agents into other Mastra primitives.
+- Browser environments can import shared A2A types and errors from `@mastra/core/a2a/client`.
 
 **Example**
 
