@@ -1537,9 +1537,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         continue;
       }
 
+      // Cap to ~200px tall (~12 rows) and half the available width
+      // to keep screenshots compact and avoid distortion
+      const maxW = Math.min(maxWidthCells, Math.floor(termWidth / 2));
+      const maxH = 12;
+
       const rendered = renderImage(img.data, dims, {
-        maxWidthCells,
-        maxHeightCells: 20,
+        maxWidthCells: maxW,
+        maxHeightCells: maxH,
         preserveAspectRatio: true,
       });
       if (rendered) {
