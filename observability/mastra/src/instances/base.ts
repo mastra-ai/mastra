@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
+import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -27,7 +27,8 @@ import type {
   LoggerContext,
   MetricsContext,
   ObservabilityEvent,
-  SpanType,
+  ModelGenerationAttributes,
+  UsageStats,
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
@@ -35,9 +36,10 @@ import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
 import { MetricsContextImpl } from '../context/metrics';
-import { emitAutoExtractedMetrics } from '../metrics/auto-extract';
+import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
 import { NoOpSpan } from '../spans';
+import { addUsageStats } from '../usage';
 
 // ============================================================================
 // Abstract Base Class
@@ -456,10 +458,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * This ensures all spans emit events regardless of implementation
    */
   private wireSpanLifecycle<TType extends SpanType>(span: Span<TType>): void {
-    // bypass wire up if internal span and not includeInternalSpans
-    if (!this.config.includeInternalSpans && span.isInternal) {
-      return;
-    }
+    // Internal spans are also wired so that filtered MODEL_GENERATION spans
+    // can roll their usage up to the closest exported ancestor. emitSpanEnded
+    // / emitSpanUpdated still short-circuit for filtered spans via
+    // getSpanForExport, so no trace events leak for internal spans.
 
     // Store original methods
     const originalEnd = span.end.bind(span);
@@ -471,7 +473,19 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         this.logger.warn(`End event is not available on event spans`);
         return;
       }
+
+      // Capture rollup usage BEFORE originalEnd runs: excluded spans
+      // drop end-time attributes (see DefaultSpan#end), so the only
+      // place to read MODEL_GENERATION usage for a filtered span is the
+      // end() options being passed in right now.
+      const rollupTarget = this.captureModelUsageRollup(span, options);
+
       originalEnd(options);
+
+      if (rollupTarget) {
+        this.applyUsageRollup(rollupTarget);
+      }
+
       this.emitSpanEnded(span);
     };
 
@@ -697,6 +711,76 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       const event: TracingEvent = { type: TracingEventType.SPAN_UPDATED, exportedSpan };
       this.emitTracingEvent(event);
     }
+  }
+
+  /**
+   * When an internal MODEL_GENERATION span ends, capture the rollup payload
+   * (usage, provider, model, target ancestor) needed to attribute its cost
+   * to the closest exported ancestor span. Returns undefined when no rollup
+   * applies — non-MODEL_GENERATION spans, spans that will be exported, or
+   * spans whose usage isn't available at end time.
+   */
+  private captureModelUsageRollup<TType extends SpanType>(
+    span: Span<TType>,
+    endOptions: EndSpanOptions<TType> | undefined,
+  ): { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string } | undefined {
+    if (span.type !== SpanType.MODEL_GENERATION) return undefined;
+    // If the span itself will be exported, the existing auto-extract pipeline
+    // emits its metrics; nothing to roll up.
+    if (!span.isInternal || this.config.includeInternalSpans) return undefined;
+
+    // For excluded spans, end() options carry the only copy of attributes —
+    // the live span discards them. Read from there first, falling back to
+    // any prior values that survived an earlier update().
+    const endAttrs = (endOptions?.attributes as ModelGenerationAttributes | undefined) ?? undefined;
+    const liveAttrs = span.attributes as ModelGenerationAttributes | undefined;
+    const usage = endAttrs?.usage ?? liveAttrs?.usage;
+    if (!usage) return undefined;
+
+    const ancestor = this.findExportedAncestor(span);
+    if (!ancestor) return undefined;
+
+    const provider = endAttrs?.provider ?? liveAttrs?.provider;
+    const model = endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model;
+
+    return { ancestor, usage, provider, model };
+  }
+
+  /**
+   * Accumulate usage onto the ancestor's `internalUsage` attribute (for trace
+   * UI visibility) and emit auto-extracted token metrics now, using the
+   * ancestor's metrics context so cost / token labels point at the visible
+   * span instead of the hidden agent that incurred them.
+   */
+  private applyUsageRollup(target: { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string }): void {
+    const { ancestor, usage, provider, model } = target;
+
+    // Mutate the live ancestor's attributes; export reads this object later.
+    // Ancestor is non-internal so its attributes weren't discarded at end-
+    // time-drop, and ancestor hasn't ended yet (we're inside a descendant's
+    // end()), so direct mutation is safe.
+    const attrs = (ancestor.attributes ?? {}) as { internalUsage?: UsageStats };
+    attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
+    (ancestor as { attributes: unknown }).attributes = attrs;
+
+    try {
+      emitTokenMetricsForUsage(usage, provider, model, this.getMetricsContext(ancestor));
+    } catch (err) {
+      this.logger.error('[Observability] Usage rollup metric emission error:', err);
+    }
+  }
+
+  /**
+   * Walk up the parent chain to find the closest ancestor that won't be
+   * filtered by internal-span filtering. Returns undefined when every
+   * ancestor is internal-and-filtered.
+   */
+  private findExportedAncestor(span: AnySpan): AnySpan | undefined {
+    let ancestor: AnySpan | undefined = span.parent;
+    while (ancestor && ancestor.isInternal && !this.config.includeInternalSpans) {
+      ancestor = ancestor.parent;
+    }
+    return ancestor;
   }
 
   /**
