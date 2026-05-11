@@ -7,12 +7,11 @@ Test stored skill create, read, update, delete, visibility, and filesystem write
 ### 1. Create a Skill
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/skills \
+curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Smoke Test Skill",
     "description": "A test skill created during smoke testing",
-    "workspaceId": "<workspaceId>",
     "visibility": "private"
   }' | jq .
 ```
@@ -31,7 +30,7 @@ Record the skill ID: `SKILL_ID=<returned id>`
 ### 2. Get the Skill
 
 ```bash
-curl -s http://localhost:4111/api/stored/skills/$SKILL_ID | jq .
+curl -s $BASE/stored/skills/$SKILL_ID | jq .
 ```
 
 - [ ] Returns the skill with all fields matching
@@ -41,7 +40,7 @@ curl -s http://localhost:4111/api/stored/skills/$SKILL_ID | jq .
 ### 3. List Skills
 
 ```bash
-curl -s http://localhost:4111/api/stored/skills | jq .
+curl -s $BASE/stored/skills | jq .
 ```
 
 - [ ] Response has `skills` array
@@ -51,7 +50,7 @@ curl -s http://localhost:4111/api/stored/skills | jq .
 ### 4. Update Visibility (Private → Public)
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/skills/$SKILL_ID \
+curl -s -X PATCH $BASE/stored/skills/$SKILL_ID \
   -H 'Content-Type: application/json' \
   -d '{"visibility": "public"}' | jq .
 ```
@@ -63,7 +62,7 @@ curl -s -X PATCH http://localhost:4111/api/stored/skills/$SKILL_ID \
 ### 5. Update Skill Metadata
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/skills/$SKILL_ID \
+curl -s -X PATCH $BASE/stored/skills/$SKILL_ID \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Updated Smoke Skill",
@@ -78,12 +77,11 @@ curl -s -X PATCH http://localhost:4111/api/stored/skills/$SKILL_ID \
 ### 6. Create a Second Skill (Public)
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/skills \
+curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Public Smoke Skill",
     "description": "A public skill for smoke testing",
-    "workspaceId": "<workspaceId>",
     "visibility": "public"
   }' | jq .
 ```
@@ -95,30 +93,33 @@ Record the second skill ID: `SKILL_ID_2=<returned id>`
 ### 7. List Skills — Verify Both
 
 ```bash
-curl -s http://localhost:4111/api/stored/skills | jq '.skills | length'
+curl -s $BASE/stored/skills | jq '.skills | length'
 ```
 
 - [ ] Count includes both new skills
 
-### 8. Publish Skill (if endpoint exists)
+### 8. Publish Skill
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/skills/$SKILL_ID/publish \
-  -H 'Content-Type: application/json' | jq .
+curl -s -X POST $BASE/stored/skills/$SKILL_ID/publish \
+  -H 'Content-Type: application/json' \
+  -d '{}' | jq .
 ```
 
-- [ ] Returns success or valid error (endpoint may not be fully implemented yet)
-- [ ] Note the response for future reference
+- [ ] HTTP `200` or `201`
+- [ ] Response includes a new `versionId` (or `activeVersionId`) on the returned skill
+- [ ] `GET /stored/skills/$SKILL_ID` shows `activeVersionId` matching the publish response
+- [ ] If the skill has no on-disk files yet, the endpoint still returns the persisted skill record with a fresh version snapshot — a `400` here means the request body was malformed, not that the endpoint is unimplemented.
 
 ### 9. Delete Skills (Cleanup)
 
 ```bash
-curl -s -X DELETE http://localhost:4111/api/stored/skills/$SKILL_ID | jq .
-curl -s -X DELETE http://localhost:4111/api/stored/skills/$SKILL_ID_2 | jq .
+curl -s -X DELETE $BASE/stored/skills/$SKILL_ID | jq .
+curl -s -X DELETE $BASE/stored/skills/$SKILL_ID_2 | jq .
 ```
 
-- [ ] Both return success
-- [ ] `GET /stored/skills/$SKILL_ID` returns 404
+- [ ] Both return HTTP `200` or `204`
+- [ ] `GET /stored/skills/$SKILL_ID` returns `404`
 - [ ] Skills list count decreased
 
 ## Filesystem persistence (#16000)
@@ -169,13 +170,13 @@ If this skill was installed from skills.sh or copied from the library:
 ### Duplicate Skill Name
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/skills \
+curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
-  -d '{"name": "Dupe Skill", "workspaceId": "<workspaceId>"}' | jq .
+  -d '{"name": "Dupe Skill"}' | jq .
 
-curl -s -X POST http://localhost:4111/api/stored/skills \
+curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
-  -d '{"name": "Dupe Skill", "workspaceId": "<workspaceId>"}' | jq .
+  -d '{"name": "Dupe Skill"}' | jq .
 ```
 
 - [ ] Second create either succeeds (unique IDs) or returns a meaningful error
@@ -184,7 +185,7 @@ curl -s -X POST http://localhost:4111/api/stored/skills \
 ### Skill Without Workspace
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/skills \
+curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -d '{"name": "No Workspace Skill"}' | jq .
 ```

@@ -2,12 +2,14 @@
 
 Test stored agent create, read, update, delete, skill attachment, and model configuration.
 
+The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid under the example's admin policy, which allows any `openai` model via wildcard plus exactly `anthropic/claude-opus-4-7` (see `examples/agent/src/mastra/index.ts` → `models.allowed`). If you've changed the policy, swap these for something allowed.
+
 ## Steps
 
 ### 1. Create a Stored Agent
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/agents \
+curl -s -X POST $BASE/stored/agents \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Smoke Test Agent",
@@ -35,7 +37,7 @@ Record the agent ID: `AGENT_ID=<returned id>`
 ### 2. Get the Agent
 
 ```bash
-curl -s http://localhost:4111/api/stored/agents/$AGENT_ID | jq .
+curl -s $BASE/stored/agents/$AGENT_ID | jq .
 ```
 
 - [ ] Returns agent with all fields
@@ -46,7 +48,7 @@ curl -s http://localhost:4111/api/stored/agents/$AGENT_ID | jq .
 ### 3. List Agents
 
 ```bash
-curl -s http://localhost:4111/api/stored/agents | jq .
+curl -s $BASE/stored/agents | jq .
 ```
 
 - [ ] Response has `agents` array
@@ -58,12 +60,11 @@ curl -s http://localhost:4111/api/stored/agents | jq .
 Create a skill to attach to the agent:
 
 ```bash
-SKILL_RESP=$(curl -s -X POST http://localhost:4111/api/stored/skills \
+SKILL_RESP=$(curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Agent Smoke Skill",
-    "description": "Skill to attach to smoke test agent",
-    "workspaceId": "<workspaceId>"
+    "description": "Skill to attach to smoke test agent"
   }')
 echo $SKILL_RESP | jq .
 SKILL_ID=$(echo $SKILL_RESP | jq -r '.id // .skill.id // empty')
@@ -72,7 +73,7 @@ SKILL_ID=$(echo $SKILL_RESP | jq -r '.id // .skill.id // empty')
 ### 5. Attach Skill to Agent
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
+curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
   -d "{\"skills\": [\"$SKILL_ID\"]}" | jq .
 ```
@@ -83,7 +84,7 @@ curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
 ### 6. Verify Skill Cross-Reference
 
 ```bash
-curl -s http://localhost:4111/api/stored/agents/$AGENT_ID | jq '.skills'
+curl -s $BASE/stored/agents/$AGENT_ID | jq '.skills'
 ```
 
 - [ ] Skills array includes the attached skill ID
@@ -91,7 +92,7 @@ curl -s http://localhost:4111/api/stored/agents/$AGENT_ID | jq '.skills'
 ### 7. Update Agent Visibility
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
+curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
   -d '{"visibility": "public"}' | jq .
 ```
@@ -102,7 +103,7 @@ curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
 ### 8. Update Agent Model
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
+curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
   -d '{
     "model": {
@@ -118,7 +119,7 @@ curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
 ### 9. Update Agent Instructions
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
+curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
   -d '{"instructions": "Updated instructions for smoke testing."}' | jq .
 ```
@@ -129,7 +130,7 @@ curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
 ### 10. Detach Skill from Agent
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
+curl -s -X PATCH $BASE/stored/agents/$AGENT_ID \
   -H 'Content-Type: application/json' \
   -d '{"skills": []}' | jq .
 ```
@@ -139,8 +140,8 @@ curl -s -X PATCH http://localhost:4111/api/stored/agents/$AGENT_ID \
 ### 11. Delete Agent and Skill (Cleanup)
 
 ```bash
-curl -s -X DELETE http://localhost:4111/api/stored/agents/$AGENT_ID | jq .
-curl -s -X DELETE http://localhost:4111/api/stored/skills/$SKILL_ID | jq .
+curl -s -X DELETE $BASE/stored/agents/$AGENT_ID | jq .
+curl -s -X DELETE $BASE/stored/skills/$SKILL_ID | jq .
 ```
 
 - [ ] Both return success
@@ -178,7 +179,7 @@ For full coverage of `applyBuilderDefaults()`, see `references/defaults.md`. Sho
 The builder config defines which models are allowed. Verify via the settings endpoint:
 
 ```bash
-curl -s http://localhost:4111/api/editor/builder/settings | jq '.models // .modelPolicy'
+curl -s $BASE/editor/builder/settings | jq '.models // .modelPolicy'
 ```
 
 - [ ] Lists allowed providers/models

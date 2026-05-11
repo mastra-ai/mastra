@@ -14,6 +14,15 @@ On startup, `ensureBuilderWorkspaces()`:
 4. Creates or updates the stored workspace in the DB
 5. Archives orphaned workspaces (ones tagged `metadata.source: "builder"` that are no longer in the config)
 
+## Prerequisites
+
+Resolve the builder workspace ID (the rest of this file assumes `$WORKSPACE_ID` is set):
+
+```bash
+WORKSPACE_ID=$(curl -s $BASE/stored/workspaces | jq -r '.workspaces[] | select(.metadata.source == "builder") | .id' | head -1)
+echo "WORKSPACE_ID=$WORKSPACE_ID"
+```
+
 ## Steps
 
 ### 1. Fresh Startup Persistence
@@ -21,7 +30,7 @@ On startup, `ensureBuilderWorkspaces()`:
 This is verified in **Setup** (section 1). After a fresh server start:
 
 ```bash
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 - [ ] Workspace exists with `metadata.source: "builder"`
@@ -34,11 +43,11 @@ Restart the server without changing any config. Record the workspace's `updatedA
 
 ```bash
 # Before restart
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq '{updatedAt, resolvedVersionId}'
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{updatedAt, resolvedVersionId}'
 
-# Restart server (Ctrl+C, pnpm dev)
+# Restart server (Ctrl+C, pnpm mastra:dev)
 # After restart
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq '{updatedAt, resolvedVersionId}'
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{updatedAt, resolvedVersionId}'
 ```
 
 - [ ] `updatedAt` is unchanged (no write on no-op)
@@ -60,7 +69,7 @@ filesystem: new LocalFilesystem({ basePath: '.mastra/workspace-v2' }),
 Restart the server, then check:
 
 ```bash
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 - [ ] `filesystem.config.basePath` is now `.mastra/workspace-v2`
@@ -91,10 +100,10 @@ Restart the server, then check both workspaces:
 
 ```bash
 # Old workspace should be archived
-curl -s http://localhost:4111/api/stored/workspaces/<original-workspaceId> | jq '{status, metadata}'
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{status, metadata}'
 
 # New workspace should be created
-curl -s http://localhost:4111/api/stored/workspaces/builder-workspace-v2 | jq '{status, metadata}'
+curl -s $BASE/stored/workspaces/builder-workspace-v2 | jq '{status, metadata}'
 ```
 
 - [ ] Old workspace: `status` is `"archived"`
@@ -110,15 +119,15 @@ Create a user workspace, then restart the server:
 
 ```bash
 # Create user workspace
-curl -s -X POST http://localhost:4111/api/stored/workspaces \
+curl -s -X POST $BASE/stored/workspaces \
   -H 'Content-Type: application/json' \
   -d '{"id": "user-workspace", "name": "User Workspace"}' | jq .
 
 # Record state
-curl -s http://localhost:4111/api/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
+curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
 
 # Restart server, then check again
-curl -s http://localhost:4111/api/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
+curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedAt}'
 ```
 
 - [ ] User workspace is unchanged after restart
@@ -128,7 +137,7 @@ curl -s http://localhost:4111/api/stored/workspaces/user-workspace | jq '{status
 Clean up:
 
 ```bash
-curl -s -X DELETE http://localhost:4111/api/stored/workspaces/user-workspace
+curl -s -X DELETE $BASE/stored/workspaces/user-workspace
 ```
 
 ### 6. Metadata Backfill

@@ -74,7 +74,7 @@ With role-preview = `admin`:
 With role-preview = `viewer`:
 
 - [ ] `/agent-builder` route either denies access or shows read-only views
-- [ ] Skills/Favorites/Infra sidebar links hidden where appropriate
+- [ ] Sidebar gating: `Skills` hidden (no `stored-skills:write`), `Favorites` hidden (no read on stars resource), `Infra` hidden (no `infrastructure:read`). The top-level `Agents` and `Library` entries remain visible because viewer keeps `*:read`.
 - [ ] Create/Edit/Delete buttons hidden
 - [ ] Attempting to navigate to `/agent-builder/agents/:id/edit` redirects to view (or denies)
 - [ ] Impersonation banner shows current preview role + "Exit preview" affordance
@@ -104,13 +104,34 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/stored/agents"
 - [ ] UI loads without login
 - [ ] All affordances visible
 
-### 8. `share` and `publish` semantics
+### 8. Visibility flip + publish semantics
 
-`stored-skills:share` (visibility flip) and `stored-skills:publish` are assertion-only permissions (not bound to a route's `requiresPermission`). Verify ownership-based access:
+The `:share` and `:publish` actions on `stored-skills` / `stored-agents`
+aren't wired into route `requiresPermission`. Instead, the handler calls
+`assertShareAccess(ctx, record)` (and equivalent for publish) inside the
+PATCH/POST handler. That helper allows the action when **any** of these
+hold:
 
-- [ ] Owner can flip visibility on their own skill (`PATCH /stored/skills/:id` with `{visibility:'public'}`)
-- [ ] Admin can flip visibility on any skill
-- [ ] Viewer/member cannot flip visibility on skills they don't own
+1. The record has no owner (legacy/unowned).
+2. The caller is the record's `authorId`.
+3. The caller has the admin-bypass permission for the resource
+   (`stored-skills:write` with no record filter).
+4. The caller explicitly holds `<resource>:share` or `<resource>:publish`
+   in their role grants.
+
+Verify the resulting ownership/admin behavior via the API:
+
+- [ ] Owner can flip visibility on their own skill: `PATCH
+      /stored/skills/:id` with `{"visibility":"public"}` returns 200 and
+      the response has `visibility: "public"`.
+- [ ] Admin can flip visibility on a skill they don't own: same PATCH
+      against another user's skill returns 200.
+- [ ] Viewer / member can't flip visibility on a skill they don't own:
+      same PATCH returns 403 with a JSON error body (no stack trace,
+      no HTML).
+- [ ] Auth-off mode bypasses these checks (handler short-circuits when
+      `getCallerAuthorId(ctx)` is `null`); record this as "auth-off
+      bypass" in the report rather than testing the same matrix.
 
 ## Checklist
 

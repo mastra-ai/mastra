@@ -106,12 +106,84 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-skipped and reported as `⏭️ Skipped (no WORKOS_* env vars)`.
 
+### Canonical order
+
+When running multiple sections, execute them in the order shown in the
+section table (1 → 15). The order is intentional:
+
+- **Setup** must run first — preflight + readiness probe gate every later
+  section.
+- **Workspace / Reconciliation / Defaults / Model Policy** establish that
+  the server's view of the project matches what the rest of the run
+  assumes. Run them before any CRUD pass.
+- **Skills → Registry → Agents → Pickers → Stars** is a build-up: agents
+  reference skills, pickers depend on the entities created above.
+- **Permissions / Infrastructure / Channels / UI** are read-mostly
+  inspections that benefit from existing entities.
+- **Auth** runs last because it requires restarting `mastra dev` with a
+  different `.env`.
+
+If `--test` or `--scope` narrows the run, keep the relative order — just
+skip the sections that fall outside the selection.
+
+### Required vs optional reference tiers
+
+References fall into three tiers; an agent should treat them
+accordingly:
+
+- **Required (every run):** `setup.md`. Any failure here blocks the rest
+  of the run.
+- **Standard (default tiers for `full`, `quick`, scope shortcuts):**
+  `workspace.md`, `skills.md`, `agents.md`, `stars.md`, `ui.md` (core),
+  `auth.md` when `--auth on`.
+- **Extended (only when explicitly selected via `--test`/`--scope` or
+  the matching code surface changed):** `reconciliation.md`,
+  `defaults.md`, `model-policy.md`, `registry.md`, `picker-allowlist.md`,
+  `permissions.md`, `infrastructure.md`, `channels.md`, `ui.md` extended
+  tier.
+
+When skipping an extended section, mark it `⏭️ Skipped (not in scope)`
+in the result table — don't silently omit it.
+
+### Cleanup
+
+Always leave the project in a runnable state. At the end of every run:
+
+1. Delete every smoke-test entity you created (workspaces, agents,
+   skills). Use the per-section cleanup snippet from the matching
+   reference file or `--clean`.
+2. If you ran `--fixtures-reset`, confirm the seeded public skills are
+   back in place by listing `/stored/skills?visibility=public`.
+3. If you toggled `.env` for Auth, restore it to the state you found it
+   in and ask the user to confirm.
+4. If a section bailed mid-flight (assertion failure, network error),
+   record the partial state in the report's **Issues** section so the
+   next run knows what to expect.
+
+Never leave the dev server running with stale fixtures or with `.env`
+in a state the user didn't ask for.
+
 ## Prerequisites
 
 - Working tree on the agent-builder feature branch.
 - `examples/agent` installed standalone: `cd examples/agent && pnpm i --ignore-workspace`.
 - `OPENAI_API_KEY` set in `examples/agent/.env` (preferred) OR exported in the shell. `examples/agent` instantiates `OpenAIVoice` at module load — without a key the server crashes inside `OpenAIVoice` (`voice/openai/dist/index.js`: `Error: No API key provided for speech model`) before HTTP ever opens.
 - Whichever browser MCP/tool the harness has access to. If neither is available, run with `--skip-browser` and report UI as `⏭️ Skipped (no browser tool)`.
+
+### Running scripts (cwd matters)
+
+All four scripts under `.claude/skills/builder-smoke-test/scripts/` are designed to be invoked **from the repo root** (the directory with `pnpm-workspace.yaml`). They resolve `examples/agent/` and `examples/agent/.env` relative to that root.
+
+| Script              | Run from                  | Notes                                                                            |
+| ------------------- | ------------------------- | -------------------------------------------------------------------------------- |
+| `preflight.sh`      | repo root                 | Will exit `not-in-mastra-repo` if `pnpm-workspace.yaml` isn't in the current cwd. |
+| `auth-detect.sh`    | repo root                 | Reads `examples/agent/.env` only.                                                |
+| `wait-for-server.sh` | repo root or anywhere     | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                     |
+| `fixtures-reset.sh` | repo root                 | Touches `examples/agent/mastra.db` + reseeds. Requires the dev server stopped.   |
+
+Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh` from the repo root. Don't `cd` into `scripts/` first — relative path resolution will break.
+
+`pnpm mastra:dev` must be run from `examples/agent/` (where its `package.json` is).
 
 ### How `mastra dev` reads env (important)
 
@@ -139,16 +211,15 @@ bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
 bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on
 ```
 
-Preflight is **detect-only**. It never edits `.env`, never sources rc files, never copies values around. When it fails it prints a concrete action the user (or you, with their explicit consent) should take. Possible failure messages and what to do:
+Preflight is **detect-only**. It checks three things (repo shape, `examples/agent/node_modules`, `OPENAI_API_KEY` reachability) and optionally compares the auth mode (delegated to `scripts/auth-detect.sh`) against `--expect off|on`. It never edits `.env`, never sources rc files, never copies values around. Each failure prints a stable error code; this table tells the agent what to do.
 
-| Preflight says | What it means | What the agent should do |
+| Error code | What it means | What the agent should do |
 | --- | --- | --- |
-| `OPENAI_API_KEY is not set in examples/agent/.env nor in the current shell` | Server will crash at boot | Ask the user to add the key to `examples/agent/.env` (or to dictate the value so you can edit). Don't proceed. |
-| `OPENAI_API_KEY is only in the shell, not in examples/agent/.env` | May or may not survive `mastra dev` env load | Ask the user to confirm `.env` has no `OPENAI_API_KEY=` line at all, or to copy the value into `.env`. |
-| `AUTH_PROVIDER is set in your shell but absent from examples/agent/.env` | Mode is ambiguous; running server has no auth but shell value will leak into other commands | Ask the user to either `unset AUTH_PROVIDER` in this shell OR add it to `.env`. |
-| `Expected auth-off mode, but examples/agent/.env has AUTH_PROVIDER=...` | Running `--expect off` against an auth-on `.env` | Ask the user to comment out the `AUTH_PROVIDER` line in `.env` (or do it for them if they say so), restart `mastra dev`, re-run preflight. |
-| `Expected auth-on mode, but examples/agent/.env has no AUTH_PROVIDER` | Running `--expect on` against an auth-off `.env` | Ask the user to add `AUTH_PROVIDER=workos` + the three WORKOS_* vars to `.env` (they can do it themselves or dictate values for you to write). Restart `mastra dev`. |
-| `AUTH_PROVIDER=workos but these WorkOS vars are missing` | Partial auth-on config | List the missing vars to the user. Ask them to add the values to `.env` (or dictate them). |
+| `not-in-mastra-repo` | Wrong cwd — no `pnpm-workspace.yaml` + `examples/agent/` at the repo root resolved from this script | `cd` into the user's mastra worktree (the dir with `pnpm-workspace.yaml`) and re-run. |
+| `examples-agent-not-installed` | `examples/agent/node_modules` missing | Run `cd examples/agent && pnpm i --ignore-workspace`. Don't `pnpm i` from the repo root for this example — it uses `link:` overrides. |
+| `openai-key-missing` | Neither shell nor `.env` has `OPENAI_API_KEY`; server will crash inside `OpenAIVoice` at module load | Try the rc-sourcing fallback below first. If that doesn't surface a key, ask the user to add it to `examples/agent/.env` or dictate the value. |
+| `mode-mismatch` | `--expect` value disagrees with what `auth-detect.sh` reports for `examples/agent/.env` | Show the user the detected vs expected mode. Ask them to toggle `AUTH_PROVIDER` in `.env` (or do it for them if they say so). Restart `mastra dev` and re-run preflight. |
+| `bad-expect-value` | `--expect` got something other than `off` or `on` | Fix the invocation. |
 
 **Default behavior:**
 
@@ -199,13 +270,19 @@ bash .claude/skills/builder-smoke-test/scripts/fixtures-reset.sh
 
 ## API base URL
 
-All API calls use `http://localhost:4111/api`.
+Every reference assumes `$BASE` is exported. Set it once at the start of the run:
 
 ```bash
-BASE=http://localhost:4111/api
+export BASE=http://localhost:4111/api
 ```
 
+All curl examples in the references use `$BASE` and won't work in a shell that hasn't exported it.
+
 ## Quick reference: key endpoints
+
+This table lists the surfaces an agent will hit and where to look for the
+authoritative request/response shape. Don't copy curl blocks from here —
+run the per-section commands in `references/<section>.md`.
 
 | Surface             | Endpoint                                                                      |
 | ------------------- | ----------------------------------------------------------------------------- |

@@ -33,7 +33,7 @@ WORKOS_ORGANIZATION_ID=<org-id>
 ```
 
 Optional but commonly set: `WORKOS_REDIRECT_URI` (defaults to
-`http://localhost:4111/api/auth/callback`), `WORKOS_COOKIE_PASSWORD`.
+`$BASE/auth/callback`), `WORKOS_COOKIE_PASSWORD`.
 
 Confirm with:
 
@@ -45,21 +45,6 @@ If preflight reports missing vars, surface that to the user — don't edit
 `.env` without explicit consent. The user can either add the lines
 themselves or dictate values for you to write.
 
-### What FGA actually is
-
-`MastraFGAWorkos` is the WorkOS-backed fine-grained authorization
-provider. It's constructed in `examples/agent/src/mastra/auth/workos.ts`
-and checks per-resource permissions ("can user X `:read` agent Y") against
-the WorkOS organization named by `WORKOS_ORGANIZATION_ID`. FGA only fires
-when (a) the route declares an `fga` block in its metadata AND (b) the
-server has an FGA provider configured — which means `AUTH_PROVIDER=workos`.
-
-If FGA throws `FGADeniedError` during an auth-on run, the most likely
-causes are: `WORKOS_ORGANIZATION_ID` doesn't match the org the FGA tuples
-are stored under, or the logged-in user has no matching tuple. Report the
-denial and the org/user combo; don't try to disable FGA independently —
-it's coupled to WorkOS auth in this example.
-
 ## Steps
 
 ### 1. Auth ON — verify login required
@@ -67,7 +52,7 @@ it's coupled to WorkOS auth in this example.
 Ensure `--expect on` passes, restart `mastra dev` if you just edited `.env`.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}' http://localhost:4111/api/stored/agents
+curl -s -o /dev/null -w '%{http_code}' $BASE/stored/agents
 ```
 
 - [ ] Returns 401 (not 200)
@@ -85,13 +70,13 @@ After logging in, create an entity (use the browser session or copy the
 session cookie into curl):
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/skills \
+curl -s -X POST $BASE/stored/skills \
   -H 'Content-Type: application/json' \
   -H 'Cookie: <session-cookie>' \
-  -d '{"name": "Auth Test Skill", "workspaceId": "<workspaceId>"}' | jq '.authorId'
+  -d '{"name": "Auth Test Skill"}' | jq '.authorId'
 ```
 
-- [ ] `authorId` is a real user ID (not null or empty)
+- [ ] `authorId` is a non-empty string matching the logged-in WorkOS user ID (typically prefixed `user_…`); it must not be `null`, `undefined`, or omitted
 
 ### 3. Auth ON → Auth OFF — switch mode
 
@@ -108,7 +93,7 @@ curl -s -X POST http://localhost:4111/api/stored/skills \
 - [ ] API returns 200 without a session:
 
   ```bash
-  curl -s -o /dev/null -w '%{http_code}' http://localhost:4111/api/stored/agents
+  curl -s -o /dev/null -w '%{http_code}' $BASE/stored/agents
   ```
 
 - [ ] In the browser, `/agent-builder` loads without a login prompt
@@ -125,8 +110,7 @@ curl -s -X POST http://localhost:4111/api/stored/skills \
 With `AUTH_PROVIDER` absent, ownership/role checks at the route layer
 should be bypassed cleanly:
 
-- [ ] Creating entities sets `authorId` to a stable default (or null)
-      without error
+- [ ] Creating entities returns `200/201` with no `authorId` in the response (the server resolves `getCallerAuthorId` → `null` and writes the row without an author)
 - [ ] Reads / writes succeed without `X-Mastra-Role-Preview`
 - [ ] Library page still surfaces public skills
 
@@ -136,7 +120,7 @@ Re-enable auth (uncomment `AUTH_PROVIDER=workos`, restart). Make an
 unauthenticated request:
 
 ```bash
-curl -s http://localhost:4111/api/stored/agents | jq .
+curl -s $BASE/stored/agents | jq .
 ```
 
 - [ ] Clear JSON error (401/403), not a server crash
@@ -148,8 +132,7 @@ curl -s http://localhost:4111/api/stored/agents | jq .
   boot.
 - The WorkOS session cookie is httpOnly, so a Stagehand-style browser
   automation picks it up automatically.
-- `authorId` on entities created without auth may be a system default or
-  null — that's expected; don't fail the run on it.
+- `authorId` on entities created while auth is off will be missing/`null` (the handler resolves it from request context, which has no caller). Records created while auth was on keep their original `authorId` after a mode flip — they are never rewritten.
 
 ## Checklist
 
@@ -161,3 +144,22 @@ curl -s http://localhost:4111/api/stored/agents | jq .
 - [ ] Auth OFF: browser loads without login
 - [ ] Auth ON → OFF: data persists, `authorId` preserved
 - [ ] Unauthenticated requests return clean JSON errors
+
+## Appendix: FGA in this example
+
+Background on the fine-grained authorization layer — only relevant if an
+auth-on run surfaces an `FGADeniedError`.
+
+- `MastraFGAWorkos` is the WorkOS-backed FGA provider. It's constructed
+  in `examples/agent/src/mastra/auth/workos.ts` and resolves per-resource
+  permissions ("can user X `:read` agent Y") against the WorkOS
+  organization named by `WORKOS_ORGANIZATION_ID`.
+- FGA fires only when (a) a route declares an `fga` block in its metadata
+  AND (b) the server has an FGA provider configured (which, in this
+  example, means `AUTH_PROVIDER=workos`). There is no separate enable/
+  disable env var.
+- If FGA denies a request during an auth-on run, the most likely causes
+  are: `WORKOS_ORGANIZATION_ID` doesn't match the org the FGA tuples are
+  stored under, or the logged-in user has no matching tuple. Report the
+  denial along with the org/user combo — don't try to disable FGA
+  independently, it's coupled to WorkOS auth here.

@@ -2,6 +2,21 @@
 
 Browser-based verification of the Agent Builder UI. Use whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.). If none is available, skip this section with `--skip-browser` and report ⏭️.
 
+## Tiers
+
+The steps below are split into two tiers. Run **Core** for every UI pass.
+Run **Extended** only when the prompt explicitly asks for full UI coverage
+or when a code change touches one of those surfaces.
+
+- **Core** (steps 1–7): shell loads, skills list, create-skill dialog,
+  agent detail page, skills section, star toggle, visibility badges.
+- **Extended** (steps 8–14): model dropdown, workspace dropdown, Library
+  + Copy flow, registry button gating, origin badges, mobile bottom-bar
+  parity, scrollable list layout.
+
+If you skip a step, mark it ⏭️ in the result table with a one-line reason
+(e.g. "extended tier not requested").
+
 ## Prerequisites
 
 - Browser tool available
@@ -11,7 +26,7 @@ Browser-based verification of the Agent Builder UI. Use whichever browser tool t
 
 ## Steps
 
-### 1. Agent Builder Shell
+### 1. Agent Builder Shell *(Core)*
 
 Navigate to `http://localhost:4111/agent-builder`.
 
@@ -20,7 +35,7 @@ Navigate to `http://localhost:4111/agent-builder`.
 - [ ] "Skills" link visible in sidebar (features.skills = true)
 - [ ] Agent list or default view renders
 
-### 2. Skills List Page
+### 2. Skills List Page *(Core)*
 
 Navigate to `http://localhost:4111/agent-builder/skills`.
 
@@ -33,7 +48,7 @@ Navigate to `http://localhost:4111/agent-builder/skills`.
   - [ ] Star icon/button
 - [ ] Skills are NOT clickable (no detail page exists yet)
 
-### 3. Create Skill via UI
+### 3. Create Skill via UI *(Core)*
 
 Click the "New Skill" or "Create" button on the skills page.
 
@@ -50,7 +65,7 @@ Click the "New Skill" or "Create" button on the skills page.
 
 **Known issue**: The Create button's `disabled` state may not update properly when typing via browser automation. If the button stays disabled, try clicking into the name field, clearing it, and retyping.
 
-### 4. Agent Detail Page
+### 4. Agent Detail Page *(Core)*
 
 Navigate to an existing stored agent's detail page: `http://localhost:4111/agent-builder/agents/<agentId>`.
 
@@ -64,7 +79,7 @@ If no stored agent exists, create one via API first.
 - [ ] Skills section visible (shows attached skills or empty state)
 - [ ] Chat panel visible on the right
 
-### 5. Agent Skills Section
+### 5. Agent Skills Section *(Core)*
 
 On the agent detail page:
 
@@ -72,7 +87,7 @@ On the agent detail page:
 - [ ] Toggle/expand panel shows attached skills
 - [ ] Skills can be toggled on/off (if skill management UI exists)
 
-### 6. Star Interaction (UI)
+### 6. Star Interaction (UI) *(Core)*
 
 On the skills list page:
 
@@ -85,14 +100,14 @@ On the agent list (if star icons exist there):
 
 - [ ] Same toggle behavior
 
-### 7. Visibility Badge Correctness
+### 7. Visibility Badge Correctness *(Core)*
 
 - [ ] Private entities show "Private" badge
 - [ ] Public entities show "Public" badge
 - [ ] Runtime agents (if any) show "Runtime" badge
 - [ ] Badges are visually distinct (different colors/styles)
 
-### 8. Model Dropdown (Agent Create/Edit)
+### 8. Model Dropdown (Agent Create/Edit) *(Extended)*
 
 Navigate to the agent create or edit page.
 
@@ -106,7 +121,7 @@ Example verification:
 - If builder config allows `{ provider: 'openai' }` (wildcard), all OpenAI models should appear
 - If builder config allows `{ provider: 'anthropic', modelId: 'claude-opus-4-7' }`, only that specific model should appear
 
-### 9. Workspace Dropdown (Skill Create)
+### 9. Workspace Dropdown (Skill Create) *(Extended)*
 
 In the skill creation dialog:
 
@@ -115,7 +130,7 @@ In the skill creation dialog:
 - [ ] Archived workspaces do NOT appear in dropdown
 - [ ] User-created workspaces (if any) also appear
 
-### 10. Library page (public skills you don't own)
+### 10. Library page (public skills you don't own) *(Extended)*
 
 Navigate to `http://localhost:4111/agent-builder/library`.
 
@@ -127,7 +142,7 @@ Navigate to `http://localhost:4111/agent-builder/library`.
 - [ ] Submit → toast confirms; new private skill appears in your skills list
 - [ ] Copied skill shows "copied" origin badge in the list
 
-### 11. Registry Browse button gating
+### 11. Registry Browse button gating *(Extended)*
 
 Still on `/agent-builder/skills`:
 
@@ -136,20 +151,20 @@ Still on `/agent-builder/skills`:
 
 (Full registry flow is covered in `references/registry.md`.)
 
-### 12. Origin badge on skills list
+### 12. Origin badge on skills list *(Extended)*
 
 - [ ] Skills installed from skills.sh show a skills.sh badge
 - [ ] Skills copied from the library show a "copied" badge with tooltip "Copied from <source>"
 - [ ] Skills you authored directly show no origin badge
 
-### 13. Mobile bottom-bar parity
+### 13. Mobile bottom-bar parity *(Extended)*
 
 Resize browser to mobile width (or use the device toggle).
 
 - [ ] Bottom-bar shows the same primary entries as the desktop sidebar (Agents, Skills, Library, Workspaces, Infra for admin)
-- [ ] Tapping each navigates correctly
+- [ ] Tapping each navigates to the matching route (`/agent-builder`, `/agent-builder/skills`, `/agent-builder/library`, `/agent-builder/workspaces`, `/agent-builder/infrastructure`) and the corresponding tab is active
 
-### 14. Scrollable lists (#16252, #16253)
+### 14. Scrollable lists (#16252, #16253) *(Extended)*
 
 On Agents and Skills list pages:
 
@@ -163,7 +178,7 @@ If created via UI:
 
 ```bash
 # Delete the UI-created skill
-curl -s http://localhost:4111/api/stored/skills | jq '.skills[] | select(.name == "UI Smoke Skill") | .id'
+curl -s $BASE/stored/skills | jq '.skills[] | select(.name == "UI Smoke Skill") | .id'
 # Then DELETE with the returned ID
 ```
 
@@ -175,6 +190,6 @@ curl -s http://localhost:4111/api/stored/skills | jq '.skills[] | select(.name =
 - [ ] Agent detail page shows all fields
 - [ ] Skills section on agent page
 - [ ] Star toggle works in UI
-- [ ] Visibility badges render correctly
+- [ ] Visibility badges render: `Private` (lock icon) for private records, `Public` for public records, `Runtime` for code-defined agents/skills
 - [ ] Model dropdown respects builder policy
 - [ ] Workspace dropdown shows correct options

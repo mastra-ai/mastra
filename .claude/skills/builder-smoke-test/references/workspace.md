@@ -2,12 +2,20 @@
 
 Test stored workspace create, read, update, and delete via API.
 
+## Prerequisites
+
+Resolve the builder workspace ID (used in steps 2 and 6):
+
+```bash
+WORKSPACE_ID=$(curl -s $BASE/stored/workspaces | jq -r '.workspaces[] | select(.metadata.source == "builder") | .id' | head -1)
+```
+
 ## Steps
 
 ### 1. List Workspaces
 
 ```bash
-curl -s http://localhost:4111/api/stored/workspaces | jq .
+curl -s $BASE/stored/workspaces | jq .
 ```
 
 **Verify:**
@@ -18,7 +26,7 @@ curl -s http://localhost:4111/api/stored/workspaces | jq .
 ### 2. Get Single Workspace
 
 ```bash
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 **Verify:**
@@ -30,7 +38,7 @@ curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
 ### 3. Create a Test Workspace
 
 ```bash
-curl -s -X POST http://localhost:4111/api/stored/workspaces \
+curl -s -X POST $BASE/stored/workspaces \
   -H 'Content-Type: application/json' \
   -d '{
     "id": "smoke-test-workspace",
@@ -51,7 +59,7 @@ curl -s -X POST http://localhost:4111/api/stored/workspaces \
 ### 4. Update the Test Workspace
 
 ```bash
-curl -s -X PATCH http://localhost:4111/api/stored/workspaces/smoke-test-workspace \
+curl -s -X PATCH $BASE/stored/workspaces/smoke-test-workspace \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Updated Smoke Test Workspace",
@@ -68,18 +76,18 @@ curl -s -X PATCH http://localhost:4111/api/stored/workspaces/smoke-test-workspac
 ### 5. Delete the Test Workspace
 
 ```bash
-curl -s -X DELETE http://localhost:4111/api/stored/workspaces/smoke-test-workspace | jq .
+curl -s -X DELETE $BASE/stored/workspaces/smoke-test-workspace | jq .
 ```
 
 **Verify:**
 
-- [ ] Returns success (200/204)
-- [ ] `GET /stored/workspaces/smoke-test-workspace` now returns 404
+- [ ] HTTP `200` or `204`
+- [ ] `GET /stored/workspaces/smoke-test-workspace` returns `404`
 
 ### 6. Verify Builder Workspace is Untouched
 
 ```bash
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 - [ ] Builder workspace still exists, unchanged

@@ -86,7 +86,7 @@ rest of the smoke (every curl in every reference assumes `:4111`).
 ### 4. Builder settings
 
 ```bash
-curl -s http://localhost:4111/api/editor/builder/settings | jq .
+curl -s $BASE/editor/builder/settings | jq .
 ```
 
 **Verify:**
@@ -103,21 +103,25 @@ Record what already exists:
 
 ```bash
 # Workspaces
-curl -s http://localhost:4111/api/stored/workspaces | jq '.workspaces | length'
+curl -s $BASE/stored/workspaces | jq '.workspaces | length'
 
 # Agents
-curl -s http://localhost:4111/api/stored/agents | jq '.agents | length'
+curl -s $BASE/stored/agents | jq '.agents | length'
 
 # Skills
-curl -s http://localhost:4111/api/stored/skills | jq '.skills | length'
+curl -s $BASE/stored/skills | jq '.skills | length'
 ```
 
 Note these counts — they help distinguish pre-existing entities from test-created ones.
 
 ### 6. Builder workspace exists
 
+Resolve the builder workspace ID first (it's whatever is registered via the editor builder config — typically the only workspace with `metadata.source = "builder"`):
+
 ```bash
-curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
+WORKSPACE_ID=$(curl -s $BASE/stored/workspaces | jq -r '.workspaces[] | select(.metadata.source == "builder") | .id' | head -1)
+echo "WORKSPACE_ID=$WORKSPACE_ID"
+curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
 **Verify:**
