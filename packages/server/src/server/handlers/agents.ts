@@ -1620,6 +1620,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         }
       }
 
+      if (typeof (agent as { sendSignal?: unknown }).sendSignal !== 'function') {
+        throw new HTTPException(501, { message: 'agent signals are not supported by this Mastra core version' });
+      }
+
       const agentSignal = signal as AgentSignalInput;
 
       if (runId) {
@@ -1665,6 +1669,12 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
+        throw new HTTPException(501, {
+          message: 'agent thread subscriptions are not supported by this Mastra core version',
+        });
+      }
+
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
