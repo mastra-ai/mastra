@@ -17,8 +17,6 @@ import type { MastraCompositeStore } from '../../storage/base';
 import type { HarnessStorage, SessionRecord as StoredSessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
-import type { EmitInput } from './events';
-
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).
 //
@@ -609,13 +607,6 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Turn abort signal. Fires for the four reasons enumerated in §4.5. */
   abortSignal: AbortSignal;
-
-  /**
-   * Forward a custom event to subscribers of this session. Reserved harness
-   * types (`agent_*`, `tool_*`, etc.) are rejected with `HarnessValidationError`.
-   * Non-JSON-serializable payloads are rejected with `HarnessEventSerializationError`.
-   */
-  emitEvent: (event: EmitInput) => void;
 
   /** Register a pending question (used by `ask_user` and custom suspending tools). */
   registerQuestion: (params: RegisterQuestionParams) => void;

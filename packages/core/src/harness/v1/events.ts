@@ -159,12 +159,13 @@ export interface ToolStartEvent extends HarnessEventBase {
  * Tool progress (§10.2). Long-running tools (shell, downloads, codegen)
  * publish incremental `partialResult`s between `tool_start` and `tool_end`.
  *
- * The harness never emits this itself — tools publish it via
- * `ctx.emitEvent({ type: 'tool_update', toolCallId, partialResult })`.
- * `tool_update` is the one harness-owned event type explicitly whitelisted
- * for `ctx.emitEvent` (spec §6.2), provided `toolCallId` matches an
- * `activeTools` entry on the session and `partialResult` is JSON-
- * serializable.
+ * Source of truth is the `data-tool-update` chunk that tools write via
+ * `ctx.writer?.custom({ type: 'data-tool-update', data: { toolCallId, partialResult } })` —
+ * the same call works outside a Harness, where consumers read the chunk
+ * directly from `agent.stream().fullStream`. Inside a Harness,
+ * `_drainStreamToEvents` recognizes the whitelisted `data-tool-update`
+ * chunk type and bridges it into this typed event so subscribers can
+ * switch on `event.type === 'tool_update'`.
  */
 export interface ToolUpdateEvent extends HarnessEventBase {
   type: 'tool_update';
@@ -175,9 +176,10 @@ export interface ToolUpdateEvent extends HarnessEventBase {
 /**
  * Streaming shell output (§10.2). Tools that wrap a child process publish
  * stdout/stderr chunks via
- * `ctx.emitEvent({ type: 'shell_output', toolCallId, output, stream })`.
- * Like `tool_update`, this is harness-owned but whitelisted for tool emit.
- * `toolCallId` must match an active tool and `output` must be a string.
+ * `ctx.writer?.custom({ type: 'data-shell-output', data: { toolCallId, output, stream } })`.
+ * Inside a Harness, `_drainStreamToEvents` bridges the whitelisted
+ * `data-shell-output` chunk into this typed event. Outside a Harness, the
+ * chunk surfaces directly on `agent.stream().fullStream`.
  */
 export interface ShellOutputEvent extends HarnessEventBase {
   type: 'shell_output';
@@ -483,18 +485,16 @@ export function sessionCreatedPayload(
 }
 
 // ---------------------------------------------------------------------------
-// Custom-event validation (§6.2, §10.3).
+// Reserved-event metadata (§6.2, §10.3).
 //
-// Two checks run before any subscriber observes an event published via
-// `ctx.emitEvent` from a tool:
-//   1. `type` must be dotted and must not collide with harness-owned types.
-//   2. The whole event must be JSON-serializable.
+// Tools emit data via `ctx.writer?.custom({ type: 'data-*', data })` and
+// the harness whitelists known `data-*` chunk types in `_drainStreamToEvents`
+// to bridge them into typed events. These reserved sets capture the names
+// the harness owns so future custom-event surfaces can validate against
+// them as a single source of truth.
 // ---------------------------------------------------------------------------
 
-/**
- * Harness-owned event types that tools must not synthesize. Listed exactly
- * as in spec §6.2 / §10.2 so this stays the single source of truth.
- */
+/** Harness-owned event types — exhaustive list per spec §6.2 / §10.2. */
 const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'session_created',
   'session_closed',

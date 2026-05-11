@@ -44,7 +44,6 @@ export {
   HarnessSessionNotFoundError,
   HarnessStorageError,
   HarnessThreadNotFoundError,
-  HarnessToolEmitError,
 } from './errors';
 
 /**

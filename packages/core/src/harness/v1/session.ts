@@ -32,8 +32,8 @@ import { convertStoredMessageToHarnessMessage } from '../_shared/message-convers
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import type { HarnessMessage } from '../types';
 
-import { HarnessConfigError, HarnessQueueFullError, HarnessToolEmitError, HarnessValidationError } from './errors';
-import { EventEmitter, assertCustomEventType, assertJsonSerializable } from './events';
+import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError } from './errors';
+import { EventEmitter } from './events';
 import type {
   EmitInput,
   HarnessEvent,
@@ -267,37 +267,6 @@ export class Session {
       return this._emitter.emit({ ...event, queuedItemId: this._currentQueuedItemId } as EmitInput);
     }
     return this._emitter.emit(event);
-  }
-
-  /**
-   * Validate shape + scope of a `tool_update` / `shell_output` event emitted
-   * via `ctx.emitEvent` (§6.2). The two types are harness-owned but
-   * whitelisted for tool emit; we enforce the contract here so subscribers
-   * can rely on:
-   *   - `toolCallId` is a non-empty string and matches an active tool on
-   *     this session (between its `tool_start` and `tool_end`).
-   *   - `shell_output.output` is a string; `shell_output.stream` is
-   *     'stdout' | 'stderr'.
-   *
-   * Throws `HarnessValidationError` on shape failures and
-   * `HarnessToolEmitError` when no matching active tool exists.
-   */
-  private _validateToolProgressEvent(event: EmitInput): void {
-    const e = event as { type: string; toolCallId?: unknown; output?: unknown; stream?: unknown };
-    if (typeof e.toolCallId !== 'string' || e.toolCallId.length === 0) {
-      throw new HarnessValidationError(`event.toolCallId`, `${e.type} requires a non-empty toolCallId string`);
-    }
-    if (!this._activeTools.has(e.toolCallId)) {
-      throw new HarnessToolEmitError(this.id, e.type, e.toolCallId);
-    }
-    if (e.type === 'shell_output') {
-      if (typeof e.output !== 'string') {
-        throw new HarnessValidationError('event.output', `shell_output.output must be a string`);
-      }
-      if (e.stream !== 'stdout' && e.stream !== 'stderr') {
-        throw new HarnessValidationError('event.stream', `shell_output.stream must be "stdout" or "stderr"`);
-      }
-    }
   }
 
   /** @internal — number of registered listeners (for tests). */
@@ -727,6 +696,44 @@ export class Session {
                 const tasks = (data as { tasks?: unknown })?.tasks;
                 if (Array.isArray(tasks)) {
                   this._emitTurnEvent({ type: 'task_updated', tasks: tasks as TaskUpdatedEvent['tasks'] });
+                }
+              } else if (chunk.type === 'data-tool-update') {
+                // Long-running tools publish incremental progress between
+                // tool_start and tool_end via
+                // `ctx.writer?.custom({ type: 'data-tool-update',
+                //   data: { toolCallId, partialResult } })`.
+                const payload = data as { toolCallId?: unknown; partialResult?: unknown } | undefined;
+                if (
+                  payload &&
+                  typeof payload.toolCallId === 'string' &&
+                  payload.toolCallId.length > 0 &&
+                  this._activeTools.has(payload.toolCallId)
+                ) {
+                  this._emitTurnEvent({
+                    type: 'tool_update',
+                    toolCallId: payload.toolCallId,
+                    partialResult: payload.partialResult,
+                  });
+                }
+              } else if (chunk.type === 'data-shell-output') {
+                // Tools that wrap a child process publish stdout/stderr via
+                // `ctx.writer?.custom({ type: 'data-shell-output',
+                //   data: { toolCallId, output, stream } })`.
+                const payload = data as { toolCallId?: unknown; output?: unknown; stream?: unknown } | undefined;
+                if (
+                  payload &&
+                  typeof payload.toolCallId === 'string' &&
+                  payload.toolCallId.length > 0 &&
+                  typeof payload.output === 'string' &&
+                  (payload.stream === 'stdout' || payload.stream === 'stderr') &&
+                  this._activeTools.has(payload.toolCallId)
+                ) {
+                  this._emitTurnEvent({
+                    type: 'shell_output',
+                    toolCallId: payload.toolCallId,
+                    output: payload.output,
+                    stream: payload.stream,
+                  });
                 }
               }
             }
@@ -1501,23 +1508,6 @@ export class Session {
         return session.setState(updatesOrUpdater as Partial<unknown>);
       }) as HarnessRequestContext<unknown>['setState'],
       abortSignal: turn.abortSignal,
-      emitEvent: (event: EmitInput) => {
-        // Reserved-type + JSON-serialization guard runs synchronously before
-        // any subscriber observes the event (§6.2).
-        //
-        // `tool_update` and `shell_output` are the two harness-owned event
-        // types explicitly whitelisted for tool emit. The harness never
-        // emits them itself, but tools wrapping long-running operations
-        // (shells, downloads, codegen) need a typed channel for progress.
-        // We validate payload shape here so subscribers can rely on it.
-        if (event.type === 'tool_update' || event.type === 'shell_output') {
-          session._validateToolProgressEvent(event);
-        } else {
-          assertCustomEventType(event.type);
-        }
-        assertJsonSerializable(event.type, session.id, event);
-        session._emitTurnEvent(event);
-      },
       registerQuestion: () => {
         throw new HarnessConfigError('ctx.registerQuestion', 'not implemented in this milestone');
       },

@@ -249,7 +249,6 @@ describe('Session — surface area (M1)', () => {
         '_resetTurnTracking',
         '_resume',
         '_runQueuedTurn',
-        '_validateToolProgressEvent',
         // Getters land in the prototype as own names too.
         'lastActivityAt',
         'lifecycleState',

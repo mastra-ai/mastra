@@ -81,26 +81,6 @@ export class HarnessValidationError extends Error {
 }
 
 /**
- * Tool emitted `tool_update` / `shell_output` via `ctx.emitEvent` but the
- * referenced `toolCallId` is not in the session's `activeTools` map (no
- * matching `tool_start` is in flight, or `tool_end` already fired). The
- * harness rejects synchronously so subscribers don't see progress events
- * disconnected from a tool's lifetime.
- */
-export class HarnessToolEmitError extends Error {
-  readonly name = 'HarnessToolEmitError';
-  constructor(
-    public readonly sessionId: string,
-    public readonly eventType: string,
-    public readonly toolCallId: string,
-  ) {
-    super(
-      `Cannot emit "${eventType}" for tool call "${toolCallId}" on session "${sessionId}" — no active tool with that id`,
-    );
-  }
-}
-
-/**
  * `session.queue(...)` rejected at admission because `pendingQueue` has
  * already reached `sessions.maxQueueDepth` (default 100). The capacity check
  * and durable append are atomic per session, so two concurrent `queue()`
@@ -147,10 +127,10 @@ export class HarnessThreadNotFoundError extends Error {
 }
 
 /**
- * `ctx.emitEvent(...)` (or any other harness-event publish path) received a
- * payload that is not JSON-serializable. The check runs synchronously before
- * any subscriber observes the event, so in-process listeners and remote/SSE
- * subscribers see the same contract.
+ * A harness-event publish path received a payload that is not
+ * JSON-serializable. The check runs synchronously before any subscriber
+ * observes the event, so in-process listeners and remote/SSE subscribers
+ * see the same contract.
  *
  * `path` is the dotted location of the offending value (e.g. `event.foo.bar`).
  * `reason` is a typed description of why the value was rejected.
