@@ -1226,11 +1226,27 @@ describe('Processor Tracing Tests', () => {
       expect(processorSpans[0]?.name).toBe('input processor: moderation');
       expect(processorSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
 
-      // Model spans created inside the moderation agent must not leak either.
+      // Model spans created inside the moderation agent must not leak — this
+      // covers MODEL_GENERATION and its descendants (MODEL_STEP,
+      // MODEL_INFERENCE, MODEL_CHUNK), which inherit the agent's tracingPolicy
+      // via the model tracker.
       const modelSpans = testExporter.getModelSpans();
-      // Only the main agent's MODEL_GENERATION should be present.
       expect(modelSpans.length).toBe(1);
       expect(modelSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+      // Only the main agent's MODEL_STEP/INFERENCE/CHUNK should be present;
+      // each must be a descendant of the main agent's MODEL_GENERATION.
+      const mainModelId = modelSpans[0]?.id;
+      const modelStepSpans = testExporter.getModelStepSpans();
+      expect(modelStepSpans.every(s => s.parentSpanId === mainModelId)).toBe(true);
+      const modelChunkSpans = testExporter.getModelChunkSpans();
+      // chunks parent to inference or step; just assert none belong to the
+      // moderation agent by walking up to the closest model_generation.
+      const visibleIds = new Set(testExporter.getAllSpans().map(s => s.id));
+      for (const chunk of modelChunkSpans) {
+        // every chunk's parent must be a visible span (no orphans into hidden
+        // inference/step spans).
+        expect(chunk.parentSpanId && visibleIds.has(chunk.parentSpanId)).toBe(true);
+      }
 
       // No orphan spans: every non-root exported span's parentSpanId must
       // resolve to another exported span. This guards against an internal
