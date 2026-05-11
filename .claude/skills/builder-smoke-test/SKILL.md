@@ -151,6 +151,19 @@ Recommended order when preflight fails:
 
 Once preflight passes in a given shell, the same shell can launch `pnpm mastra:dev` directly and `examples/agent` will inherit the vars.
 
+### Agent: how to handle the `AUTH_PROVIDER=workos` + `MASTRA_FGA_ENABLED` cross-check
+
+Preflight warns when `AUTH_PROVIDER=workos` is set but `MASTRA_FGA_ENABLED` is not. `examples/agent/.env` keeps `AUTH_PROVIDER=workos` as a long-lived value — the user routinely toggles between auth-off and auth-on runs by flipping FGA, not by removing the provider.
+
+When this warning fires, **just resolve it without asking**:
+
+- **For any `--auth off` run (Prompts 1–6 by default):** add `MASTRA_FGA_ENABLED=false` to `examples/agent/.env` if it isn't there. This is the canonical workaround — documented in the prerequisites, gitignored, and persistent across runs. Then re-run preflight; the warning disappears.
+- **For Prompt 7 (`--auth on`):** the user manages auth env themselves per Prompt 7's text. Leave `.env` alone, trust their setup, and proceed.
+
+This is **not** real auth-off. With `AUTH_PROVIDER=workos` still in `.env`, the server is auth-on at the WorkOS layer; setting `MASTRA_FGA_ENABLED=false` only disables FGA tool-call enforcement. That's an acceptable approximation for the non-auth prompts because (a) no WorkOS session means requests are unauthenticated and (b) the FGA bypass prevents `FGADeniedError`s from masking real failures. Flag this in your run report under "Configuration" — don't block on it.
+
+If you want pedantically pure auth-off semantics (no `AUTH_PROVIDER` at all), that's the user's call — surface the option in your report but don't unilaterally remove it from `.env`.
+
 ## Starting the dev server
 
 If the server is not running on `:4111`, the Setup section starts it. The convenience helpers live under `scripts/`:

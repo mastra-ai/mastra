@@ -124,7 +124,11 @@ fga_src=$(locate_var MASTRA_FGA_ENABLED || true)
 if [ -n "${auth_provider_src}" ] && [ -z "${fga_src}" ]; then
   echo "⚠️  AUTH_PROVIDER is set (${auth_provider_src}) but MASTRA_FGA_ENABLED is not."
   echo "   This auto-enables FGA and will throw FGADeniedError on tool calls."
-  echo "   For a non-auth smoke run, set MASTRA_FGA_ENABLED=false in examples/agent/.env."
+  echo
+  echo "   Agent: for any --auth off run (Prompts 1–6), just append"
+  echo "   'MASTRA_FGA_ENABLED=false' to examples/agent/.env and re-run preflight."
+  echo "   Don't ask the user — this is the documented workaround. For --auth on"
+  echo "   runs (Prompt 7), the user manages this themselves; leave .env alone."
 fi
 
 if [ "$missing" -gt 0 ]; then
