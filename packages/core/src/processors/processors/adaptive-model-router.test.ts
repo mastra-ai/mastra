@@ -4,9 +4,15 @@ import { TripWire } from '../../agent/trip-wire';
 import type { MastraServerCache } from '../../cache';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ObservabilityStorage } from '../../storage/domains';
-import type { ProcessInputStepArgs } from '../index';
+import type { ProcessInputStepArgs, ProcessAPIErrorArgs, ProcessOutputStepArgs } from '../index';
 import { AdaptiveModelRouter } from './adaptive-model-router';
-import type { AdaptiveModelRouterOptions, ErrorRateRule, ScoreRule, FeedbackRule } from './adaptive-model-router';
+import type {
+  AdaptiveModelRouterOptions,
+  AdaptiveModelRouterTripwireMetadata,
+  ErrorRateRule,
+  ScoreRule,
+  FeedbackRule,
+} from './adaptive-model-router';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,6 +94,52 @@ function createRouter(
     (router as any).cache = cache;
   }
   return router;
+}
+
+function createAPIErrorArgs(
+  overrides: Partial<ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata>> = {},
+): ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata> {
+  return {
+    steps: [],
+    stepNumber: 0,
+    messages: [],
+    messageList: {} as MessageList,
+    abort: ((reason?: string, options?: any) => {
+      throw new TripWire(reason ?? 'abort', options ?? {});
+    }) as any,
+    retryCount: 0,
+    error: new Error('API error'),
+    state: {},
+    ...overrides,
+  };
+}
+
+function createOutputStepArgs(
+  overrides: Partial<ProcessOutputStepArgs<AdaptiveModelRouterTripwireMetadata>> = {},
+): ProcessOutputStepArgs<AdaptiveModelRouterTripwireMetadata> {
+  return {
+    steps: [],
+    stepNumber: 0,
+    messages: [
+      {
+        id: 'msg-1',
+        role: 'assistant' as const,
+        content: { format: 2, parts: [{ type: 'text' as const, text: 'hello' }] },
+        createdAt: new Date(),
+      },
+    ],
+    messageList: {} as MessageList,
+    abort: ((reason?: string, options?: any) => {
+      throw new TripWire(reason ?? 'abort', options ?? {});
+    }) as any,
+    retryCount: 0,
+    finishReason: 'stop',
+    text: 'hello',
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    systemMessages: [],
+    state: {},
+    ...overrides,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1336,6 +1388,449 @@ describe('AdaptiveModelRouter', () => {
       await router.processInputStep(args);
 
       expect(obsStorage.getMetricBreakdown).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // processAPIError — reactive fallback retry
+  // -------------------------------------------------------------------------
+  describe('processAPIError', () => {
+    it('returns undefined when not in fallback-chain mode', async () => {
+      const router = createRouter(
+        {
+          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          scope: 'resource',
+        },
+        createMockObservabilityStorage(),
+        createMockCache(),
+      );
+
+      const result = await router.processAPIError(
+        createAPIErrorArgs({
+          state: { __adaptiveRouter_currentModelId: 'openai/gpt-4o', __adaptiveRouter_scopeKey: 'resource:user-1' },
+        }),
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it('returns { retry: true } and opens circuit on API failure in fallback-chain mode', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'anthropic/claude-3.5-sonnet', model: 'anthropic/claude-3.5-sonnet' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const state: Record<string, unknown> = {
+        __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+        __adaptiveRouter_scopeKey: 'resource:user-1',
+      };
+
+      const result = await router.processAPIError(
+        createAPIErrorArgs({
+          state,
+          error: new Error('429 Too Many Requests'),
+        }),
+      );
+
+      expect(result).toEqual({ retry: true });
+      // Circuit should be open for the failed model
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+      // Retried models should be tracked in state
+      expect(state.__adaptiveRouter_retriedModels).toEqual(['openai/gpt-4o']);
+    });
+
+    it('returns undefined when missing state (no prior processInputStep call)', async () => {
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = createMockCache();
+
+      const result = await router.processAPIError(createAPIErrorArgs({ state: {} }));
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined when all fallbacks have been retried', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const state: Record<string, unknown> = {
+        __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+        __adaptiveRouter_scopeKey: 'resource:user-1',
+        __adaptiveRouter_retriedModels: ['openai/gpt-4o-mini'], // Already retried the other model
+      };
+
+      const result = await router.processAPIError(createAPIErrorArgs({ state }));
+      expect(result).toBeUndefined();
+    });
+
+    it('tracks multiple retried models across successive failures', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'model-a', model: 'model-a' },
+        { id: 'model-b', model: 'model-b' },
+        { id: 'model-c', model: 'model-c' },
+      ]);
+      (router as any).cache = cache;
+
+      const state: Record<string, unknown> = {
+        __adaptiveRouter_currentModelId: 'model-a',
+        __adaptiveRouter_scopeKey: 'resource:user-1',
+      };
+
+      // First failure
+      const result1 = await router.processAPIError(createAPIErrorArgs({ state }));
+      expect(result1).toEqual({ retry: true });
+      expect(state.__adaptiveRouter_retriedModels).toEqual(['model-a']);
+
+      // Second failure (now failing on model-b)
+      state.__adaptiveRouter_currentModelId = 'model-b';
+      const result2 = await router.processAPIError(createAPIErrorArgs({ state }));
+      expect(result2).toEqual({ retry: true });
+      expect(state.__adaptiveRouter_retriedModels).toEqual(['model-a', 'model-b']);
+
+      // Third failure (now failing on model-c) — all exhausted
+      state.__adaptiveRouter_currentModelId = 'model-c';
+      const result3 = await router.processAPIError(createAPIErrorArgs({ state }));
+      expect(result3).toBeUndefined();
+    });
+
+    it('triggers onViolation callback on API error', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+      const violations: any[] = [];
+      router.onViolation = (v: any) => violations.push(v);
+
+      await router.processAPIError(
+        createAPIErrorArgs({
+          state: {
+            __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+            __adaptiveRouter_scopeKey: 'resource:user-1',
+          },
+        }),
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0]!.message).toContain('openai/gpt-4o');
+      expect(violations[0]!.message).toContain('API error');
+    });
+
+    it('still retries even when cache.set fails', async () => {
+      const cache = createMockCache();
+      (cache.set as any).mockRejectedValue(new Error('Redis unavailable'));
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const result = await router.processAPIError(
+        createAPIErrorArgs({
+          state: {
+            __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+            __adaptiveRouter_scopeKey: 'resource:user-1',
+          },
+        }),
+      );
+
+      expect(result).toEqual({ retry: true });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // processOutputStep — soft-failure detection
+  // -------------------------------------------------------------------------
+  describe('processOutputStep', () => {
+    it('returns messages unchanged when not in fallback-chain mode', async () => {
+      const router = createRouter(
+        {
+          rules: [{ signal: 'error-rate', threshold: 0.3, fallbackModels: ['openai/gpt-4o-mini'] }],
+          scope: 'resource',
+        },
+        createMockObservabilityStorage(),
+        createMockCache(),
+      );
+
+      const args = createOutputStepArgs();
+      const result = await router.processOutputStep(args);
+      expect(result).toBe(args.messages);
+    });
+
+    it('returns messages unchanged on successful response (no soft failure)', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'stop',
+        text: 'Some response',
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      const result = await router.processOutputStep(args);
+      expect(result).toBe(args.messages);
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('opens circuit on error finish reason', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'error',
+        text: '',
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      await router.processOutputStep(args);
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+    });
+
+    it('opens circuit on unknown finish reason', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'unknown',
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      await router.processOutputStep(args);
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+    });
+
+    it('opens circuit on empty response (stop with no text and no tool calls)', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'stop',
+        text: '',
+        toolCalls: [],
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      await router.processOutputStep(args);
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+    });
+
+    it('does NOT open circuit when stop with text', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'stop',
+        text: 'valid response',
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      await router.processOutputStep(args);
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('does NOT open circuit when stop with tool calls', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'stop',
+        text: '',
+        toolCalls: [{ toolCallId: 'tc1', toolName: 'search', args: {} }],
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      await router.processOutputStep(args);
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('triggers onViolation on soft failure', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+      const violations: any[] = [];
+      router.onViolation = (v: any) => violations.push(v);
+
+      await router.processOutputStep(
+        createOutputStepArgs({
+          finishReason: 'error',
+          state: {
+            __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+            __adaptiveRouter_scopeKey: 'resource:user-1',
+          },
+        }),
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0]!.message).toContain('Soft failure');
+      expect(violations[0]!.message).toContain('openai/gpt-4o');
+    });
+
+    it('returns messages unchanged even when cache fails', async () => {
+      const cache = createMockCache();
+      (cache.set as any).mockRejectedValue(new Error('Redis unavailable'));
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = cache;
+
+      const args = createOutputStepArgs({
+        finishReason: 'error',
+        state: {
+          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_scopeKey: 'resource:user-1',
+        },
+      });
+
+      const result = await router.processOutputStep(args);
+      expect(result).toBe(args.messages);
+    });
+
+    it('returns messages unchanged when state is missing', async () => {
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).cache = createMockCache();
+
+      const args = createOutputStepArgs({ state: {} });
+      const result = await router.processOutputStep(args);
+      expect(result).toBe(args.messages);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // processInputStep state tracking
+  // -------------------------------------------------------------------------
+  describe('processInputStep state tracking', () => {
+    it('stores current model ID in state for processAPIError to read', async () => {
+      const obsStorage = createMockObservabilityStorage();
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      ]);
+      (router as any).observabilityStorage = obsStorage;
+      (router as any).cache = cache;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+      const state: Record<string, unknown> = {};
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'openai/gpt-4o' as any,
+        state,
+      });
+
+      await router.processInputStep(args);
+
+      expect(state.__adaptiveRouter_currentModelId).toBe('openai/gpt-4o');
+      expect(state.__adaptiveRouter_scopeKey).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // End-to-end reactive fallback flow
+  // -------------------------------------------------------------------------
+  describe('end-to-end reactive fallback flow', () => {
+    it('processInputStep → processAPIError → processInputStep retry skips failed model', async () => {
+      const cache = createMockCache();
+      const router = AdaptiveModelRouter.fromModelFallbacks([
+        { id: 'model-a', model: 'model-a' },
+        { id: 'model-b', model: 'model-b' },
+      ]);
+      (router as any).cache = cache;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+      const state: Record<string, unknown> = {};
+
+      // Step 1: processInputStep — no cooldowns, should not switch
+      const args1 = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result1 = await router.processInputStep(args1);
+      expect(result1).toBeUndefined(); // no switch needed
+      expect(state.__adaptiveRouter_currentModelId).toBe('model-a');
+
+      // Step 2: API error — opens circuit for model-a
+      const errorResult = await router.processAPIError(
+        createAPIErrorArgs({
+          state,
+          error: new Error('500 Internal Server Error'),
+        }),
+      );
+      expect(errorResult).toEqual({ retry: true });
+
+      // Step 3: processInputStep (retry) — model-a should now be in cooldown
+      const args2 = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result2 = await router.processInputStep(args2);
+      expect(result2).toBeDefined();
+      expect(result2!.model).toBe('model-b');
     });
   });
 });

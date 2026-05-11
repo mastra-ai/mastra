@@ -38,6 +38,7 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../processors/index';
+import type { AdaptiveFallbacksOptions } from '../processors/processors';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
@@ -268,6 +269,50 @@ export interface AgentConfig<
    * @defaultValue 0
    */
   maxRetries?: number;
+  /**
+   * Enable adaptive model fallbacks powered by the AdaptiveModelRouter processor.
+   * When set to `true` (or an options object) and `model` is a fallback array, an
+   * AdaptiveModelRouter processor is automatically created under the hood. This makes
+   * model fallbacks "smart" — instead of always trying each model in order, the router
+   * uses observability data (error rates) to skip models that are known to be failing
+   * and jump directly to a healthy fallback.
+   *
+   * Set to `true` to use default settings (30% error rate threshold, 5min window, 2min cooldown).
+   * Or pass an `AdaptiveFallbacksOptions` object for fine-grained control.
+   *
+   * Only takes effect when `model` is an array of `ModelWithRetries`.
+   *
+   * @default false
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   model: [
+   *     { model: 'openai/gpt-4o' },
+   *     { model: 'anthropic/claude-3.5-sonnet' },
+   *     { model: 'openai/gpt-4o-mini' },
+   *   ],
+   *   adaptiveFallbacks: true,
+   * });
+   * ```
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   model: [
+   *     { model: 'openai/gpt-4o' },
+   *     { model: 'anthropic/claude-3.5-sonnet' },
+   *   ],
+   *   adaptiveFallbacks: {
+   *     errorRateThreshold: 0.5,
+   *     window: '1h',
+   *     cooldown: '5m',
+   *     minRequests: 10,
+   *   },
+   * });
+   * ```
+   */
+  adaptiveFallbacks?: boolean | AdaptiveFallbacksOptions;
   /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */

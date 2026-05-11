@@ -69,6 +69,7 @@ export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {
   AdaptiveModelRouter,
+  type AdaptiveFallbacksOptions,
   type AdaptiveModelRouterOptions,
   type AdaptiveModelRouterRule,
   type AdaptiveModelRouterTripwireMetadata,
@@ -77,6 +78,7 @@ export {
   type ScoreRule,
   type FeedbackRule,
   type FallbackModel,
+  type FallbackModelSettings,
   type RouterScope,
   type RouterWindow,
 } from './adaptive-model-router';
