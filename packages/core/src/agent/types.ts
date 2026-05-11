@@ -62,7 +62,7 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
-export type { SubAgent } from './agent.types';
+export type { SubAgent, SubAgentGenerateResult, SubAgentStreamResult, SubAgentToolResult } from './agent.types';
 export type { MastraBrowser } from '../browser/browser';
 // Screencast types now on MastraBrowser directly
 export type { ScreencastOptions, ScreencastStream } from '../browser/browser';

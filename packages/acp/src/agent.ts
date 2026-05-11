@@ -13,12 +13,13 @@ import { MessageList, coreContentToString } from '@mastra/core/agent/message-lis
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
-import { ChunkFrom } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import type { DynamicArgument } from '@mastra/core/types';
 
 import { ACPConnection } from './connection';
 import type { CreateACPToolOptions } from './types';
+
+const CHUNK_FROM_AGENT = 'AGENT' as ChunkType['from'];
 
 const model = {
   modelId: 'acp-agent',
@@ -68,6 +69,10 @@ export class AcpAgent implements SubAgent {
     return undefined;
   }
 
+  getInstructions(): string {
+    return '';
+  }
+
   async generate(messages: MessageListInput, options?: AgentGenerateOptions): Promise<SubAgentGenerateResult> {
     const prompt = this.getPrompt(messages, options?.instructions);
     const text = await this.connection.prompt(
@@ -87,32 +92,51 @@ export class AcpAgent implements SubAgent {
     };
   }
 
+  async resumeGenerate(): Promise<SubAgentGenerateResult> {
+    throw new Error('AcpAgent does not support resuming suspended generate calls');
+  }
+
+  async resumeStream(): Promise<SubAgentStreamResult> {
+    throw new Error('AcpAgent does not support resuming suspended stream calls');
+  }
+
   async stream(messages: MessageListInput, options?: AgentStreamOptions): Promise<SubAgentStreamResult> {
     const runId = options?.runId ?? randomUUID();
     const prompt = this.getPrompt(messages, options?.instructions);
-    const textPromise = this.connection.prompt(
-      prompt,
-      (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
-    );
+    const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
     const messageList = new MessageList();
     messageList.add(messages, 'input');
 
+    let resolveText!: (text: string) => void;
+    let rejectText!: (error: unknown) => void;
+    const textPromise = new Promise<string>((resolve, reject) => {
+      resolveText = resolve;
+      rejectText = reject;
+    });
+
     const fullStream = new ReadableStream<ChunkType>({
       start: async controller => {
+        const textId = randomUUID();
+        const chunks: string[] = [];
+
         try {
-          const text = await textPromise;
-          const textId = randomUUID();
+          controller.enqueue({ type: 'text-start', runId, from: CHUNK_FROM_AGENT, payload: { id: textId } });
+
+          for await (const chunk of this.connection.promptStream(prompt, signal)) {
+            chunks.push(chunk);
+            controller.enqueue({ type: 'text-delta', runId, from: CHUNK_FROM_AGENT, payload: { id: textId, text: chunk } });
+          }
+
+          const text = chunks.join('');
           messageList.add([{ role: 'assistant', content: text }], 'response');
 
-          controller.enqueue({ type: 'text-start', runId, from: ChunkFrom.AGENT, payload: { id: textId } });
-          if (text) {
-            controller.enqueue({ type: 'text-delta', runId, from: ChunkFrom.AGENT, payload: { id: textId, text } });
-          }
-          controller.enqueue({ type: 'text-end', runId, from: ChunkFrom.AGENT, payload: { id: textId } });
+          controller.enqueue({ type: 'text-end', runId, from: CHUNK_FROM_AGENT, payload: { id: textId } });
           controller.enqueue(createFinishChunk('step-finish', runId));
           controller.enqueue(createFinishChunk('finish', runId));
+          resolveText(text);
           controller.close();
         } catch (error) {
+          rejectText(error);
           controller.error(error);
         }
       },
@@ -181,7 +205,7 @@ function createFinishChunk(type: 'step-finish' | 'finish', runId: string): Chunk
   return {
     type,
     runId,
-    from: ChunkFrom.AGENT,
+    from: CHUNK_FROM_AGENT,
     payload: {
       id: randomUUID(),
       output: {

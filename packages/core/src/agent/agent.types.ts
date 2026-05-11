@@ -3,7 +3,7 @@ import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { Mastra } from '../mastra';
@@ -13,10 +13,11 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+import type { ChunkType } from '../stream/types';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows/types';
-import type { MessageListInput } from './message-list';
+import type { MessageListInput, MessageList } from './message-list';
 import type { CreatedAgentSignal } from './signals';
 import type {
   AgentMemoryOption,
@@ -315,6 +316,32 @@ export interface DelegationConfig {
  * `Agent` already satisfies this interface. Implement this to create lighter-weight
  * subagents without the full Agent class.
  */
+export type SubAgentToolResult = {
+  payload: {
+    toolName: string;
+    toolCallId: string;
+    result?: unknown;
+    args?: unknown;
+    isError?: boolean;
+  };
+};
+
+export type SubAgentGenerateResult = Pick<FullOutput, 'text' | 'finishReason' | 'runId'> & {
+  response: { dbMessages?: MastraDBMessage[] };
+  toolResults?: SubAgentToolResult[];
+  suspendPayload?: unknown;
+  resumeSchema?: unknown;
+};
+
+export type SubAgentStreamResult = {
+  fullStream: ReadableStream<ChunkType>;
+  text: Promise<string>;
+  usage?: Promise<unknown>;
+  messageList: MessageList;
+  toolResults?: SubAgentToolResult[] | Promise<SubAgentToolResult[]>;
+  runId: string;
+};
+
 export interface SubAgent<TOutput = unknown, TRequestContext extends Record<string, any> | unknown = unknown> {
   /** Unique identifier for this subagent */
   readonly id: string;
@@ -326,12 +353,10 @@ export interface SubAgent<TOutput = unknown, TRequestContext extends Record<stri
   getDescription(): string;
 
   /** Returns the model instance used to select the execution path. */
-  getModel(opts: {
-    requestContext?: RequestContext;
-  }): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+  getModel(opts?: { requestContext?: RequestContext }): any;
 
   /** Returns default execution options, if configured. */
-  getDefaultOptions?(opts: {
+  getDefaultOptions?(opts?: {
     requestContext?: RequestContext;
   }): AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> | undefined;
 
@@ -342,22 +367,22 @@ export interface SubAgent<TOutput = unknown, TRequestContext extends Record<stri
   __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>): void;
 
   /** Returns the memory instance, if configured */
-  getMemory(opts: { requestContext?: RequestContext }): Promise<MastraMemory | undefined>;
+  getMemory(opts?: { requestContext?: RequestContext }): Promise<MastraMemory | undefined> | MastraMemory | undefined;
 
   /** Returns the system prompt / instructions */
-  getInstructions(opts: { requestContext?: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
+  getInstructions(opts?: { requestContext?: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
 
   /** Execute a prompt and return the full result */
-  generate(messages: MessageListInput, options?: AgentExecutionOptionsBase<any>): Promise<FullOutput>;
+  generate(messages: MessageListInput, options?: any): Promise<FullOutput | SubAgentGenerateResult>;
 
   /** Stream a prompt execution */
-  stream(messages: MessageListInput, options?: AgentExecutionOptionsBase<any>): Promise<MastraModelOutput>;
+  stream(messages: MessageListInput, options?: any): Promise<MastraModelOutput | SubAgentStreamResult>;
 
   /** Resume a previously suspended generate execution */
-  resumeGenerate(resumeData: any, options?: AgentExecutionOptionsBase<any>): Promise<FullOutput>;
+  resumeGenerate(resumeData: any, options?: any): Promise<FullOutput | SubAgentGenerateResult>;
 
   /** Resume a previously suspended stream execution */
-  resumeStream(resumeData: any, options?: AgentExecutionOptionsBase<any>): Promise<MastraModelOutput>;
+  resumeStream(resumeData: any, options?: any): Promise<MastraModelOutput | SubAgentStreamResult>;
 
   /** Execute a prompt using a legacy v1 model */
   generateLegacy?(messages: MessageListInput, options?: any): Promise<any>;

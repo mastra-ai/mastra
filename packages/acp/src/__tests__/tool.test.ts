@@ -165,6 +165,47 @@ describe('ACPConnection', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
   });
 
+  it('streams agent message chunks before the ACP prompt completes', async () => {
+    const { ACPConnection } = await import('../connection');
+    let finishPrompt!: () => void;
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    mocks.onPrompt = async acpConnection => {
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'hello ' },
+        },
+      });
+
+      await new Promise<void>(resolve => {
+        finishPrompt = resolve;
+      });
+
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'world' },
+        },
+      });
+    };
+
+    const iterator = connection.promptStream('stream feature')[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({ value: 'hello ', done: false });
+    finishPrompt();
+    await expect(iterator.next()).resolves.toEqual({ value: 'world', done: false });
+    await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
+  });
+
   it('cancels the ACP prompt when the abort signal fires', async () => {
     const { ACPConnection } = await import('../connection');
     const controller = new AbortController();
@@ -288,7 +329,14 @@ describe('AcpAgent', () => {
         sessionId: 'session-1',
         update: {
           sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: 'streamed' },
+          content: { type: 'text', text: 'streamed ' },
+        },
+      });
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'output' },
         },
       });
     };
@@ -306,8 +354,19 @@ describe('AcpAgent', () => {
       chunks.push(chunk);
     }
 
-    await expect(result.text).resolves.toBe('streamed');
-    expect(chunks.map(chunk => chunk.type)).toEqual(['text-start', 'text-delta', 'text-end', 'step-finish', 'finish']);
+    await expect(result.text).resolves.toBe('streamed output');
+    expect(chunks.map(chunk => chunk.type)).toEqual([
+      'text-start',
+      'text-delta',
+      'text-delta',
+      'text-end',
+      'step-finish',
+      'finish',
+    ]);
+    expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).toEqual([
+      'streamed ',
+      'output',
+    ]);
     expect(result.messageList.get.response.db()[0]?.role).toBe('assistant');
   });
 });

@@ -27,6 +27,7 @@ import type { CreateACPToolOptions } from './types';
 type PromptState = {
   sessionId: string;
   chunks: string[];
+  onChunk?: (chunk: string) => void;
 };
 
 class ACPClient implements Client {
@@ -46,7 +47,10 @@ class ACPClient implements Client {
     const update = notification.update;
 
     if (update.sessionUpdate === 'agent_message_chunk') {
-      appendContentChunk(state.chunks, update);
+      const chunk = appendContentChunk(state.chunks, update);
+      if (chunk) {
+        state.onChunk?.(chunk);
+      }
     }
   }
 
@@ -108,6 +112,16 @@ export class ACPConnection {
   }
 
   async prompt(task: string, signal?: AbortSignal): Promise<string> {
+    const chunks: string[] = [];
+
+    for await (const chunk of this.promptStream(task, signal)) {
+      chunks.push(chunk);
+    }
+
+    return chunks.join('');
+  }
+
+  async *promptStream(task: string, signal?: AbortSignal): AsyncGenerator<string> {
     await this.ensureConnected();
 
     const sessionId = this.session?.sessionId;
@@ -121,26 +135,45 @@ export class ACPConnection {
       throw signal.reason ?? new Error('ACP prompt aborted');
     }
 
-    const state: PromptState = { sessionId, chunks: [] };
+    const queue = createAsyncQueue<string>();
+    const state: PromptState = {
+      sessionId,
+      chunks: [],
+      onChunk: chunk => queue.push(chunk),
+    };
     this.currentPrompt = state;
 
     const abortHandler = () => {
       void this.cancel();
+      queue.throw(signal?.reason ?? new Error('ACP prompt aborted'));
     };
 
     signal?.addEventListener('abort', abortHandler, { once: true });
 
-    try {
-      const response = await this.connection.prompt({
+    const responsePromise = this.connection
+      .prompt({
         sessionId,
         prompt: [{ type: 'text', text: task }],
-      });
+      })
+      .then(
+        response => {
+          this.throwIfPromptDidNotComplete(response);
+          queue.close();
+        },
+        error => {
+          queue.throw(this.withStderr(error));
+        },
+      );
 
-      this.throwIfPromptDidNotComplete(response);
+    try {
+      for await (const chunk of queue) {
+        yield chunk;
+      }
 
-      return state.chunks.join('');
+      await responsePromise;
     } catch (error) {
-      throw this.withStderr(error);
+      await responsePromise.catch(() => undefined);
+      throw error;
     } finally {
       signal?.removeEventListener('abort', abortHandler);
       if (this.currentPrompt === state) {
@@ -272,14 +305,78 @@ export class ACPConnection {
   }
 }
 
-function appendContentChunk(chunks: string[], chunk: ContentChunk): void {
-  appendContentBlock(chunks, chunk.content);
+function appendContentChunk(chunks: string[], chunk: ContentChunk): string | undefined {
+  return appendContentBlock(chunks, chunk.content);
 }
 
-function appendContentBlock(chunks: string[], content: ContentBlock): void {
+function appendContentBlock(chunks: string[], content: ContentBlock): string | undefined {
   if (content.type === 'text') {
     chunks.push(content.text);
+    return content.text;
   }
+
+  return undefined;
+}
+
+type AsyncQueue<T> = AsyncIterable<T> & {
+  close: () => void;
+  push: (value: T) => void;
+  throw: (error: unknown) => void;
+};
+
+function createAsyncQueue<T>(): AsyncQueue<T> {
+  const values: T[] = [];
+  const waiters: Array<{
+    resolve: (value: IteratorResult<T>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  let closed = false;
+  let error: unknown;
+
+  const next = (): Promise<IteratorResult<T>> => {
+    if (values.length > 0) {
+      return Promise.resolve({ value: values.shift()!, done: false });
+    }
+
+    if (error) {
+      return Promise.reject(error);
+    }
+
+    if (closed) {
+      return Promise.resolve({ value: undefined, done: true });
+    }
+
+    return new Promise((resolve, reject) => {
+      waiters.push({ resolve, reject });
+    });
+  };
+
+  return {
+    push(value) {
+      const waiter = waiters.shift();
+      if (waiter) {
+        waiter.resolve({ value, done: false });
+        return;
+      }
+
+      values.push(value);
+    },
+    close() {
+      closed = true;
+      for (const waiter of waiters.splice(0)) {
+        waiter.resolve({ value: undefined, done: true });
+      }
+    },
+    throw(queueError) {
+      error = queueError;
+      for (const waiter of waiters.splice(0)) {
+        waiter.reject(queueError);
+      }
+    },
+    [Symbol.asyncIterator]() {
+      return { next };
+    },
+  };
 }
 
 function selectedPermissionOutcome(option: PermissionOption): RequestPermissionResponse['outcome'] {
