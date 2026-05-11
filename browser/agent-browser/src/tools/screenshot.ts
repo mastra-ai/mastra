@@ -20,7 +20,17 @@ export function createScreenshotTool(browser: AgentBrowser) {
       return await browser.screenshot(input, threadId);
     },
     toModelOutput(output) {
-      const result = output as { base64: string; title?: string; url?: string };
+      const result = output as { base64?: string; title?: string; url?: string; message?: string };
+
+      if (typeof result.base64 !== 'string') {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: result.message ?? 'Failed to capture screenshot.' }],
+        };
+      }
+
+      const label = result.title ?? result.url ?? 'current page';
+      const location = result.url ? ` (${result.url})` : '';
       return {
         type: 'content' as const,
         value: [
@@ -29,9 +39,10 @@ export function createScreenshotTool(browser: AgentBrowser) {
             mediaType: 'image/png',
             data: result.base64,
           },
-          ...(result.url
-            ? [{ type: 'text' as const, text: `Screenshot of: ${result.title ?? result.url} (${result.url})` }]
-            : []),
+          {
+            type: 'text' as const,
+            text: `Screenshot of: ${label}${location}. Use snapshot when you need structured data instead of visual interpretation.`,
+          },
         ],
       };
     },

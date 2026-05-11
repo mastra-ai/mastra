@@ -738,6 +738,37 @@ describe('createStagehandTools', () => {
   });
 });
 
+describe('excludeTools', () => {
+  it('should filter out excluded tools from getTools()', () => {
+    const browser = new StagehandBrowser({
+      scope: 'shared',
+      excludeTools: ['stagehand_screenshot', 'stagehand_close'],
+    });
+    const tools = browser.getTools();
+
+    expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeUndefined();
+    expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeUndefined();
+    expect(tools[STAGEHAND_TOOLS.ACT].id).toBe('stagehand_act');
+    expect(tools[STAGEHAND_TOOLS.EXTRACT].id).toBe('stagehand_extract');
+    expect(tools[STAGEHAND_TOOLS.OBSERVE].id).toBe('stagehand_observe');
+    expect(tools[STAGEHAND_TOOLS.NAVIGATE].id).toBe('stagehand_navigate');
+    expect(tools[STAGEHAND_TOOLS.TABS].id).toBe('stagehand_tabs');
+    expect(Object.keys(tools)).toHaveLength(5);
+  });
+
+  it('should return all tools when excludeTools is not set', () => {
+    const browser = new StagehandBrowser({ scope: 'shared' });
+    const tools = browser.getTools();
+    expect(Object.keys(tools)).toHaveLength(7);
+  });
+
+  it('should return all tools when excludeTools is empty', () => {
+    const browser = new StagehandBrowser({ scope: 'shared', excludeTools: [] });
+    const tools = browser.getTools();
+    expect(Object.keys(tools)).toHaveLength(7);
+  });
+});
+
 describe('STAGEHAND_TOOLS', () => {
   it('should have correct tool names', () => {
     expect(STAGEHAND_TOOLS.ACT).toBe('stagehand_act');
