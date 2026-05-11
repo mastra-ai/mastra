@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.9.0-alpha.12
+
+### Patch Changes
+
+- Fixed Studio not forwarding custom request headers (such as `Authorization` or `x-tenant-id`) on the SSO login and logout endpoints. Headers configured in Studio settings now flow through to `/auth/sso/login` and `/auth/logout`, matching the behavior of other Studio API calls. This unblocks setups where tenant middleware or composite auth requires a header on the SSO login request. ([#16328](https://github.com/mastra-ai/mastra/pull/16328))
+
+- Updated dependencies [[`37c0dc5`](https://github.com/mastra-ai/mastra/commit/37c0dc5697d343db98628bf867bf71ce6deec6d7), [`ef6b584`](https://github.com/mastra-ai/mastra/commit/ef6b5847ac33c0a7e80af3a86e8801e2933dd3ee), [`4dd900d`](https://github.com/mastra-ai/mastra/commit/4dd900d75dfe9be89f8c15188b368a8622aa1e18), [`4ff5bdf`](https://github.com/mastra-ai/mastra/commit/4ff5bdfe170cba6dfb5260c6af0f4ba668430772), [`bbcd93c`](https://github.com/mastra-ai/mastra/commit/bbcd93cf7d8aa1007d6d84bfd033b8015c912087), [`308bd07`](https://github.com/mastra-ai/mastra/commit/308bd074f35cef0c75d82fc1eb19382fe04ecf6f)]:
+  - @mastra/core@1.33.0-alpha.11
+  - @mastra/client-js@1.18.0-alpha.12
+  - @mastra/react@0.2.36-alpha.12
+  - @mastra/playground-ui@27.0.0-alpha.12
+
 ## 1.9.0-alpha.11
 
 ### Patch Changes

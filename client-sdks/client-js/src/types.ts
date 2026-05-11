@@ -1939,7 +1939,8 @@ export interface CreateStoredSkillParams {
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
-  description?: string;
+  /** Required by the server: description of what the skill does and when to use it. */
+  description: string;
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
