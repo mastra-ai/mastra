@@ -3,11 +3,15 @@
 #
 # Resolution order for each variable (first non-empty wins):
 #   1. Already-exported shell env
-#   2. $BUILDER_SMOKE_RC (path to an rc file that's `source`-d)
+#   2. $BUILDER_SMOKE_RC (path to an env file we grep, never source)
 #   3. examples/agent/.env
 #   4. repo-root .env, .env.local
 #
-# Does NOT mutate any environment or file. Prints a status table and exits:
+# This script itself never sources anything. The agent calling it IS allowed
+# to source the user's shell rc on their behalf when vars are missing — see
+# the "Missing vars" hint printed at the end.
+#
+# Prints a status table and exits:
 #   0 — all required vars present
 #   1 — one or more required vars missing
 #
@@ -126,7 +130,23 @@ fi
 if [ "$missing" -gt 0 ]; then
   echo
   echo "✗ ${missing} required var(s) missing. Server boot will fail (e.g. OpenAIVoice ctor)."
-  echo "  Set them in shell env, ${RC_FILE:-an rc file via \$BUILDER_SMOKE_RC}, or ${EXAMPLE_ENV#${REPO_ROOT}/}."
+  echo
+  echo "  Agent: you have explicit permission to source the user's shell rc on"
+  echo "  their behalf to pull these vars in. Safe pattern (no rc side effects"
+  echo "  leak into the smoke run):"
+  echo
+  echo "    # Ask the user to confirm, then run ONCE per session, in the same"
+  echo "    # terminal you'll launch \`pnpm mastra:dev\` from:"
+  echo "    source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true"
+  echo "    bash .claude/skills/builder-smoke-test/scripts/preflight.sh"
+  echo
+  echo "  Other options, in preference order:"
+  echo "    1. User exports the missing vars in their current shell, then re-runs preflight."
+  echo "    2. Add the vars to examples/agent/.env (project-local, gitignored)."
+  echo "    3. Point \$BUILDER_SMOKE_RC at a personal env file the script will grep:"
+  echo "         export BUILDER_SMOKE_RC=\$HOME/.config/mastra/builder-smoke.env"
+  echo
+  echo "  Do NOT prompt the user for raw key values — they're in their rc already."
   exit 1
 fi
 

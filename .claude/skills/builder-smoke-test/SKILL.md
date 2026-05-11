@@ -117,26 +117,39 @@ If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-sk
 
 ### Env-var resolution order
 
-The smoke scripts (`preflight.sh`, `auth-detect.sh`) look for each variable in this order, first non-empty wins. They never mutate your environment.
+The smoke scripts (`preflight.sh`, `auth-detect.sh`) look for each variable in this order, first non-empty wins. They never source or mutate your environment.
 
 1. Already-exported shell env (`echo $VAR`).
-2. `$BUILDER_SMOKE_RC` — optional path to a personal rc file (e.g. `~/.config/mastra/builder-smoke.env`). Keeps team-specific secrets out of `examples/agent/.env`.
+2. `$BUILDER_SMOKE_RC` — optional path to a personal env file the script will `grep` (not source). Keeps team-specific secrets out of `examples/agent/.env`.
 3. `examples/agent/.env`.
 4. Repo-root `.env`, then `.env.local`.
 
-If you keep keys in `~/.zshrc` or a personal rc, either export them in your shell before running, or point `BUILDER_SMOKE_RC` at a sourceable file:
-
-```bash
-export BUILDER_SMOKE_RC="$HOME/.config/mastra/builder-smoke.env"
-```
-
-Run preflight to see exactly which vars are missing and where each found one came from:
+Run preflight first:
 
 ```bash
 bash .claude/skills/builder-smoke-test/scripts/preflight.sh
 ```
 
-Preflight is non-mutating. It exits non-zero if any required var is missing; fix it and re-run before continuing.
+It exits non-zero if any required var is missing and prints exactly where each found one came from.
+
+### Agent: how to handle missing env vars
+
+**You have explicit permission to `source` the user's shell rc on their behalf** when preflight reports missing vars — the user almost certainly has their API keys exported in `~/.zshrc` or `~/.bashrc` already, and asking them to paste a raw key value is the wrong move.
+
+Recommended order when preflight fails:
+
+1. **Source the user's rc, then re-run preflight in the same shell.** Do this ONCE per session, in the same terminal you'll launch `pnpm mastra:dev` from. The rc may run side effects (`nvm`, `starship`, etc.) — that's fine for a smoke run, just don't loop it.
+
+   ```bash
+   source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null || true
+   bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+   ```
+
+2. If sourcing didn't pick the var up (key lives somewhere unusual), tell the user which var is still missing and offer three options: export it manually, add it to `examples/agent/.env`, or point `$BUILDER_SMOKE_RC` at an env file.
+
+3. **Do not prompt the user for raw key values.** They already have the keys somewhere — your job is to find them, not extract them.
+
+Once preflight passes in a given shell, the same shell can launch `pnpm mastra:dev` directly and `examples/agent` will inherit the vars.
 
 ## Starting the dev server
 
