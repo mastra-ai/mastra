@@ -118,6 +118,14 @@ export interface ToolExecutionOptions {
   showImages?: boolean;
   autoCollapse?: boolean;
   collapsedByDefault?: boolean;
+  /**
+   * True when this tool component is being constructed during history
+   * replay (not from a live stream). Images in history were never the
+   * active inline image and never will be, so we render a cheap default
+   * placeholder instead of decoding/encoding the image to compute its
+   * pixel-accurate row count.
+   */
+  fromHistory?: boolean;
 }
 /**
  * Convert absolute path to tilde notation if it's in home directory
@@ -1616,6 +1624,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const caps = getCapabilities();
     const termWidth = getTermWidth();
     const maxWidthCells = termWidth - 4 - BOX_INDENT * 2;
+
+    // History replay: images here were never live and never will be the
+    // active inline image, so skip the expensive decode/encode and just
+    // render a single-line muted "(image)" placeholder per image.
+    if (this.options.fromHistory) {
+      for (const img of images) {
+        this.contentBox.addChild(
+          new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, undefined)), 0, 0),
+        );
+      }
+      return;
+    }
 
     for (const img of images) {
       const dims = getImageDimensions(img.data, img.mimeType);

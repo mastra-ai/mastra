@@ -502,6 +502,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             {
               showImages: false,
               collapsedByDefault: !state.toolOutputExpanded,
+              fromHistory: true,
             },
             state.ui,
           );
