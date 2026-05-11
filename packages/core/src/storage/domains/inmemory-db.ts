@@ -51,6 +51,13 @@ export class InMemoryDB {
   readonly logRecords: LogRecord[] = [];
   readonly scoreRecords: ScoreRecord[] = [];
   readonly feedbackRecords: FeedbackRecord[] = [];
+  observabilityNextCursorId = 1;
+  readonly traceCursorIds = new Map<string, number>();
+  readonly branchCursorIds = new Map<string, number>();
+  readonly metricCursorIds = new Map<MetricRecord, number>();
+  readonly logCursorIds = new Map<LogRecord, number>();
+  readonly scoreCursorIds = new Map<ScoreRecord, number>();
+  readonly feedbackCursorIds = new Map<FeedbackRecord, number>();
   readonly agents = new Map<string, StorageAgentType>();
   readonly agentVersions = new Map<string, AgentVersion>();
   readonly promptBlocks = new Map<string, StoragePromptBlockType>();
@@ -99,6 +106,13 @@ export class InMemoryDB {
     this.logRecords.length = 0;
     this.scoreRecords.length = 0;
     this.feedbackRecords.length = 0;
+    this.observabilityNextCursorId = 1;
+    this.traceCursorIds.clear();
+    this.branchCursorIds.clear();
+    this.metricCursorIds.clear();
+    this.logCursorIds.clear();
+    this.scoreCursorIds.clear();
+    this.feedbackCursorIds.clear();
     this.agents.clear();
     this.agentVersions.clear();
     this.promptBlocks.clear();

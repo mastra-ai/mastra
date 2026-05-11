@@ -11,9 +11,17 @@
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
  */
 import { createClient } from '@clickhouse/client';
+import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_MIGRATIONS, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
+import {
+  ALL_MIGRATIONS,
+  buildAllMvDDL,
+  buildAllTableDDL,
+  buildRetentionDDL,
+  buildRetentionEntries,
+  parseTtlExpression,
+} from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -46,6 +54,962 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     expect(storage.observabilityStrategy).toEqual({
       preferred: 'insert-only',
       supported: ['insert-only'],
+    });
+  });
+
+  describe('delta polling', () => {
+    async function withFallbackStorage<T>(
+      run: (fallbackStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
+    ): Promise<T> {
+      let adminClient: ReturnType<typeof createClient> | null = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const database = `fallback_delta_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      let client: ReturnType<typeof createClient> | null = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      let fallbackStorage: ObservabilityStorageClickhouseVNext | null = new ObservabilityStorageClickhouseVNext({
+        client,
+        deltaCursorStrategy: 'fallback',
+      });
+
+      try {
+        await fallbackStorage.init();
+        await fallbackStorage.dangerouslyClearAll();
+        return await run(fallbackStorage);
+      } finally {
+        if (fallbackStorage) {
+          await fallbackStorage.dangerouslyClearAll();
+        }
+        if (client) {
+          await client.close();
+        }
+        if (adminClient) {
+          await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+          await adminClient.close();
+        }
+      }
+    }
+
+    it('advertises delta list capabilities when the feature is enabled', () => {
+      expect(storage.getListCapabilities()).toEqual({
+        delta: {
+          traces: true,
+          branches: true,
+          logs: true,
+          metrics: true,
+          scores: true,
+          feedback: true,
+        },
+      });
+    });
+
+    it('hides delta list capabilities when the feature is disabled', () => {
+      coreFeatures.delete('observability-delta-polling');
+
+      try {
+        expect(storage.getListCapabilities()).toBeUndefined();
+      } finally {
+        coreFeatures.add('observability-delta-polling');
+      }
+    });
+
+    it('supports page deltaCursor and delta polling for traces', async () => {
+      await storage.createSpan({
+        span: {
+          traceId: 'delta-trace-1',
+          spanId: 'delta-trace-root-1',
+          parentSpanId: null,
+          name: 'delta-trace-root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'delta-trace-agent',
+          entityName: 'delta-trace-agent',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'delta',
+          source: null,
+          serviceName: null,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt: new Date('2026-05-01T00:00:00Z'),
+          endedAt: new Date('2026-05-01T00:00:01Z'),
+        },
+      });
+
+      const page = await waitForValue(
+        () => storage.listTraces({ filters: { entityName: 'delta-trace-agent' } }),
+        result => result.spans.length === 1 && typeof result.deltaCursor === 'string',
+      );
+      expect(page.spans[0]!.traceId).toBe('delta-trace-1');
+
+      const bootstrap = await storage.listTraces({ mode: 'delta', filters: { entityName: 'delta-trace-agent' } });
+      expect(bootstrap.spans).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.createSpan({
+        span: {
+          traceId: 'delta-trace-2',
+          spanId: 'delta-trace-root-2',
+          parentSpanId: null,
+          name: 'delta-trace-root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'delta-trace-agent',
+          entityName: 'delta-trace-agent',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'delta',
+          source: null,
+          serviceName: null,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt: new Date('2026-05-01T00:00:02Z'),
+          endedAt: new Date('2026-05-01T00:00:03Z'),
+        },
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listTraces({
+            mode: 'delta',
+            after: bootstrap.deltaCursor!,
+            filters: { entityName: 'delta-trace-agent' },
+          }),
+        result => result.spans.length === 1,
+      );
+      expect(delta.spans.map(span => span.traceId)).toEqual(['delta-trace-2']);
+      expect(delta.delta).toEqual({ limit: 10, hasMore: false });
+      expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('supports page deltaCursor and delta polling for branches', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'delta-branch-trace-1',
+            spanId: 'delta-branch-root-1',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-delta',
+            entityName: 'wf-delta',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-02T00:00:00Z'),
+            endedAt: new Date('2026-05-02T00:00:01Z'),
+          },
+          {
+            traceId: 'delta-branch-trace-1',
+            spanId: 'delta-branch-anchor-1',
+            parentSpanId: 'delta-branch-root-1',
+            name: 'observer',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'delta-branch-agent',
+            entityName: 'delta-branch-agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-02T00:00:00.500Z'),
+            endedAt: new Date('2026-05-02T00:00:00.800Z'),
+          },
+        ],
+      });
+
+      const page = await waitForValue(
+        () => storage.listBranches({ filters: { entityName: 'delta-branch-agent' } }),
+        result => result.branches.length === 1 && typeof result.deltaCursor === 'string',
+      );
+      expect(page.branches[0]!.traceId).toBe('delta-branch-trace-1');
+
+      const bootstrap = await storage.listBranches({ mode: 'delta', filters: { entityName: 'delta-branch-agent' } });
+      expect(bootstrap.branches).toEqual([]);
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'delta-branch-trace-2',
+            spanId: 'delta-branch-root-2',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-delta',
+            entityName: 'wf-delta',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-02T00:00:02Z'),
+            endedAt: new Date('2026-05-02T00:00:03Z'),
+          },
+          {
+            traceId: 'delta-branch-trace-2',
+            spanId: 'delta-branch-anchor-2',
+            parentSpanId: 'delta-branch-root-2',
+            name: 'observer',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'delta-branch-agent',
+            entityName: 'delta-branch-agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-02T00:00:02.500Z'),
+            endedAt: new Date('2026-05-02T00:00:02.800Z'),
+          },
+        ],
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listBranches({
+            mode: 'delta',
+            after: bootstrap.deltaCursor!,
+            filters: { entityName: 'delta-branch-agent' },
+          }),
+        result => result.branches.length === 1,
+      );
+      expect(delta.branches.map(span => span.traceId)).toEqual(['delta-branch-trace-2']);
+      expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('supports page deltaCursor and delta polling for logs', async () => {
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'delta-log-1',
+            timestamp: new Date('2026-05-03T00:00:00Z'),
+            level: 'info',
+            message: 'delta log 1',
+            data: null,
+            traceId: 'delta-log-trace',
+            metadata: null,
+          },
+        ],
+      });
+
+      const page = await waitForValue(
+        () => storage.listLogs({ filters: { traceId: 'delta-log-trace' } }),
+        result => result.logs.length === 1 && typeof result.deltaCursor === 'string',
+      );
+      expect(page.logs[0]!.logId).toBe('delta-log-1');
+
+      const bootstrap = await storage.listLogs({ mode: 'delta', filters: { traceId: 'delta-log-trace' } });
+      expect(bootstrap.logs).toEqual([]);
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'delta-log-2',
+            timestamp: new Date('2026-05-03T00:00:01Z'),
+            level: 'info',
+            message: 'delta log 2',
+            data: null,
+            traceId: 'delta-log-trace',
+            metadata: null,
+          },
+        ],
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listLogs({
+            mode: 'delta',
+            after: bootstrap.deltaCursor!,
+            filters: { traceId: 'delta-log-trace' },
+          }),
+        result => result.logs.length === 1,
+      );
+      expect(delta.logs.map(log => log.logId)).toEqual(['delta-log-2']);
+      expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('returns a resumable page deltaCursor for empty filtered logs', async () => {
+      const page = await storage.listLogs({ filters: { traceId: 'delta-log-empty' } });
+      expect(page.logs).toEqual([]);
+      expect(page.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'delta-log-empty-1',
+            timestamp: new Date('2026-05-03T00:00:02Z'),
+            level: 'info',
+            message: 'delta log after empty page',
+            data: null,
+            traceId: 'delta-log-empty',
+            metadata: null,
+          },
+        ],
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listLogs({
+            mode: 'delta',
+            after: page.deltaCursor!,
+            filters: { traceId: 'delta-log-empty' },
+          }),
+        result => result.logs.length === 1,
+      );
+      expect(delta.logs.map(log => log.logId)).toEqual(['delta-log-empty-1']);
+    });
+
+    it('supports page deltaCursor and delta polling for metrics', async () => {
+      await storage.batchCreateMetrics({
+        metrics: [
+          {
+            metricId: 'delta-metric-1',
+            timestamp: new Date('2026-05-04T00:00:00Z'),
+            name: 'delta_metric',
+            value: 1,
+            labels: {},
+          },
+        ],
+      });
+
+      const page = await waitForValue(
+        () => storage.listMetrics({ filters: { name: ['delta_metric'] } }),
+        result => result.metrics.length === 1 && typeof result.deltaCursor === 'string',
+      );
+      expect(page.metrics[0]!.metricId).toBe('delta-metric-1');
+
+      const bootstrap = await storage.listMetrics({ mode: 'delta', filters: { name: ['delta_metric'] } });
+      expect(bootstrap.metrics).toEqual([]);
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.batchCreateMetrics({
+        metrics: [
+          {
+            metricId: 'delta-metric-2',
+            timestamp: new Date('2026-05-04T00:00:01Z'),
+            name: 'delta_metric',
+            value: 2,
+            labels: {},
+          },
+        ],
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listMetrics({
+            mode: 'delta',
+            after: bootstrap.deltaCursor!,
+            filters: { name: ['delta_metric'] },
+          }),
+        result => result.metrics.length === 1,
+      );
+      expect(delta.metrics.map(metric => metric.metricId)).toEqual(['delta-metric-2']);
+      expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('supports page deltaCursor and delta polling for scores', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'delta-score-1',
+          timestamp: new Date('2026-05-05T00:00:00Z'),
+          traceId: 'delta-score-trace-1',
+          spanId: null,
+          scorerId: 'delta-scorer',
+          score: 0.1,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const page = await waitForValue(
+        () => storage.listScores({ filters: { scorerId: 'delta-scorer' } as any }),
+        result => result.scores.length === 1 && typeof result.deltaCursor === 'string',
+      );
+      expect(page.scores[0]!.scoreId).toBe('delta-score-1');
+
+      const bootstrap = await storage.listScores({ mode: 'delta', filters: { scorerId: 'delta-scorer' } as any });
+      expect(bootstrap.scores).toEqual([]);
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.createScore({
+        score: {
+          scoreId: 'delta-score-2',
+          timestamp: new Date('2026-05-05T00:00:01Z'),
+          traceId: 'delta-score-trace-2',
+          spanId: null,
+          scorerId: 'delta-scorer',
+          score: 0.2,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listScores({
+            mode: 'delta',
+            after: bootstrap.deltaCursor!,
+            filters: { scorerId: 'delta-scorer' } as any,
+          }),
+        result => result.scores.length === 1,
+      );
+      expect(delta.scores.map(score => score.scoreId)).toEqual(['delta-score-2']);
+      expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('supports page deltaCursor and delta polling for feedback', async () => {
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'delta-feedback-1',
+          timestamp: new Date('2026-05-06T00:00:00Z'),
+          traceId: 'delta-feedback-trace',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const page = await waitForValue(
+        () => storage.listFeedback({ filters: { traceId: 'delta-feedback-trace' } }),
+        result => result.feedback.length === 1 && typeof result.deltaCursor === 'string',
+      );
+      expect(page.feedback[0]!.feedbackId).toBe('delta-feedback-1');
+
+      const bootstrap = await storage.listFeedback({ mode: 'delta', filters: { traceId: 'delta-feedback-trace' } });
+      expect(bootstrap.feedback).toEqual([]);
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'delta-feedback-2',
+          timestamp: new Date('2026-05-06T00:00:01Z'),
+          traceId: 'delta-feedback-trace',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 0,
+          comment: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const delta = await waitForValue(
+        () =>
+          storage.listFeedback({
+            mode: 'delta',
+            after: bootstrap.deltaCursor!,
+            filters: { traceId: 'delta-feedback-trace' },
+          }),
+        result => result.feedback.length === 1,
+      );
+      expect(delta.feedback.map(feedback => feedback.feedbackId)).toEqual(['delta-feedback-2']);
+      expect(delta.deltaCursor).toBeTruthy();
+    });
+
+    it('uses serial-backed delta tables when generateSerialID is available at runtime', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const result = await client.query({
+        query: `
+          SELECT create_table_query
+          FROM system.tables
+          WHERE database = currentDatabase()
+            AND name = 'mastra_mv_log_events_delta'
+        `,
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ create_table_query?: string }>;
+      const ddl = rows[0]?.create_table_query ?? '';
+      await client.close();
+
+      expect(ddl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
+      expect(ddl).toContain('AS cursorId');
+    });
+
+    it('builds serial-backed delta DDL when explicitly requested', () => {
+      const serialDdl = [...buildAllTableDDL(), ...buildAllMvDDL('serial')].join('\n');
+      const fallbackDdl = [...buildAllTableDDL(), ...buildAllMvDDL('fallback')].join('\n');
+
+      expect(serialDdl).toContain(`generateSerialID('mastra_log_events_delta_cursor')`);
+      expect(serialDdl).toContain(`generateSerialID('mastra_trace_roots_delta_cursor')`);
+      expect(fallbackDdl).toContain('farmFingerprint64(');
+      expect(fallbackDdl).not.toContain('generateSerialID(');
+    });
+
+    it('supports fallback-mode delta polling for traces when forced', async () => {
+      await withFallbackStorage(async fallbackStorage => {
+        await fallbackStorage.createSpan({
+          span: {
+            traceId: 'fallback-trace-1',
+            spanId: 'fallback-trace-root-1',
+            parentSpanId: null,
+            name: 'fallback-trace-root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'fallback-trace-agent',
+            entityName: 'fallback-trace-agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'fallback',
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-08T00:00:00Z'),
+            endedAt: new Date('2026-05-08T00:00:01Z'),
+          },
+        });
+
+        const page = await waitForValue(
+          () => fallbackStorage.listTraces({ filters: { entityName: 'fallback-trace-agent' } }),
+          result => result.spans.length === 1 && typeof result.deltaCursor === 'string',
+        );
+
+        await fallbackStorage.createSpan({
+          span: {
+            traceId: 'fallback-trace-2',
+            spanId: 'fallback-trace-root-2',
+            parentSpanId: null,
+            name: 'fallback-trace-root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'fallback-trace-agent',
+            entityName: 'fallback-trace-agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'fallback',
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-05-08T00:00:02Z'),
+            endedAt: new Date('2026-05-08T00:00:03Z'),
+          },
+        });
+
+        const delta = await waitForValue(
+          () =>
+            fallbackStorage.listTraces({
+              mode: 'delta',
+              after: page.deltaCursor!,
+              filters: { entityName: 'fallback-trace-agent' },
+            }),
+          result => result.spans.length === 1,
+        );
+        expect(delta.spans.map(span => span.traceId)).toEqual(['fallback-trace-2']);
+      });
+    });
+
+    it('supports fallback-mode delta polling for branches when forced', async () => {
+      await withFallbackStorage(async fallbackStorage => {
+        await fallbackStorage.batchCreateSpans({
+          records: [
+            {
+              traceId: 'fallback-branch-trace-1',
+              spanId: 'fallback-branch-root-1',
+              parentSpanId: null,
+              name: 'root',
+              spanType: SpanType.WORKFLOW_RUN,
+              isEvent: false,
+              entityType: EntityType.WORKFLOW_RUN,
+              entityId: 'fallback-wf',
+              entityName: 'fallback-wf',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:00Z'),
+              endedAt: new Date('2026-05-09T00:00:01Z'),
+            },
+            {
+              traceId: 'fallback-branch-trace-1',
+              spanId: 'fallback-branch-anchor-1',
+              parentSpanId: 'fallback-branch-root-1',
+              name: 'observer',
+              spanType: SpanType.AGENT_RUN,
+              isEvent: false,
+              entityType: EntityType.AGENT,
+              entityId: 'fallback-branch-agent',
+              entityName: 'fallback-branch-agent',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:00.500Z'),
+              endedAt: new Date('2026-05-09T00:00:00.800Z'),
+            },
+          ],
+        });
+
+        const page = await waitForValue(
+          () => fallbackStorage.listBranches({ filters: { entityName: 'fallback-branch-agent' } }),
+          result => result.branches.length === 1 && typeof result.deltaCursor === 'string',
+        );
+
+        await fallbackStorage.batchCreateSpans({
+          records: [
+            {
+              traceId: 'fallback-branch-trace-2',
+              spanId: 'fallback-branch-root-2',
+              parentSpanId: null,
+              name: 'root',
+              spanType: SpanType.WORKFLOW_RUN,
+              isEvent: false,
+              entityType: EntityType.WORKFLOW_RUN,
+              entityId: 'fallback-wf',
+              entityName: 'fallback-wf',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:02Z'),
+              endedAt: new Date('2026-05-09T00:00:03Z'),
+            },
+            {
+              traceId: 'fallback-branch-trace-2',
+              spanId: 'fallback-branch-anchor-2',
+              parentSpanId: 'fallback-branch-root-2',
+              name: 'observer',
+              spanType: SpanType.AGENT_RUN,
+              isEvent: false,
+              entityType: EntityType.AGENT,
+              entityId: 'fallback-branch-agent',
+              entityName: 'fallback-branch-agent',
+              userId: null,
+              organizationId: null,
+              resourceId: null,
+              runId: null,
+              sessionId: null,
+              threadId: null,
+              requestId: null,
+              environment: null,
+              source: null,
+              serviceName: null,
+              scope: null,
+              attributes: null,
+              metadata: null,
+              tags: null,
+              links: null,
+              input: null,
+              output: null,
+              error: null,
+              startedAt: new Date('2026-05-09T00:00:02.500Z'),
+              endedAt: new Date('2026-05-09T00:00:02.800Z'),
+            },
+          ],
+        });
+
+        const delta = await waitForValue(
+          () =>
+            fallbackStorage.listBranches({
+              mode: 'delta',
+              after: page.deltaCursor!,
+              filters: { entityName: 'fallback-branch-agent' },
+            }),
+          result => result.branches.length === 1,
+        );
+        expect(delta.branches.map(branch => branch.traceId)).toEqual(['fallback-branch-trace-2']);
+      });
+    });
+
+    it('supports fallback-mode delta polling for logs when forced', async () => {
+      await withFallbackStorage(async fallbackStorage => {
+        await fallbackStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'fallback-log-1',
+              timestamp: new Date('2026-05-10T00:00:00Z'),
+              level: 'info',
+              message: 'fallback log 1',
+              data: null,
+              traceId: 'fallback-log-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const page = await waitForValue(
+          () => fallbackStorage.listLogs({ filters: { traceId: 'fallback-log-trace' } }),
+          result => result.logs.length === 1 && typeof result.deltaCursor === 'string',
+        );
+
+        await fallbackStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'fallback-log-2',
+              timestamp: new Date('2026-05-10T00:00:01Z'),
+              level: 'info',
+              message: 'fallback log 2',
+              data: null,
+              traceId: 'fallback-log-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const delta = await waitForValue(
+          () =>
+            fallbackStorage.listLogs({
+              mode: 'delta',
+              after: page.deltaCursor!,
+              filters: { traceId: 'fallback-log-trace' },
+            }),
+          result => result.logs.length === 1,
+        );
+        expect(delta.logs.map(log => log.logId)).toEqual(['fallback-log-2']);
+      });
+    });
+
+    it('keeps using fallback mode after reinit on a Keeper-enabled server when fallback delta tables already exist', async () => {
+      const fallbackStorage = new ObservabilityStorageClickhouseVNext({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        deltaCursorStrategy: 'fallback',
+      });
+      await fallbackStorage.init();
+      await fallbackStorage.dangerouslyClearAll();
+
+      try {
+        await fallbackStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'fallback-upgrade-log-1',
+              timestamp: new Date('2026-05-11T00:00:00Z'),
+              level: 'info',
+              message: 'fallback upgrade log 1',
+              data: null,
+              traceId: 'fallback-upgrade-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const page = await waitForValue(
+          () => fallbackStorage.listLogs({ filters: { traceId: 'fallback-upgrade-trace' } }),
+          result => result.logs.length === 1 && typeof result.deltaCursor === 'string',
+        );
+
+        const defaultStorage = new ObservabilityStorageClickhouseVNext({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        await defaultStorage.init();
+
+        await defaultStorage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'fallback-upgrade-log-2',
+              timestamp: new Date('2026-05-11T00:00:01Z'),
+              level: 'info',
+              message: 'fallback upgrade log 2',
+              data: null,
+              traceId: 'fallback-upgrade-trace',
+              metadata: null,
+            },
+          ],
+        });
+
+        const delta = await waitForValue(
+          () =>
+            defaultStorage.listLogs({
+              mode: 'delta',
+              after: page.deltaCursor!,
+              filters: { traceId: 'fallback-upgrade-trace' },
+            }),
+          result => result.logs.length === 1,
+        );
+        expect(delta.logs.map(log => log.logId)).toEqual(['fallback-upgrade-log-2']);
+      } finally {
+        await fallbackStorage.dangerouslyClearAll();
+      }
     });
   });
 
@@ -4362,6 +5326,27 @@ async function triggerDiscoveryRefresh(): Promise<void> {
   } finally {
     await client.close();
   }
+}
+
+async function waitForValue<T>(
+  fn: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<T> {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const intervalMs = opts.intervalMs ?? 100;
+  const deadline = Date.now() + timeoutMs;
+
+  let lastValue: T | undefined;
+  while (Date.now() < deadline) {
+    lastValue = await fn();
+    if (predicate(lastValue)) {
+      return lastValue;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`Timed out waiting for expected value. Last value: ${JSON.stringify(lastValue)}`);
 }
 
 /**

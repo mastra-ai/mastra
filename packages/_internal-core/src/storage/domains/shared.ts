@@ -67,6 +67,111 @@ export const paginationInfoSchema = z.object({
   hasMore: z.boolean().describe('True if more pages are available'),
 });
 
+/** Opaque cursor used to resume incremental polling for observability list endpoints. */
+export const deltaCursorSchema = z.string().min(1).describe('Opaque cursor value for incremental polling');
+
+/** Public delta cursor type used across observability list endpoints. */
+export type DeltaCursor = z.output<typeof deltaCursorSchema>;
+
+/** Explicit list mode selector for observability list endpoints. */
+export const listModeSchema = z
+  .enum(['page', 'delta'])
+  .describe("List mode: 'page' | 'delta', defaults to 'page' when omitted.");
+
+/** Max number of updates returned from a delta poll window. */
+export const deltaLimitSchema = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(100)
+  .optional()
+  .describe('Maximum number of updates to return in one delta poll');
+
+/** Default page-mode pagination used to preserve legacy list arg behavior. */
+export const defaultPaginationArgs = {
+  page: 0,
+  perPage: 10,
+} as const satisfies z.output<typeof paginationArgsSchema>;
+
+/** Default number of updates returned when delta mode does not specify a limit. */
+export const defaultDeltaLimit = 10;
+
+type ObservabilityListModeValue<TFilters, TOrderBy> = {
+  mode?: z.output<typeof listModeSchema>;
+  filters?: TFilters;
+  pagination?: { page: number; perPage: number };
+  orderBy?: TOrderBy;
+  after?: DeltaCursor;
+  limit?: number;
+};
+
+type ObservabilityListDefaults<TOrderBy> = {
+  orderBy: TOrderBy;
+  pagination?: { page: number; perPage: number };
+  limit?: number;
+};
+
+type NormalizedObservabilityListArgs<TFilters, TOrderBy> = {
+  mode: 'page' | 'delta';
+  filters: TFilters | undefined;
+  pagination: { page: number; perPage: number };
+  orderBy: TOrderBy;
+  after: DeltaCursor | undefined;
+  limit: number;
+};
+
+/**
+ * Enforces the shared page-vs-delta parameter rules for observability list endpoints.
+ * Keeps validation centralized while allowing endpoints to keep their own filters and orderBy schemas.
+ */
+export function refineObservabilityListMode<TFilters, TOrderBy>(
+  value: ObservabilityListModeValue<TFilters, TOrderBy>,
+  ctx: z.core.$RefinementCtx,
+) {
+  if (value.mode === 'delta') {
+    if (value.pagination !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['pagination'], message: 'pagination is not allowed in delta mode' });
+    }
+    if (value.orderBy !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['orderBy'], message: 'orderBy is not allowed in delta mode' });
+    }
+    return;
+  }
+
+  if (value.after !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['after'], message: 'after is only allowed in delta mode' });
+  }
+  if (value.limit !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['limit'], message: 'limit is only allowed in delta mode' });
+  }
+}
+
+/**
+ * Normalizes observability list args into the legacy-friendly shape expected by existing stores.
+ * Page mode remains the default, and pagination/orderBy/limit are always populated.
+ */
+export function normalizeObservabilityListArgs<TFilters, TOrderBy>(
+  value: ObservabilityListModeValue<TFilters, TOrderBy>,
+  defaults: ObservabilityListDefaults<TOrderBy>,
+): NormalizedObservabilityListArgs<TFilters, TOrderBy> {
+  return {
+    mode: value.mode === 'delta' ? 'delta' : 'page',
+    filters: value.filters,
+    pagination: value.pagination ?? defaults.pagination ?? defaultPaginationArgs,
+    orderBy: value.orderBy ?? defaults.orderBy,
+    after: value.after,
+    limit: value.limit ?? defaults.limit ?? defaultDeltaLimit,
+  };
+}
+
+/** Metadata returned for a delta poll window. */
+export const deltaInfoSchema = z
+  .object({
+    limit: z.number().describe('Maximum number of updates requested for this delta poll'),
+    hasMore: z.boolean().describe('True when more matching updates remain after this response'),
+  })
+  .describe('Incremental polling metadata');
+
 /**
  * Date range for filtering by time
  * Uses z.coerce to handle ISO string → Date conversion from query params

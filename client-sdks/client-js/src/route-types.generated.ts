@@ -14720,7 +14720,28 @@ export type GetObservabilityTraces_QueryParams = {
       )
     | undefined;
   traceId?: (string | undefined) | undefined;
-  entityType?: (string | undefined) | undefined;
+  entityType?:
+    | (
+        | (
+            | (
+                | 'agent'
+                | 'scorer'
+                | 'rag_ingestion'
+                | 'trajectory'
+                | 'input_processor'
+                | 'input_step_processor'
+                | 'output_processor'
+                | 'output_step_processor'
+                | 'workflow_step'
+                | 'tool'
+                | 'workflow_run'
+                | 'memory'
+              )
+            | null
+          )
+        | undefined
+      )
+    | undefined;
   entityId?: ((string | null) | undefined) | undefined;
   entityName?: ((string | null) | undefined) | undefined;
   parentEntityType?:
@@ -14810,10 +14831,6 @@ export type GetObservabilityTraces_QueryParams = {
   tags?: (((string[] | null) | undefined) | undefined) | any;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
-  page?: (number | undefined) | undefined;
-  perPage?: (number | undefined) | undefined;
-  field?: ('startedAt' | 'endedAt') | undefined;
-  direction?: ('ASC' | 'DESC') | undefined;
   dateRange?:
     | (
         | (
@@ -14833,19 +14850,37 @@ export type GetObservabilityTraces_QueryParams = {
       )
     | any;
   name?: (string | undefined) | undefined;
+  page?: (number | undefined) | undefined;
+  perPage?: (number | undefined) | undefined;
+  field?: ('startedAt' | 'endedAt') | undefined;
+  direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityTraces_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   spans: {
     /** Unique trace identifier */
     traceId: string;
@@ -15498,19 +15533,33 @@ export type GetObservabilityBranches_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: ('startedAt' | 'endedAt') | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityBranches_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   branches: {
     /** Unique trace identifier */
     traceId: string;
@@ -16656,19 +16705,33 @@ export type GetObservabilityLogs_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: 'timestamp' | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityLogs_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   logs: {
     /** Unique id for this log event */
     logId?: (string | null) | undefined;
@@ -16903,19 +16966,33 @@ export type GetObservabilityScores_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: ('timestamp' | 'score') | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityScores_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   scores: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
@@ -17976,19 +18053,33 @@ export type GetObservabilityFeedback_QueryParams = {
   perPage?: (number | undefined) | undefined;
   field?: 'timestamp' | undefined;
   direction?: ('ASC' | 'DESC') | undefined;
+  mode?: (('page' | 'delta') | undefined) | undefined;
+  after?: (string | undefined) | undefined;
+  limit?: (number | undefined) | undefined;
 };
 
 export type GetObservabilityFeedback_Response = {
-  pagination: {
-    /** Total number of items available */
-    total: number;
-    /** Current page */
-    page: number;
-    /** Number of items per page, or false if pagination is disabled */
-    perPage: number | false;
-    /** True if more pages are available */
-    hasMore: boolean;
-  };
+  pagination?:
+    | {
+        /** Total number of items available */
+        total: number;
+        /** Current page */
+        page: number;
+        /** Number of items per page, or false if pagination is disabled */
+        perPage: number | false;
+        /** True if more pages are available */
+        hasMore: boolean;
+      }
+    | undefined;
+  delta?:
+    | {
+        /** Maximum number of updates requested for this delta poll */
+        limit: number;
+        /** True when more matching updates remain after this response */
+        hasMore: boolean;
+      }
+    | undefined;
+  deltaCursor?: string | undefined;
   feedback: {
     /** Unique id for this feedback event */
     feedbackId?: (string | null) | undefined;
