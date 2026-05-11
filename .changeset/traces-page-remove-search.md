@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Removed mistakenly added the search input from the Traces page in Studio.
+Removed the unintended search input from the Traces page in Studio.
