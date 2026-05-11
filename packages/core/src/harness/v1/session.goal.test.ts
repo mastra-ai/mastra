@@ -267,3 +267,157 @@ describe('Session goal — judge loop', () => {
     expect(firstGoal.id).toBeTruthy();
   });
 });
+
+describe('Session goal — continuation wording (TUI parity)', () => {
+  it('setGoal kickoff wraps the objective in <system-reminder type="goal">', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await session.setGoal({ objective: 'ship the thing' });
+
+    const queued = session.getRecord().pendingQueue ?? [];
+    expect(queued).toHaveLength(1);
+    expect(queued[0]!.content).toBe('<system-reminder type="goal">ship the thing</system-reminder>');
+    expect(queued[0]!.source).toBe('goal');
+  });
+
+  it('setGoal kickoff escapes XML special characters in the objective', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await session.setGoal({ objective: 'fix <bug> & ship it' });
+
+    const queued = session.getRecord().pendingQueue ?? [];
+    expect(queued[0]!.content).toBe('<system-reminder type="goal">fix &lt;bug&gt; &amp; ship it</system-reminder>');
+  });
+
+  it('resumeGoal sends plain "Continue working toward the goal: X" (no system-reminder wrapper)', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'ship the thing', kickoff: false });
+    await session.pauseGoal();
+
+    await session.resumeGoal();
+
+    const queued = session.getRecord().pendingQueue ?? [];
+    expect(queued).toHaveLength(1);
+    expect(queued[0]!.content).toBe('Continue working toward the goal: ship the thing');
+    expect(queued[0]!.source).toBe('goal');
+  });
+
+  it('judge continue uses the [Goal attempt N/M] template wrapped in <system-reminder type="goal-judge">', async () => {
+    const { harness, agent } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'ship X', maxTurns: 5, kickoff: false });
+    installJudge(session, async () => ({ decision: 'continue', reason: 'not done yet' }));
+    agent.enqueueRun({ finishReason: 'stop', text: 'partial progress' });
+    // Second run consumed by the auto-drained continuation turn.
+    agent.enqueueRun({ finishReason: 'stop', text: 'continuation' });
+
+    await session.message({ content: 'go' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // The continuation drained to the agent as a second stream call.
+    expect(agent.streamCalls).toHaveLength(2);
+    expect(agent.streamCalls[1]!.messages).toBe(
+      '<system-reminder type="goal-judge">[Goal attempt 1/5] The goal is not yet complete. Judge feedback: not done yet\n\nContinue working toward the goal: ship X</system-reminder>',
+    );
+  });
+
+  it('no-assistant-message fallback enqueues the "No response yet, keep working." nudge', async () => {
+    const { harness, agent } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'ship X', maxTurns: 5, kickoff: false });
+    let judgeCalls = 0;
+    installJudge(session, async () => {
+      judgeCalls++;
+      return { decision: 'continue', reason: 'unused' };
+    });
+    // Turn ends with no text — should hit the fallback path before calling judge.
+    agent.enqueueRun({ finishReason: 'stop', text: '' });
+    agent.enqueueRun({ finishReason: 'stop', text: 'follow-up' });
+
+    await session.message({ content: 'go' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(judgeCalls).toBe(0);
+    expect(agent.streamCalls).toHaveLength(2);
+    expect(agent.streamCalls[1]!.messages).toBe(
+      '<system-reminder type="goal-judge">[Goal attempt 0/5] The goal is not yet complete. Judge feedback: No response yet, keep working.\n\nContinue working toward the goal: ship X</system-reminder>',
+    );
+  });
+
+  it('no-assistant-message fallback pauses with budget_exhausted when turnsUsed already at maxTurns', async () => {
+    const { harness, agent } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    // maxTurns: 1 means after the first continue we'd already be at budget.
+    const goal = await session.setGoal({ objective: 'ship X', maxTurns: 1, kickoff: false });
+    // Pre-advance turnsUsed to maxTurns so the fallback hits budget exhaustion.
+    (session as unknown as { _record: { goal: GoalState } })._record.goal = { ...goal, turnsUsed: 1 };
+    const events = record(session, ['goal_paused']);
+    agent.enqueueRun({ finishReason: 'stop', text: '' });
+
+    await session.message({ content: 'go' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(session.getGoal()?.status).toBe('paused');
+    expect((events[0] as { reason: string } | undefined)?.reason).toBe('budget_exhausted');
+    expect(session.getRecord().pendingQueue ?? []).toEqual([]);
+  });
+});
+
+describe('Session.updateJudgeDefaults', () => {
+  it('updates judge model on the in-flight goal without resetting turnsUsed', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const goal = await session.setGoal({ objective: 'go', kickoff: false });
+    (session as unknown as { _record: { goal: GoalState } })._record.goal = { ...goal, turnsUsed: 3 };
+
+    const updated = await session.updateJudgeDefaults({ judgeModelId: 'judge:new' });
+
+    expect(updated?.judgeModelId).toBe('judge:new');
+    expect(updated?.turnsUsed).toBe(3);
+    expect(session.getRecord().goal?.judgeModelId).toBe('judge:new');
+  });
+
+  it('updates maxTurns without changing other fields', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', maxTurns: 10, kickoff: false });
+
+    const updated = await session.updateJudgeDefaults({ maxTurns: 25 });
+
+    expect(updated?.maxTurns).toBe(25);
+    expect(updated?.objective).toBe('go');
+  });
+
+  it('rejects non-positive maxTurns', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', kickoff: false });
+
+    await expect(session.updateJudgeDefaults({ maxTurns: 0 })).rejects.toBeInstanceOf(HarnessValidationError);
+    await expect(session.updateJudgeDefaults({ maxTurns: -5 })).rejects.toBeInstanceOf(HarnessValidationError);
+  });
+
+  it('returns undefined when no goal is set', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const result = await session.updateJudgeDefaults({ judgeModelId: 'judge:other' });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not emit goal_paused or goal_resumed', async () => {
+    const { harness } = setupHarness({ goals: { defaultJudgeModel: 'judge:test' } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    await session.setGoal({ objective: 'go', kickoff: false });
+    const events = record(session);
+    events.length = 0;
+
+    await session.updateJudgeDefaults({ judgeModelId: 'judge:new', maxTurns: 99 });
+
+    expect(events.find(e => e.type === 'goal_paused' || e.type === 'goal_resumed')).toBeUndefined();
+  });
+});

@@ -21,8 +21,11 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
+import { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { ToolsInput } from '../../agent/types';
+import { ModelRouterLanguageModel } from '../../llm/model/router';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import type {
   GoalJudgeDecision,
@@ -80,11 +83,71 @@ const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 
 export type SessionLifecycleState = 'live' | 'closed' | 'evicted';
 
+/**
+ * System prompt for the goal judge. Lifted verbatim from
+ * mastracode/src/tui/goal-manager.ts so the harness-native judge produces
+ * the same verdicts as the TUI implementation. The wording matters — the
+ * "don't wait for yourself" rule and the asked-question-vs-checkpoint
+ * distinction prevent the loop from flip-flopping.
+ */
+const JUDGE_SYSTEM_PROMPT = `You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.
+
+Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
+
+Use "done" when the goal is fully achieved.
+Use "waiting" only when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint. Do not use "waiting" merely because the assistant asked a question or could benefit from user input.
+Use "continue" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.
+If your previous decision was "waiting" for an explicit user checkpoint, keep choosing "waiting" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.
+If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose "continue" when the assistant should proceed to the next step. Do not choose "waiting" for judge-controlled checkpoints, because that would mean waiting for yourself.
+
+Your "reason" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing "continue", write the reason as an instruction for what the assistant should do next. When choosing "waiting", explain what specific user checkpoint is still outstanding.`;
+
 /** Structured-output schema used by the goal judge call (§4.7). */
 const GoalJudgeSchema = z.object({
-  decision: z.enum(['done', 'continue', 'waiting']),
-  reason: z.string().min(1),
+  decision: z
+    .enum(['done', 'continue', 'waiting'])
+    .describe(
+      'Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal',
+    ),
+  reason: z.string().describe('Brief explanation of what was accomplished or what remains to be done'),
 });
+
+/** Per-message cap on judge-context strings to keep judge latency bounded. */
+const JUDGE_TRUNCATE_LIMIT = 4000;
+
+function truncateForJudge(value: string): string {
+  return value.length > JUDGE_TRUNCATE_LIMIT ? value.slice(0, JUDGE_TRUNCATE_LIMIT) + '\n...[truncated]' : value;
+}
+
+function escapeGoalXml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/**
+ * Continuation prompts. The wording matters — these are lifted verbatim
+ * from `mastracode/src/tui/goal-manager.ts` + `commands/goal.ts` so the
+ * harness-native goal API produces byte-identical kickoff/resume/judge-
+ * continue messages.
+ */
+
+/** Kickoff sent by `setGoal` (parity with TUI's `createGoalReminderXml`). */
+function buildKickoffContinuation(objective: string): string {
+  return `<system-reminder type="goal">${escapeGoalXml(objective)}</system-reminder>`;
+}
+
+/** Continuation sent by `resumeGoal` (parity with TUI's `/goal resume`). */
+function buildResumeContinuation(objective: string): string {
+  return `Continue working toward the goal: ${objective}`;
+}
+
+/**
+ * Continuation sent after a judge `continue` verdict (parity with TUI's
+ * `GoalManager.buildContinuationPrompt`).
+ */
+function buildJudgeContinuation(opts: { turn: number; max: number; objective: string; judgeReason: string }): string {
+  const message = `[Goal attempt ${opts.turn}/${opts.max}] The goal is not yet complete. Judge feedback: ${opts.judgeReason}\n\nContinue working toward the goal: ${opts.objective}`;
+  return `<system-reminder type="goal-judge">${escapeGoalXml(message)}</system-reminder>`;
+}
 
 /**
  * Active-tool tracking for `SessionDisplayState.activeTools`. One entry per
@@ -1130,7 +1193,7 @@ export class Session {
     this._emit({ type: 'goal_set', goal });
 
     if (opts.kickoff !== false) {
-      await this._enqueueGoalContinuation(goal, opts.objective);
+      await this._enqueueGoalContinuation(goal, buildKickoffContinuation(opts.objective));
     }
 
     return goal;
@@ -1165,7 +1228,7 @@ export class Session {
     const updated: GoalState = { ...goal, status: 'active' };
     await this._flushUpdate(prev => ({ ...prev, goal: updated }));
     this._emit({ type: 'goal_resumed', goalId: goal.id });
-    await this._enqueueGoalContinuation(updated, updated.objective);
+    await this._enqueueGoalContinuation(updated, buildResumeContinuation(updated.objective));
     return updated;
   }
 
@@ -1183,22 +1246,49 @@ export class Session {
   }
 
   /**
-   * @internal — enqueue a goal-driven continuation turn. Marked with
+   * Re-point judge model and/or budget on the in-flight goal. Parity with
+   * TUI's `GoalManager.updateJudgeDefaults`. Both fields are optional; pass
+   * only what you want to change. Does not reset `turnsUsed`, does not emit
+   * `goal_paused`/`goal_resumed`. No-op when no goal is set.
+   *
+   * Returns the updated goal, or `undefined` if there's nothing to update.
+   */
+  async updateJudgeDefaults(opts: { judgeModelId?: string; maxTurns?: number }): Promise<GoalState | undefined> {
+    this._assertLive('updateJudgeDefaults()');
+    const goal = this._record.goal;
+    if (!goal) return undefined;
+    if (opts.judgeModelId === undefined && opts.maxTurns === undefined) return goal;
+    if (opts.maxTurns !== undefined && (!Number.isFinite(opts.maxTurns) || opts.maxTurns <= 0)) {
+      throw new HarnessValidationError('maxTurns', 'maxTurns must be a positive number');
+    }
+    const updated: GoalState = {
+      ...goal,
+      ...(opts.judgeModelId !== undefined ? { judgeModelId: opts.judgeModelId } : {}),
+      ...(opts.maxTurns !== undefined ? { maxTurns: opts.maxTurns } : {}),
+    };
+    await this._flushUpdate(prev => ({ ...prev, goal: updated }));
+    return updated;
+  }
+
+  /**
+   * @internal — enqueue a goal-driven continuation turn. Caller is responsible
+   * for building the final prompt content (kickoff / resume / judge-continue
+   * each use a distinct template — see `buildKickoffContinuation` /
+   * `buildResumeContinuation` / `buildJudgeContinuation`). Marked with
    * `source: 'goal'` so the judge loop knows to skip re-judging on the
    * resulting turn (otherwise the loop would never terminate).
    */
-  private async _enqueueGoalContinuation(goal: GoalState, prompt: string): Promise<void> {
+  private async _enqueueGoalContinuation(goal: GoalState, content: string): Promise<void> {
     const cap = this._harness._internalMaxQueueDepth;
     if ((this._record.pendingQueue?.length ?? 0) >= cap) {
       // Drop continuation silently — user activity has filled the queue,
       // we'll re-judge after they drain. Better than failing the judge call.
       return;
     }
-    const wrapped = `<system-reminder type="goal-judge">${prompt}</system-reminder>`;
     const item: QueuedItem = {
       id: `q-${randomUUID()}`,
       enqueuedAt: Date.now(),
-      content: wrapped,
+      content,
       attachments: [],
       source: 'goal',
       goalId: goal.id,
@@ -1229,17 +1319,47 @@ export class Session {
     const goal = this._record.goal;
     if (!goal || goal.status !== 'active') return;
 
-    const goalId = goal.id;
-    const evaluatedGoalId = goalId;
+    const evaluatedGoalId = goal.id;
 
     // Suspended turns don't count toward the judge loop — wait for resume.
     if (turn.finishReason === 'suspended') return;
+
+    // Gate 1 — re-read goal after the async context fetch. If it's been
+    // cleared / paused / replaced, drop this judge cycle silently.
+    const context = await this._getJudgeContext(turn);
+    if (this._record.goal?.id !== evaluatedGoalId || this._record.goal.status !== 'active') return;
+
+    // No-assistant-message fallback: parity with TUI's evaluateAfterTurn.
+    // The judge has nothing to score, but the agent still made some attempt
+    // (typically a tool call without a closing assistant message). Push a
+    // gentle nudge unless we've hit the budget.
+    if (!context.lastAssistantContent) {
+      if (goal.turnsUsed >= goal.maxTurns) {
+        await this._flushUpdate(prev =>
+          prev.goal && prev.goal.id === evaluatedGoalId
+            ? { ...prev, goal: { ...prev.goal, status: 'paused' as const } }
+            : prev,
+        );
+        this._emit({ type: 'goal_paused', goalId: evaluatedGoalId, reason: 'budget_exhausted' });
+        return;
+      }
+      await this._enqueueGoalContinuation(
+        goal,
+        buildJudgeContinuation({
+          turn: goal.turnsUsed,
+          max: goal.maxTurns,
+          objective: goal.objective,
+          judgeReason: 'No response yet, keep working.',
+        }),
+      );
+      return;
+    }
 
     let decision: GoalJudgeDecision;
     try {
       decision = await this._callJudge(goal, turn);
     } catch {
-      // Stale check: goal might have changed during the judge call.
+      // Gate 2a — goal might have changed during the judge call.
       if (this._record.goal?.id !== evaluatedGoalId) return;
       await this._flushUpdate(prev =>
         prev.goal && prev.goal.id === evaluatedGoalId
@@ -1250,7 +1370,7 @@ export class Session {
       return;
     }
 
-    // Stale check: goal might have changed during the judge call.
+    // Gate 2b — goal might have changed during the judge call.
     if (this._record.goal?.id !== evaluatedGoalId) return;
 
     const turnsUsed = decision.decision === 'waiting' ? goal.turnsUsed : goal.turnsUsed + 1;
@@ -1291,9 +1411,17 @@ export class Session {
       return;
     }
 
-    // Final stale check before enqueueing.
+    // Gate 3 — final stale check before enqueueing.
     if (this._record.goal?.id !== evaluatedGoalId || this._record.goal.status !== 'active') return;
-    await this._enqueueGoalContinuation(updated, decision.reason);
+    await this._enqueueGoalContinuation(
+      updated,
+      buildJudgeContinuation({
+        turn: turnsUsed,
+        max: updated.maxTurns,
+        objective: updated.objective,
+        judgeReason: decision.reason,
+      }),
+    );
   }
 
   /**
@@ -1303,31 +1431,60 @@ export class Session {
    * runs in place of the real judge call so unit tests can drive verdicts
    * deterministically without standing up a live model.
    */
-  private async _callJudge(goal: GoalState, _turn: FullOutput<unknown>): Promise<GoalJudgeDecision> {
+  private async _callJudge(goal: GoalState, turn: FullOutput<unknown>): Promise<GoalJudgeDecision> {
     const hook = this.__testJudge;
     if (hook) {
       const verdict = await hook(goal);
       return { ...verdict, judgedAt: Date.now() };
     }
-    // Real judge path. Build a one-shot Agent-style call against the
-    // configured judge model with structured output. Mode-aware agents
-    // bring instructions + processor chain; here we want a lightweight
-    // judge so we go through the default mode's agent with a per-call
-    // model override + structuredOutput. The judge only sees the goal
-    // objective + the assistant's last message; we don't replay the
-    // full thread so judge latency stays bounded.
-    const lastAssistantText = await this._lastAssistantText();
-    const judgeAgent = this._harness.getAgentForMode(this._record.modeId);
-    const prompt = this._buildJudgePrompt(goal.objective, lastAssistantText);
-    const result = await judgeAgent.generate(prompt, {
-      model: goal.judgeModelId,
-      structuredOutput: {
-        schema: GoalJudgeSchema,
-      },
+    // Real judge path. Mirrors the TUI's GoalManager.callJudge:
+    //   - dedicated `goal-judge` Agent with JUDGE_SYSTEM_PROMPT baked in
+    //   - input processor: ProviderHistoryCompat (history-shape parity
+    //     across providers, esp. Anthropic)
+    //   - error processors: StreamErrorRetryProcessor, PrefillErrorHandler,
+    //     ProviderHistoryCompat (retry flaky judge streams cleanly)
+    //   - dedicated memory thread `${sessionId}-${goalId}` so the judge
+    //     sees continuity across iterations (its own prior verdicts)
+    //   - structured output via the judge schema
+    //   - context: goal + last user content + assistantStepsSinceLastUser
+    //     + truncated last assistant content (4000-char cap)
+    const context = await this._getJudgeContext(turn);
+    const judgeAgent = this._createJudgeAgent(goal);
+    const memory = await judgeAgent.getMemory({ requestContext: new RequestContext() });
+    const judgeThreadId = `${this._record.id}-${goal.id}`;
+
+    if (memory) {
+      const existing = await memory.getThreadById({ threadId: judgeThreadId });
+      if (!existing) {
+        await memory.createThread({
+          threadId: judgeThreadId,
+          resourceId: this._record.resourceId,
+          title: `Goal judge: ${goal.objective.slice(0, 80)}`,
+          metadata: {
+            goalJudge: true,
+            parentSessionId: this._record.id,
+            goalId: goal.id,
+          },
+        });
+      }
+    }
+
+    const truncatedAssistant = truncateForJudge(context.lastAssistantContent ?? 'No response yet, keep working.');
+    const recentUser = context.lastUserContent
+      ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
+      : '';
+    const prompt = `Goal: ${goal.objective}${recentUser}\n\nLatest assistant message:\n${truncatedAssistant}`;
+
+    const stream = await judgeAgent.stream(prompt, {
+      ...(memory ? { memory: { thread: judgeThreadId, resource: this._record.resourceId } } : {}),
+      structuredOutput: { schema: GoalJudgeSchema },
     } as never);
-    const obj = (result as { object?: unknown }).object as
-      | { decision: 'done' | 'continue' | 'waiting'; reason: string }
-      | undefined;
+
+    await (stream as { consumeStream: () => Promise<void> }).consumeStream();
+    const full = (await (stream as { getFullOutput: () => Promise<unknown> }).getFullOutput()) as {
+      object?: unknown;
+    };
+    const obj = full.object as { decision: 'done' | 'continue' | 'waiting'; reason: string } | undefined;
     if (!obj || typeof obj !== 'object') {
       throw new Error('judge returned no structured output');
     }
@@ -1337,38 +1494,92 @@ export class Session {
   /** @internal — test-only hook used by `session.goal.test.ts`. */
   __testJudge?: (goal: GoalState) => Promise<Omit<GoalJudgeDecision, 'judgedAt'>>;
 
-  private async _lastAssistantText(): Promise<string> {
+  /**
+   * Build the conversation context the judge sees: the latest user content,
+   * how many assistant steps have happened since that user message, and the
+   * latest assistant content. Mirrors `GoalManager.getRecentConversationContext`.
+   */
+  private async _getJudgeContext(turn?: FullOutput<unknown>): Promise<{
+    lastUserContent: string | null;
+    assistantStepsSinceLastUser: number;
+    lastAssistantContent: string | null;
+  }> {
+    let messages: HarnessMessage[] = [];
     try {
-      const msgs = await this.listMessages({ limit: 4 });
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        const m = msgs[i] as { role?: string; content?: unknown };
-        if (m?.role === 'assistant') {
-          if (typeof m.content === 'string') return m.content;
-          if (Array.isArray(m.content)) {
-            return m.content
-              .map(part => (typeof part === 'string' ? part : ((part as { text?: string })?.text ?? '')))
-              .join('');
-          }
-        }
-      }
+      messages = await this.listMessages();
     } catch {
-      // listMessages can fail in ad-hoc-thread setups; the judge prompt
-      // tolerates an empty assistant message.
+      // listMessages can fail in ad-hoc-thread setups; we'll fall back to
+      // the in-memory turn text below.
     }
-    return 'No response yet, keep working.';
+
+    let lastUserIndex = -1;
+    let lastAssistantContent: string | null = null;
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i] as { role?: string; content?: unknown } | undefined;
+      if (!msg) continue;
+      if (!lastAssistantContent && msg.role === 'assistant') {
+        lastAssistantContent = this._extractTextContent(msg.content);
+      }
+      if (msg.role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+
+    // Storage may not have the assistant turn yet (depends on the agent
+    // wiring). Fall back to the in-memory `turn.text` we just produced.
+    if (!lastAssistantContent && turn) {
+      const text = (turn as { text?: string }).text;
+      if (typeof text === 'string' && text.length > 0) {
+        lastAssistantContent = text;
+      }
+    }
+
+    const lastUserContent =
+      lastUserIndex >= 0 ? this._extractTextContent((messages[lastUserIndex] as { content?: unknown }).content) : null;
+    const assistantStepsSinceLastUser =
+      lastUserIndex >= 0
+        ? messages.slice(lastUserIndex + 1).filter(m => (m as { role?: string }).role === 'assistant').length
+        : 0;
+
+    return {
+      lastUserContent,
+      assistantStepsSinceLastUser,
+      lastAssistantContent,
+    };
   }
 
-  private _buildJudgePrompt(objective: string, lastAssistant: string): string {
-    return [
-      'You are a goal-progress judge. Decide whether the agent has finished, should continue, or should wait.',
-      '',
-      `Objective: ${objective}`,
-      '',
-      'Most recent assistant turn:',
-      lastAssistant,
-      '',
-      'Reply with one of: done / continue / waiting, plus a one-sentence reason.',
-    ].join('\n');
+  private _extractTextContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter(part => (part as { type?: string })?.type === 'text')
+        .map(part => (part as { text?: string }).text ?? '')
+        .join('\n');
+    }
+    return String(content ?? '');
+  }
+
+  /**
+   * Construct the dedicated judge Agent. The processor chain matches the
+   * TUI's GoalManager so the harness-native judge has the same robustness
+   * against provider history quirks and transient stream errors.
+   *
+   * The judge agent is bound to the same Mastra instance as the parent
+   * session so it inherits memory/storage wiring.
+   */
+  private _createJudgeAgent(goal: GoalState): Agent {
+    const model = new ModelRouterLanguageModel(goal.judgeModelId as never);
+    return new Agent({
+      id: 'goal-judge',
+      name: 'Goal Judge',
+      instructions: JUDGE_SYSTEM_PROMPT,
+      model,
+      mastra: this._harness.mastra,
+      inputProcessors: [new ProviderHistoryCompat()],
+      errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    });
   }
 
   // -------------------------------------------------------------------------
