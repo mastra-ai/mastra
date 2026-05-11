@@ -7,7 +7,6 @@ import type {
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
-  AgentSignal,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
@@ -123,23 +122,7 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export type SendAgentSignalParams<OUTPUT = unknown> =
-  | {
-      signal: AgentSignal;
-      runId: string;
-      resourceId?: string;
-      threadId?: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
-      ifIdle?: never;
-    }
-  | {
-      signal: AgentSignal;
-      runId?: string;
-      resourceId: string;
-      threadId: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
-      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: Omit<AgentExecutionOptions<OUTPUT>, 'messages'> };
-    };
+export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.

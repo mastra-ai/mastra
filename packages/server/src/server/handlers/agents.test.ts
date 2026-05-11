@@ -11,7 +11,7 @@ import {
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { sendAgentSignalBodySchema } from '../schemas/agents';
+import { sendAgentSignalBodySchema, subscribeAgentThreadBodySchema } from '../schemas/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -1125,6 +1125,43 @@ describe('Agent Routes Authorization', () => {
           threadId: 'thread-a',
         }).success,
       ).toBe(false);
+    });
+
+    it('should accept run-targeted signal bodies with active behavior', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'pause here' },
+          runId: 'run-123',
+          ifActive: { behavior: 'persist' },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should accept thread-targeted signal bodies with active and idle behavior', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: '<system-reminder>review PR comment</system-reminder>' },
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ifActive: { behavior: 'discard' },
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: {
+              maxSteps: 3,
+              instructions: 'Use the PR context.',
+            },
+          },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should accept subscribe thread bodies', () => {
+      expect(
+        subscribeAgentThreadBodySchema.safeParse({
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+        }).success,
+      ).toBe(true);
     });
 
     it('should send a signal using context resource and thread values', async () => {
