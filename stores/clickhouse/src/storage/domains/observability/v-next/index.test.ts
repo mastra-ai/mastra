@@ -4088,6 +4088,13 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(parseTtlExpression(createTable)).toEqual({ column: 'endedAt', days: 30 });
     });
 
+    it('parseTtlExpression handles backtick-quoted column identifiers', () => {
+      // ClickHouse's `system.tables.create_table_query` often wraps identifiers
+      // in backticks, e.g. `TTL `endedAt` + toIntervalDay(30)`.
+      expect(parseTtlExpression('TTL `endedAt` + toIntervalDay(30)')).toEqual({ column: 'endedAt', days: 30 });
+      expect(parseTtlExpression('TTL `timestamp` + INTERVAL 7 DAY')).toEqual({ column: 'timestamp', days: 7 });
+    });
+
     it('parseTtlExpression returns null when no TTL clause is present', () => {
       expect(parseTtlExpression('ORDER BY (traceId, endedAt)')).toBeNull();
       expect(parseTtlExpression('')).toBeNull();

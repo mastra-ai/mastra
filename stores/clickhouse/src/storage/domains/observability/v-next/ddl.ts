@@ -899,12 +899,16 @@ export function buildRetentionDDL(retention: RetentionConfig): string[] {
  * Parses a ClickHouse `TTL` expression of the form
  *   `TTL <col> + INTERVAL <N> DAY`     (input form)
  *   `TTL <col> + toIntervalDay(<N>)`   (normalized form in system.tables)
+ * The column may appear as `\`col\`` (backtick-quoted, common in
+ * system.tables.create_table_query) or as a plain identifier.
  * Returns `{ column, days }` if matched, otherwise null.
  */
 export function parseTtlExpression(expr: string): { column: string; days: number } | null {
-  const match = expr.match(/TTL\s+(\w+)\s*\+\s*(?:toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY)/i);
+  const match = expr.match(/TTL\s+(?:`([^`]+)`|(\w+))\s*\+\s*(?:toIntervalDay\((\d+)\)|INTERVAL\s+(\d+)\s+DAY)/i);
   if (!match) return null;
-  const days = Number(match[2] ?? match[3]);
+  const column = match[1] ?? match[2];
+  if (!column) return null;
+  const days = Number(match[3] ?? match[4]);
   if (!Number.isFinite(days)) return null;
-  return { column: match[1]!, days };
+  return { column, days };
 }
