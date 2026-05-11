@@ -89,11 +89,14 @@ import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
 
 import {
-  ALL_TABLE_DDL,
+  BASE_MV_DDL,
+  BASE_TABLE_DDL,
+  buildAllTableDDL,
   ALL_MV_DDL,
   ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
+  DELTA_TABLE_NAMES,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
   buildRetentionEntries,
@@ -105,12 +108,16 @@ export type { RetentionConfig } from './ddl';
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
+  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
 import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { deltaPollingFeatureEnabled } from './polling';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -245,15 +252,103 @@ async function queryNamesByTable(
   return out;
 }
 
+async function detectDeltaCursorStrategy(
+  client: ClickHouseClient,
+  override?: ClickHouseDeltaCursorStrategy,
+): Promise<ClickHouseDeltaCursorStrategy> {
+  if (override) {
+    return override;
+  }
+
+  const existingStrategy = await detectExistingDeltaCursorStrategy(client);
+  if (existingStrategy && existingStrategy !== 'mixed') {
+    return existingStrategy;
+  }
+
+  try {
+    await client.query({
+      query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
+      query_params: { counterName: 'mastra_observability_delta_cursor_probe' },
+      format: 'JSONEachRow',
+    });
+    return 'serial';
+  } catch {
+    return 'tuple';
+  }
+}
+
+async function detectExistingDeltaCursorStrategy(
+  client: ClickHouseClient,
+): Promise<ClickHouseDeltaCursorStrategy | 'mixed' | null> {
+  const result = await client.query({
+    query: `
+      SELECT table, name
+      FROM system.columns
+      WHERE database = currentDatabase()
+        AND table IN ({tables:Array(String)})
+    `,
+    query_params: { tables: [...DELTA_TABLE_NAMES] },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ table: string; name: string }>;
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const columnsByTable = new Map<string, Set<string>>();
+  for (const row of rows) {
+    let columns = columnsByTable.get(row.table);
+    if (!columns) {
+      columns = new Set<string>();
+      columnsByTable.set(row.table, columns);
+    }
+    columns.add(row.name);
+  }
+
+  let sawTupleTable = false;
+  let sawSerialTable = false;
+
+  for (const table of DELTA_TABLE_NAMES) {
+    const columns = columnsByTable.get(table);
+    if (!columns) {
+      continue;
+    }
+
+    if (columns.has('cursorId')) {
+      sawSerialTable = true;
+    } else {
+      sawTupleTable = true;
+    }
+  }
+
+  if (sawTupleTable && !sawSerialTable) {
+    return 'tuple';
+  }
+
+  if (sawSerialTable && !sawTupleTable) {
+    return 'serial';
+  }
+
+  if (sawTupleTable && sawSerialTable) {
+    return 'mixed';
+  }
+
+  return null;
+}
+
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
+  readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'tuple';
 
   constructor(config: VNextObservabilityConfig) {
     super();
     const { client } = resolveClickhouseConfig(config);
     this.#client = client;
     this.#retention = config.retention;
+    this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
   }
 
   // -------------------------------------------------------------------------
@@ -275,8 +370,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
 
     try {
+      const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
+      if (existingStrategy === 'mixed') {
+        this.#deltaCursorStrategy = null;
+        this.logger.error(
+          'ClickHouse observability delta tables use mixed cursor schemas; delta polling has been disabled for this store instance.',
+        );
+      } else if (this.#deltaCursorStrategyOverride) {
+        this.#deltaCursorStrategy = this.#deltaCursorStrategyOverride;
+      } else if (existingStrategy) {
+        this.#deltaCursorStrategy = existingStrategy;
+      } else {
+        this.#deltaCursorStrategy = await detectDeltaCursorStrategy(this.#client);
+      }
+
       // Core tables + incremental MVs (must succeed)
-      for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
+      const coreDdl =
+        this.#deltaCursorStrategy === null
+          ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
+          : [...buildAllTableDDL(this.#deltaCursorStrategy), ...ALL_MV_DDL];
+      for (const ddl of coreDdl) {
         await this.#client.command({ query: ddl });
       }
 
@@ -381,6 +494,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       preferred: 'insert-only',
       supported: ['insert-only'],
     };
+  }
+
+  override getListCapabilities() {
+    if (!deltaPollingFeatureEnabled() || this.#deltaCursorStrategy === null) {
+      return undefined;
+    }
+
+    return {
+      delta: {
+        traces: true,
+        branches: true,
+        logs: true,
+        metrics: true,
+        scores: true,
+        feedback: true,
+      },
+    } as const;
   }
 
   // -------------------------------------------------------------------------
@@ -512,7 +642,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     try {
-      return await traceRootsOps.listTraces(this.#client, args);
+      return await traceRootsOps.listTraces(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -528,7 +658,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     try {
-      return await tracingOps.listBranches(this.#client, args);
+      return await tracingOps.listBranches(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -561,7 +691,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listLogs(args: ListLogsArgs): Promise<ListLogsResponse> {
     try {
-      return await logsOps.listLogs(this.#client, args);
+      return await logsOps.listLogs(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -594,7 +724,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listMetrics(args: ListMetricsArgs): Promise<ListMetricsResponse> {
     try {
-      return await metricsOps.listMetrics(this.#client, args);
+      return await metricsOps.listMetrics(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -643,7 +773,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     try {
-      return await scoresOps.listScores(this.#client, args);
+      return await scoresOps.listScores(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -709,7 +839,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     try {
-      return await feedbackOps.listFeedback(this.#client, args);
+      return await feedbackOps.listFeedback(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

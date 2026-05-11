@@ -1,3 +1,4 @@
+import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DuckDBConnection } from '../../db/index';
@@ -74,6 +75,62 @@ describe('ObservabilityStorageDuckDB', () => {
       preferred: 'event-sourced',
       supported: ['event-sourced'],
     });
+  });
+
+  it('gates delta list capabilities on the observability delta feature flag', async () => {
+    const originalFeatures = new Set(coreFeatures);
+
+    try {
+      coreFeatures.add('observability-delta-polling');
+      expect(storage.getListCapabilities()).toEqual({
+        delta: {
+          traces: true,
+          branches: true,
+          logs: true,
+          metrics: true,
+          scores: true,
+          feedback: true,
+        },
+      });
+
+      coreFeatures.delete('observability-delta-polling');
+
+      expect(storage.getListCapabilities()).toBeUndefined();
+      await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
+        'This storage provider does not support observability delta polling',
+      );
+    } finally {
+      coreFeatures.clear();
+      for (const feature of originalFeatures) {
+        coreFeatures.add(feature);
+      }
+    }
+  });
+
+  it('reports delta list capabilities through the lazy store facade before init', async () => {
+    const originalFeatures = new Set(coreFeatures);
+    const lazyStore = new DuckDBStore({ path: ':memory:' });
+
+    try {
+      coreFeatures.add('observability-delta-polling');
+
+      expect(lazyStore.observability.getListCapabilities()).toEqual({
+        delta: {
+          traces: true,
+          branches: true,
+          logs: true,
+          metrics: true,
+          scores: true,
+          feedback: true,
+        },
+      });
+    } finally {
+      coreFeatures.clear();
+      for (const feature of originalFeatures) {
+        coreFeatures.add(feature);
+      }
+      await lazyStore.db.close();
+    }
   });
 
   it('batches schema DDL and migrations during initialization', async () => {
@@ -461,6 +518,178 @@ describe('ObservabilityStorageDuckDB', () => {
       const reversedIds = reversed.spans.map(s => s.traceId);
       expect(reversedIds).toContain('trace-bound-a');
       expect(reversedIds).not.toContain('trace-bound-b');
+    });
+
+    it('supports page deltaCursor and delta polling for traces', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-delta-existing',
+            spanId: 'root-existing',
+            parentSpanId: null,
+            name: 'existing-root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-existing',
+            entityName: 'Existing Agent',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc-traces',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['keep'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-02-02T00:00:00Z'),
+            endedAt: new Date('2026-02-02T00:00:01Z'),
+          },
+        ],
+      });
+
+      const page = await storage.listTraces({ filters: { environment: 'production' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listTraces({
+        mode: 'delta',
+        filters: { environment: 'production' },
+      });
+      expect(bootstrap.spans).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-delta-existing',
+          spanId: 'child-existing',
+          parentSpanId: 'root-existing',
+          name: 'child',
+          spanType: SpanType.TOOL_CALL,
+          isEvent: false,
+          entityType: EntityType.TOOL,
+          entityId: 'tool-existing',
+          entityName: 'Tool Existing',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'production',
+          source: null,
+          serviceName: 'svc-traces',
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: ['keep'],
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt: new Date('2026-02-02T00:00:02Z'),
+          endedAt: new Date('2026-02-02T00:00:03Z'),
+        },
+      });
+
+      const afterExistingUpdate = await storage.listTraces({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(afterExistingUpdate.spans).toEqual([]);
+
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-delta-new',
+          spanId: 'root-new',
+          parentSpanId: null,
+          name: 'new-root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'agent-new',
+          entityName: 'New Agent',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'production',
+          source: null,
+          serviceName: 'svc-traces',
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: ['keep'],
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt: new Date('2026-02-02T00:00:04Z'),
+          endedAt: new Date('2026-02-02T00:00:05Z'),
+        },
+      });
+      await storage.createSpan({
+        span: {
+          traceId: 'trace-delta-ignore',
+          spanId: 'root-ignore',
+          parentSpanId: null,
+          name: 'ignore-root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'agent-ignore',
+          entityName: 'Ignore Agent',
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: 'staging',
+          source: null,
+          serviceName: 'svc-traces',
+          scope: null,
+          attributes: null,
+          metadata: null,
+          tags: ['keep'],
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          startedAt: new Date('2026-02-02T00:00:06Z'),
+          endedAt: new Date('2026-02-02T00:00:07Z'),
+        },
+      });
+
+      const delta = await storage.listTraces({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
+      expect(delta.deltaCursor).toBeTruthy();
+
+      const afterPageCursor = await storage.listTraces({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: page.deltaCursor!,
+      });
+      expect(afterPageCursor.spans.map(span => span.traceId)).toEqual(['trace-delta-new']);
     });
 
     it('batch deletes traces', async () => {
@@ -858,6 +1087,119 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(tagSpanIds).not.toContain('agent-b');
     });
 
+    it('supports page deltaCursor and delta polling for branches', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'branch-delta-trace',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-branch-delta',
+            entityName: 'Workflow Branch Delta',
+            environment: 'production',
+            startedAt: new Date('2026-04-06T00:00:00Z'),
+            endedAt: new Date('2026-04-06T00:00:10Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'branch-delta-trace',
+            spanId: 'branch-existing',
+            parentSpanId: 'root',
+            name: 'existing-branch',
+            spanType: SpanType.TOOL_CALL,
+            entityType: EntityType.TOOL,
+            entityId: 'tool-existing',
+            entityName: 'Tool Existing',
+            environment: 'production',
+            startedAt: new Date('2026-04-06T00:00:01Z'),
+            endedAt: new Date('2026-04-06T00:00:02Z'),
+          },
+        ],
+      });
+
+      const page = await storage.listBranches({ filters: { environment: 'production' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listBranches({
+        mode: 'delta',
+        filters: { environment: 'production' },
+      });
+      expect(bootstrap.branches).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      await storage.createSpan({
+        span: {
+          ...baseSpan,
+          traceId: 'branch-delta-trace',
+          spanId: 'leaf-existing',
+          parentSpanId: 'branch-existing',
+          name: 'leaf-existing',
+          spanType: SpanType.MODEL_STEP,
+          startedAt: new Date('2026-04-06T00:00:03Z'),
+          endedAt: new Date('2026-04-06T00:00:04Z'),
+        },
+      });
+
+      const afterExistingUpdate = await storage.listBranches({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(afterExistingUpdate.branches).toEqual([]);
+
+      await storage.createSpan({
+        span: {
+          ...baseSpan,
+          traceId: 'branch-delta-trace',
+          spanId: 'branch-new',
+          parentSpanId: 'root',
+          name: 'branch-new',
+          spanType: SpanType.AGENT_RUN,
+          entityType: EntityType.AGENT,
+          entityId: 'agent-new',
+          entityName: 'Agent New',
+          environment: 'production',
+          startedAt: new Date('2026-04-06T00:00:05Z'),
+          endedAt: new Date('2026-04-06T00:00:06Z'),
+        },
+      });
+      await storage.createSpan({
+        span: {
+          ...baseSpan,
+          traceId: 'branch-delta-ignore',
+          spanId: 'branch-ignore',
+          parentSpanId: null,
+          name: 'branch-ignore',
+          spanType: SpanType.TOOL_CALL,
+          entityType: EntityType.TOOL,
+          entityId: 'tool-ignore',
+          entityName: 'Tool Ignore',
+          environment: 'staging',
+          startedAt: new Date('2026-04-06T00:00:07Z'),
+          endedAt: new Date('2026-04-06T00:00:08Z'),
+        },
+      });
+
+      const delta = await storage.listBranches({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.branches.map(branch => branch.spanId)).toEqual(['branch-new']);
+
+      const afterPageCursor = await storage.listBranches({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: page.deltaCursor!,
+      });
+      expect(afterPageCursor.branches.map(branch => branch.spanId)).toEqual(['branch-new']);
+    });
+
     it('getSpans batch-fetches a subset of spans within a trace', async () => {
       await storage.batchCreateSpans({
         records: [
@@ -1023,6 +1365,84 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(filtered.logs).toHaveLength(1);
       expect(filtered.logs[0]!.message).toBe('Error occurred');
+    });
+
+    it('supports page deltaCursor and delta polling for logs', async () => {
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'log-delta-existing',
+            timestamp: new Date('2026-05-01T00:00:00Z'),
+            level: 'info',
+            message: 'existing-log',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'production',
+            metadata: null,
+          },
+        ],
+      });
+
+      const page = await storage.listLogs({ filters: { environment: 'production' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listLogs({ mode: 'delta', filters: { environment: 'production' } });
+      expect(bootstrap.logs).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            logId: 'log-delta-new',
+            timestamp: new Date('2026-05-01T00:00:01Z'),
+            level: 'warn',
+            message: 'new-log',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'production',
+            metadata: null,
+          },
+          {
+            logId: 'log-delta-ignore',
+            timestamp: new Date('2026-05-01T00:00:02Z'),
+            level: 'warn',
+            message: 'ignore-log',
+            data: null,
+            traceId: 'trace-log',
+            spanId: null,
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityId: 'agent-log',
+            entityName: 'Agent Log',
+            environment: 'staging',
+            metadata: null,
+          },
+        ],
+      });
+
+      const delta = await storage.listLogs({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.logs.map(log => log.logId)).toEqual(['log-delta-new']);
+
+      const afterPageCursor = await storage.listLogs({
+        mode: 'delta',
+        filters: { environment: 'production' },
+        after: page.deltaCursor!,
+      });
+      expect(afterPageCursor.logs.map(log => log.logId)).toEqual(['log-delta-new']);
     });
   });
 
@@ -1293,6 +1713,55 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.series).toHaveLength(2);
       const p50 = result.series.find(s => s.percentile === 0.5);
       expect(p50).toBeDefined();
+    });
+
+    it('supports page deltaCursor and delta polling for metrics', async () => {
+      const page = await storage.listMetrics({ filters: { provider: 'openai' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listMetrics({ mode: 'delta', filters: { provider: 'openai' } });
+      expect(bootstrap.metrics).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+      await storage.batchCreateMetrics({
+        metrics: [
+          {
+            metricId: 'metric-delta-new',
+            timestamp: new Date('2026-01-01T02:00:00Z'),
+            name: 'mastra_agent_duration_ms',
+            value: 123,
+            labels: { status: 'ok' },
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            estimatedCost: 0.12,
+            costUnit: 'usd',
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityName: 'weatherAgent',
+          },
+          {
+            metricId: 'metric-delta-ignore',
+            timestamp: new Date('2026-01-01T02:00:05Z'),
+            name: 'mastra_agent_duration_ms',
+            value: 999,
+            labels: { status: 'ok' },
+            provider: 'anthropic',
+            model: 'claude-3-7-sonnet',
+            estimatedCost: 0.99,
+            costUnit: 'usd',
+            tags: ['prod'],
+            entityType: EntityType.AGENT,
+            entityName: 'codeAgent',
+          },
+        ],
+      });
+
+      const delta = await storage.listMetrics({
+        mode: 'delta',
+        filters: { provider: 'openai' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.metrics.map(metric => metric.metricId)).toEqual(['metric-delta-new']);
     });
   });
 
@@ -1585,6 +2054,63 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.scores[0]!.scoreSource).toBe('automated');
     });
 
+    it('supports page deltaCursor and delta polling for scores', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'score-delta-existing',
+          timestamp: new Date('2026-01-01T00:01:00Z'),
+          traceId: 'trace-score-existing',
+          spanId: null,
+          scorerId: 'relevance',
+          score: 0.88,
+          reason: 'existing',
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const page = await storage.listScores({ filters: { scorerId: 'relevance' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listScores({ mode: 'delta', filters: { scorerId: 'relevance' } });
+      expect(bootstrap.scores).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+      await storage.createScore({
+        score: {
+          scoreId: 'score-delta-new',
+          timestamp: new Date('2026-01-01T00:02:00Z'),
+          traceId: 'trace-score-new',
+          spanId: null,
+          scorerId: 'relevance',
+          score: 0.77,
+          reason: 'delta',
+          experimentId: null,
+          metadata: null,
+        },
+      });
+      await storage.createScore({
+        score: {
+          scoreId: 'score-delta-ignore',
+          timestamp: new Date('2026-01-01T00:03:00Z'),
+          traceId: 'trace-score-ignore',
+          spanId: null,
+          scorerId: 'factuality',
+          score: 0.66,
+          reason: 'ignore',
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { scorerId: 'relevance' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores.map(score => score.scoreId)).toEqual(['score-delta-new']);
+    });
+
     it('supports score OLAP queries keyed by scorerId and optional scoreSource', async () => {
       await storage.batchCreateScores({
         scores: [
@@ -1777,6 +2303,72 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback).toHaveLength(1);
       expect(result.feedback[0]!.traceId).toBeNull();
       expect(result.feedback[0]!.feedbackSource).toBe('manual');
+    });
+
+    it('supports page deltaCursor and delta polling for feedback', async () => {
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-delta-existing',
+          timestamp: new Date('2026-01-01T00:01:00Z'),
+          traceId: 'trace-feedback-existing',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'existing',
+          experimentId: null,
+          feedbackUserId: 'user-2',
+          sourceId: 'source-2',
+          metadata: null,
+        },
+      });
+
+      const page = await storage.listFeedback({ filters: { feedbackSource: 'user' } });
+      expect(page.deltaCursor).toBeTruthy();
+
+      const bootstrap = await storage.listFeedback({ mode: 'delta', filters: { feedbackSource: 'user' } });
+      expect(bootstrap.feedback).toEqual([]);
+      expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-delta-new',
+          timestamp: new Date('2026-01-01T00:02:00Z'),
+          traceId: 'trace-feedback-new',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'delta',
+          experimentId: null,
+          feedbackUserId: 'user-3',
+          sourceId: 'source-3',
+          metadata: null,
+        },
+      });
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'feedback-delta-ignore',
+          timestamp: new Date('2026-01-01T00:03:00Z'),
+          traceId: 'trace-feedback-ignore',
+          spanId: null,
+          feedbackSource: 'reviewer',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'ignore',
+          experimentId: null,
+          feedbackUserId: 'user-4',
+          sourceId: 'source-4',
+          metadata: null,
+        },
+      });
+
+      const delta = await storage.listFeedback({
+        mode: 'delta',
+        filters: { feedbackSource: 'user' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.feedback.map(feedback => feedback.feedbackId)).toEqual(['feedback-delta-new']);
     });
 
     it('batch creates and lists feedback', async () => {

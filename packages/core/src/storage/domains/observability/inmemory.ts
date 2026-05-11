@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { coreFeatures } from '../../../features';
 import { EntityType } from '../../../observability';
 import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
@@ -103,6 +104,8 @@ import {
   toTraceSpans,
 } from './tracing';
 
+const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
+
 /**
  * Internal structure for storing a trace with computed properties for efficient filtering
  */
@@ -126,12 +129,176 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     this.db = db;
   }
 
+  override getListCapabilities() {
+    if (!this.deltaPollingFeatureEnabled()) {
+      return undefined;
+    }
+
+    return {
+      delta: {
+        traces: true,
+        branches: true,
+        logs: true,
+        metrics: true,
+        scores: true,
+        feedback: true,
+      },
+    } as const;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.traces.clear();
     this.db.metricRecords.length = 0;
     this.db.logRecords.length = 0;
     this.db.scoreRecords.length = 0;
     this.db.feedbackRecords.length = 0;
+    this.db.observabilityNextCursorId = 1;
+    this.db.traceCursorIds.clear();
+    this.db.branchCursorIds.clear();
+    this.db.metricCursorIds.clear();
+    this.db.logCursorIds.clear();
+    this.db.scoreCursorIds.clear();
+    this.db.feedbackCursorIds.clear();
+  }
+
+  private deltaPollingFeatureEnabled(): boolean {
+    return coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE);
+  }
+
+  private assertDeltaPollingEnabled(): void {
+    if (this.deltaPollingFeatureEnabled()) {
+      return;
+    }
+
+    throw new MastraError({
+      id: 'OBSERVABILITY_DELTA_POLLING_NOT_SUPPORTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support observability delta polling',
+    });
+  }
+
+  private allocateObservabilityCursorId(): number {
+    const cursorId = this.db.observabilityNextCursorId;
+    this.db.observabilityNextCursorId += 1;
+    return cursorId;
+  }
+
+  private currentObservabilityCursorId(): number {
+    return Math.max(0, this.db.observabilityNextCursorId - 1);
+  }
+
+  private encodeDeltaCursor(cursorId: number): string {
+    return `inmem:${cursorId.toString(36)}`;
+  }
+
+  private decodeDeltaCursor(cursor: string): number {
+    if (!cursor.startsWith('inmem:')) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Invalid observability delta cursor',
+      });
+    }
+
+    const cursorId = Number.parseInt(cursor.slice('inmem:'.length), 36);
+    if (!Number.isInteger(cursorId) || cursorId < 0) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_INVALID_DELTA_CURSOR',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Invalid observability delta cursor',
+      });
+    }
+
+    return cursorId;
+  }
+
+  private currentDeltaCursor(): string {
+    return this.encodeDeltaCursor(this.currentObservabilityCursorId());
+  }
+
+  private pageDeltaCursor(): { deltaCursor?: string } {
+    if (!this.deltaPollingFeatureEnabled()) {
+      return {};
+    }
+
+    return { deltaCursor: this.currentDeltaCursor() };
+  }
+
+  private createBranchCursorKey(traceId: string, spanId: string): string {
+    return `${traceId}\u0000${spanId}`;
+  }
+
+  private maybeRegisterTraceCursor(traceEntry: TraceEntry): void {
+    const rootSpan = traceEntry.rootSpan;
+    if (!rootSpan) {
+      return;
+    }
+
+    if (!this.db.traceCursorIds.has(rootSpan.traceId)) {
+      this.db.traceCursorIds.set(rootSpan.traceId, this.allocateObservabilityCursorId());
+    }
+  }
+
+  private maybeRegisterBranchCursor(span: SpanRecord): void {
+    if (!BRANCH_SPAN_TYPE_SET.has(span.spanType)) {
+      return;
+    }
+
+    const key = this.createBranchCursorKey(span.traceId, span.spanId);
+    if (!this.db.branchCursorIds.has(key)) {
+      this.db.branchCursorIds.set(key, this.allocateObservabilityCursorId());
+    }
+  }
+
+  private buildDeltaResponse<T>(
+    rows: Array<{ cursorId: number; row: T }>,
+    limit: number,
+  ): { rows: T[]; delta: { limit: number; hasMore: boolean }; deltaCursor: string } {
+    const visibleRows = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+
+    return {
+      rows: visibleRows.map(entry => entry.row),
+      delta: { limit, hasMore },
+      deltaCursor:
+        visibleRows.length > 0
+          ? this.encodeDeltaCursor(visibleRows[visibleRows.length - 1]!.cursorId)
+          : this.currentDeltaCursor(),
+    };
+  }
+
+  private listAppendOnlyDelta<T extends object>(
+    rows: T[],
+    cursorIds: Map<T, number>,
+    matches: (row: T) => boolean,
+    after: string | undefined,
+    limit: number,
+  ): { rows: T[]; delta: { limit: number; hasMore: boolean }; deltaCursor: string } {
+    if (after === undefined) {
+      return {
+        rows: [],
+        delta: { limit, hasMore: false },
+        deltaCursor: this.currentDeltaCursor(),
+      };
+    }
+
+    const afterCursorId = this.decodeDeltaCursor(after);
+    const matchingRows = rows
+      .flatMap(row => {
+        const cursorId = cursorIds.get(row);
+        if (cursorId === undefined || cursorId <= afterCursorId || !matches(row)) {
+          return [];
+        }
+
+        return [{ cursorId, row }];
+      })
+      .sort((a, b) => a.cursorId - b.cursorId)
+      .slice(0, limit + 1);
+
+    return this.buildDeltaResponse(matchingRows, limit);
   }
 
   async createSpan(args: CreateSpanArgs): Promise<void> {
@@ -205,6 +372,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
 
     this.recomputeTraceProperties(traceEntry);
+    this.maybeRegisterTraceCursor(traceEntry);
+    this.maybeRegisterBranchCursor(span);
   }
 
   /**
@@ -319,7 +488,43 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
-    const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+    const { mode, filters, pagination, orderBy, after, limit } = listTracesArgsSchema.parse(args);
+
+    if (mode === 'delta') {
+      this.assertDeltaPollingEnabled();
+
+      if (after === undefined) {
+        return {
+          spans: [],
+          delta: { limit, hasMore: false },
+          deltaCursor: this.currentDeltaCursor(),
+        };
+      }
+
+      const afterCursorId = this.decodeDeltaCursor(after);
+      const matchingRootSpans = Array.from(this.db.traceCursorIds.entries())
+        .flatMap(([traceId, cursorId]) => {
+          if (cursorId <= afterCursorId) {
+            return [];
+          }
+
+          const traceEntry = this.db.traces.get(traceId);
+          if (!traceEntry?.rootSpan || !this.traceMatchesFilters(traceEntry, filters)) {
+            return [];
+          }
+
+          return [{ cursorId, row: traceEntry.rootSpan }];
+        })
+        .sort((a, b) => a.cursorId - b.cursorId)
+        .slice(0, limit + 1);
+
+      const deltaResponse = this.buildDeltaResponse(matchingRootSpans, limit);
+      return {
+        spans: toTraceSpans(deltaResponse.rows),
+        delta: deltaResponse.delta,
+        deltaCursor: deltaResponse.deltaCursor,
+      };
+    }
 
     // Collect all traces that match filters
     const matchingRootSpans: SpanRecord[] = [];
@@ -367,6 +572,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore: end < total },
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -514,7 +720,49 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
-    const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
+    const { mode, filters, pagination, orderBy, after, limit } = listBranchesArgsSchema.parse(args);
+
+    if (mode === 'delta') {
+      this.assertDeltaPollingEnabled();
+
+      if (after === undefined) {
+        return {
+          branches: [],
+          delta: { limit, hasMore: false },
+          deltaCursor: this.currentDeltaCursor(),
+        };
+      }
+
+      const afterCursorId = this.decodeDeltaCursor(after);
+      const matches = Array.from(this.db.branchCursorIds.entries())
+        .flatMap(([key, cursorId]) => {
+          if (cursorId <= afterCursorId) {
+            return [];
+          }
+
+          const [traceId, spanId] = key.split('\u0000');
+          if (!traceId || !spanId) {
+            return [];
+          }
+
+          const traceEntry = this.db.traces.get(traceId);
+          const span = traceEntry?.spans[spanId];
+          if (!span || !this.spanMatchesBranchFilters(span, filters)) {
+            return [];
+          }
+
+          return [{ cursorId, row: span }];
+        })
+        .sort((a, b) => a.cursorId - b.cursorId)
+        .slice(0, limit + 1);
+
+      const deltaResponse = this.buildDeltaResponse(matches, limit);
+      return {
+        branches: deltaResponse.rows.map(toTraceSpan),
+        delta: deltaResponse.delta,
+        deltaCursor: deltaResponse.deltaCursor,
+      };
+    }
 
     const allowedSpanTypes = filters?.spanType
       ? BRANCH_SPAN_TYPE_SET.has(filters.spanType)
@@ -555,6 +803,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       pagination: { total, page, perPage, hasMore: end < total },
       branches: paged.map(toTraceSpan),
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -673,6 +922,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
 
     this.recomputeTraceProperties(traceEntry);
+    this.maybeRegisterTraceCursor(traceEntry);
+    this.maybeRegisterBranchCursor(updatedSpan);
   }
 
   async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
@@ -683,6 +934,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     for (const traceId of args.traceIds) {
+      const traceEntry = this.db.traces.get(traceId);
+      if (traceEntry) {
+        this.db.traceCursorIds.delete(traceId);
+        for (const spanId of Object.keys(traceEntry.spans)) {
+          this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
+        }
+      }
       this.db.traces.delete(traceId);
     }
   }
@@ -693,12 +951,31 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
     for (const metric of args.metrics) {
-      this.db.metricRecords.push(metric as MetricRecord);
+      const record = metric as MetricRecord;
+      this.db.metricRecords.push(record);
+      this.db.metricCursorIds.set(record, this.allocateObservabilityCursorId());
     }
   }
 
   async listMetrics(args: ListMetricsArgs): Promise<ListMetricsResponse> {
-    const { filters, pagination, orderBy } = listMetricsArgsSchema.parse(args);
+    const { mode, filters, pagination, orderBy, after, limit } = listMetricsArgsSchema.parse(args);
+
+    if (mode === 'delta') {
+      this.assertDeltaPollingEnabled();
+      const deltaResponse = this.listAppendOnlyDelta(
+        this.db.metricRecords,
+        this.db.metricCursorIds,
+        metric => this.metricMatchesFilters(metric, filters as Record<string, unknown>),
+        after,
+        limit,
+      );
+
+      return {
+        metrics: deltaResponse.rows,
+        delta: deltaResponse.delta,
+        deltaCursor: deltaResponse.deltaCursor,
+      };
+    }
 
     let matching = this.filterMetrics(filters as Record<string, unknown>);
 
@@ -713,63 +990,67 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       metrics: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
+      ...this.pageDeltaCursor(),
     };
   }
 
   private filterMetrics(filters?: Record<string, unknown>): MetricRecord[] {
     if (!filters) return [...this.db.metricRecords];
-    return this.db.metricRecords.filter(m => {
-      if (filters.timestamp) {
-        const ts = filters.timestamp as { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean };
-        if (ts.start && (ts.startExclusive ? m.timestamp <= ts.start : m.timestamp < ts.start)) return false;
-        if (ts.end && (ts.endExclusive ? m.timestamp >= ts.end : m.timestamp > ts.end)) return false;
+    return this.db.metricRecords.filter(metric => this.metricMatchesFilters(metric, filters));
+  }
+
+  private metricMatchesFilters(m: MetricRecord, filters?: Record<string, unknown>): boolean {
+    if (!filters) return true;
+    if (filters.timestamp) {
+      const ts = filters.timestamp as { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean };
+      if (ts.start && (ts.startExclusive ? m.timestamp <= ts.start : m.timestamp < ts.start)) return false;
+      if (ts.end && (ts.endExclusive ? m.timestamp >= ts.end : m.timestamp > ts.end)) return false;
+    }
+    if (filters.name != null) {
+      if (!(filters.name as string[]).includes(m.name)) return false;
+    }
+    if (filters.traceId !== undefined && m.traceId !== filters.traceId) return false;
+    if (filters.spanId !== undefined && m.spanId !== filters.spanId) return false;
+    if (filters.provider !== undefined && m.provider !== filters.provider) return false;
+    if (filters.model !== undefined && m.model !== filters.model) return false;
+    if (filters.costUnit !== undefined && m.costUnit !== filters.costUnit) return false;
+    if (filters.entityType !== undefined && m.entityType !== filters.entityType) return false;
+    if (filters.entityName !== undefined && m.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && m.entityVersionId !== filters.entityVersionId) return false;
+    if (filters.parentEntityVersionId !== undefined && m.parentEntityVersionId !== filters.parentEntityVersionId)
+      return false;
+    if (filters.rootEntityVersionId !== undefined && m.rootEntityVersionId !== filters.rootEntityVersionId)
+      return false;
+    if (filters.userId !== undefined && m.userId !== filters.userId) return false;
+    if (filters.organizationId !== undefined && m.organizationId !== filters.organizationId) return false;
+    if (filters.resourceId !== undefined && m.resourceId !== filters.resourceId) return false;
+    if (filters.runId !== undefined && m.runId !== filters.runId) return false;
+    if (filters.sessionId !== undefined && m.sessionId !== filters.sessionId) return false;
+    if (filters.threadId !== undefined && m.threadId !== filters.threadId) return false;
+    if (filters.requestId !== undefined && m.requestId !== filters.requestId) return false;
+    if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
+    if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
+    if (filters.environment !== undefined && m.environment !== filters.environment) return false;
+    const metricExecutionSource = m.executionSource ?? m.source ?? null;
+    if (filters.executionSource !== undefined && metricExecutionSource !== filters.executionSource) return false;
+    if (filters.source !== undefined && metricExecutionSource !== filters.source) return false;
+    if (filters.parentEntityType !== undefined && m.parentEntityType !== filters.parentEntityType) return false;
+    if (filters.parentEntityName !== undefined && m.parentEntityName !== filters.parentEntityName) return false;
+    if (filters.rootEntityType !== undefined && m.rootEntityType !== filters.rootEntityType) return false;
+    if (filters.rootEntityName !== undefined && m.rootEntityName !== filters.rootEntityName) return false;
+    if (filters.tags != null && Array.isArray(filters.tags) && filters.tags.length > 0) {
+      if (m.tags == null) return false;
+      for (const tag of filters.tags) {
+        if (!m.tags.includes(tag)) return false;
       }
-      if (filters.name != null) {
-        if (!(filters.name as string[]).includes(m.name)) return false;
+    }
+    if (filters.labels) {
+      const labelFilters = filters.labels as Record<string, string>;
+      for (const [k, v] of Object.entries(labelFilters)) {
+        if (m.labels[k] !== v) return false;
       }
-      if (filters.traceId !== undefined && m.traceId !== filters.traceId) return false;
-      if (filters.spanId !== undefined && m.spanId !== filters.spanId) return false;
-      if (filters.provider !== undefined && m.provider !== filters.provider) return false;
-      if (filters.model !== undefined && m.model !== filters.model) return false;
-      if (filters.costUnit !== undefined && m.costUnit !== filters.costUnit) return false;
-      if (filters.entityType !== undefined && m.entityType !== filters.entityType) return false;
-      if (filters.entityName !== undefined && m.entityName !== filters.entityName) return false;
-      if (filters.entityVersionId !== undefined && m.entityVersionId !== filters.entityVersionId) return false;
-      if (filters.parentEntityVersionId !== undefined && m.parentEntityVersionId !== filters.parentEntityVersionId)
-        return false;
-      if (filters.rootEntityVersionId !== undefined && m.rootEntityVersionId !== filters.rootEntityVersionId)
-        return false;
-      if (filters.userId !== undefined && m.userId !== filters.userId) return false;
-      if (filters.organizationId !== undefined && m.organizationId !== filters.organizationId) return false;
-      if (filters.resourceId !== undefined && m.resourceId !== filters.resourceId) return false;
-      if (filters.runId !== undefined && m.runId !== filters.runId) return false;
-      if (filters.sessionId !== undefined && m.sessionId !== filters.sessionId) return false;
-      if (filters.threadId !== undefined && m.threadId !== filters.threadId) return false;
-      if (filters.requestId !== undefined && m.requestId !== filters.requestId) return false;
-      if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
-      if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
-      if (filters.environment !== undefined && m.environment !== filters.environment) return false;
-      const metricExecutionSource = m.executionSource ?? m.source ?? null;
-      if (filters.executionSource !== undefined && metricExecutionSource !== filters.executionSource) return false;
-      if (filters.source !== undefined && metricExecutionSource !== filters.source) return false;
-      if (filters.parentEntityType !== undefined && m.parentEntityType !== filters.parentEntityType) return false;
-      if (filters.parentEntityName !== undefined && m.parentEntityName !== filters.parentEntityName) return false;
-      if (filters.rootEntityType !== undefined && m.rootEntityType !== filters.rootEntityType) return false;
-      if (filters.rootEntityName !== undefined && m.rootEntityName !== filters.rootEntityName) return false;
-      if (filters.tags != null && Array.isArray(filters.tags) && filters.tags.length > 0) {
-        if (m.tags == null) return false;
-        for (const tag of filters.tags) {
-          if (!m.tags.includes(tag)) return false;
-        }
-      }
-      if (filters.labels) {
-        const labelFilters = filters.labels as Record<string, string>;
-        for (const [k, v] of Object.entries(labelFilters)) {
-          if (m.labels[k] !== v) return false;
-        }
-      }
-      return true;
-    });
+    }
+    return true;
   }
 
   private aggregate(
@@ -1207,12 +1488,31 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
     for (const log of args.logs) {
-      this.db.logRecords.push(log as LogRecord);
+      const record = log as LogRecord;
+      this.db.logRecords.push(record);
+      this.db.logCursorIds.set(record, this.allocateObservabilityCursorId());
     }
   }
 
   async listLogs(args: ListLogsArgs): Promise<ListLogsResponse> {
-    const { filters, pagination, orderBy } = listLogsArgsSchema.parse(args);
+    const { mode, filters, pagination, orderBy, after, limit } = listLogsArgsSchema.parse(args);
+
+    if (mode === 'delta') {
+      this.assertDeltaPollingEnabled();
+      const deltaResponse = this.listAppendOnlyDelta(
+        this.db.logRecords,
+        this.db.logCursorIds,
+        log => this.logMatchesFilters(log, filters),
+        after,
+        limit,
+      );
+
+      return {
+        logs: deltaResponse.rows,
+        delta: deltaResponse.delta,
+        deltaCursor: deltaResponse.deltaCursor,
+      };
+    }
 
     let matching = this.db.logRecords.filter(log => this.logMatchesFilters(log, filters));
 
@@ -1229,6 +1529,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       logs: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -1299,26 +1600,47 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async createScore(args: CreateScoreArgs): Promise<void> {
     const scoreSource = args.score.scoreSource ?? args.score.source ?? null;
-    this.db.scoreRecords.push({
+    const record = {
       ...args.score,
       scoreSource,
       source: scoreSource,
-    } as ScoreRecord);
+    } as ScoreRecord;
+    this.db.scoreRecords.push(record);
+    this.db.scoreCursorIds.set(record, this.allocateObservabilityCursorId());
   }
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     for (const score of args.scores) {
       const scoreSource = score.scoreSource ?? score.source ?? null;
-      this.db.scoreRecords.push({
+      const record = {
         ...score,
         scoreSource,
         source: scoreSource,
-      } as ScoreRecord);
+      } as ScoreRecord;
+      this.db.scoreRecords.push(record);
+      this.db.scoreCursorIds.set(record, this.allocateObservabilityCursorId());
     }
   }
 
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
-    const { filters, pagination, orderBy } = listScoresArgsSchema.parse(args);
+    const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
+
+    if (mode === 'delta') {
+      this.assertDeltaPollingEnabled();
+      const deltaResponse = this.listAppendOnlyDelta(
+        this.db.scoreRecords,
+        this.db.scoreCursorIds,
+        score => this.scoreMatchesFilters(score, filters),
+        after,
+        limit,
+      );
+
+      return {
+        scores: deltaResponse.rows,
+        delta: deltaResponse.delta,
+        deltaCursor: deltaResponse.deltaCursor,
+      };
+    }
 
     let matching = this.db.scoreRecords.filter(score => this.scoreMatchesFilters(score, filters));
 
@@ -1339,6 +1661,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       scores: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
+      ...this.pageDeltaCursor(),
     };
   }
 
@@ -1621,7 +1944,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // ============================================================================
 
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    this.db.feedbackRecords.push({
+    const record = {
       ...args.feedback,
       feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       source: args.feedback.feedbackSource ?? args.feedback.source ?? '',
@@ -1629,23 +1952,44 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         args.feedback.feedbackUserId ??
         args.feedback.userId ??
         (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
-    } as FeedbackRecord);
+    } as FeedbackRecord;
+    this.db.feedbackRecords.push(record);
+    this.db.feedbackCursorIds.set(record, this.allocateObservabilityCursorId());
   }
 
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     for (const fb of args.feedbacks) {
-      this.db.feedbackRecords.push({
+      const record = {
         ...fb,
         feedbackSource: fb.feedbackSource ?? fb.source ?? '',
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
           fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
-      } as FeedbackRecord);
+      } as FeedbackRecord;
+      this.db.feedbackRecords.push(record);
+      this.db.feedbackCursorIds.set(record, this.allocateObservabilityCursorId());
     }
   }
 
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
-    const { filters, pagination, orderBy } = listFeedbackArgsSchema.parse(args);
+    const { mode, filters, pagination, orderBy, after, limit } = listFeedbackArgsSchema.parse(args);
+
+    if (mode === 'delta') {
+      this.assertDeltaPollingEnabled();
+      const deltaResponse = this.listAppendOnlyDelta(
+        this.db.feedbackRecords,
+        this.db.feedbackCursorIds,
+        feedback => this.feedbackMatchesFilters(feedback, filters),
+        after,
+        limit,
+      );
+
+      return {
+        feedback: deltaResponse.rows,
+        delta: deltaResponse.delta,
+        deltaCursor: deltaResponse.deltaCursor,
+      };
+    }
 
     let matching = this.db.feedbackRecords.filter(fb => this.feedbackMatchesFilters(fb, filters));
 
@@ -1662,6 +2006,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       feedback: matching.slice(start, start + perPage),
       pagination: { total, page, perPage, hasMore: start + perPage < total },
+      ...this.pageDeltaCursor(),
     };
   }
 

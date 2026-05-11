@@ -623,9 +623,11 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       describe('basic pagination', () => {
         it('should return empty list when no traces exist', async () => {
           const result = await observabilityStorage.listTraces({});
+          const pagination = result.pagination;
 
           expect(result.spans).toEqual([]);
-          expect(result.pagination.total).toBe(0);
+          expect(pagination).toBeDefined();
+          expect(pagination!.total).toBe(0);
         });
 
         it('should return root spans with pagination info', async () => {
@@ -634,11 +636,13 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           const result = await observabilityStorage.listTraces({
             pagination: { page: 0, perPage: 10 },
           });
+          const pagination = result.pagination;
 
           expect(result.spans.length).toBe(4);
-          expect(result.pagination.total).toBe(4);
-          expect(result.pagination.page).toBe(0);
-          expect(result.pagination.perPage).toBe(10);
+          expect(pagination).toBeDefined();
+          expect(pagination!.total).toBe(4);
+          expect(pagination!.page).toBe(0);
+          expect(pagination!.perPage).toBe(10);
         });
 
         it('should respect perPage limit', async () => {
@@ -647,9 +651,11 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           const result = await observabilityStorage.listTraces({
             pagination: { page: 0, perPage: 2 },
           });
+          const pagination = result.pagination;
 
           expect(result.spans.length).toBeLessThanOrEqual(2);
-          expect(result.pagination.perPage).toBe(2);
+          expect(pagination).toBeDefined();
+          expect(pagination!.perPage).toBe(2);
         });
 
         it('should handle page navigation', async () => {
@@ -662,11 +668,88 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           const page2 = await observabilityStorage.listTraces({
             pagination: { page: 1, perPage: 2 },
           });
+          const pagination1 = page1.pagination;
+          const pagination2 = page2.pagination;
 
           // Ensure different spans on different pages
           expect(page1.spans[0]?.traceId).not.toBe(page2.spans[0]?.traceId);
-          expect(page1.pagination.page).toBe(0);
-          expect(page2.pagination.page).toBe(1);
+          expect(pagination1).toBeDefined();
+          expect(pagination2).toBeDefined();
+          expect(pagination1!.page).toBe(0);
+          expect(pagination2!.page).toBe(1);
+        });
+      });
+
+      describe('delta polling', () => {
+        it('should return only newly listed traces after the cursor', async () => {
+          if (observabilityStorage.getListCapabilities?.()?.delta?.traces !== true) {
+            return;
+          }
+
+          await createMultipleTraces();
+
+          const bootstrap = await observabilityStorage.listTraces({
+            mode: 'delta',
+            filters: { environment: 'production' },
+          });
+
+          expect(bootstrap.spans).toEqual([]);
+          expect(bootstrap.delta).toBeDefined();
+          expect(bootstrap.deltaCursor).toBeDefined();
+
+          await observabilityStorage.createSpan({
+            span: createSpan({
+              traceId: 'trace-1',
+              spanId: 'child-2',
+              parentSpanId: 'root-1',
+              startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 7000),
+              endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 7200),
+            }),
+          });
+
+          const afterExistingTraceUpdate = await observabilityStorage.listTraces({
+            mode: 'delta',
+            filters: { environment: 'production' },
+            after: bootstrap.deltaCursor!,
+          });
+
+          expect(afterExistingTraceUpdate.spans).toEqual([]);
+
+          await observabilityStorage.createSpan({
+            span: createSpan({
+              traceId: 'trace-5',
+              spanId: 'root-5',
+              spanType: SpanType.AGENT_RUN,
+              entityType: EntityType.AGENT,
+              entityId: 'agent-5',
+              entityName: 'Agent Five',
+              environment: 'production',
+              startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 8000),
+              endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 9000),
+            }),
+          });
+
+          await observabilityStorage.createSpan({
+            span: createSpan({
+              traceId: 'trace-6',
+              spanId: 'root-6',
+              spanType: SpanType.AGENT_RUN,
+              entityType: EntityType.AGENT,
+              entityId: 'agent-6',
+              entityName: 'Agent Six',
+              environment: 'staging',
+              startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 10000),
+              endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 11000),
+            }),
+          });
+
+          const delta = await observabilityStorage.listTraces({
+            mode: 'delta',
+            filters: { environment: 'production' },
+            after: bootstrap.deltaCursor!,
+          });
+
+          expect(delta.spans.map(span => span.traceId)).toEqual(['trace-5']);
         });
       });
 
@@ -738,9 +821,11 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
             filters: { entityId: 'non-existent-entity' },
             pagination: { page: 0, perPage: 10 },
           });
+          const pagination = result.pagination;
 
           expect(result.spans).toHaveLength(0);
-          expect(result.pagination.total).toBe(0);
+          expect(pagination).toBeDefined();
+          expect(pagination!.total).toBe(0);
         });
       });
 
@@ -894,6 +979,102 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           expect(result.spans.length).toBe(1);
           expect(result.spans[0]!.traceId).toBe('trace-1');
         });
+      });
+    });
+
+    describe('listBranches', () => {
+      it('should return only newly listed branches after the cursor', async () => {
+        if (observabilityStorage.getListCapabilities?.()?.delta?.branches !== true) {
+          return;
+        }
+
+        const root = createSpan({
+          traceId: 'trace-branches',
+          spanId: 'root-branches',
+          spanType: SpanType.WORKFLOW_RUN,
+          entityType: EntityType.WORKFLOW_RUN,
+          entityId: 'workflow-branches',
+          entityName: 'Workflow Branches',
+          environment: 'production',
+          startedAt: DEFAULT_BASE_DATE,
+          endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 1000),
+        });
+        const existingBranch = createChildSpan('root-branches', {
+          traceId: 'trace-branches',
+          spanId: 'branch-1',
+          spanType: SpanType.TOOL_CALL,
+          entityType: EntityType.TOOL,
+          entityId: 'tool-1',
+          entityName: 'Tool One',
+          environment: 'production',
+          startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 500),
+          endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 900),
+        });
+
+        await observabilityStorage.batchCreateSpans({ records: [root, existingBranch] });
+
+        const bootstrap = await observabilityStorage.listBranches({
+          mode: 'delta',
+          filters: { environment: 'production' },
+        });
+
+        expect(bootstrap.branches).toEqual([]);
+        expect(bootstrap.delta).toBeDefined();
+        expect(bootstrap.deltaCursor).toBeDefined();
+
+        await observabilityStorage.createSpan({
+          span: createChildSpan('branch-1', {
+            traceId: 'trace-branches',
+            spanId: 'leaf-1',
+            spanType: SpanType.MODEL_GENERATION,
+            startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 1200),
+            endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 1500),
+          }),
+        });
+
+        const afterExistingBranchUpdate = await observabilityStorage.listBranches({
+          mode: 'delta',
+          filters: { environment: 'production' },
+          after: bootstrap.deltaCursor!,
+        });
+
+        expect(afterExistingBranchUpdate.branches).toEqual([]);
+
+        await observabilityStorage.createSpan({
+          span: createChildSpan('root-branches', {
+            traceId: 'trace-branches',
+            spanId: 'branch-2',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-branch',
+            entityName: 'Agent Branch',
+            environment: 'production',
+            startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 2000),
+            endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 2600),
+          }),
+        });
+
+        await observabilityStorage.createSpan({
+          span: createChildSpan('root-branches', {
+            traceId: 'trace-branches',
+            spanId: 'branch-3',
+            spanType: SpanType.AGENT_RUN,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-branch-staging',
+            entityName: 'Agent Branch Staging',
+            environment: 'staging',
+            startedAt: new Date(DEFAULT_BASE_DATE.getTime() + 3000),
+            endedAt: new Date(DEFAULT_BASE_DATE.getTime() + 3600),
+          }),
+        });
+
+        const delta = await observabilityStorage.listBranches({
+          mode: 'delta',
+          filters: { environment: 'production' },
+          after: bootstrap.deltaCursor!,
+        });
+
+        expect(delta.branches.map(branch => branch.spanId)).toEqual(['branch-2']);
       });
     });
 

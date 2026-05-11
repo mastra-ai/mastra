@@ -15,10 +15,19 @@ import type {
   AggregationInterval,
   AggregationType,
 } from '@mastra/core/storage';
+import { listScoresArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import {
+  assertDeltaPollingEnabled,
+  decodeDeltaCursor,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  extendWhereClause,
+  normalizeCursorId,
+} from './polling';
 
 type LegacyScoreRecord = CreateScoreArgs['score'] & {
   source?: string | null;
@@ -341,14 +350,48 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
 /** Query score events with filtering, ordering, and pagination. */
 export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Promise<ListScoresResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
   const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>, {
     source: 'scoreSource',
   });
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentDeltaCursor = await getDeltaCursor(db, filterClause, filterParams);
+    if (after === undefined) {
+      return {
+        scores: [],
+        delta: { limit, hasMore: false },
+        deltaCursor: currentDeltaCursor,
+      };
+    }
+
+    const afterCursorId = decodeDeltaCursor(after);
+    const deltaWhereClause = extendWhereClause(filterClause, ['cursorId IS NOT NULL', `cursorId > CAST(? AS BIGINT)`]);
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT * FROM score_events ${deltaWhereClause} ORDER BY cursorId ASC LIMIT ?`,
+      [...filterParams, afterCursorId.toString(), limit + 1],
+    );
+
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: normalizeCursorId(row.cursorId),
+      score: rowToScoreRecord(row),
+    }));
+
+    return {
+      scores: visibleRows.map(row => row.score) as ListScoresResponse['scores'],
+      delta: { limit, hasMore: rows.length > limit },
+      deltaCursor:
+        visibleRows.length > 0
+          ? encodeDeltaCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentDeltaCursor,
+    };
+  }
+
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
@@ -366,7 +409,21 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     scores: rows.map(row => rowToScoreRecord(row)) as ListScoresResponse['scores'],
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: await getDeltaCursor(db, filterClause, filterParams) } : {}),
   };
+}
+
+async function getDeltaCursor(
+  db: DuckDBConnection,
+  filterClause: string,
+  filterParams: unknown[],
+): Promise<string | null> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT max(cursorId) AS cursorId FROM score_events ${filterClause}`,
+    filterParams,
+  );
+
+  return encodeDeltaCursor(rows[0]?.cursorId);
 }
 
 export async function getScoreById(db: DuckDBConnection, scoreId: string): Promise<ScoreRecord | null> {

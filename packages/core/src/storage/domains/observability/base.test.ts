@@ -4,6 +4,10 @@ import { ObservabilityStorage } from './base';
 describe('ObservabilityStorage base class', () => {
   const storage = new ObservabilityStorage();
 
+  it('does not advertise list capabilities by default', () => {
+    expect(storage.getListCapabilities()).toBeUndefined();
+  });
+
   const methodCases: Array<{ name: string; callThunk: () => Promise<unknown>; expectedMessage: string }> = [
     // Logs
     {
