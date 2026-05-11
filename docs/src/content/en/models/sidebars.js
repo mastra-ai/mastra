@@ -233,6 +233,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
+        },
+        {
+          type: 'doc',
           id: 'providers/fireworks-ai',
           label: 'Fireworks AI',
         },
@@ -305,11 +310,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
-        },
-        {
-          type: 'doc',
-          id: 'providers/kiro',
-          label: 'Kiro',
         },
         {
           type: 'doc',

@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
@@ -26,6 +26,8 @@ import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
+  CachedLLMStepChunk,
+  CachedLLMStepResponse,
   ErrorProcessorOrWorkflow,
   OutputResult,
   ProcessInputStepResult,
@@ -1262,10 +1264,11 @@ export class ProcessorRunner {
     abortSignal?: AbortSignal;
     tracingContext?: TracingContext;
     writer?: ProcessorStreamWriter;
-  }): Promise<{ prompt: LanguageModelV2Prompt }> {
+  }): Promise<{ prompt: LanguageModelV2Prompt; response?: CachedLLMStepResponse }> {
     const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
 
     let currentPrompt = args.prompt;
+    let cachedResponse: CachedLLMStepResponse | undefined;
 
     for (const processorOrWorkflow of this.inputProcessors) {
       // Workflows do not currently participate in processLLMRequest.
@@ -1298,8 +1301,20 @@ export class ProcessorRunner {
           ...createObservabilityContext(args.tracingContext),
         });
 
-        if (result && typeof result === 'object' && result.prompt) {
-          currentPrompt = result.prompt;
+        if (result && typeof result === 'object') {
+          // Use property presence (not truthiness) so a processor can
+          // intentionally pass an empty prompt without it being silently
+          // ignored.
+          if (Object.prototype.hasOwnProperty.call(result, 'prompt')) {
+            currentPrompt = result.prompt as LanguageModelV2Prompt;
+          }
+          if (result.response && !cachedResponse) {
+            // First processor to short-circuit wins. Subsequent processors
+            // still see their `processLLMRequest` invoked so per-request side
+            // effects (telemetry, key derivation) run, but they cannot
+            // override an already-resolved cached response.
+            cachedResponse = result.response;
+          }
         }
       } catch (error) {
         if (error instanceof TripWire) {
@@ -1310,7 +1325,75 @@ export class ProcessorRunner {
     }
 
     void observabilityContext;
-    return { prompt: currentPrompt };
+    return { prompt: currentPrompt, response: cachedResponse };
+  }
+
+  /**
+   * Run processLLMResponse for all processors that implement it.
+   *
+   * Called *after* the LLM step completes (or after a cached response is
+   * replayed) and *after* output processors have collected the response
+   * chunks. The shared `state` object is the same instance passed to
+   * `processLLMRequest` for the same step, allowing processors to correlate
+   * pre- and post-call work (e.g. cache key stash, then cache write).
+   */
+  async runProcessLLMResponse(args: {
+    chunks: CachedLLMStepChunk[];
+    model: unknown;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    warnings?: LanguageModelV2CallWarning[];
+    request?: unknown;
+    rawResponse?: unknown;
+    fromCache: boolean;
+    requestContext?: RequestContext;
+    retryCount?: number;
+    abortSignal?: AbortSignal;
+    tracingContext?: TracingContext;
+    writer?: ProcessorStreamWriter;
+  }): Promise<void> {
+    const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
+
+    for (const processorOrWorkflow of this.inputProcessors) {
+      // Workflows do not currently participate in processLLMResponse.
+      if (isProcessorWorkflow(processorOrWorkflow)) continue;
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processLLMResponse?.bind(processor);
+      if (!processMethod) continue;
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      try {
+        const processorState = this.getProcessorState(processor.id);
+
+        await processMethod({
+          chunks: args.chunks,
+          model: args.model as never,
+          stepNumber: args.stepNumber,
+          steps: args.steps,
+          state: processorState.customState,
+          warnings: args.warnings,
+          request: args.request,
+          rawResponse: args.rawResponse,
+          fromCache: args.fromCache,
+          retryCount: args.retryCount ?? 0,
+          requestContext: args.requestContext,
+          abort,
+          abortSignal: args.abortSignal,
+          writer: args.writer,
+          ...createObservabilityContext(args.tracingContext),
+        });
+      } catch (error) {
+        if (error instanceof TripWire) {
+          await invokeOnViolation(processor, error);
+        }
+        throw error;
+      }
+    }
+
+    void observabilityContext;
   }
 
   /**

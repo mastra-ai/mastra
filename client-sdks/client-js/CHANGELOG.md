@@ -1,5 +1,108 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.10
+
+### Patch Changes
+
+- Fixed memory thread write methods (`update`, `delete`, `deleteMessages`, `clone`) silently sending requests without the required `agentId`. The methods now resolve `agentId` from a per-call argument first, then the constructor, and throw a clear error if neither is set — before any HTTP request is issued. Reads are unchanged. ([#16310](https://github.com/mastra-ai/mastra/pull/16310))
+
+  ```ts
+  // Either set agentId on the thread once...
+  const thread = client.getMemoryThread({ threadId: 't1', agentId: 'a1' });
+  await thread.update({ title: 'Renamed' });
+  await thread.delete();
+
+  // ...or pass it per call.
+  const thread = client.getMemoryThread({ threadId: 't1' });
+  await thread.update({ agentId: 'a1', title: 'Renamed' });
+  await thread.delete({ agentId: 'a1' });
+  ```
+
+  Fixed `MastraClient.deleteThread()` issuing `DELETE /api` (an empty URL) when called without `agentId` or `networkId`. The method now requires exactly one of the two, enforced both at runtime and in the type signature.
+
+  ```ts
+  await client.deleteThread('t1', { agentId: 'a1' });
+  await client.deleteThread('t1', { networkId: 'n1' });
+  ```
+
+## 1.18.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/core@1.33.0-alpha.9
+
+## 1.18.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`c50ebc3`](https://github.com/mastra-ai/mastra/commit/c50ebc34da71044558315735e69bfb94fcfb74bf), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4)]:
+  - @mastra/core@1.33.0-alpha.8
+  - @mastra/schema-compat@1.2.10-alpha.0
+
+## 1.18.0-alpha.7
+
+### Minor Changes
+
+- Added streamed function-call argument events to `@mastra/client-js` Responses streams. You can now read finalized tool arguments directly from the stream: ([#16285](https://github.com/mastra-ai/mastra/pull/16285))
+
+  ```ts
+  for await (const event of stream) {
+    if (event.type === 'response.function_call_arguments.done') {
+      console.log(event.arguments);
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6742347`](https://github.com/mastra-ai/mastra/commit/6742347d71955d7639adc9ddf6ff8282de7ee3ba), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`62666c3`](https://github.com/mastra-ai/mastra/commit/62666c367eaeac3941ead454b1d38810cc855721), [`4af2160`](https://github.com/mastra-ai/mastra/commit/4af2160322f4718cac421930cce85641e9512389), [`136c959`](https://github.com/mastra-ai/mastra/commit/136c9592fb0eeb0cd212f28629d8a29b7557a2fc), [`4df7cc7`](https://github.com/mastra-ai/mastra/commit/4df7cc79342fd065fe7fdeef93c094db14b12bcd), [`aca3121`](https://github.com/mastra-ai/mastra/commit/aca31211233dac25459f140ea4fcfb3a5af64c18), [`9cdf38e`](https://github.com/mastra-ai/mastra/commit/9cdf38e58506e1109c8b38f97cd7770978a4218e), [`990851e`](https://github.com/mastra-ai/mastra/commit/990851edcb0e30be5c2c18b6532f1a876cc2d335), [`6068a6c`](https://github.com/mastra-ai/mastra/commit/6068a6c42950fad3ebfc92346417896ba60803d2), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`e2a079c`](https://github.com/mastra-ai/mastra/commit/e2a079cc3755b1895f7bd5dc36e9be81b11c7c22), [`534a456`](https://github.com/mastra-ai/mastra/commit/534a456a25e4df1e5407e7e632f4cb3b1fa14f9d), [`36bae07`](https://github.com/mastra-ai/mastra/commit/36bae07c0e70b1b3006f2fd20830e8883dcbd066)]:
+  - @mastra/core@1.33.0-alpha.7
+
+## 1.18.0-alpha.6
+
+### Minor Changes
+
+- Fix `orderBy` shape mismatch for paginated list methods. ([#16323](https://github.com/mastra-ai/mastra/pull/16323))
+
+  The server expects `orderBy` as a structured object (`{ field, direction }`),
+  but several SDK methods were sending `orderBy` and `sortDirection` as flat
+  strings, which caused server-side schema validation to fail.
+
+  Affected methods:
+  - `MastraClient.listMemoryThreads`
+  - `Agent.listVersions`
+  - `StoredAgent.listVersions`
+  - `StoredPromptBlock.listVersions`
+  - `StoredScorer.listVersions`
+
+  Before:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: 'createdAt', sortDirection: 'DESC' });
+  ```
+
+  After:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: { field: 'createdAt', direction: 'DESC' } });
+  ```
+
+  The flat `sortDirection` parameter has been removed from the affected param
+  types in favor of the nested `orderBy.direction` field.
+
+### Patch Changes
+
+- Updated dependencies [[`b560d6f`](https://github.com/mastra-ai/mastra/commit/b560d6f88b9b904b15c10f75c949eb145bc27684), [`36b3bbf`](https://github.com/mastra-ai/mastra/commit/36b3bbf5a8d59f7e23d47e29340e76c681b4929c), [`b275631`](https://github.com/mastra-ai/mastra/commit/b275631dc10541a482b2e2d4a3e3cfa843bd5fa1)]:
+  - @mastra/core@1.33.0-alpha.6
+
+## 1.18.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962)]:
+  - @mastra/core@1.33.0-alpha.5
+
 ## 1.18.0-alpha.4
 
 ### Minor Changes
