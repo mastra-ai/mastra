@@ -1552,11 +1552,22 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         preserveAspectRatio: true,
       });
       if (rendered) {
-        // Split the rendered sequence into lines so each can be bordered
-        const lines = rendered.sequence.split('\n');
-        for (const line of lines) {
-          this.contentBox.addChild(new Text(borderFn('│') + ' ' + line, 0, 0));
+        // The image escape sequence draws across `rendered.rows` cell rows on
+        // the terminal but is a single string with no newlines. If we treated
+        // it as one line, the TUI layout would only reserve one row and any
+        // following UI (e.g. the input box) would overlap the image.
+        //
+        // Mirror what pi-tui's built-in Image component does:
+        //   - emit (rows - 1) empty bordered lines so layout reserves space
+        //   - emit the image sequence on the final line, prefixed with a
+        //     cursor-up escape so the terminal draws the image back at the
+        //     first reserved row.
+        const borderPrefix = borderFn('│') + ' ';
+        for (let i = 0; i < rendered.rows - 1; i++) {
+          this.contentBox.addChild(new Text(borderPrefix, 0, 0));
         }
+        const moveUp = rendered.rows > 1 ? `\x1b[${rendered.rows - 1}A` : '';
+        this.contentBox.addChild(new Text(borderPrefix + moveUp + rendered.sequence, 0, 0));
       } else {
         this.contentBox.addChild(
           new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
