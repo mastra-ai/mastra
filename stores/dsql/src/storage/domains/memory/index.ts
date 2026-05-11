@@ -1079,23 +1079,35 @@ export class MemoryDSQL extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
-    const result = await this.#db.client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
-      `SELECT * FROM ${tableName} WHERE id = $1`,
-      [resourceId],
-    );
+    try {
+      const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
+        `SELECT * FROM ${tableName} WHERE id = $1`,
+        [resourceId],
+      );
 
-    if (!result) {
-      return null;
+      if (!result) {
+        return null;
+      }
+
+      return {
+        id: result.id,
+        createdAt: result.createdAtZ || result.createdAt,
+        updatedAt: result.updatedAtZ || result.updatedAt,
+        workingMemory: result.workingMemory,
+        metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'GET_RESOURCE_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
     }
-
-    return {
-      id: result.id,
-      createdAt: result.createdAtZ || result.createdAt,
-      updatedAt: result.updatedAtZ || result.updatedAt,
-      workingMemory: result.workingMemory,
-      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-    };
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
