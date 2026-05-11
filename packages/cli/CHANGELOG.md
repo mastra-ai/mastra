@@ -1,5 +1,49 @@
 # mastra
 
+## 1.9.0-alpha.12
+
+### Patch Changes
+
+- Add pre-deploy validation (preflight) to `mastra studio deploy` and `mastra server deploy` that inspects the built bundle before upload and surfaces likely deployment failures locally. ([#16317](https://github.com/mastra-ai/mastra/pull/16317))
+
+  **What it checks**
+  - **Missing env vars** (warning) — `process.env.FOO` references in the bundle that aren't satisfied by the resolved `.env`/`.env.local` (or `--env-file`). Common platform/runtime/tooling vars (`PORT`, `NODE_ENV`, `MASTRA_*`, `OTEL_*`, `DEBUG`, etc.) are allowlisted.
+  - **Local storage paths** (error) — SQLite/file URLs (`file:./mastra.db`, `sqlite://...`) and `localhost`/`127.0.0.1` connection strings that won't survive on a remote container.
+
+  **How it runs**
+  - Runs after the local build (or after `--skip-build` when `.mastra/output/index.mjs` already exists), before zipping/uploading.
+  - Errors always block the deploy and exit non-zero (so CI surfaces them as a real failure). Warnings prompt for confirmation in interactive mode and pass through silently in `--yes` / headless mode; declining the prompt cancels with exit code 0.
+  - Opt out entirely with `--skip-preflight` or `MASTRA_SKIP_PREFLIGHT=1`.
+
+- Add `mastra verify` command — validate that a Mastra project is ready to deploy without uploading anything. ([#16443](https://github.com/mastra-ai/mastra/pull/16443))
+
+  `mastra verify` runs the same preflight checks as `mastra studio deploy` and `mastra server deploy` (missing env vars, host-local storage paths) but stops after reporting issues. Useful as a CI gate, a pre-commit hook, or while iterating locally.
+
+  ```bash
+  # basic usage — runs `mastra build` then validates
+  mastra verify
+
+  # skip the build step and check the existing .mastra/output
+  mastra verify --skip-build
+
+  # validate against a specific env file
+  mastra verify --env-file .env.production
+
+  # treat warnings as errors (good for CI)
+  mastra verify --strict
+
+  # machine-readable output for CI tooling
+  mastra verify --json
+  ```
+
+  Exit codes:
+  - `0` — preflight passed (no issues, or warnings only)
+  - `1` — at least one error-severity issue, or any issue in `--strict` mode
+
+- Updated dependencies [[`37c0dc5`](https://github.com/mastra-ai/mastra/commit/37c0dc5697d343db98628bf867bf71ce6deec6d7), [`ef6b584`](https://github.com/mastra-ai/mastra/commit/ef6b5847ac33c0a7e80af3a86e8801e2933dd3ee), [`4dd900d`](https://github.com/mastra-ai/mastra/commit/4dd900d75dfe9be89f8c15188b368a8622aa1e18), [`4ff5bdf`](https://github.com/mastra-ai/mastra/commit/4ff5bdfe170cba6dfb5260c6af0f4ba668430772), [`bbcd93c`](https://github.com/mastra-ai/mastra/commit/bbcd93cf7d8aa1007d6d84bfd033b8015c912087), [`308bd07`](https://github.com/mastra-ai/mastra/commit/308bd074f35cef0c75d82fc1eb19382fe04ecf6f)]:
+  - @mastra/core@1.33.0-alpha.11
+  - @mastra/deployer@1.33.0-alpha.11
+
 ## 1.9.0-alpha.11
 
 ### Patch Changes
