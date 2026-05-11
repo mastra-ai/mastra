@@ -36,6 +36,7 @@ import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
+import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
@@ -57,7 +58,6 @@ import { setAuthStorage } from './providers/claude-max.js';
 import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
-import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { stateSchema } from './schema.js';
 
 import { mastra } from './tui/theme.js';
