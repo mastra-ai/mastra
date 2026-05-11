@@ -35,4 +35,14 @@ Added `orientation` (`horizontal` | `vertical`), and new `ButtonsGroupSeparator`
   <ButtonsGroupText>42</ButtonsGroupText>
   <Button variant="outline">+</Button>
 </ButtonsGroup>
+
+<ButtonsGroup orientation="vertical">
+  <Button variant="ghost">Copy</Button>
+  <ButtonsGroupSeparator />
+  <Button variant="ghost">Cut</Button>
+</ButtonsGroup>
 ```
+
+**Tweaked `Button` ghost variant**
+
+Aligned hover/active progression with the outline variant (`surface3` → `surface4`) so click feedback is perceptible on transparent backgrounds. Existing ghost buttons throughout the playground will appear one shade lighter on hover and active.

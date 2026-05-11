@@ -79,7 +79,9 @@ describe('InputGroup', () => {
         <InputGroupInput placeholder="x" />
       </InputGroup>,
     );
-    expect(getWrapper().className).toContain('has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0');
+    expect(getWrapper().className).toContain(
+      'has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0',
+    );
   });
 
   it('aria-invalid on control turns wrapper into error state via :has', () => {
