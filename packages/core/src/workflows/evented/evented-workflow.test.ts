@@ -66,10 +66,6 @@ createWorkflowTestSuite({
 
   // Skip only tests that actually fail - updated after BUG fixes 2026-02
   skipTests: {
-    // Abort - returns 'success' not 'canceled', timeout on signal wait
-    abortStatus: true,
-    abortDuringStep: true,
-
     // Suspend/resume - parallel suspend has race condition (each step publishes workflow.suspend independently)
     resumeParallelMulti: true,
     resumeMultiSuspendError: true,
@@ -115,8 +111,6 @@ createWorkflowTestSuite({
     resumeIncorrectBranches: true,
     // Map-branch resume requires direct Mastra registration (server restart sim)
     resumeMapBranchCondition: true,
-    // Abort propagation to nested workflows times out in evented engine
-    abortNestedPropagation: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {

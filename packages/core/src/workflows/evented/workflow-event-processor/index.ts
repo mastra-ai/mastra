@@ -168,7 +168,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
-  protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
+  protected async processWorkflowCancel({ workflowId, runId, prevResult, ...args }: ProcessorArgs) {
     // Cancel this workflow and all nested child workflows
     this.cancelRunAndChildren(runId);
 
@@ -182,19 +182,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.mastra.getLogger()?.warn('Canceling workflow without loaded state', { workflowId, runId });
     }
 
+    //call end workflow with status of canceled to indicate the workflow was canceled
     await this.endWorkflow(
       {
-        workflow: undefined as any,
         workflowId,
         runId,
-        stepResults: (currentState?.context ?? {}) as any,
-        prevResult: { status: 'canceled' } as any,
-        requestContext: (currentState?.requestContext ?? {}) as any,
-        executionPath: [],
-        activeSteps: {},
-        resumeSteps: [],
-        resumeData: undefined,
-        parentWorkflow: undefined,
+        prevResult,
+        ...args,
       },
       'canceled',
     );
@@ -1155,6 +1149,35 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
     requestContext = Object.fromEntries(rc.entries());
+
+    if (abortController?.signal?.aborted) {
+      // Extract updated state from step result
+      const updatedState = (stepResult as any).__state ?? currentState;
+      //cancel the workflow
+      return this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          timeTravel,
+          stepResults: {
+            ...stepResults,
+            [step.step.id]: stepResult,
+            __state: updatedState,
+          },
+          prevResult: { ...stepResult, status: 'canceled' }, //set the status to canceled to indicate the workflow was canceled
+          activeSteps,
+          requestContext,
+          perStep,
+          state: updatedState,
+          outputOptions,
+        },
+      });
+    }
 
     // @ts-expect-error - bailed status not in type
     if (stepResult.status === 'bailed') {
