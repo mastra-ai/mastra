@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Expose tool `toModelOutput` content on streaming `tool-result` chunks and harness `tool_end` events. The `modelOutput` (e.g. screenshot image parts produced by a tool's `toModelOutput`) is now available on `chunk.payload.providerMetadata.mastra.modelOutput` and forwarded to harness consumers via `tool_end.modelOutput` and `tool_result.modelOutput`, including in history replay. This lets harness UIs (such as the mastracode TUI) render rich tool output inline without re-running the tool.
+Compute a tool's `toModelOutput` before emitting the streaming `tool-result` chunk so its value is available on `chunk.payload.providerMetadata.mastra.modelOutput`. Forward `providerMetadata` through the harness `tool_end` event and on `tool_result` content (both for streaming and history replay) so harness UIs can read `providerMetadata.mastra.modelOutput` (or any other provider metadata) without re-running the tool.
