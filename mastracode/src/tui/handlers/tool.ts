@@ -440,7 +440,11 @@ export function buildToolResultContent(
     Array.isArray((modelOutput as any).value)
   ) {
     for (const part of (modelOutput as any).value) {
-      if (part?.type === 'media' && typeof part.data === 'string' && typeof part.mediaType === 'string') {
+      if (
+        (part?.type === 'media' || part?.type === 'image-data') &&
+        typeof part.data === 'string' &&
+        typeof part.mediaType === 'string'
+      ) {
         content.push({ type: 'image', data: part.data, mimeType: part.mediaType });
         hasImageParts = true;
       }
