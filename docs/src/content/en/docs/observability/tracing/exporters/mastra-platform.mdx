@@ -1,17 +1,23 @@
 ---
-title: "Cloud exporter | Tracing | Observability"
+title: "Mastra Platform exporter | Tracing | Observability"
 description: "Send traces, logs, metrics, scores, and feedback to Mastra platform"
 packages:
   - "@mastra/observability"
 ---
 
-# Cloud exporter
+# Mastra Platform exporter
 
-The `CloudExporter` sends traces, logs, metrics, scores, and feedback to the Mastra platform. Use it to route observability data from any Mastra app to a hosted project in the Mastra platform.
+The `MastraPlatformExporter` sends traces, logs, metrics, scores, and feedback to the Mastra platform. Use it to route observability data from any Mastra app to a hosted project in the Mastra platform.
+
+:::note
+
+`MastraPlatformExporter` was previously called `CloudExporter`. The original `CloudExporter` class is still exported from `@mastra/observability` for backward compatibility, but it is deprecated. New code should use `MastraPlatformExporter`.
+
+:::
 
 :::note[Self-hosted or standalone apps]
 
-If you host your Mastra application on your own infrastructure (not on Mastra Platform), you still need a deployed Studio project to view traces, logs, and metrics. `CloudExporter` sends data to a Studio project, so one must exist before you can use it.
+If you host your Mastra application on your own infrastructure (not on Mastra Platform), you still need a deployed Studio project to view traces, logs, and metrics. `MastraPlatformExporter` sends data to a Studio project, so one must exist before you can use it.
 
 1. [Create a Mastra project](/guides/getting-started/quickstart) if you don't have one yet.
 1. [Deploy Studio](/docs/studio/deployment#mastra-platform) to the Mastra platform with `mastra studio deploy`.
@@ -21,13 +27,13 @@ If you host your Mastra application on your own infrastructure (not on Mastra Pl
 
 ## Version compatibility
 
-- Use `CloudExporter` with `@mastra/observability@1.8.0` or later.
-- If you use `@mastra/observability@1.8.0` through `1.9.1`, set `MASTRA_CLOUD_TRACES_ENDPOINT=https://observability.mastra.ai` in addition to `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
-- Starting in `@mastra/observability@1.9.2`, `CloudExporter` defaults to `https://observability.mastra.ai`, so `MASTRA_CLOUD_TRACES_ENDPOINT` is only required when you want to send telemetry to a different collector.
+- `MastraPlatformExporter` is available starting in `@mastra/observability@1.12.0`. In `1.8.0` through `1.11.x` the same exporter ships only as `CloudExporter`; the constructor signature and environment variables are identical.
+- In `@mastra/observability@1.8.0` through `1.9.1`, set `MASTRA_CLOUD_TRACES_ENDPOINT=https://observability.mastra.ai` in addition to `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
+- Starting in `@mastra/observability@1.9.2`, the exporter defaults to `https://observability.mastra.ai`, so `MASTRA_CLOUD_TRACES_ENDPOINT` is only required when you want to send telemetry to a different collector.
 
 ## Quickstart
 
-To connect `CloudExporter`, create an access token, find the destination `projectId`, and add the exporter to your observability config.
+To connect `MastraPlatformExporter`, create an access token, find the destination `projectId`, and add the exporter to your observability config.
 
 ### 1. Create an access token
 
@@ -80,7 +86,7 @@ MASTRA_PROJECT_ID=<your-project-id>
 
 ### 3. Set your environment variables
 
-Set both values in your environment so `CloudExporter` can authenticate and route telemetry to the correct project:
+Set both values in your environment so `MastraPlatformExporter` can authenticate and route telemetry to the correct project:
 
 ```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
@@ -99,29 +105,29 @@ If you want to send telemetry somewhere other than Mastra platform, set `MASTRA_
 MASTRA_CLOUD_TRACES_ENDPOINT=https://collector.example.com
 ```
 
-When you pass a base origin, `CloudExporter` derives the matching publish URLs for traces, logs, metrics, scores, and feedback automatically.
+When you pass a base origin, `MastraPlatformExporter` derives the matching publish URLs for traces, logs, metrics, scores, and feedback automatically.
 
-### 4. Enable `CloudExporter`
+### 4. Enable `MastraPlatformExporter`
 
-The following example demonstrates how to add `CloudExporter` to your observability config:
+The following example demonstrates how to add `MastraPlatformExporter` to your observability config:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { Observability, CloudExporter } from '@mastra/observability'
+import { Observability, MastraPlatformExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       production: {
         serviceName: 'api-server',
-        exporters: [new CloudExporter()],
+        exporters: [new MastraPlatformExporter()],
       },
     },
   }),
 })
 ```
 
-Set `serviceName` on the observability config, not on `CloudExporter` itself.
+Set `serviceName` on the observability config, not on `MastraPlatformExporter` itself.
 
 Use a stable `serviceName` value. In Studio, traces can be filtered by **Deployments → Service Name**, so a consistent name makes traces easier to find.
 
@@ -130,27 +136,27 @@ Visit [Observability configuration reference](/reference/observability/tracing/c
 If you prefer, rely entirely on environment variables:
 
 ```ts title="src/mastra/index.ts"
-new CloudExporter()
+new MastraPlatformExporter()
 ```
 
-With `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `CloudExporter` sends data to the Mastra platform project you configured. If you also set `MASTRA_CLOUD_TRACES_ENDPOINT`, it sends data to that collector instead.
+With `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `MastraPlatformExporter` sends data to the Mastra platform project you configured. If you also set `MASTRA_CLOUD_TRACES_ENDPOINT`, it sends data to that collector instead.
 
 :::note
 
-Visit [CloudExporter reference](/reference/observability/tracing/exporters/cloud-exporter) for the full list of configuration options.
+Visit [MastraPlatformExporter reference](/reference/observability/tracing/exporters/mastra-platform-exporter) for the full list of configuration options.
 
 :::
 
 ## Recommended configuration
 
-Include `DefaultExporter` if you also want to inspect local traces in Studio or persist observability data to your configured storage.
+Include `MastraStorageExporter` if you also want to inspect local traces in Studio or persist observability data to your configured storage.
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 
@@ -159,7 +165,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter(), new CloudExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
@@ -169,7 +175,7 @@ export const mastra = new Mastra({
 
 ## Complete configuration
 
-`CloudExporter` defaults to Mastra platform. If you want to send telemetry to a different collector, set `MASTRA_CLOUD_TRACES_ENDPOINT` in your environment or pass `endpoint` in code.
+`MastraPlatformExporter` defaults to Mastra platform. If you want to send telemetry to a different collector, set `MASTRA_CLOUD_TRACES_ENDPOINT` in your environment or pass `endpoint` in code.
 
 ```bash title=".env"
 MASTRA_CLOUD_TRACES_ENDPOINT=https://collector.example.com
@@ -178,7 +184,7 @@ MASTRA_CLOUD_TRACES_ENDPOINT=https://collector.example.com
 The following example demonstrates how to override the collector endpoint and batching behavior in code:
 
 ```ts title="src/mastra/index.ts"
-new CloudExporter({
+new MastraPlatformExporter({
   endpoint: 'https://collector.example.com',
   maxBatchSize: 1000,
   maxBatchWaitMs: 5000,
@@ -188,7 +194,7 @@ new CloudExporter({
 
 ## Viewing data in Mastra Studio
 
-After you enable `CloudExporter`, open your project in [Mastra Studio](https://projects.mastra.ai) to inspect the exported data.
+After you enable `MastraPlatformExporter`, open your project in [Mastra Studio](https://projects.mastra.ai) to inspect the exported data.
 
 - Open the project you set `MASTRA_PROJECT_ID` to and select **Open Studio**.
 - In Studio, go to **Traces** to inspect agent and workflow traces.
@@ -201,7 +207,7 @@ When you deploy with Mastra Studio, set **Deployment → Service Name** to a sta
 
 :::info
 
-CloudExporter uses batching to optimize network usage. Events are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
+MastraPlatformExporter uses batching to optimize network usage. Events are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
 
 :::
 
@@ -215,4 +221,4 @@ CloudExporter uses batching to optimize network usage. Events are buffered and s
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [DefaultExporter](/docs/observability/tracing/exporters/default)
+- [MastraStorageExporter](/docs/observability/tracing/exporters/mastra-storage)
