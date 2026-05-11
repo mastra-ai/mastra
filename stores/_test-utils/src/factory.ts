@@ -9,6 +9,7 @@ import { createDatasetsTests } from './domains/datasets';
 import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
 import { createSchedulesTests } from './domains/schedules';
+import { createSkillsTests } from './domains/skills';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -47,6 +48,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
       const scoresStorage = await storage.getStore('scores');
       const observabilityStorage = await storage.getStore('observability');
       const agentsStorage = await storage.getStore('agents');
+      const skillsStorage = await storage.getStore('skills');
 
       if (workflowStorage) {
         clearList.push(workflowStorage.dangerouslyClearAll());
@@ -62,6 +64,9 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
       }
       if (agentsStorage) {
         clearList.push(agentsStorage.dangerouslyClearAll());
+      }
+      if (skillsStorage) {
+        clearList.push(skillsStorage.dangerouslyClearAll());
       }
 
       const datasetsStorage = await storage.getStore('datasets');
@@ -95,6 +100,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage });
     createAgentsTests({ storage });
+    createSkillsTests({ storage });
     createDatasetsTests({ storage });
     createExperimentsTests({ storage });
     createBackgroundTasksTests({ storage });

@@ -28,6 +28,10 @@ describe('skillSnapshotFieldValuesEqual', () => {
     expect(skillSnapshotFieldValuesEqual(treeA, treeB)).toBe(true);
   });
 
+  it('treats nested missing and undefined object fields as equal', () => {
+    expect(skillSnapshotFieldValuesEqual({ entry: { mimeType: undefined } }, { entry: {} })).toBe(true);
+  });
+
   it('detects real value changes', () => {
     expect(skillSnapshotFieldValuesEqual({ a: 1 }, { a: 2 })).toBe(false);
     expect(skillSnapshotFieldValuesEqual({ a: 1 }, { b: 1 })).toBe(false);

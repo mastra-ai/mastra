@@ -32,8 +32,14 @@ export function skillSnapshotFieldValuesEqual(a: unknown, b: unknown): boolean {
     return false;
   }
 
-  const keysA = Object.keys(a as object).sort();
-  const keysB = Object.keys(b as object).sort();
+  const ao = a as Record<string, unknown>;
+  const bo = b as Record<string, unknown>;
+  const keysA = Object.keys(ao)
+    .filter(k => ao[k] !== undefined)
+    .sort();
+  const keysB = Object.keys(bo)
+    .filter(k => bo[k] !== undefined)
+    .sort();
   if (keysA.length !== keysB.length) {
     return false;
   }
@@ -43,8 +49,6 @@ export function skillSnapshotFieldValuesEqual(a: unknown, b: unknown): boolean {
     }
   }
 
-  const ao = a as Record<string, unknown>;
-  const bo = b as Record<string, unknown>;
   for (const k of keysA) {
     if (!skillSnapshotFieldValuesEqual(ao[k], bo[k])) {
       return false;
