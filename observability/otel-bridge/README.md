@@ -20,6 +20,7 @@ Enables bidirectional integration between Mastra and OpenTelemetry infrastructur
 - Maintains proper parent-child relationships in distributed traces
 - Allows OTEL-instrumented code (DB calls, HTTP clients) within Mastra operations to nest correctly
 - Exports spans with OTEL semantic conventions for GenAI operations
+- Forwards Mastra log events to the globally-registered OTEL `LoggerProvider`. Logs that originate inside a Mastra span are emitted under that span's OTEL context, so backends correlate logs to traces using the standard OTLP fields. If no `LoggerProvider` is registered, log emission is a silent no-op.
 
 ## Installation
 
@@ -155,16 +156,45 @@ When a Mastra span ends:
 
 The bridge provides `executeInContext()` and `executeInContextSync()` to run code within a Mastra span's OTEL context. This allows OTEL-instrumented code (DB clients, HTTP clients) to nest correctly under Mastra spans.
 
+### Log Forwarding
+
+When a `LoggerProvider` is registered globally (e.g. via `@opentelemetry/sdk-logs`, or via `NodeSDK`'s `logRecordProcessor` option), the bridge forwards every Mastra log event to it as an OTEL `LogRecord`. Trace correlation is automatic:
+
+1. If the log carries a `spanId` the bridge created an OTEL span for, the log is emitted under that span's stored OTEL context — so it nests beneath the Mastra span in distributed traces.
+2. Otherwise, if the log carries `traceId` and `spanId`, those are attached to the emitted log record's `SpanContext` so backends can still correlate by ID.
+3. Otherwise, the log is emitted under whatever OTEL context is currently active.
+
+Log severity, message body, structured `data`, and `metadata` are mapped to the OTEL `LogRecord` shape. `mastra.traceId` / `mastra.spanId` attributes are also attached for backends that key off attributes only.
+
+To wire up logs alongside traces, pass `logRecordProcessor` to `NodeSDK`:
+
+```javascript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+
+const sdk = new NodeSDK({
+  // ...trace config as usual
+  logRecordProcessor: new BatchLogRecordProcessor(new OTLPLogExporter()),
+});
+```
+
 ## Requirements
 
 - **Dependencies**:
   - `@mastra/core` >= 1.0.0
   - `@opentelemetry/api` >= 1.9.0
+  - `@opentelemetry/api-logs` >= 0.215.0
 
 **For Standard OTEL Setup:**
 
 - `@opentelemetry/sdk-node` >= 0.205.0
 - `@opentelemetry/auto-instrumentations-node` >= 0.64.1
+
+**For Log Forwarding (optional):**
+
+- `@opentelemetry/sdk-logs` >= 0.215.0
+- An OTLP log exporter for your protocol (e.g. `@opentelemetry/exporter-logs-otlp-http`)
 
 ## License
 

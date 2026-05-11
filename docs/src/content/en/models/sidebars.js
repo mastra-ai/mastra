@@ -233,18 +233,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
+        },
+        {
+          type: 'doc',
           id: 'providers/fireworks-ai',
           label: 'Fireworks AI',
         },
         {
           type: 'doc',
-          id: 'providers/firmware',
-          label: 'Firmware',
+          id: 'providers/friendli',
+          label: 'Friendli',
         },
         {
           type: 'doc',
-          id: 'providers/friendli',
-          label: 'Friendli',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
         },
         {
           type: 'doc',

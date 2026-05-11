@@ -1,5 +1,4 @@
-import { Spacer } from '@mariozechner/pi-tui';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { askModalQuestion } from '../modal-question.js';
 import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -23,32 +22,11 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
 
   const dirName = projectPath.split('/').pop() || projectPath;
 
-  return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Tag this thread with directory "${dirName}"?\n  ${theme.fg('dim', projectPath)}`,
-        options: [{ label: 'Yes' }, { label: 'No' }],
-        formatResult: answer => (answer === 'Yes' ? `Tagged thread with: ${dirName}` : `Thread not tagged`),
-        onSubmit: async answer => {
-          state.activeInlineQuestion = undefined;
-          if (answer.toLowerCase().startsWith('y')) {
-            await state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
-          }
-          resolve();
-        },
-        onCancel: () => {
-          state.activeInlineQuestion = undefined;
-          resolve();
-        },
-      },
-      state.ui,
-    );
-
-    state.activeInlineQuestion = questionComponent;
-    state.chatContainer.addChild(new Spacer(1));
-    state.chatContainer.addChild(questionComponent);
-    state.chatContainer.addChild(new Spacer(1));
-    state.ui.requestRender();
-    state.chatContainer.invalidate();
+  const answer = await askModalQuestion(state.ui, {
+    question: `Tag this thread with directory "${dirName}"?\n  ${theme.fg('dim', projectPath)}`,
+    options: [{ label: 'Yes' }, { label: 'No' }],
   });
+  if (answer?.toLowerCase().startsWith('y')) {
+    await state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
+  }
 }

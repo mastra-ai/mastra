@@ -60,14 +60,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const thread = await this.#db.get<StorageThreadType>({
         tableName: TABLE_THREADS,
         keys: { id: threadId },
       });
 
-      if (!thread) return null;
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
 
       return {
         ...thread,

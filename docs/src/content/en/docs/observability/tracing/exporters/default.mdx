@@ -183,7 +183,42 @@ The DefaultExporter includes robust error handling for production use:
 - **Persistent Failures**: Drop batch after 4 failed attempts
 - **Buffer Overflow**: Prevent memory issues during storage outages
 
-### Configuration Examples
+## Dropped observability events
+
+`DefaultExporter` emits structured drop events when it cannot persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
+
+There are two drop reasons:
+
+- `unsupported-storage`: The storage provider does not implement the signal type.
+- `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
+
+The following example demonstrates forwarding drop details to a monitoring endpoint:
+
+```typescript title="src/mastra/observability.ts"
+import { BaseExporter } from '@mastra/observability'
+import type { ObservabilityDropEvent, TracingEvent } from '@mastra/core/observability'
+
+class DropAlertExporter extends BaseExporter {
+  name = 'drop-alerts'
+
+  async onDroppedEvent(event: ObservabilityDropEvent) {
+    await fetch('https://monitoring.example.com/observability-drops', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        count: event.count,
+        signal: event.signal,
+        reason: event.reason,
+        exporterName: event.exporterName,
+      }),
+    })
+  }
+
+  protected async _exportTracingEvent(_event: TracingEvent) {}
+}
+```
+
+## Configuration examples
 
 ```typescript
 // Zero config - recommended for most users

@@ -2,6 +2,7 @@ import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
+import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
@@ -105,6 +106,71 @@ describe('addUserMessage', () => {
       '⏳ 15 minutes later',
     );
     expect(state.allSystemReminderComponents).toHaveLength(1);
+  });
+
+  it('renders escaped legacy goal reminders as system reminders', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<system-reminder type="goal-judge">[Goal attempt 1/20] Continue &amp; handle &lt;tags&gt;</system-reminder>',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSystemReminderComponents).toHaveLength(1);
+    const rendered = state.allSystemReminderComponents[0]!.render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Goal');
+    expect(rendered).toContain('Continue & handle <tags>');
+  });
+
+  it('renders canonical initial goal reminders as system reminders', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'goal',
+        message: 'Finish the implementation.',
+        goalMaxTurns: 20,
+        judgeModelId: 'openai/gpt-5.5',
+      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSystemReminderComponents).toHaveLength(1);
+    const rendered = state.allSystemReminderComponents[0]!.render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Goal (20 max attempts, judge: openai/gpt-5.5)');
+    expect(rendered).toContain('Finish the implementation.');
+    expect(rendered).not.toContain('Goal set');
+  });
+
+  it('inserts a goal reminder before an active streaming response', () => {
+    const state = createState();
+    const streamingComponent = new AssistantMessageComponent();
+    state.streamingComponent = streamingComponent;
+    state.chatContainer.addChild(streamingComponent);
+
+    addUserMessage(
+      state,
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'goal',
+        message: 'Finish the implementation.',
+        goalMaxTurns: 20,
+        judgeModelId: 'openai/gpt-5.5',
+      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(2);
+    expect(state.chatContainer.children[0]).toBe(state.allSystemReminderComponents[0]);
+    expect(state.chatContainer.children[1]).toBe(streamingComponent);
   });
 
   it('keeps normal user text visible when it merely quotes a system-reminder tag', () => {

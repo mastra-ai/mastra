@@ -7,9 +7,11 @@
  * These unit tests focus on the bridge's core logic and API surface.
  */
 
-import type { CreateSpanOptions } from '@mastra/core/observability';
+import type { CreateSpanOptions, LogEvent } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { isSpanContextValid, trace } from '@opentelemetry/api';
+import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
+import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { tracing } from '@opentelemetry/sdk-node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OtelBridge } from './bridge.js';
@@ -24,15 +26,25 @@ describe('OtelBridge', () => {
   // no-op tracer whose spans carry all-zero IDs (see issue #15589 regression
   // tests below).
   let tracerProvider: tracing.BasicTracerProvider;
+  let loggerProvider: LoggerProvider;
+  let logExporter: InMemoryLogRecordExporter;
 
   beforeAll(() => {
     tracerProvider = new tracing.BasicTracerProvider();
     trace.setGlobalTracerProvider(tracerProvider);
+
+    logExporter = new InMemoryLogRecordExporter();
+    loggerProvider = new LoggerProvider({
+      processors: [new SimpleLogRecordProcessor(logExporter)],
+    });
+    otelLogs.setGlobalLoggerProvider(loggerProvider);
   });
 
   afterAll(async () => {
     await tracerProvider.shutdown();
+    await loggerProvider.shutdown();
     trace.disable();
+    otelLogs.disable();
   });
 
   describe('createSpan', () => {
@@ -350,6 +362,116 @@ describe('OtelBridge', () => {
 
       // Tags should NOT be present when array is empty
       expect(readableSpan.attributes['mastra.tags']).toBeUndefined();
+    });
+  });
+
+  describe('onLogEvent', () => {
+    function makeLogEvent(overrides: Partial<LogEvent['log']> = {}): LogEvent {
+      return {
+        type: 'log',
+        log: {
+          logId: 'log-1',
+          timestamp: new Date(),
+          level: 'info',
+          message: 'hello',
+          ...overrides,
+        },
+      };
+    }
+
+    it('emits a log record through the global LoggerProvider with mapped severity and body', async () => {
+      logExporter.reset();
+      const bridge = new OtelBridge();
+
+      await bridge.onLogEvent(makeLogEvent({ level: 'warn', message: 'something happened' }));
+
+      const records = logExporter.getFinishedLogRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0]!.body).toBe('something happened');
+      expect(records[0]!.severityNumber).toBe(SeverityNumber.WARN);
+      expect(records[0]!.severityText).toBe('WARN');
+    });
+
+    it('attaches mastra.traceId / mastra.spanId attributes when the log carries trace context', async () => {
+      logExporter.reset();
+      const bridge = new OtelBridge();
+
+      await bridge.onLogEvent(
+        makeLogEvent({
+          traceId: '0af7651916cd43dd8448eb211c80319c',
+          spanId: 'b7ad6b7169203331',
+        }),
+      );
+
+      const records = logExporter.getFinishedLogRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0]!.attributes['mastra.traceId']).toBe('0af7651916cd43dd8448eb211c80319c');
+      expect(records[0]!.attributes['mastra.spanId']).toBe('b7ad6b7169203331');
+    });
+
+    it('emits the OTEL log record with the trace context for the matching Mastra span', async () => {
+      logExporter.reset();
+      const bridge = new OtelBridge();
+
+      const ids = bridge.createSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: {},
+      } as CreateSpanOptions<SpanType.AGENT_RUN>);
+      expect(ids).toBeDefined();
+
+      await bridge.onLogEvent(makeLogEvent({ traceId: ids!.traceId, spanId: ids!.spanId, message: 'inside agent' }));
+
+      const records = logExporter.getFinishedLogRecords();
+      expect(records).toHaveLength(1);
+      // The OTEL SDK populates spanContext on the log record from the emit-time Context.
+      const spanContext = records[0]!.spanContext;
+      expect(spanContext?.traceId).toBe(ids!.traceId);
+      expect(spanContext?.spanId).toBe(ids!.spanId);
+    });
+
+    it('falls back to a SpanContext built from raw IDs when the span is not in the local map', async () => {
+      logExporter.reset();
+      const bridge = new OtelBridge();
+
+      const traceId = '11111111111111111111111111111111';
+      const spanId = '2222222222222222';
+      await bridge.onLogEvent(makeLogEvent({ traceId, spanId, message: 'orphan' }));
+
+      const records = logExporter.getFinishedLogRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0]!.spanContext?.traceId).toBe(traceId);
+      expect(records[0]!.spanContext?.spanId).toBe(spanId);
+    });
+
+    it('emits without a spanContext when the log carries no trace IDs', async () => {
+      logExporter.reset();
+      const bridge = new OtelBridge();
+
+      await bridge.onLogEvent(makeLogEvent({ message: 'no trace context' }));
+
+      const records = logExporter.getFinishedLogRecords();
+      expect(records).toHaveLength(1);
+      expect(records[0]!.spanContext).toBeUndefined();
+    });
+
+    it('is a silent no-op when no global LoggerProvider is registered', async () => {
+      // Tear down the suite-level LoggerProvider so otelLogs.getLogger(...)
+      // resolves to a NoopLogger via the api-logs proxy. This mirrors a real
+      // user who configures OtelBridge without also wiring up sdk-logs.
+      otelLogs.disable();
+      try {
+        const bridge = new OtelBridge();
+        logExporter.reset();
+
+        await expect(bridge.onLogEvent(makeLogEvent({ message: 'dropped silently' }))).resolves.toBeUndefined();
+
+        // The in-memory exporter is not on the registered provider any more,
+        // so it should never receive the record either.
+        expect(logExporter.getFinishedLogRecords()).toHaveLength(0);
+      } finally {
+        otelLogs.setGlobalLoggerProvider(loggerProvider);
+      }
     });
   });
 });

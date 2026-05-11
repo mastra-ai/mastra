@@ -50,14 +50,20 @@ export class StoreMemoryRedis extends MemoryStorage {
     await this.db.scanAndDelete('thread:*:messages');
   }
 
-  public async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  public async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const thread = await this.db.get<StorageThreadType>({
         tableName: TABLE_THREADS,
         keys: { id: threadId },
       });
 
-      if (!thread) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
 

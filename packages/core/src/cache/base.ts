@@ -12,7 +12,14 @@ export abstract class MastraServerCache extends MastraBase {
 
   abstract listLength(key: string): Promise<number>;
 
-  abstract set(key: string, value: unknown): Promise<void>;
+  /**
+   * Store a value in the cache.
+   * @param key - Cache key
+   * @param value - Value to store
+   * @param ttlMs - Optional per-key TTL in milliseconds. If not provided, uses
+   *   the implementation's default TTL.
+   */
+  abstract set(key: string, value: unknown, ttlMs?: number): Promise<void>;
 
   abstract listPush(key: string, value: unknown): Promise<void>;
 
