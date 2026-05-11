@@ -7,7 +7,7 @@ Backed by the official [`@brightdata/sdk`](https://github.com/brightdata/sdk-js)
 ## Installation
 
 ```bash
-npm install @mastra/brightdata @brightdata/sdk zod
+npm install @mastra/brightdata zod
 ```
 
 ## Quick Start

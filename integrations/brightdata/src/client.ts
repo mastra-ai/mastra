@@ -16,6 +16,9 @@ export function getBrightDataClient(config?: BrightDataClientOptions): BrightDat
 export async function closeClient(client: BrightDataClient): Promise<void> {
   const close = (client as { close?: () => Promise<void> | void }).close;
   if (typeof close === 'function') {
-    await close.call(client);
+    try {
+      await close.call(client);
+    } catch {
+    }
   }
 }

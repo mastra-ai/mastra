@@ -23,9 +23,9 @@ export function createBrightDataFetchTool(config?: BrightDataClientOptions) {
     execute: async input => {
       const client = getBrightDataClient(config);
       try {
-        const content = (await client.scrapeUrl(input.url, {
+        const content = await client.scrapeUrl(input.url, {
           dataFormat: 'markdown',
-        })) as string;
+        });
 
         return {
           url: input.url,

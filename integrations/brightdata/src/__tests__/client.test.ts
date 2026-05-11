@@ -86,4 +86,11 @@ describe('closeClient', () => {
 
     await expect(closeClient(client as any)).resolves.toBeUndefined();
   });
+
+  it('should swallow errors thrown by close() so they cannot mask the primary error', async () => {
+    const client = { close: vi.fn().mockRejectedValue(new Error('close failed')) };
+
+    await expect(closeClient(client as any)).resolves.toBeUndefined();
+    expect(client.close).toHaveBeenCalledTimes(1);
+  });
 });
