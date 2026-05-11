@@ -1,0 +1,305 @@
+---
+title: "Deploy Mastra to Amazon Bedrock AgentCore | Deployment"
+description: "Learn how to deploy a Mastra application to Amazon Bedrock AgentCore Runtime with the AgentCore CLI"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Deploy Mastra to Amazon Bedrock AgentCore
+
+Deploy your Mastra application to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/) using the [AgentCore CLI](https://github.com/aws/agentcore-cli). The CLI scaffolds a bring-your-own-code TypeScript project, builds the container with AWS CodeBuild, and provisions the runtime, so a local Docker daemon is not required for deployment.
+
+This guide follows the [official AgentCore TypeScript walkthrough](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-cli-typescript.html) and adapts it to call a Mastra agent from the invocation handler.
+
+:::info
+For a Lambda-based deployment of the full Mastra server, see the [AWS Lambda guide](/guides/deployment/aws-lambda). For a long-lived virtual machine, see the [Amazon EC2 guide](/guides/deployment/amazon-ec2).
+:::
+
+## Before you begin
+
+You'll need:
+
+- A [Mastra application](/guides/getting-started/quickstart)
+- An [AWS account](https://aws.amazon.com/) with permissions for Amazon Bedrock AgentCore, AWS CodeBuild, Amazon ECR, and AWS IAM
+- **[AWS CLI](https://aws.amazon.com/cli/)** installed and authenticated (`aws configure` or `aws sso login`)
+- **Node.js 20 or later**
+- **[Docker](https://www.docker.com/)**, **[Podman](https://podman.io/)**, or **[Finch](https://runfinch.com/)** for local testing with `agentcore dev` (not required for `agentcore deploy`)
+
+Amazon Bedrock AgentCore Runtime is available in [a subset of AWS Regions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-regions.html). Use a region where AgentCore is available and where the foundation models you plan to call are enabled.
+
+## Installation
+
+Install the AgentCore CLI globally:
+
+```bash npm2yarn
+npm install -g @aws/agentcore
+```
+
+## Create the AgentCore project
+
+<Steps>
+<StepItem>
+
+Initialize the AgentCore project at the root of your Mastra application. The `--no-agent` flag skips agent selection so you can add a bring-your-own-code TypeScript agent in the next step:
+
+```bash
+agentcore create --name MastraOnAgentCore --no-agent
+```
+
+The command creates an `agentcore/` directory with `agentcore.json` and `aws-targets.json`.
+
+</StepItem>
+<StepItem>
+
+Add a bring-your-own-code (BYO) TypeScript agent. The CLI generates a code directory under `app/MastraAgent/` and registers the agent in `agentcore.json`:
+
+```bash
+agentcore add agent \
+  --name MastraAgent \
+  --type byo \
+  --build Container \
+  --language TypeScript \
+  --framework Strands \
+  --model-provider Bedrock \
+  --code-location app/MastraAgent
+```
+
+:::note
+`--framework Strands` is required by the CLI but does not constrain your code. The bring-your-own-code mode runs whatever your `Dockerfile` starts.
+:::
+
+</StepItem>
+</Steps>
+
+## Add the Mastra integration
+
+The `agentcore add agent` command generates an empty `app/MastraAgent/` directory. Fill it with the files below to wire Mastra into the AgentCore Runtime service contract (`POST /invocations` on port `8080`).
+
+<Steps>
+<StepItem>
+
+Switch into the generated agent directory:
+
+```bash
+cd app/MastraAgent
+```
+
+Install the AgentCore TypeScript SDK and your Mastra dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html):
+
+```bash npm2yarn
+npm install bedrock-agentcore @mastra/core @opentelemetry/auto-instrumentations-node --legacy-peer-deps
+```
+
+Then install the TypeScript build tools as dev dependencies:
+
+```bash npm2yarn
+npm install --save-dev typescript @types/node tsx
+```
+
+Add the providers and any other Mastra packages your agent uses, for example `@ai-sdk/openai` or `@mastra/memory`.
+
+</StepItem>
+<StepItem>
+
+Create `tsconfig.json`:
+
+```json title="app/MastraAgent/tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+</StepItem>
+<StepItem>
+
+Set the build and start scripts in `package.json`:
+
+```json title="app/MastraAgent/package.json"
+{
+  "name": "mastra-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/agent.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/agent.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+```
+
+</StepItem>
+<StepItem>
+
+Create `agent.ts`. The handler is called for every `POST /invocations` request. Resolve the Mastra agent and call it inside the handler:
+
+```typescript title="app/MastraAgent/agent.ts"
+import { BedrockAgentCoreApp } from "bedrock-agentcore/runtime";
+import { mastra } from "./mastra";
+
+const app = new BedrockAgentCoreApp({
+  invocationHandler: {
+    process: async (payload, context) => {
+      const { prompt } = payload as { prompt: string };
+
+      const agent = mastra.getAgentById("weatherAgent");
+      const response = await agent.generate(prompt, {
+        runId: context.sessionId,
+      });
+
+      return { text: response.text };
+    },
+  },
+});
+
+app.run();
+```
+
+`context.sessionId` is provided by AgentCore Runtime and persists across requests within the same session. Pass it to Mastra as `runId` so traces and memory stay aligned with the AgentCore session.
+
+</StepItem>
+<StepItem>
+
+Replace the generated `Dockerfile` with a Node.js multi-stage build:
+
+```dockerfile title="app/MastraAgent/Dockerfile"
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-slim
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+
+RUN useradd -m -u 1000 bedrock_agentcore
+USER bedrock_agentcore
+
+EXPOSE 8080
+CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "dist/agent.js"]
+```
+
+</StepItem>
+</Steps>
+
+## Test locally
+
+Start the agent in a local container. AgentCore serves the same `POST /invocations` contract used in production:
+
+```bash
+agentcore dev --runtime MastraAgent
+```
+
+In a separate terminal, send a test request:
+
+```bash
+agentcore dev "What is the weather in Tokyo?"
+```
+
+## Deploy
+
+<Steps>
+<StepItem>
+
+Set the AWS account and region in `agentcore/aws-targets.json`:
+
+```json title="agentcore/aws-targets.json"
+[
+  {
+    "name": "default",
+    "account": "123456789012",
+    "region": "us-east-1"
+  }
+]
+```
+
+</StepItem>
+<StepItem>
+
+Deploy to AgentCore Runtime. The CLI builds the image with AWS CodeBuild, pushes it to Amazon ECR, and creates the runtime and a `DEFAULT` endpoint:
+
+```bash
+agentcore deploy
+```
+
+:::note
+Set provider API keys and other secrets in `agentcore/agentcore.json` under the agent's `environmentVariables` field before deploying.
+:::
+
+</StepItem>
+</Steps>
+
+## Verify your deployment
+
+Run `agentcore status` to view the runtime ARN, endpoint, and recent invocations. Then call the deployed agent from the CLI:
+
+```bash
+agentcore invoke "What is the weather in Tokyo?"
+```
+
+To stream tokens as they are generated, use `--stream`:
+
+```bash
+agentcore invoke --stream "Plan a 3-day trip to Tokyo"
+```
+
+To invoke the runtime from another service, use the [`@aws-sdk/client-bedrock-agentcore`](https://www.npmjs.com/package/@aws-sdk/client-bedrock-agentcore) package with the agent ARN from `agentcore status`:
+
+```typescript title="invoke-agent.ts"
+import {
+  BedrockAgentCoreClient,
+  InvokeAgentRuntimeCommand,
+} from "@aws-sdk/client-bedrock-agentcore";
+import { randomUUID } from "crypto";
+
+const client = new BedrockAgentCoreClient({ region: "us-east-1" });
+
+const command = new InvokeAgentRuntimeCommand({
+  agentRuntimeArn:
+    "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/MastraAgent-XXXXXXXX",
+  runtimeSessionId: randomUUID(),
+  payload: JSON.stringify({ prompt: "What is the weather in Tokyo?" }),
+  contentType: "application/json",
+  qualifier: "DEFAULT",
+});
+
+const response = await client.send(command);
+const text = await response.response?.transformToString();
+console.log(text);
+```
+
+Reuse the same `runtimeSessionId` across calls to keep server-side session state and Mastra memory aligned within a single conversation.
+
+## Next steps
+
+AgentCore provides additional managed primitives you can call from your Mastra agent:
+
+- [**AgentCore Memory**](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html): managed short-term and long-term memory with semantic search, accessible through the [`@aws-sdk/client-bedrock-agentcore`](https://www.npmjs.com/package/@aws-sdk/client-bedrock-agentcore) SDK.
+- [**AgentCore Observability**](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html): logs, traces, and the **GenAI Observability** dashboard in Amazon CloudWatch. Stream logs and traces with `agentcore logs` and `agentcore traces list`.
+
+## Related
+
+- [Amazon Bedrock AgentCore documentation](https://docs.aws.amazon.com/bedrock-agentcore/)
+- [AgentCore CLI on GitHub](https://github.com/aws/agentcore-cli)
+- [Deployment overview](/docs/deployment/overview)
+- [AWS Lambda deployment guide](/guides/deployment/aws-lambda)
+- [Amazon EC2 deployment guide](/guides/deployment/amazon-ec2)
