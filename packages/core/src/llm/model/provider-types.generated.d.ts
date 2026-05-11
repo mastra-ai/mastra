@@ -1064,6 +1064,7 @@ export type ProviderModelsMap = {
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
     'stepfun/step-3.5-flash',
+    'tencent/hy3-preview',
     'x-ai/grok-3',
     'x-ai/grok-3-beta',
     'x-ai/grok-3-mini',
@@ -1230,6 +1231,7 @@ export type ProviderModelsMap = {
     'siliconflow/deepseek-v3.2',
     'tongyi-intent-detect-v3',
   ];
+  readonly firepass: readonly ['accounts/fireworks/routers/kimi-k2p6-turbo'];
   readonly 'minimax-cn-coding-plan': readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -2212,7 +2214,6 @@ export type ProviderModelsMap = {
     'gpt-5.4-pro',
     'gpt-5.5',
     'gpt-5.5-pro',
-    'hy3-preview-free',
     'kimi-k2.5',
     'kimi-k2.6',
     'minimax-m2.5',
@@ -2221,6 +2222,7 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
+    'ring-2.6-1t-free',
   ];
   readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly nebius: readonly [
@@ -2241,6 +2243,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.5-397B-A17B-fast',
     'deepseek-ai/DeepSeek-V3.2',
     'deepseek-ai/DeepSeek-V3.2-fast',
+    'deepseek-ai/DeepSeek-V4-Pro',
     'google/gemma-2-2b-it',
     'google/gemma-3-27b-it',
     'meta-llama/Llama-3.3-70B-Instruct',
@@ -2273,6 +2276,8 @@ export type ProviderModelsMap = {
     'elevenlabs/elevenlabs-music',
     'elevenlabs/elevenlabs-v2.5-turbo',
     'elevenlabs/elevenlabs-v3',
+    'empiriolabs/deepseek-v4-flash-el',
+    'empiriolabs/deepseek-v4-pro-el',
     'fireworks-ai/kimi-k2.5-fw',
     'google/gemini-2.0-flash',
     'google/gemini-2.0-flash-lite',
@@ -2309,6 +2314,7 @@ export type ProviderModelsMap = {
     'novita/glm-5',
     'novita/kimi-k2-thinking',
     'novita/kimi-k2.5',
+    'novita/kimi-k2.6',
     'novita/minimax-m2.1',
     'openai/dall-e-3',
     'openai/gpt-3.5-turbo',
@@ -2837,20 +2843,6 @@ export type ProviderModelsMap = {
     'text-embedding-3-small',
     'text-embedding-ada-002',
   ];
-  readonly kiro: readonly [
-    'auto',
-    'claude-haiku-4.5',
-    'claude-opus-4.5',
-    'claude-opus-4.6',
-    'claude-opus-4.7',
-    'claude-sonnet-4',
-    'claude-sonnet-4.5',
-    'claude-sonnet-4.6',
-    'deepseek-3.2',
-    'minimax-m2.1',
-    'minimax-m2.5',
-    'qwen3-coder-next',
-  ];
   readonly requesty: readonly [
     'anthropic/claude-3-7-sonnet',
     'anthropic/claude-haiku-4-5',
@@ -3234,6 +3226,7 @@ export type ProviderModelsMap = {
     'google/gemini-3-pro-image',
     'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-image-preview',
+    'google/gemini-3.1-flash-lite',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'google/gemini-embedding-001',
@@ -3443,6 +3436,7 @@ export type ProviderModelsMap = {
     'gemini-2.5-flash-lite-preview-09-2025',
     'gemini-2.5-pro',
     'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite',
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
     'gemini-pro-latest',
@@ -3509,6 +3503,7 @@ export type ProviderModelsMap = {
     'grok-4-1-fast-reasoning',
     'grok-4-20-beta-0309-non-reasoning',
     'grok-4-20-beta-0309-reasoning',
+    'grok-4-3',
     'grok-4-fast',
     'grok-4-fast-non-reasoning',
     'grok-4-fast-reasoning',
@@ -3531,6 +3526,10 @@ export type ProviderModelsMap = {
     'llama-4-scout',
     'llama-4-scout-17b-instruct',
     'mimo-v2-flash',
+    'mimo-v2-omni',
+    'mimo-v2-pro',
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.1-lightning',

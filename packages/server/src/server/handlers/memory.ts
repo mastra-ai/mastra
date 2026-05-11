@@ -1,4 +1,5 @@
-import type { Agent, MastraDBMessage } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
@@ -309,8 +310,9 @@ async function getAgentFromContext({
       for (const [_, ag] of Object.entries(agents)) {
         try {
           const nestedAgents = await ag.listAgents({ requestContext });
-          if (nestedAgents[agentId]) {
-            agent = nestedAgents[agentId];
+          const nestedAgent = nestedAgents[agentId];
+          if (nestedAgent instanceof Agent) {
+            agent = nestedAgent;
             break;
           }
         } catch (error) {

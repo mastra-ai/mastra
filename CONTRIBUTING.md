@@ -28,7 +28,9 @@ Be sure to include a title and clear description, as much relevant information a
 
 Follow the [Development Guide](./DEVELOPMENT.md) to learn how to set up this repository and run its tests. After successfully testing things locally, open a pull request with your changes.
 
-Ensure that the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
+**Required:** Your PR description must include a link to the issue(s) it addresses (e.g. with `Fixes #1234`, `Closes #1234`). PRs without linked issues may be closed.
+
+Also ensure that the PR description clearly describes the problem and solution.
 
 **Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and either provide feedback or merge it.
 

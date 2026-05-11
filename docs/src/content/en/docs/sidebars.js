@@ -119,6 +119,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/response-caching',
+          label: 'Response caching',
+        },
+        {
+          type: 'doc',
           id: 'agents/agent-approval',
           label: 'Agent Approval',
         },
@@ -589,13 +594,13 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/default',
-                  label: 'Default',
+                  id: 'observability/tracing/exporters/mastra-storage',
+                  label: 'Mastra Storage',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/cloud',
-                  label: 'Cloud',
+                  id: 'observability/tracing/exporters/mastra-platform',
+                  label: 'Mastra Platform',
                 },
                 {
                   type: 'doc',

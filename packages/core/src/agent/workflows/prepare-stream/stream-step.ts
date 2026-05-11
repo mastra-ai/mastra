@@ -8,6 +8,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
+import type { ToolPayloadTransformPolicy } from '../../../tools';
 import { createStep } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
@@ -37,6 +38,7 @@ interface StreamStepOptions {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   /**
    * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
    * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
@@ -66,6 +68,7 @@ export function createStreamStep<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
+  toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
   initialSignalEchoes,
@@ -108,6 +111,7 @@ export function createStreamStep<OUTPUT = undefined>({
           backgroundTaskManager,
           agentBackgroundConfig,
           backgroundTaskManagerConfig: backgroundTaskManager?.config,
+          toolPayloadTransform,
           skipBgTaskWait,
           drainPendingSignals,
           initialSignalEchoes,

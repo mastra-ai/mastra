@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.10-alpha.0
+
+### Patch Changes
+
+- Fixed Google-compatible schema conversion so Gemini accepts broad nullable tool parameters. ([#16129](https://github.com/mastra-ai/mastra/pull/16129))
+
 ## 1.2.9
 
 ### Patch Changes

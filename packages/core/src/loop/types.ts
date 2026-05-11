@@ -38,6 +38,7 @@ import type {
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
+import type { ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -68,6 +69,8 @@ export type StreamInternal = {
   backgroundTaskManager?: BackgroundTaskManager;
   // Agent-level background task config
   agentBackgroundConfig?: AgentBackgroundConfig;
+  // Transform policy for display/transcript tool payloads.
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
   // When true, backgroundTaskCheckStep returns immediately without waiting for
