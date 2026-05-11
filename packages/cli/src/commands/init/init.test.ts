@@ -15,7 +15,7 @@ vi.mock('./utils', () => ({
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
   checkDependencies: vi.fn(),
-  writeObserveEnv: vi.fn(),
+  writeObservabilityEnv: vi.fn(),
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -197,14 +197,14 @@ describe('CLI', () => {
   //   expect(fs.existsSync('/mock')).toBe(false);
   // });
 
-  test('calls writeObserveEnv when observe is true', async () => {
+  test('calls writeObservabilityEnv when observability is true', async () => {
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: true, dirPath };
     });
 
-    const mockWriteObserveEnv = vi.spyOn(utils, 'writeObserveEnv');
+    const mockWriteObservabilityEnv = vi.spyOn(utils, 'writeObservabilityEnv');
 
     await init({
       directory: '/mock',
@@ -212,20 +212,20 @@ describe('CLI', () => {
       addExample: false,
       llmProvider: 'openai',
       llmApiKey: 'sk-...',
-      observe: true,
+      observability: true,
     });
 
-    expect(mockWriteObserveEnv).toHaveBeenCalled();
+    expect(mockWriteObservabilityEnv).toHaveBeenCalled();
   });
 
-  test('does not call writeObserveEnv when observe is false or undefined', async () => {
+  test('does not call writeObservabilityEnv when observability is false or undefined', async () => {
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
       return { ok: true, dirPath };
     });
 
-    const mockWriteObserveEnv = vi.spyOn(utils, 'writeObserveEnv');
+    const mockWriteObservabilityEnv = vi.spyOn(utils, 'writeObservabilityEnv');
 
     await init({
       directory: '/mock',
@@ -233,10 +233,10 @@ describe('CLI', () => {
       addExample: false,
       llmProvider: 'openai',
       llmApiKey: 'sk-...',
-      observe: false,
+      observability: false,
     });
 
-    expect(mockWriteObserveEnv).not.toHaveBeenCalled();
+    expect(mockWriteObservabilityEnv).not.toHaveBeenCalled();
   });
 
   test('stops initialization if mastra is already setup', async () => {

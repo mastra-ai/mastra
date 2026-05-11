@@ -6,7 +6,7 @@ import { DepsService } from '../../services/service.deps';
 import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-import { provisionObserveProject } from './observe-provision';
+import { provisionObservabilityProject } from './observability-provision';
 import { installMastraSkills } from './skills-install';
 import {
   createComponentsDir,
@@ -18,7 +18,7 @@ import {
   writeClaudeMarkdown,
   writeCodeSample,
   writeIndexFile,
-  writeObserveEnv,
+  writeObservabilityEnv,
 } from './utils';
 import type { Component, LLMProvider } from './utils';
 
@@ -34,9 +34,9 @@ export const init = async ({
   mcpServer,
   versionTag,
   initGit = false,
-  observe,
-  observeProject,
-  observeMode = 'pick',
+  observability,
+  observabilityProject,
+  observabilityMode = 'pick',
 }: {
   directory?: string;
   components: Component[];
@@ -47,14 +47,14 @@ export const init = async ({
   mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
-  observe?: boolean;
-  observeProject?: string;
+  observability?: boolean;
+  observabilityProject?: string;
   /**
    * `'create'` skips the picker and always provisions a new platform project
    * named after the local one (used by `create-mastra`). `'pick'` shows the
    * existing-or-new picker (used by `mastra init`).
    */
-  observeMode?: 'create' | 'pick';
+  observabilityMode?: 'create' | 'pick';
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -195,17 +195,21 @@ export const init = async ({
       }
     }
 
-    if (observe) {
+    if (observability) {
       try {
         const defaultProjectName = await readPackageName();
-        const result = await provisionObserveProject({ defaultProjectName, observeProject, mode: observeMode });
-        await writeObserveEnv({
+        const result = await provisionObservabilityProject({
+          defaultProjectName,
+          observabilityProject,
+          mode: observabilityMode,
+        });
+        await writeObservabilityEnv({
           token: result.token,
           projectId: result.projectId,
           endpoint: result.tracesEndpoint,
         });
         p.note(
-          `${color.green('Mastra Observe enabled.')}
+          `${color.green('Mastra Observability enabled.')}
 
   Project: ${color.cyan(result.projectName)} (${result.orgName})
   Wrote ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`,
@@ -213,10 +217,10 @@ export const init = async ({
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         try {
-          await writeObserveEnv();
+          await writeObservabilityEnv();
         } catch {}
         p.note(
-          `${color.yellow('Could not connect this project to Mastra Observe automatically:')} ${message}
+          `${color.yellow('Could not connect this project to Mastra Observability automatically:')} ${message}
 
   Empty ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.
 

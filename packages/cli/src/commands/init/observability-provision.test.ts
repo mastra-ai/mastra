@@ -23,7 +23,7 @@ vi.mock('@clack/prompts', () => ({
   isCancel: (v: unknown) => typeof v === 'symbol',
 }));
 
-const { provisionObserveProject } = await import('./observe-provision');
+const { provisionObservabilityProject } = await import('./observability-provision');
 const { getToken } = await import('../auth/credentials.js');
 const { resolveCurrentOrg } = await import('../auth/orgs.js');
 const { platformFetch } = await import('../auth/client.js');
@@ -42,7 +42,7 @@ function jsonResponse(body: unknown, init: { status?: number } = {}): Response {
   });
 }
 
-describe('provisionObserveProject', () => {
+describe('provisionObservabilityProject', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getTokenMock.mockResolvedValue('test-token');
@@ -59,14 +59,14 @@ describe('provisionObserveProject', () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          token: { id: 'k1', name: 'mastra observe – my-app' },
+          token: { id: 'k1', name: 'mastra observability – my-app' },
           secret: 'sk_secret_value',
         }),
       );
 
     textMock.mockResolvedValueOnce('my-app' as never);
 
-    const result = await provisionObserveProject({ defaultProjectName: 'my-app' });
+    const result = await provisionObservabilityProject({ defaultProjectName: 'my-app' });
 
     expect(result).toEqual({
       token: 'sk_secret_value',
@@ -102,7 +102,7 @@ describe('provisionObserveProject', () => {
       'https://platform.test/v1/auth/tokens',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ name: 'mastra observe – my-app' }),
+        body: JSON.stringify({ name: 'mastra observability – my-app' }),
       }),
     );
   });
@@ -119,14 +119,14 @@ describe('provisionObserveProject', () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          token: { id: 'k1', name: 'mastra observe – Beta' },
+          token: { id: 'k1', name: 'mastra observability – Beta' },
           secret: 'sk_beta',
         }),
       );
 
     selectMock.mockResolvedValueOnce('p2' as never);
 
-    const result = await provisionObserveProject();
+    const result = await provisionObservabilityProject();
 
     expect(result.projectSlug).toBe('beta');
     expect(result.projectName).toBe('Beta');
@@ -140,7 +140,7 @@ describe('provisionObserveProject', () => {
       'https://platform.test/v1/auth/tokens',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ name: 'mastra observe – Beta' }),
+        body: JSON.stringify({ name: 'mastra observability – Beta' }),
       }),
     );
   });
@@ -159,7 +159,7 @@ describe('provisionObserveProject', () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          token: { id: 'k1', name: 'mastra observe – Gamma' },
+          token: { id: 'k1', name: 'mastra observability – Gamma' },
           secret: 'sk_gamma',
         }),
       );
@@ -167,7 +167,7 @@ describe('provisionObserveProject', () => {
     selectMock.mockResolvedValueOnce('__new__' as never);
     textMock.mockResolvedValueOnce('Gamma' as never);
 
-    const result = await provisionObserveProject();
+    const result = await provisionObservabilityProject();
 
     expect(result.projectSlug).toBe('gamma');
     expect(result.projectId).toBe('p2');
@@ -178,7 +178,7 @@ describe('provisionObserveProject', () => {
   test('throws when the list projects call fails', async () => {
     platformFetchMock.mockResolvedValueOnce(jsonResponse({ error: 'boom' }, { status: 500 }));
 
-    await expect(provisionObserveProject()).rejects.toThrow(/Failed to list projects \(500\)/);
+    await expect(provisionObservabilityProject()).rejects.toThrow(/Failed to list projects \(500\)/);
   });
 
   test('throws when the access token mint fails', async () => {
@@ -192,7 +192,7 @@ describe('provisionObserveProject', () => {
 
     selectMock.mockResolvedValueOnce('p1' as never);
 
-    await expect(provisionObserveProject()).rejects.toThrow(/Failed to create access token \(403\)/);
+    await expect(provisionObservabilityProject()).rejects.toThrow(/Failed to create access token \(403\)/);
   });
 
   test('throws when the user cancels the project picker', async () => {
@@ -204,17 +204,17 @@ describe('provisionObserveProject', () => {
 
     selectMock.mockResolvedValueOnce(Symbol('cancel') as never);
 
-    await expect(provisionObserveProject()).rejects.toThrow(/Cancelled/);
+    await expect(provisionObservabilityProject()).rejects.toThrow(/Cancelled/);
   });
 
   test('propagates errors from getToken (login gate)', async () => {
     getTokenMock.mockRejectedValueOnce(new Error('Not logged in'));
 
-    await expect(provisionObserveProject()).rejects.toThrow(/Not logged in/);
+    await expect(provisionObservabilityProject()).rejects.toThrow(/Not logged in/);
     expect(platformFetchMock).not.toHaveBeenCalled();
   });
 
-  test('observeProject matches an existing project by name and skips the picker', async () => {
+  test('observabilityProject matches an existing project by name and skips the picker', async () => {
     platformFetchMock
       .mockResolvedValueOnce(
         jsonResponse({
@@ -226,12 +226,12 @@ describe('provisionObserveProject', () => {
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          token: { id: 'k1', name: 'mastra observe – Beta' },
+          token: { id: 'k1', name: 'mastra observability – Beta' },
           secret: 'sk_beta',
         }),
       );
 
-    const result = await provisionObserveProject({ observeProject: 'Beta' });
+    const result = await provisionObservabilityProject({ observabilityProject: 'Beta' });
 
     expect(result.projectId).toBe('p2');
     expect(result.token).toBe('sk_beta');
@@ -240,22 +240,24 @@ describe('provisionObserveProject', () => {
     expect(platformFetchMock).toHaveBeenCalledTimes(2);
   });
 
-  test('observeProject matches an existing project by slug', async () => {
+  test('observabilityProject matches an existing project by slug', async () => {
     platformFetchMock
       .mockResolvedValueOnce(
         jsonResponse({
           projects: [{ id: 'p1', slug: 'alpha', name: 'Alpha', organizationId: 'org_test' }],
         }),
       )
-      .mockResolvedValueOnce(jsonResponse({ token: { id: 'k1', name: 'mastra observe – Alpha' }, secret: 'sk_a' }));
+      .mockResolvedValueOnce(
+        jsonResponse({ token: { id: 'k1', name: 'mastra observability – Alpha' }, secret: 'sk_a' }),
+      );
 
-    const result = await provisionObserveProject({ observeProject: 'alpha' });
+    const result = await provisionObservabilityProject({ observabilityProject: 'alpha' });
 
     expect(result.projectId).toBe('p1');
     expect(platformFetchMock).toHaveBeenCalledTimes(2);
   });
 
-  test('observeProject creates a new project when name does not match', async () => {
+  test('observabilityProject creates a new project when name does not match', async () => {
     platformFetchMock
       .mockResolvedValueOnce(
         jsonResponse({
@@ -267,9 +269,11 @@ describe('provisionObserveProject', () => {
           project: { id: 'p9', slug: 'fresh-app', name: 'fresh-app', organizationId: 'org_test' },
         }),
       )
-      .mockResolvedValueOnce(jsonResponse({ token: { id: 'k1', name: 'mastra observe – fresh-app' }, secret: 'sk_f' }));
+      .mockResolvedValueOnce(
+        jsonResponse({ token: { id: 'k1', name: 'mastra observability – fresh-app' }, secret: 'sk_f' }),
+      );
 
-    const result = await provisionObserveProject({ observeProject: 'fresh-app' });
+    const result = await provisionObservabilityProject({ observabilityProject: 'fresh-app' });
 
     expect(result.projectId).toBe('p9');
     expect(result.token).toBe('sk_f');
@@ -293,10 +297,10 @@ describe('provisionObserveProject', () => {
         }),
       )
       .mockResolvedValueOnce(
-        jsonResponse({ token: { id: 'k1', name: 'mastra observe – my-app' }, secret: 'sk_my_app' }),
+        jsonResponse({ token: { id: 'k1', name: 'mastra observability – my-app' }, secret: 'sk_my_app' }),
       );
 
-    const result = await provisionObserveProject({ defaultProjectName: 'my-app', mode: 'create' });
+    const result = await provisionObservabilityProject({ defaultProjectName: 'my-app', mode: 'create' });
 
     expect(result.projectId).toBe('p1');
     expect(result.projectName).toBe('my-app');
@@ -317,7 +321,7 @@ describe('provisionObserveProject', () => {
   });
 
   test('mode "create" throws when defaultProjectName is missing', async () => {
-    await expect(provisionObserveProject({ mode: 'create' })).rejects.toThrow(/defaultProjectName is required/);
+    await expect(provisionObservabilityProject({ mode: 'create' })).rejects.toThrow(/defaultProjectName is required/);
     expect(platformFetchMock).not.toHaveBeenCalled();
   });
 });

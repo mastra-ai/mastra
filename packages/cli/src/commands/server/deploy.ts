@@ -71,7 +71,7 @@ export function parseEnvFile(content: string): Record<string, string> {
 
 /**
  * Loads MASTRA_PROJECT_ID and MASTRA_ORG_ID from the project's .env files
- * into process.env so deploys auto-link to the project that `mastra observe`
+ * into process.env so deploys auto-link to the project that `mastra init --observability`
  * provisioned. Uses dotenv with override: false (the default), so any
  * existing process.env value (e.g. from CI) always wins.
  */
@@ -311,7 +311,7 @@ export async function serverDeployAction(
 ) {
   const targetDir = resolve(dir || process.cwd());
   // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
-  // auto-link to the project that `mastra observe` provisioned.
+  // auto-link to the project that `mastra init --observability` provisioned.
   loadDeployEnvFromDotenv(targetDir);
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   const autoAccept = opts.yes ?? isHeadless;

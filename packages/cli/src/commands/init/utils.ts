@@ -611,16 +611,17 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
 };
 
 /**
- * Append Mastra Observe credentials to the project's `.env` file.
+ * Append Mastra Observability credentials to the project's `.env` file.
  *
  * The generated `src/mastra/index.ts` template already registers a
- * `CloudExporter` which no-ops unless `MASTRA_CLOUD_ACCESS_TOKEN` is set, so
- * enabling Observe is a pure env-var concern from the scaffolder's side.
+ * `MastraPlatformExporter` which no-ops unless `MASTRA_CLOUD_ACCESS_TOKEN` is
+ * set, so enabling Observability is a pure env-var concern from the
+ * scaffolder's side.
  *
  * When called with no token, writes empty placeholders so the user can paste
  * a key minted manually from the dashboard.
  */
-export const writeObserveEnv = async ({
+export const writeObservabilityEnv = async ({
   token,
   projectId,
   endpoint,
@@ -628,16 +629,16 @@ export const writeObserveEnv = async ({
   const envFilePath = path.join(process.cwd(), '.env');
   const lines = [
     '',
-    '# Mastra Observe — https://projects.mastra.ai',
+    '# Mastra Observability — https://projects.mastra.ai',
     '# Access token and project id wired up automatically when you ran',
-    '# `mastra init` / `create-mastra` with Observe enabled.',
+    '# `mastra init` / `create-mastra` with Observability enabled.',
     `MASTRA_CLOUD_ACCESS_TOKEN=${token ?? ''}`,
     `MASTRA_PROJECT_ID=${projectId ?? ''}`,
   ];
   // Only emit the traces endpoint when caller provided one (e.g. local dev or
-  // staging). In production the CloudExporter falls back to its built-in
-  // https://observability.mastra.ai default and per-project URLs are derived
-  // from MASTRA_PROJECT_ID.
+  // staging). In production the MastraPlatformExporter falls back to its
+  // built-in https://observability.mastra.ai default and per-project URLs are
+  // derived from MASTRA_PROJECT_ID.
   if (endpoint) {
     lines.push(`MASTRA_CLOUD_TRACES_ENDPOINT=${endpoint}`);
   }
@@ -696,7 +697,7 @@ interface InteractivePromptArgs {
     gitInit?: boolean;
     skills?: boolean;
     mcpServer?: boolean;
-    observe?: boolean;
+    observability?: boolean;
   };
 }
 
@@ -748,14 +749,14 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         }
         return undefined;
       },
-      observe: async () => {
-        if (skip?.observe) return undefined;
+      observability: async () => {
+        if (skip?.observability) return undefined;
 
         const choice = await p.select({
-          message: 'Enable Mastra Observe? (observability for your agents, workflows, and tools — free tier available)',
+          message: 'Enable Mastra Observability? (will open auth flow)',
           options: [
-            { value: 'yes', label: 'Yes, enable Mastra Observe', hint: 'recommended' },
-            { value: 'no', label: 'No thanks' },
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
           ],
           initialValue: 'yes',
         });

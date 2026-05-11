@@ -9,9 +9,9 @@ vi.mock('node:fs/promises', async () => {
   };
 });
 
-const { writeObserveEnv } = await import('./utils');
+const { writeObservabilityEnv } = await import('./utils');
 
-describe('writeObserveEnv', () => {
+describe('writeObservabilityEnv', () => {
   const cwd = '/mock-project';
 
   beforeEach(() => {
@@ -23,11 +23,11 @@ describe('writeObserveEnv', () => {
   test('appends placeholder MASTRA_CLOUD_ACCESS_TOKEN to .env', async () => {
     fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n');
 
-    await writeObserveEnv();
+    await writeObservabilityEnv();
 
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('EXISTING=1');
-    expect(contents).toContain('# Mastra Observe');
+    expect(contents).toContain('# Mastra Observability');
     expect(contents).toContain('MASTRA_CLOUD_ACCESS_TOKEN=');
     expect(contents).not.toMatch(/MASTRA_CLOUD_ACCESS_TOKEN=\S/);
   });
@@ -35,7 +35,7 @@ describe('writeObserveEnv', () => {
   test('writes a real token and project id when provided', async () => {
     fs.writeFileSync(`${cwd}/.env`, '');
 
-    await writeObserveEnv({ token: 'sk_abc123', projectId: 'proj_xyz' });
+    await writeObservabilityEnv({ token: 'sk_abc123', projectId: 'proj_xyz' });
 
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('MASTRA_CLOUD_ACCESS_TOKEN=sk_abc123');
@@ -47,7 +47,7 @@ describe('writeObserveEnv', () => {
   test('writes the traces endpoint only when provided', async () => {
     fs.writeFileSync(`${cwd}/.env`, '');
 
-    await writeObserveEnv({
+    await writeObservabilityEnv({
       token: 'sk_abc',
       projectId: 'proj_x',
       endpoint: 'http://localhost:8080/projects/proj_x/ai/spans/publish',
@@ -58,7 +58,7 @@ describe('writeObserveEnv', () => {
   });
 
   test('creates the .env file if it does not exist', async () => {
-    await writeObserveEnv();
+    await writeObservabilityEnv();
 
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('MASTRA_CLOUD_ACCESS_TOKEN=');

@@ -3,7 +3,7 @@ import { authHeaders, MASTRA_PLATFORM_API_URL, platformFetch } from '../auth/cli
 import { getToken } from '../auth/credentials.js';
 import { resolveCurrentOrg } from '../auth/orgs.js';
 
-interface ObserveProject {
+interface ObservabilityProject {
   id: string;
   slug: string;
   name: string;
@@ -15,7 +15,7 @@ interface CreateTokenResponse {
   secret: string;
 }
 
-export interface ObserveProvisionResult {
+export interface ObservabilityProvisionResult {
   /** WorkOS organization API key (sk_*) used as MASTRA_CLOUD_ACCESS_TOKEN. */
   token: string;
   /** Platform project id (UUID) used as MASTRA_PROJECT_ID. */
@@ -28,8 +28,8 @@ export interface ObserveProvisionResult {
   orgName: string;
   /**
    * Spans endpoint override. Only set when the platform URL is non-default
-   * (e.g., local dev or staging). When omitted, the CloudExporter falls back
-   * to its built-in `https://observability.mastra.ai` default.
+   * (e.g., local dev or staging). When omitted, the MastraPlatformExporter
+   * falls back to its built-in `https://observability.mastra.ai` default.
    */
   tracesEndpoint?: string;
 }
@@ -37,7 +37,7 @@ export interface ObserveProvisionResult {
 const DEFAULT_PLATFORM_API_URL = 'https://platform.mastra.ai';
 
 /**
- * Walk the user through enabling Mastra Observe for a freshly-scaffolded
+ * Walk the user through enabling Mastra Observability for a freshly-scaffolded
  * project: log in (via the existing browser flow) if needed, pick or create a
  * platform project, mint a fresh org-scoped ingest token, and return what the
  * caller needs to write to `.env`.
@@ -45,9 +45,9 @@ const DEFAULT_PLATFORM_API_URL = 'https://platform.mastra.ai';
  * Defaults the project name to `defaultProjectName` (typically the package
  * name from `package.json`) when creating a new project.
  */
-export async function provisionObserveProject({
+export async function provisionObservabilityProject({
   defaultProjectName,
-  observeProject,
+  observabilityProject,
   mode = 'pick',
 }: {
   defaultProjectName?: string;
@@ -56,7 +56,7 @@ export async function provisionObserveProject({
    * name or slug; if no match, creates a new project with this name. Lets the
    * `create` / `init` commands run fully non-interactively.
    */
-  observeProject?: string;
+  observabilityProject?: string;
   /**
    * `'create'` (used by `create-mastra`) always provisions a new platform
    * project named after the local one — no picker, no extra name prompt.
@@ -64,18 +64,18 @@ export async function provisionObserveProject({
    * attach to an existing project or create a new one.
    */
   mode?: 'create' | 'pick';
-} = {}): Promise<ObserveProvisionResult> {
+} = {}): Promise<ObservabilityProvisionResult> {
   const token = await getToken();
   const { orgId, orgName } = await resolveCurrentOrg(token, { forcePrompt: true });
 
-  let project: ObserveProject;
-  if (observeProject) {
+  let project: ObservabilityProject;
+  if (observabilityProject) {
     const projects = await listProjects(token, orgId);
-    const match = projects.find(proj => proj.name === observeProject || proj.slug === observeProject);
+    const match = projects.find(proj => proj.name === observabilityProject || proj.slug === observabilityProject);
     if (match) {
       project = match;
     } else {
-      project = await createProjectByName({ token, orgId, name: observeProject });
+      project = await createProjectByName({ token, orgId, name: observabilityProject });
     }
   } else if (mode === 'create') {
     // Fresh scaffold: reuse the local project name; no picker, no re-prompt.
@@ -111,10 +111,10 @@ export async function provisionObserveProject({
   const secret = await mintOrgToken({
     token,
     orgId,
-    keyName: `mastra observe – ${project.name}`,
+    keyName: `mastra observability – ${project.name}`,
   });
 
-  const result: ObserveProvisionResult = {
+  const result: ObservabilityProvisionResult = {
     token: secret,
     projectId: project.id,
     projectSlug: project.slug,
@@ -124,7 +124,7 @@ export async function provisionObserveProject({
 
   // Only emit a traces endpoint override when the user is pointed at a
   // non-default platform (local dev / staging). For prod, omit it so the
-  // CloudExporter uses its built-in https://observability.mastra.ai default.
+  // MastraPlatformExporter uses its built-in https://observability.mastra.ai default.
   if (MASTRA_PLATFORM_API_URL !== DEFAULT_PLATFORM_API_URL) {
     result.tracesEndpoint = deriveTracesEndpoint(MASTRA_PLATFORM_API_URL, project.id);
   }
@@ -132,14 +132,14 @@ export async function provisionObserveProject({
   return result;
 }
 
-async function listProjects(token: string, orgId: string): Promise<ObserveProject[]> {
+async function listProjects(token: string, orgId: string): Promise<ObservabilityProject[]> {
   const res = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/projects`, {
     headers: authHeaders(token, orgId),
   });
   if (!res.ok) {
     throw new Error(`Failed to list projects (${res.status})`);
   }
-  const body = (await res.json()) as { projects: ObserveProject[] };
+  const body = (await res.json()) as { projects: ObservabilityProject[] };
   return body.projects;
 }
 
@@ -153,7 +153,7 @@ async function createProject({
   orgId: string;
   defaultName?: string;
   orgName: string;
-}): Promise<ObserveProject> {
+}): Promise<ObservabilityProject> {
   const name = await p.text({
     message: `New project name (in ${orgName})`,
     placeholder: defaultName ?? 'my-mastra-app',
@@ -176,8 +176,8 @@ async function createProjectByName({
   token: string;
   orgId: string;
   name: string;
-}): Promise<ObserveProject> {
-  // Create as observe-only: no Studio or Server runtime attached. The first
+}): Promise<ObservabilityProject> {
+  // Create as observability-only: no Studio or Server runtime attached. The first
   // `mastra studio deploy` / `mastra server deploy` flips the matching flag
   // on the platform side.
   const res = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/projects`, {
@@ -188,7 +188,7 @@ async function createProjectByName({
   if (!res.ok) {
     throw new Error(`Failed to create project (${res.status})`);
   }
-  const body = (await res.json()) as { project: ObserveProject };
+  const body = (await res.json()) as { project: ObservabilityProject };
   return body.project;
 }
 
@@ -216,8 +216,8 @@ async function mintOrgToken({
 /**
  * Derive a per-project spans endpoint matching the mobs-collector route
  * `POST /projects/:projectId/ai/spans/publish`. Only used when a non-default
- * platform URL is in play; production usage relies on the CloudExporter's
- * own default base.
+ * platform URL is in play; production usage relies on the
+ * MastraPlatformExporter's own default base.
  */
 function deriveTracesEndpoint(platformUrl: string, projectId: string): string {
   // Strip a trailing /v1 (or any other path) — we want the host root.
