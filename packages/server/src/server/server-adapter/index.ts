@@ -15,6 +15,10 @@ import {
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
 } from '../constants';
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
@@ -24,6 +28,13 @@ import type { ServerRoute } from './routes';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_STUDIO_CLIENT_TYPE,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
+} from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
@@ -356,17 +367,29 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const requestContext = new RequestContext();
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
-        if (MastraServer.RESERVED_CONTEXT_KEYS.has(key)) continue;
+        if (isReservedRequestContextKey(key)) continue;
         requestContext.set(key, value);
       }
     }
     if (paramsRequestContext) {
       for (const [key, value] of Object.entries(paramsRequestContext)) {
-        if (MastraServer.RESERVED_CONTEXT_KEYS.has(key)) continue;
+        if (isReservedRequestContextKey(key)) continue;
         requestContext.set(key, value);
       }
     }
     return requestContext;
+  }
+
+  protected applyRequestMetadataToContext({
+    requestContext,
+    getHeader,
+  }: {
+    requestContext: RequestContext;
+    getHeader: (name: string) => string | undefined;
+  }): void {
+    if (isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER))) {
+      requestContext.set(MASTRA_IS_STUDIO_KEY, true);
+    }
   }
 
   /**
