@@ -35,6 +35,7 @@ export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
 export * from './ds/components/Input';
+export * from './ds/components/InputGroup';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';
 export * from './ds/components/MarkdownRenderer';

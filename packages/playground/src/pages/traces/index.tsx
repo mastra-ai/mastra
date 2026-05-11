@@ -2,7 +2,6 @@ import { EntityType } from '@mastra/core/observability';
 import {
   ButtonWithTooltip,
   DateTimeRangePicker,
-  ListSearch,
   NoTracesInfo,
   PageHeader,
   PageLayout,
@@ -51,7 +50,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
   const [groupByThread, setGroupByThread] = useState<boolean>(false);
-  const [search, setSearch] = useState<string>('');
   const url = useTraceUrlState(searchParams, setSearchParams, {
     onRemoveAll: () => setGroupByThread(false),
   });
@@ -179,20 +177,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
   const threadTitles = tracesData?.threadTitles ?? {};
 
-  const filteredTraces = useMemo(() => {
-    if (!search) return traces;
-    const q = search.toLowerCase();
-    return traces.filter(t => {
-      const parts: unknown[] = [t.input, t.output, t.error, t.name];
-      for (const part of parts) {
-        if (part == null) continue;
-        const str = typeof part === 'string' ? part : JSON.stringify(part);
-        if (str.toLowerCase().includes(q)) return true;
-      }
-      return false;
-    });
-  }, [traces, search]);
-
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),
   );
@@ -207,7 +191,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
 
   const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(
-    filteredTraces,
+    traces,
     url.traceIdParam,
     url.handleTraceClick,
   );
@@ -229,14 +213,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const toolbarControls = (
     <>
-      <div className="w-64">
-        <ListSearch
-          onSearch={setSearch}
-          label="Search traces"
-          placeholder="Search input, output or error..."
-          debounceMs={300}
-        />
-      </div>
       <DateTimeRangePicker
         preset={url.datePreset}
         onPresetChange={url.handleDatePresetChange}
@@ -345,12 +321,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         traceCollapsed={traceCollapsed}
         listSlot={
           <TracesListView
-            traces={filteredTraces}
+            traces={traces}
             isLoading={isTracesLoading}
             isFetchingNextPage={isFetchingNextPage}
             hasNextPage={hasNextPage}
             setEndOfListElement={setEndOfListElement}
-            filtersApplied={filtersApplied || !!search}
+            filtersApplied={filtersApplied}
             featuredTraceId={url.traceIdParam}
             onTraceClick={trace => url.handleTraceClick(url.traceIdParam === trace.traceId ? '' : trace.traceId)}
             groupByThread={groupByThread}
