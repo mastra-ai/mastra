@@ -1,5 +1,4 @@
 import { cva } from 'class-variance-authority';
-import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { formElementSizes } from '@/ds/primitives/form-element';
@@ -56,12 +55,15 @@ const buttonsGroupVariants = cva(
   },
 );
 
-export type ButtonsGroupProps = React.ComponentPropsWithoutRef<'div'> & VariantProps<typeof buttonsGroupVariants>;
+export type ButtonsGroupProps = React.ComponentPropsWithoutRef<'div'> & {
+  orientation?: Orientation;
+  spacing?: 'default' | 'close';
+};
 
 export const ButtonsGroup = React.forwardRef<HTMLDivElement, ButtonsGroupProps>(
   ({ children, className, orientation = 'horizontal', spacing = 'default', ...props }, ref) => {
     return (
-      <ButtonsGroupOrientationContext.Provider value={orientation ?? 'horizontal'}>
+      <ButtonsGroupOrientationContext.Provider value={orientation}>
         <div
           ref={ref}
           role="group"
