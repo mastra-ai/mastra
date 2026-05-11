@@ -45,29 +45,30 @@ async function runVerify(args: VerifyArgs): Promise<void> {
     p.intro('mastra verify');
   }
 
-  if (!args.skipBuild) {
-    await runBuild(projectDir, { debug: args.debug });
-  }
-
   // Match deploy's env-file resolution. In JSON mode, never prompt — require
   // an explicit --env-file when multiple candidates exist.
-  let envVars: Record<string, string>;
+  let issues: PreflightIssue[];
   try {
-    envVars = await readEnvVars(projectDir, {
+    if (!args.skipBuild) {
+      await runBuild(projectDir, { debug: args.debug });
+    }
+
+    const envVars = await readEnvVars(projectDir, {
       envFile: args.envFile,
       autoAccept: json,
     });
+
+    issues = await preflightBuildOutput(projectDir, envVars);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (json) {
-      process.stdout.write(JSON.stringify({ ok: false, error: message, issues: [] }, null, 2) + '\n');
+      emitJson([], { strict: args.strict ?? false, error: message });
     } else {
       p.log.error(message);
+      process.exit(1);
     }
-    process.exit(1);
+    return;
   }
-
-  const issues = await preflightBuildOutput(projectDir, envVars);
 
   if (json) {
     emitJson(issues, { strict: args.strict ?? false });
@@ -103,10 +104,10 @@ async function runVerify(args: VerifyArgs): Promise<void> {
   p.outro(pc.yellow(`✓ Verify passed with ${warnings.length} warning(s)`));
 }
 
-function emitJson(issues: PreflightIssue[], opts: { strict: boolean }): void {
+function emitJson(issues: PreflightIssue[], opts: { strict: boolean; error?: string }): void {
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
-  const blocked = errors.length > 0 || (opts.strict && warnings.length > 0);
+  const blocked = opts.error !== undefined || errors.length > 0 || (opts.strict && warnings.length > 0);
 
   process.stdout.write(
     JSON.stringify(
@@ -116,6 +117,7 @@ function emitJson(issues: PreflightIssue[], opts: { strict: boolean }): void {
         errorCount: errors.length,
         warningCount: warnings.length,
         issues,
+        ...(opts.error !== undefined ? { error: opts.error } : {}),
       },
       null,
       2,

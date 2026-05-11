@@ -130,7 +130,13 @@ describe('verifyProject', () => {
     const jsonOutput = calls.find(c => c.trim().startsWith('{'));
     expect(jsonOutput).toBeDefined();
     const parsed = JSON.parse(jsonOutput!);
-    expect(parsed.ok).toBe(false);
+    expect(parsed).toMatchObject({
+      ok: false,
+      strict: false,
+      errorCount: 0,
+      warningCount: 0,
+      issues: [],
+    });
     expect(parsed.error).toMatch(/env file/i);
   });
 });
