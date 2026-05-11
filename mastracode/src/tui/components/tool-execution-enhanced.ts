@@ -4,7 +4,7 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text, renderImage, getImageDimensions, imageFallback, getCapabilities } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, renderImage, getImageDimensions, imageFallback, getCapabilities, getCellDimensions } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
@@ -1537,14 +1537,18 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         continue;
       }
 
-      // Cap to ~200px tall (~12 rows) and half the available width
-      // to keep screenshots compact and avoid distortion
-      const maxW = Math.min(maxWidthCells, Math.floor(termWidth / 2));
-      const maxH = 12;
+      // renderImage ignores maxHeightCells, so we constrain the width
+      // to ensure the image won't exceed our desired max row count.
+      const maxRows = 8;
+      const cellDims = getCellDimensions();
+      // Work backwards: what width (in cells) would produce maxRows?
+      const maxHeightPx = maxRows * cellDims.heightPx;
+      const scale = maxHeightPx / dims.heightPx;
+      const widthForMaxHeight = Math.floor((dims.widthPx * scale) / cellDims.widthPx);
+      const maxW = Math.min(maxWidthCells, Math.floor(termWidth / 2), widthForMaxHeight);
 
       const rendered = renderImage(img.data, dims, {
         maxWidthCells: maxW,
-        maxHeightCells: maxH,
         preserveAspectRatio: true,
       });
       if (rendered) {
