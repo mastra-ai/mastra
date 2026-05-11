@@ -1,5 +1,20 @@
 # mastracode
 
+## 0.18.0-alpha.12
+
+### Patch Changes
+
+- Updated the generated project template and runtime bootstrap to use `MastraStorageExporter` and `MastraPlatformExporter` from `@mastra/observability`. ([#16223](https://github.com/mastra-ai/mastra/pull/16223))
+
+- dependencies updates: ([#16398](https://github.com/mastra-ai/mastra/pull/16398))
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.76` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.76) (from `^3.0.74`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.63` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.63) (from `^3.0.58`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-compatible@^2.0.47` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-compatible/v/2.0.47) (from `^2.0.45`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.176` ↗︎](https://www.npmjs.com/package/ai/v/6.0.176) (from `^6.0.174`, in `dependencies`)
+- Updated dependencies [[`7ad5585`](https://github.com/mastra-ai/mastra/commit/7ad55856406f1de398dc713f6a9eaa78b2784bb6), [`210ea7a`](https://github.com/mastra-ai/mastra/commit/210ea7af559791b73a44fc9c12179908aaa3183f), [`83218c8`](https://github.com/mastra-ai/mastra/commit/83218c88b37773c9424fbe733b37be556e55e94d), [`265ec9f`](https://github.com/mastra-ai/mastra/commit/265ec9f887b5c81255c873a76ff7796f16e4f99b), [`6ce80bf`](https://github.com/mastra-ai/mastra/commit/6ce80bf4872a891e0bddf8b80561a80584efb14b), [`9268531`](https://github.com/mastra-ai/mastra/commit/9268531e7ec4be98beeba3b3ae8be0a7ea380662), [`13ead79`](https://github.com/mastra-ai/mastra/commit/13ead79149486b88144db7e11e6ff551caef5be1), [`50f5884`](https://github.com/mastra-ai/mastra/commit/50f5884b412dc05924a4c306c05eef7fb95a4aa1), [`bd36d8e`](https://github.com/mastra-ai/mastra/commit/bd36d8eb6de8c9a0310352649dbd4b06703c2299), [`8ac9141`](https://github.com/mastra-ai/mastra/commit/8ac9141439caa8fdd674944c4d84f29b3c730296)]:
+  - @mastra/core@1.33.0-alpha.10
+  - @mastra/observability@1.12.0-alpha.3
+
 ## 0.18.0-alpha.11
 
 ### Patch Changes
