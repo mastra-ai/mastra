@@ -1,4 +1,4 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { LanguageModelV2ToolResultOutput, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
@@ -17,18 +17,6 @@ import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 /**
- * The return type of `toModelOutput()` as defined by `@ai-sdk/provider`
- * (`LanguageModelV2ToolResultOutput`). This is a discriminated union on `type` —
- * only the `content` variant can contain `type: 'media'` parts that need normalizing.
- */
-type ModelOutput =
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown }
-  | { type: 'error-text'; value: string }
-  | { type: 'error-json'; value: unknown }
-  | { type: 'content'; value: Array<{ type: string; [key: string]: unknown }> };
-
-/**
  * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts are
  * converted to `type: 'image-data'` or `type: 'file-data'` as the AI SDK
  * provider layer expects. AI SDK performs this same normalization internally in
@@ -38,7 +26,7 @@ type ModelOutput =
 function normalizeModelOutput(output: unknown): unknown {
   if (output == null || typeof output !== 'object') return output;
 
-  const typed = output as ModelOutput;
+  const typed = output as LanguageModelV2ToolResultOutput;
   if (typed.type !== 'content' || !Array.isArray(typed.value)) return output;
 
   return {
@@ -46,9 +34,9 @@ function normalizeModelOutput(output: unknown): unknown {
     value: typed.value.map(item => {
       if (item.type !== 'media') return item;
       if (typeof item.mediaType === 'string' && item.mediaType.startsWith('image/')) {
-        return { type: 'image-data', data: item.data, mediaType: item.mediaType };
+        return { type: 'image-data' as const, data: item.data, mediaType: item.mediaType };
       }
-      return { type: 'file-data', data: item.data, mediaType: item.mediaType };
+      return { type: 'file-data' as const, data: item.data, mediaType: item.mediaType };
     }),
   };
 }
