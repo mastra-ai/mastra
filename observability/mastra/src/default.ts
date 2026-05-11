@@ -10,6 +10,7 @@ import type {
   FeedbackInput,
   FeedbackEvent,
   ObservabilityEntrypoint,
+  ObservabilityDropEvent,
   ObservabilityInstance,
   RecordedTrace,
   ScoreInput,
@@ -208,11 +209,15 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
       const config = instance.getConfig();
       const exporters = instance.getExporters();
+      const emitDropEvent =
+        instance instanceof BaseObservabilityInstance
+          ? (event: ObservabilityDropEvent) => instance.getObservabilityBus().emitDropEvent(event)
+          : undefined;
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init({ mastra, config });
+            exporter.init({ mastra, config, emitDropEvent });
           } catch (error) {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,

@@ -160,6 +160,27 @@ new LangfuseExporter({
 })
 ```
 
+## Scoping evaluators per agent
+
+Langfuse evaluators (such as LLM-as-a-Judge) can be filtered to run only against specific traces. The Mastra Langfuse exporter automatically scopes each trace to the agent or workflow that started it, so trace-level filters resolve to the right runs.
+
+For every trace whose root span is an `AGENT_RUN`, the exporter sets:
+
+- `langfuse.trace.name`: the agent name (or id, when no name is set)
+- `langfuse.trace.metadata.agentId`: the agent id
+- `langfuse.trace.metadata.agentName`: the agent name
+
+The same applies to `WORKFLOW_RUN` root spans, which set `langfuse.trace.metadata.workflowId` and `langfuse.trace.metadata.workflowName`.
+
+To scope an evaluator to a specific agent, configure either filter in Langfuse:
+
+- **Trace name**: equals the agent name (for example, `weather-agent`).
+- **Metadata**: `agentId` equals the agent id.
+
+The trace name dropdown in Langfuse evaluator filters lists every distinct value seen, so each agent appears as its own entry once it has produced at least one trace.
+
+If you set a custom `traceName` via `mastra.metadata.traceName`, your value takes precedence over the default agent name.
+
 ## Prompt linking
 
 You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). This enables version tracking and metrics for your prompts.
