@@ -155,6 +155,20 @@ Preflight is **detect-only**. It never edits `.env`, never sources rc files, nev
 - **Existing `.env`** — never edit without the user's say-so. Targeted edits are allowed only when the user explicitly says "go ahead, comment that line out" or "yes, set those four vars to these values." Never write secrets into an existing `.env` without the user dictating them.
 - **Missing `.env`** — if `examples/agent/.env` doesn't exist at all, you may create it with the minimum required vars (`OPENAI_API_KEY`, plus auth vars for `--expect on`). Still ask the user to dictate the actual values; don't invent or guess them.
 
+### Sourcing the user's rc file
+
+If `OPENAI_API_KEY` is missing from `.env` but might be in the user's shell rc (very common — keys live in `~/.zshrc` for many developers), you have **standing permission** to try sourcing it once per session, no prompt needed. Two important details:
+
+1. **Use the right shell.** `execute_command` runs `bash` by default, but most macOS developers use `zsh` and their rc files have zsh-only syntax (`autoload`, `compdef`, etc.). Sourcing `~/.zshrc` from bash will spit out dozens of syntax errors and fail. Always wrap in `zsh -c`:
+
+   ```bash
+   zsh -c 'source ~/.zshrc 2>/dev/null && echo "OPENAI_API_KEY=${OPENAI_API_KEY:-(unset)}"'
+   ```
+
+2. **This only helps `OPENAI_API_KEY`.** `mastra dev` overwrites `process.env` from `.env` for any key present there — so for auth vars (`AUTH_PROVIDER`, `WORKOS_*`), sourcing the rc is useless. But `OPENAI_API_KEY` is the one var the skill allows to live in either place; if `.env` has no `OPENAI_API_KEY=` line at all, the shell value survives into the server.
+
+If sourcing surfaces the key, start `mastra dev` from the same zsh session (or `zsh -c 'cd examples/agent && pnpm mastra:dev'`) so the value reaches the server. If sourcing doesn't surface it, fall back to asking the user.
+
 When the user has fixed the issue (either themselves or via your edit), they'll tell you it's good. Restart `mastra dev` if you edited `.env` — the env file is only read at boot — then re-run preflight.
 
 ## Starting the dev server
