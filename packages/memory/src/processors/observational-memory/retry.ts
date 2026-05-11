@@ -5,11 +5,17 @@ import { omDebug } from './debug';
  * Exported as a mutable object so tests can shrink the backoff schedule
  * without changing public API.
  *
+ * With the defaults the per-retry pre-jitter backoff schedule is:
+ *   1s, 2s, 4s, 8s, 16s, 32s, 64s, 120s (cap)
+ * giving 8 retries / 9 total attempts and ~247s (~4 minutes) of waiting
+ * before the final attempt fails. Designed to ride out short provider /
+ * network blips without holding the actor turn for much longer than that.
+ *
  * @internal
  */
 export const RETRY_CONFIG = {
-  /** Maximum number of retry *attempts* (i.e. total tries = maxRetries + 1). */
-  maxRetries: 6,
+  /** Maximum number of retry *attempts* (total tries = maxRetries + 1). */
+  maxRetries: 8,
   /** Initial backoff delay in milliseconds. */
   initialDelayMs: 1_000,
   /** Multiplier applied to the delay after each failed attempt. */
@@ -107,7 +113,16 @@ export function isTransientLLMError(error: unknown): boolean {
   return visit(error);
 }
 
-function computeDelay(attempt: number): number {
+/**
+ * Compute the backoff delay (ms) for the Nth retry (0-indexed).
+ *
+ * Exponential growth (`initialDelayMs * backoffFactor^attempt`) capped at
+ * `maxDelayMs`, then nudged by ±`jitter` (fractional). Exported for unit
+ * tests that lock the schedule against drift.
+ *
+ * @internal
+ */
+export function computeDelay(attempt: number): number {
   const base = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffFactor, attempt);
   const capped = Math.min(base, RETRY_CONFIG.maxDelayMs);
   if (RETRY_CONFIG.jitter <= 0) return capped;

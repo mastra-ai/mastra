@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isTransientLLMError, RETRY_CONFIG, withRetry } from '../retry';
+import { computeDelay, isTransientLLMError, RETRY_CONFIG, withRetry } from '../retry';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -83,6 +83,49 @@ describe('isTransientLLMError', () => {
     b.cause = a;
     // Should not stack-overflow; both messages are non-transient.
     expect(isTransientLLMError(a)).toBe(false);
+  });
+});
+
+describe('default retry schedule', () => {
+  // Tyler review (#16454): lock the schedule so the stated "few-minute" budget
+  // doesn't silently regress.
+
+  const defaults = {
+    maxRetries: 8,
+    initialDelayMs: 1_000,
+    backoffFactor: 2,
+    maxDelayMs: 120_000,
+  };
+
+  it('has the expected default config', () => {
+    expect(RETRY_CONFIG.maxRetries).toBe(defaults.maxRetries);
+    expect(RETRY_CONFIG.initialDelayMs).toBe(defaults.initialDelayMs);
+    expect(RETRY_CONFIG.backoffFactor).toBe(defaults.backoffFactor);
+    expect(RETRY_CONFIG.maxDelayMs).toBe(defaults.maxDelayMs);
+  });
+
+  it('produces the expected pre-jitter schedule and total budget', () => {
+    const originalJitter = RETRY_CONFIG.jitter;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      const expectedSchedule = [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 120_000];
+      const actualSchedule: number[] = [];
+      for (let attempt = 0; attempt < RETRY_CONFIG.maxRetries; attempt++) {
+        actualSchedule.push(computeDelay(attempt));
+      }
+      expect(actualSchedule).toEqual(expectedSchedule);
+
+      // Final retry delay must hit the configured cap.
+      expect(actualSchedule[actualSchedule.length - 1]).toBe(RETRY_CONFIG.maxDelayMs);
+
+      // ~247s total — i.e. the "few-minute" budget actually reaches minutes-scale.
+      const totalBudgetMs = actualSchedule.reduce((a, b) => a + b, 0);
+      expect(totalBudgetMs).toBe(247_000);
+      expect(totalBudgetMs).toBeGreaterThanOrEqual(3 * 60_000);
+      expect(totalBudgetMs).toBeLessThanOrEqual(8 * 60_000);
+    } finally {
+      RETRY_CONFIG.jitter = originalJitter;
+    }
   });
 });
 
