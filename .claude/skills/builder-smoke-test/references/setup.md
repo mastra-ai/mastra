@@ -126,20 +126,16 @@ echo "WORKSPACE_ID=$WORKSPACE_ID"
 curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 ```
 
-**Verify on the detail GET:**
+**Verify:**
 
 - [ ] Workspace exists in DB (not 404)
 - [ ] `metadata.source` is `"builder"`
 - [ ] `filesystem.provider` and `filesystem.config.basePath` are present
-- [ ] Detail GET also returns `filesystem.config.contained: true`, a `sandbox` block (e.g. `{ provider: "daytona", config: {} }`), and a `resolvedVersionId` UUID — these are informational, not assertions, but worth recording.
-
-> Ignore the `status` field. It's a versioning column (`'draft' | 'published' | 'archived'`) the resolver uses to pick which version to hydrate; nothing in the current Builder surface writes to it from a route, and a freshly-registered builder workspace stays `draft` indefinitely. Asserting on it tells you nothing about runtime health.
-
-> `runtimeRegistered` is **list-only**: it appears on entries of `GET /stored/workspaces` but is **not** included on the detail response above. Verify it via the list:
-> ```bash
-> curl -s $BASE/stored/workspaces | jq '.workspaces[] | select(.id == "'"$WORKSPACE_ID"'") | .runtimeRegistered'
-> # → true
-> ```
+- [ ] `runtimeRegistered: true` — only on the list response, **not** the detail GET above:
+  ```bash
+  curl -s $BASE/stored/workspaces | jq '.workspaces[] | select(.id == "'"$WORKSPACE_ID"'") | .runtimeRegistered'
+  # → true
+  ```
 
 If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't run — check that the `Workspace` instance is registered in the Mastra constructor in `examples/agent/src/mastra/index.ts`.
 
