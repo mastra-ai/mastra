@@ -520,6 +520,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     resolveBuilder: async () => ({
       enabled: true,
       getFeatures: () => ({ agent: { stars: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
     }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),

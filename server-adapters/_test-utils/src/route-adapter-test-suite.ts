@@ -96,6 +96,14 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // getPermissionsForRole. Per-status behavior is covered in
       // packages/server/src/server/handlers/auth.test.ts.
       '/auth/roles/:roleId/permissions',
+      // Star routes hard-require an authenticated caller (handler returns 401 when
+      // MASTRA_USER_KEY / MASTRA_RESOURCE_ID_KEY is absent). Both keys are reserved
+      // request-context keys only the auth middleware can set; the harness runs
+      // without auth. Per-status behavior is covered in
+      // packages/server/src/server/handlers/stars.test.ts and
+      // packages/server/src/server/handlers/stars.integration.test.ts.
+      '/stored/agents/:storedAgentId/star',
+      '/stored/skills/:storedSkillId/star',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
