@@ -90,6 +90,47 @@ describe('InworldVoice', () => {
       const voice = new InworldVoice({ speechModel: { apiKey: 'test-key' }, speaker: 'Olivia' });
       expect(voice.speaker).toBe('Olivia');
     });
+
+    it('uses speechModel.apiKey for TTS and listeningModel.apiKey for STT independently', async () => {
+      const voice = new InworldVoice({
+        speechModel: { apiKey: 'speech-key' },
+        listeningModel: { apiKey: 'listen-key' },
+      });
+
+      const audioBase64 = Buffer.from('audio').toString('base64');
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(createNdjsonBody([audioBase64]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ transcription: { transcript: 'ok' } }), { status: 200 }));
+
+      await streamToBuffer(await voice.speak('hi'));
+      await voice.listen(Readable.from(Buffer.from('audio')));
+
+      const speakAuth = (fetchSpy.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+      const listenAuth = (fetchSpy.mock.calls[1]![1] as RequestInit).headers as Record<string, string>;
+
+      expect(speakAuth.Authorization).toBe('Basic speech-key');
+      expect(listenAuth.Authorization).toBe('Basic listen-key');
+    });
+
+    it('reuses a single configured key for both services when only one is provided', async () => {
+      const voice = new InworldVoice({ speechModel: { apiKey: 'only-key' } });
+
+      const audioBase64 = Buffer.from('audio').toString('base64');
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(createNdjsonBody([audioBase64]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ transcription: { transcript: 'ok' } }), { status: 200 }));
+
+      await streamToBuffer(await voice.speak('hi'));
+      await voice.listen(Readable.from(Buffer.from('audio')));
+
+      const speakAuth = (fetchSpy.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+      const listenAuth = (fetchSpy.mock.calls[1]![1] as RequestInit).headers as Record<string, string>;
+
+      expect(speakAuth.Authorization).toBe('Basic only-key');
+      expect(listenAuth.Authorization).toBe('Basic only-key');
+    });
   });
 
   describe('getSpeakers', () => {

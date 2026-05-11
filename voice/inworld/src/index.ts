@@ -53,7 +53,8 @@ export type {
 };
 
 export class InworldVoice extends MastraVoice {
-  private apiKey: string;
+  private speechApiKey: string;
+  private listeningApiKey: string;
   private audioEncoding: AudioEncoding;
   private sampleRateHertz: number;
   private language: string;
@@ -86,9 +87,15 @@ export class InworldVoice extends MastraVoice {
     sampleRateHertz?: number;
     language?: string;
   } = {}) {
-    const apiKey = speechModel?.apiKey ?? listeningModel?.apiKey ?? process.env.INWORLD_API_KEY;
+    // Resolve TTS and STT keys independently so callers can scope credentials
+    // per service. If only one model is configured with a key, it is reused as
+    // the fallback for the other (preserving the "one key works everywhere"
+    // ergonomic). The INWORLD_API_KEY env var is the final fallback.
+    const envKey = process.env.INWORLD_API_KEY;
+    const speechApiKey = speechModel?.apiKey ?? listeningModel?.apiKey ?? envKey;
+    const listeningApiKey = listeningModel?.apiKey ?? speechModel?.apiKey ?? envKey;
 
-    if (!apiKey) {
+    if (!speechApiKey || !listeningApiKey) {
       throw new Error(
         'Inworld API key is required. Pass apiKey in speechModel/listeningModel config or set INWORLD_API_KEY env var.',
       );
@@ -97,16 +104,17 @@ export class InworldVoice extends MastraVoice {
     super({
       speechModel: {
         name: speechModel?.name ?? 'inworld-tts-2',
-        apiKey,
+        apiKey: speechApiKey,
       },
       listeningModel: {
         name: listeningModel?.name ?? 'groq/whisper-large-v3',
-        apiKey,
+        apiKey: listeningApiKey,
       },
       speaker: speaker ?? 'Dennis',
     });
 
-    this.apiKey = apiKey;
+    this.speechApiKey = speechApiKey;
+    this.listeningApiKey = listeningApiKey;
     this.audioEncoding = audioEncoding ?? 'MP3';
     this.sampleRateHertz = sampleRateHertz ?? 48000;
     this.language = language ?? 'en-US';
@@ -119,7 +127,7 @@ export class InworldVoice extends MastraVoice {
    */
   async getSpeakers() {
     const response = await fetch(`${INWORLD_API_BASE}/voices/v1/voices`, {
-      headers: { Authorization: `Basic ${this.apiKey}` },
+      headers: { Authorization: `Basic ${this.speechApiKey}` },
     });
 
     if (!response.ok) {
@@ -201,7 +209,7 @@ export class InworldVoice extends MastraVoice {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${this.apiKey}`,
+        Authorization: `Basic ${this.speechApiKey}`,
       },
       body: JSON.stringify(body),
     });
@@ -324,7 +332,7 @@ export class InworldVoice extends MastraVoice {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${this.apiKey}`,
+        Authorization: `Basic ${this.listeningApiKey}`,
       },
       body: JSON.stringify(body),
     });
