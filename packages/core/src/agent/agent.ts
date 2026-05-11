@@ -685,8 +685,10 @@ export class Agent<
 
   /**
    * Gets an AdaptiveModelRouter processor when the agent has model fallbacks
-   * and `adaptiveFallbacks` is enabled. This makes model fallbacks "smart" —
-   * the router tracks error rates per model and skips models in cooldown.
+   * (array of 2+ enabled models). This is created automatically — no extra
+   * config is needed. The router tracks error rates per model and skips
+   * models in cooldown, making fallbacks "smart" instead of always trying
+   * each model in order.
    * @internal
    */
   private getAdaptiveModelRouterProcessor(
@@ -694,10 +696,6 @@ export class Agent<
   ): AdaptiveModelRouter[] {
     // Only applies when the agent has model fallbacks (array of models)
     if (!Array.isArray(this.model)) return [];
-
-    // Check if adaptiveFallbacks is enabled
-    const adaptiveConfig = this.#config.adaptiveFallbacks;
-    if (!adaptiveConfig) return [];
 
     // Check for existing AdaptiveModelRouter in configured processors to avoid duplicates
     const hasRouter = configuredProcessors.some(
@@ -713,7 +711,6 @@ export class Agent<
     // DynamicArgument fields (model, modelSettings, etc.) may be functions — use the
     // model `id` string as the FallbackModel when the model itself is a function, and
     // skip function-typed settings since they need request context to resolve.
-    const options = typeof adaptiveConfig === 'object' ? adaptiveConfig : undefined;
     const router = AdaptiveModelRouter.fromModelFallbacks(
       fallbacks.map(f => ({
         id: f.id,
@@ -723,7 +720,6 @@ export class Agent<
         providerOptions: typeof f.providerOptions === 'function' ? undefined : f.providerOptions,
         headers: typeof f.headers === 'function' ? undefined : f.headers,
       })),
-      options,
     );
 
     // Register mastra instance if available so the router gets access to storage/cache

@@ -952,6 +952,12 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
    * This provides backwards compatibility with the existing model fallback
    * behavior — even without observability data, the router can react to
    * real-time failures and route to healthy models.
+   *
+   * NOTE: processAPIError currently fires for ALL caught errors in the LLM
+   * execution step (both API rejections like 400/422 AND network/HTTP errors
+   * like 429/500/timeouts). If a `processRequestError` hook is added in the
+   * future to separate network errors from API rejections, this router should
+   * implement that hook as well.
    */
   async processAPIError(
     args: ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata>,
@@ -989,15 +995,6 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     return { retry: true };
   }
 
-  /**
-   * Post-response monitoring: after a successful LLM response, check for soft
-   * failures (e.g., error finish reason, empty responses) and open the circuit
-   * so future requests route away from a degraded model.
-   *
-   * Unlike processAPIError, this does NOT trigger a retry for the current
-   * request (the response was already returned). Instead it proactively
-   * protects subsequent requests.
-   */
   /**
    * Post-response monitoring: after a successful LLM response, check for soft
    * failures (e.g., error finish reason, empty responses) and open the circuit
