@@ -13,8 +13,8 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
-import type { DynamicArgument } from '../types';
 import type { ToolPayloadTransformPolicy } from '../tools';
+import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {

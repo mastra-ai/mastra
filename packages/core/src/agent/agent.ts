@@ -3956,8 +3956,11 @@ export class Agent<
                 }
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
-              } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
-                if (!resolvedAgent.generateLegacy) {
+              } else if (
+                (methodType === 'generate' || methodType === 'generateLegacy') &&
+                resolvedModelVersion === 'v1'
+              ) {
+                if (typeof resolvedAgent.generateLegacy !== 'function') {
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement generateLegacy`);
                 }
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
@@ -4118,7 +4121,7 @@ export class Agent<
                   subAgentToolResults,
                 };
               } else {
-                if (!resolvedAgent.streamLegacy) {
+                if (typeof resolvedAgent.streamLegacy !== 'function') {
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
                 }
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {

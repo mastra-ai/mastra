@@ -715,14 +715,14 @@ export async function getAgentFromSystem({
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
   requestContext?: RequestContext;
-}) {
+}): Promise<Agent> {
   const logger = mastra.getLogger();
 
   if (!agentId) {
     throw new HTTPException(400, { message: 'Agent ID is required' });
   }
 
-  let agent;
+  let agent: Agent | null | undefined;
 
   try {
     agent = mastra.getAgentById(agentId);
@@ -738,8 +738,9 @@ export async function getAgentFromSystem({
         try {
           const subAgents = await ag.listAgents();
 
-          if (subAgents[agentId]) {
-            agent = subAgents[agentId];
+          const subAgent = subAgents[agentId];
+          if (subAgent instanceof Agent) {
+            agent = subAgent;
             break;
           }
         } catch (error) {
