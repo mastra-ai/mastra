@@ -1,4 +1,4 @@
-import type { LanguageModelV2ToolResultOutput, ToolSet } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
@@ -26,17 +26,17 @@ import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 function normalizeModelOutput(output: unknown): unknown {
   if (output == null || typeof output !== 'object') return output;
 
-  const typed = output as LanguageModelV2ToolResultOutput;
-  if (typed.type !== 'content' || !Array.isArray(typed.value)) return output;
+  const obj = output as Record<string, unknown>;
+  if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
 
   return {
-    ...typed,
-    value: typed.value.map(item => {
+    ...obj,
+    value: (obj.value as Array<Record<string, unknown>>).map(item => {
       if (item.type !== 'media') return item;
       if (typeof item.mediaType === 'string' && item.mediaType.startsWith('image/')) {
-        return { type: 'image-data' as const, data: item.data, mediaType: item.mediaType };
+        return { type: 'image-data', data: item.data, mediaType: item.mediaType };
       }
-      return { type: 'file-data' as const, data: item.data, mediaType: item.mediaType };
+      return { type: 'file-data', data: item.data, mediaType: item.mediaType };
     }),
   };
 }
