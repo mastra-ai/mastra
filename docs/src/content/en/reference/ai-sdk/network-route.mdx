@@ -12,13 +12,15 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 :::warning[Deprecated]
 
-Agent networks are deprecated and will be removed in a future release. Use the [supervisor pattern](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
+Agent networks are deprecated and will be removed in a future release. Use [supervisor agents](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
 
 :::
 
 Creates a network route handler for streaming network execution using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts messages, executes an agent network, and streams the response back to the client in AI SDK-compatible format. Agent networks allow a routing agent to delegate tasks to other agents. You have to use it inside a [custom API route](/docs/server/custom-api-routes).
 
 Use [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream) if you need a framework-agnostic handler.
+
+`networkRoute()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
 
 ## Usage example
 
@@ -62,6 +64,14 @@ export const mastra = new Mastra({
 <PropertiesTable
   content={[
   {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
+  {
     name: 'path',
     type: 'string',
     description:
@@ -74,6 +84,13 @@ export const mastra = new Mastra({
     type: 'string',
     description:
       "The ID of the routing agent to use for this network route. Required if the path doesn't include `:agentId`.",
+    isOptional: true,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/editor/overview) to be configured.",
     isOptional: true,
   },
   {

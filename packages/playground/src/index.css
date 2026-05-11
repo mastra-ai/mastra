@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import '../../playground-ui/src/index.css';
+
+/* Scan playground-ui dist for Tailwind classes used by consumed components */
+@source '../../node_modules/@mastra/playground-ui';
 
 @font-face {
   font-family: 'TasaExplorer';
@@ -14,7 +15,6 @@
     local('Inter'),
     url('./assets/fonts/InterVariable.ttf') format('truetype');
 }
-
 @font-face {
   font-family: 'GeistMonoVF';
   src:
@@ -22,75 +22,38 @@
     url('./assets/fonts/GeistMonoVF.woff') format('woff');
 }
 
-:root {
-  --font-inter: 'Inter', sans-serif;
-  --tasa-explorer: 'TasaExplorer', sans-serif;
-  --geist-mono: 'GeistMonoVF', monospace;
-}
-
-/* width */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 8px;
-}
-
-/* Track */
-::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 5px;
-}
-
-/* Handle */
-::-webkit-scrollbar-thumb {
-  background: #303030;
-  border-radius: 4px;
-}
-
-/* Handle on hover */
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
 @layer base {
   :root {
-    --radius: 0.5rem;
     --top-bar-height: 40px;
-    --color-thumb: rgb(64, 64, 64);
-    --color-thumb-hover: rgb(96, 96, 96);
+    --color-thumb: var(--surface4);
+    --color-thumb-hover: var(--surface6);
     --color-track: transparent;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border1;
-  }
-  body {
-    @apply bg-surface1 text-neutral6;
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
-
-  *:focus,
-  *:focus-visible {
-    @apply outline-none;
-  }
-
-  *:focus-visible {
-    @apply outline outline-accent1;
-  }
 }
 
-.react-flow__controls-button {
-  @apply !text-neutral5 !bg-surface2 !border-none;
+::-webkit-scrollbar {
+  width: 5px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 5px;
+}
+html::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
+  border-radius: 4px;
+}
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
 }
 
 .scorerListItem:has(+ .expanded) {
   border-bottom: none;
 }
-
 .scorerListItem.expanded:has(+ .expanded) {
   margin-bottom: 5px;
 }
@@ -121,5 +84,5 @@ code[class^='language-'] {
 
 th:has(header) {
   height: var(--top-bar-height) !important;
-  padding-block: 0 !important ;
+  padding-block: 0 !important;
 }

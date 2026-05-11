@@ -51,6 +51,8 @@ export interface MockOptions {
   name?: string;
   /** Directory for recording files (default: `__recordings__` in cwd) */
   recordingsDir?: string;
+  /** Override the test mode instead of reading from `LLM_TEST_MODE` env var. */
+  mode?: LLMRecorderOptions['mode'];
   /** Force re-record even if recording exists */
   forceRecord?: boolean;
   /** Replay with original chunk timing (default: false) */
@@ -61,6 +63,8 @@ export interface MockOptions {
   transformRequest?: LLMRecorderOptions['transformRequest'];
   /** Enable verbose debug logging */
   debug?: boolean;
+  /** When true, only accept exact hash matches during replay. Disables fuzzy/similarity matching. */
+  exactMatch?: boolean;
 }
 
 /**

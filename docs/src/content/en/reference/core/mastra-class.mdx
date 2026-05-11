@@ -105,6 +105,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description: 'Observability configuration for tracing and monitoring',
   },
   {
+    name: 'environment',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. Falls back to `process.env.NODE_ENV` when unset; left undefined if neither is set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
+  },
+  {
     name: 'deployer',
     type: 'MastraDeployer',
     isOptional: true,
@@ -161,6 +168,50 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
       'Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'versions',
+    type: 'VersionOverrides',
+    description:
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning) for details.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'VersionOverrides',
+        parameters: [
+          {
+            name: 'agents',
+            type: 'Record<string, VersionSelector>',
+            isOptional: true,
+            description:
+              'A map of agent IDs to their version selectors. Each selector can target a specific version by ID or by publication status.',
+            properties: [
+              {
+                type: 'VersionSelector',
+                parameters: [
+                  {
+                    name: 'versionId',
+                    type: 'string',
+                    isOptional: true,
+                    description: 'The ID of a specific version to use.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'status',
+                    type: "'draft' | 'published'",
+                    isOptional: true,
+                    description: 'Select the latest version with this publication status.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

@@ -19,7 +19,7 @@ import type {
   DynamicToolResult,
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -77,15 +77,21 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
   /**
-   * Number of times processors have triggered retry for this generation.
-   * Used to enforce maxProcessorRetries limit.
+   * Number of consecutive processor-triggered retries for the current generation.
+   * Used to enforce the processor retry safety cap.
    */
   processorRetryCount?: number;
   /**
-   * Feedback message from processor to be added as system message on retry.
-   * This is passed through workflow state so it survives the system message reset.
+   * Current fallback model index for the active generation.
+   * Preserved across processor-triggered retries so retries resume on the same fallback model.
    */
+  fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  /**
+   * True when a background task result was injected and the LLM needs another
+   * iteration to process it. When set, isTaskCompleteStep is skipped.
+   */
+  backgroundTaskPending?: boolean;
 }
 
 // Zod schemas for common types used in validation
@@ -96,6 +102,7 @@ const languageModelUsageSchema = z.object({
   totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
 });
 
 // Zod schemas for runtime validation
@@ -150,8 +157,10 @@ export const llmIterationOutputSchema = z.object({
   }),
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
+  fallbackModelIndex: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
+  backgroundTaskPending: z.boolean().optional(), // true if a background task result was injected and LLM needs to process it
 });
 
 export const toolCallInputSchema = z.object({

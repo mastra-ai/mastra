@@ -11,7 +11,7 @@ import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { createGatewayMock } from '@internal/test-utils';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';

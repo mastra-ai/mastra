@@ -8,18 +8,22 @@ import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processor
 import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
+import { MASTRA_IS_STUDIO_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { checkRouteFGA } from '../server-adapter';
 import {
   LIST_AGENTS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
   GENERATE_AGENT_ROUTE,
+  getSerializedAgentTools,
   UPDATE_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
   STREAM_GENERATE_LEGACY_ROUTE,
   STREAM_GENERATE_ROUTE,
   ENHANCE_INSTRUCTIONS_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
 } from './agents';
 import { createTestServerContext } from './test-utils';
 class MockAgent extends Agent {
@@ -28,6 +32,7 @@ class MockAgent extends Agent {
 
     this.generate = vi.fn();
     this.stream = vi.fn();
+    this.streamUntilIdle = vi.fn();
     this.__updateInstructions = vi.fn();
   }
 
@@ -37,6 +42,10 @@ class MockAgent extends Agent {
 
   stream(args: any) {
     return this.stream(args);
+  }
+
+  streamUntilIdle(args: any) {
+    return this.streamUntilIdle(args);
   }
 
   __updateInstructions(args: any) {
@@ -110,6 +119,7 @@ describe('Agent Handlers', () => {
           workflows: {},
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
@@ -136,6 +146,7 @@ describe('Agent Handlers', () => {
           requestContextSchema: undefined,
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
@@ -341,6 +352,49 @@ describe('Agent Handlers', () => {
       expect(typeof agent.tools.testTool.outputSchema).toBe('string');
     });
 
+    it('should serialize plain JSON Schema tool schemas', async () => {
+      const inputSchema = {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+      };
+
+      const outputSchema = {
+        type: 'object',
+        properties: {
+          result: { type: 'string' },
+        },
+      };
+
+      const requestContextSchema = {
+        type: 'object',
+        properties: {
+          userId: { type: 'string' },
+        },
+      };
+
+      const tools = await getSerializedAgentTools({
+        composioTool: {
+          id: 'composio-tool',
+          inputSchema,
+          outputSchema,
+          requestContextSchema,
+        },
+      });
+
+      expect(tools.composioTool.inputSchema).toBeDefined();
+      expect(tools.composioTool.outputSchema).toBeDefined();
+      expect(tools.composioTool.requestContextSchema).toBeDefined();
+      expect(tools.composioTool.inputSchema).toContain('"query"');
+      expect(tools.composioTool.outputSchema).toContain('"result"');
+      expect(tools.composioTool.requestContextSchema).toContain('"userId"');
+      expect(tools.composioTool.inputSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+      expect(tools.composioTool.outputSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+      expect(tools.composioTool.requestContextSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+    });
+
     it('should not expose a model list for agents with dynamic single-model selection', async () => {
       const dynamicSingleModelAgent = makeMockAgent({
         name: 'dynamic-single-model-agent',
@@ -371,9 +425,111 @@ describe('Agent Handlers', () => {
         modelList: undefined,
       });
     });
+
+    it("should still list other agents when one agent's dynamic instructions throws", async () => {
+      const healthyAgent = makeMockAgent({
+        name: 'agent-b',
+        description: 'Healthy agent',
+        instructions: 'healthy instructions',
+      });
+
+      // Simulate the MRE: a dynamic instructions callback that throws when the
+      // active request context doesn't satisfy the agent's expected shape.
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: () => {
+          throw new Error("Cannot destructure property 'name' of 'requestContext.get(...)' as it is undefined.");
+        },
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({
+        agents: {
+          'agent-a': throwingAgent,
+          'agent-b': healthyAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+        requestContext,
+      });
+
+      // The handler must resolve and include both agents — the throwing agent
+      // should be returned with `instructions: undefined`.
+      expect(result['agent-a']).toBeDefined();
+      expect(result['agent-a'].name).toBe('agent-a');
+      expect(result['agent-a'].instructions).toBeUndefined();
+
+      expect(result['agent-b']).toBeDefined();
+      expect(result['agent-b'].name).toBe('agent-b');
+      expect(result['agent-b'].instructions).toBe('healthy instructions');
+    });
+
+    it('should still list other agents when an agent throws from a non-instructions dynamic getter', async () => {
+      const healthyAgent = makeMockAgent({
+        name: 'agent-b',
+        description: 'Healthy agent',
+        instructions: 'healthy instructions',
+      });
+
+      const throwingAgent = makeMockAgent({
+        name: 'agent-a',
+        description: 'Throwing agent',
+        instructions: 'agent-a instructions',
+      });
+      vi.spyOn(throwingAgent, 'getLLM').mockImplementation(async () => {
+        throw new Error('boom from getLLM');
+      });
+
+      const mastraWithThrowingAgent = makeMastraMock({
+        agents: {
+          'agent-a': throwingAgent,
+          'agent-b': healthyAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithThrowingAgent }),
+        requestContext,
+      });
+
+      // The throwing agent is still listed with safe defaults; the healthy
+      // agent is unaffected.
+      expect(result['agent-a']).toBeDefined();
+      expect(result['agent-a'].name).toBe('agent-a');
+      expect(result['agent-a'].instructions).toBe('agent-a instructions');
+      expect(result['agent-a'].provider).toBeUndefined();
+      expect(result['agent-a'].modelId).toBeUndefined();
+
+      expect(result['agent-b']).toBeDefined();
+      expect(result['agent-b'].provider).toBe('openai.chat');
+      expect(result['agent-b'].modelId).toBe('gpt-4o');
+    });
   });
 
   describe('getAgentByIdHandler', () => {
+    it('should declare FGA for agent reads', async () => {
+      const fgaRequestContext = new RequestContext();
+      fgaRequestContext.set('user', { id: 'user-1' });
+      const check = vi.fn().mockResolvedValue(true);
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { check } } as any);
+
+      const result = await checkRouteFGA(mockMastra, GET_AGENT_BY_ID_ROUTE as any, fgaRequestContext as any, {
+        agentId: 'test-agent',
+      });
+
+      expect(result).toBeNull();
+      expect(check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:read',
+          context: { resourceId: 'test-agent', requestContext: fgaRequestContext },
+        },
+      );
+    });
+
     it('should return serialized agent', async () => {
       const firstStep = createStep({
         id: 'first',
@@ -437,6 +593,8 @@ describe('Agent Handlers', () => {
         },
         skills: [],
         workspaceTools: [],
+        browserTools: [],
+        workspaceId: undefined,
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
@@ -446,6 +604,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        requestContextSchema: undefined,
         source: 'code',
       });
     });
@@ -479,6 +638,72 @@ describe('Agent Handlers', () => {
           model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
         },
       ]);
+    });
+
+    it('should use Studio placeholder context when serializing an agent from Studio', async () => {
+      const studioAgent = makeMockAgent({
+        name: 'studio-agent',
+        instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+      });
+
+      const mastraWithStudioAgent = makeMastraMock({
+        agents: { 'studio-agent': studioAgent },
+      });
+      const studioRequestContext = new RequestContext();
+      studioRequestContext.set(MASTRA_IS_STUDIO_KEY, true);
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStudioAgent }),
+        agentId: 'studio-agent',
+        requestContext: studioRequestContext,
+      });
+
+      expect(result.instructions).toBe('Hello <displayName>');
+    });
+
+    it.each([false, 'true', 1])(
+      'should not use Studio placeholder context for non-true isStudio value %s',
+      async isStudio => {
+        const agent = makeMockAgent({
+          name: 'non-studio-agent',
+          instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+        });
+
+        const mastraWithAgent = makeMastraMock({
+          agents: { 'non-studio-agent': agent },
+        });
+        const nonStudioRequestContext = new RequestContext();
+        nonStudioRequestContext.set(MASTRA_IS_STUDIO_KEY, isStudio);
+
+        const result = await GET_AGENT_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithAgent }),
+          agentId: 'non-studio-agent',
+          requestContext: nonStudioRequestContext,
+        });
+
+        expect(result.instructions).toBe('Hello undefined');
+      },
+    );
+
+    it('should not use Studio placeholder context for user-supplied isStudio request context', async () => {
+      const agent = makeMockAgent({
+        name: 'user-is-studio-agent',
+        instructions: ({ requestContext }) => `Hello ${String(requestContext.get('displayName'))}`,
+      });
+
+      const mastraWithAgent = makeMastraMock({
+        agents: { 'user-is-studio-agent': agent },
+      });
+      const requestContextWithUserKey = new RequestContext();
+      requestContextWithUserKey.set('isStudio', true);
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithAgent }),
+        agentId: 'user-is-studio-agent',
+        requestContext: requestContextWithUserKey,
+      });
+
+      expect(result.instructions).toBe('Hello undefined');
     });
 
     it('should return serialized agent without a model list for dynamic single-model selection', async () => {
@@ -521,6 +746,34 @@ describe('Agent Handlers', () => {
           message: 'Agent with id non-existing not found',
         }),
       );
+    });
+
+    it('should return serialized agent with browser tools when browser is configured', async () => {
+      const mockBrowser = {
+        providerType: 'sdk' as const,
+        getTools: () => ({
+          navigate: { name: 'navigate' },
+          click: { name: 'click' },
+          screenshot: { name: 'screenshot' },
+        }),
+      };
+
+      const agentWithBrowser = makeMockAgent({
+        name: 'browser-agent',
+        browser: mockBrowser as any,
+      });
+
+      const mastraWithBrowser = makeMastraMock({
+        agents: { 'browser-agent': agentWithBrowser },
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithBrowser }),
+        agentId: 'browser-agent',
+        requestContext,
+      });
+
+      expect(result?.browserTools).toEqual(['navigate', 'click', 'screenshot']);
     });
   });
 
@@ -578,6 +831,43 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         STREAM_GENERATE_LEGACY_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'non-existing',
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+    });
+  });
+
+  describe('streamUntilIdleGenerateHandler', () => {
+    it('should stream response from agent', async () => {
+      const mockStreamResult = {
+        toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
+        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        fullStream: new ReadableStream(),
+      };
+      (mockAgent.streamUntilIdle as any).mockResolvedValue(mockStreamResult);
+
+      const result = await STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'test-agent',
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
+      });
+
+      expect(result).toBeDefined();
+      expect(result).toBeInstanceOf(ReadableStream);
+      expect(mockAgent.streamUntilIdle).toHaveBeenCalled();
+    });
+
+    it('should throw 404 when agent not found', async () => {
+      await expect(
+        STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           agentId: 'non-existing',
           messages: ['test message'],

@@ -6,7 +6,7 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
@@ -38,6 +38,15 @@ export interface BraintrustExporterConfig extends TrackingExporterConfig {
    * - Parent spans: Auto-detects and attaches to external Braintrust spans
    */
   braintrustLogger?: Logger<true>;
+
+  /**
+   * Optional resolver for the active Braintrust span.
+   *
+   * Pass Braintrust's `currentSpan` from the same package instance that creates
+   * `Eval()` or `logger.traced()` spans when your app and Mastra may resolve
+   * different copies of the `braintrust` package.
+   */
+  currentSpan?: () => Span | undefined;
 
   /** Braintrust API key. Required if logger is not provided. */
   apiKey?: string;
@@ -134,6 +143,45 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (this.isDisabled) return;
+
+    const { score } = event;
+    const rowId = score.spanId ?? score.traceId;
+    if (!rowId) {
+      this.logger.debug('Braintrust exporter: skipping score with no spanId or traceId', {
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    const logger = this.#useProvidedLogger ? this.#providedLogger : await this.getLocalLogger();
+    if (!logger) return;
+
+    const name = score.scorerName ?? score.scorerId;
+
+    try {
+      logger.logFeedback({
+        id: rowId,
+        scores: { [name]: score.score },
+        ...(score.reason ? { comment: score.reason } : {}),
+        metadata: {
+          scorerId: score.scorerId,
+          ...(score.scoreSource ? { scoreSource: score.scoreSource } : {}),
+          ...(score.metadata ?? {}),
+        },
+        source: 'external',
+      });
+    } catch (err) {
+      this.logger.error('Braintrust exporter: Failed to submit score', {
+        error: err,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
+    }
+  }
+
   private startSpan(args: { parent: Span | Logger<true>; span: AnyExportedSpan }): BraintrustSpanData {
     const { parent, span } = args;
     const payload = this.buildSpanPayload(span);
@@ -171,7 +219,13 @@ export class BraintrustExporter extends TrackingExporter<
       // Try to find a Braintrust span to attach to:
       // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
       // 2. Fall back to the configured logger
-      const externalSpan = currentSpan();
+      let externalSpan: Span | undefined;
+      try {
+        externalSpan = this.config.currentSpan?.();
+      } catch (err) {
+        this.logger.error('Braintrust exporter: Failed to resolve configured currentSpan', { error: err });
+      }
+      externalSpan ??= currentSpan();
 
       // Check if it's a valid span (not the NOOP_SPAN)
       if (externalSpan && externalSpan.id) {
@@ -477,6 +531,12 @@ export class BraintrustExporter extends TrackingExporter<
         payload.metadata.provider = modelAttr.provider;
       }
 
+      // Prefer resolved model ID (e.g. "claude-sonnet-4-5-20250929") over
+      // gateway aliases (e.g. "claude-sonnet-4.5") for accurate cost estimation
+      if (modelAttr.responseModel !== undefined) {
+        payload.metadata.model = modelAttr.responseModel;
+      }
+
       // Usage/token info goes to metrics
       payload.metrics = formatUsageMetrics(modelAttr.usage);
 
@@ -493,7 +553,13 @@ export class BraintrustExporter extends TrackingExporter<
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
+      const otherAttributes = omitKeys(attributes, [
+        'model',
+        'responseModel',
+        'usage',
+        'parameters',
+        'completionStartTime',
+      ]);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

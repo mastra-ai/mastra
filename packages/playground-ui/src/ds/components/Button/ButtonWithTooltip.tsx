@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, type ButtonProps } from './Button';
+import { Button } from './Button';
+import type { ButtonProps } from './Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 export interface ButtonWithTooltipProps extends ButtonProps {

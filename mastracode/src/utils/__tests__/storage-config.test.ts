@@ -142,26 +142,41 @@ describe('createStorage', () => {
     });
     expect(result.storage).toBeDefined();
     expect(result.storage.constructor.name).toBe('LibSQLStore');
+    expect(result.backend).toBe('libsql');
     expect(result.warning).toBeUndefined();
   });
 
   it('falls back to LibSQL with warning when pg has no connection info', async () => {
-    const { createStorage } = await import('../storage-factory.js');
+    const { createStorage, createVectorStore } = await import('../storage-factory.js');
     const result = await createStorage({
       backend: 'pg',
     });
+    const vectorStore = await createVectorStore({ backend: 'pg' }, result.backend);
+
     expect(result.storage.constructor.name).toBe('LibSQLStore');
+    expect(result.backend).toBe('libsql');
+    expect(vectorStore?.constructor.name).toBe('LibSQLVector');
     expect(result.warning).toMatch(/no connection info/);
   });
 
   it('falls back to LibSQL with warning when pg connection fails', async () => {
-    const { createStorage } = await import('../storage-factory.js');
+    const { createStorage, createVectorStore } = await import('../storage-factory.js');
     // Use a connection string that will fail to connect (no server on this port)
     const result = await createStorage({
       backend: 'pg',
       connectionString: 'postgresql://user:pass@localhost:59999/testdb',
     });
+    const vectorStore = await createVectorStore(
+      {
+        backend: 'pg',
+        connectionString: 'postgresql://user:pass@localhost:59999/testdb',
+      },
+      result.backend,
+    );
+
     expect(result.storage.constructor.name).toBe('LibSQLStore');
+    expect(result.backend).toBe('libsql');
+    expect(vectorStore?.constructor.name).toBe('LibSQLVector');
     expect(result.warning).toMatch(/Failed to connect/);
   }, 15000);
 

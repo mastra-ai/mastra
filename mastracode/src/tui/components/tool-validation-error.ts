@@ -5,6 +5,7 @@
 
 import { Container, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import { safeStringify } from '@mastra/core/utils';
 import { MC_TOOLS } from '../../tool-names.js';
 import { theme } from '../theme.js';
 
@@ -29,19 +30,24 @@ export function parseValidationErrors(error: unknown): ValidationError[] {
   const errors: ValidationError[] = [];
 
   if (typeof error === 'string') {
-    // Try to parse Zod-style errors
-    const zodMatch = error.match(/at "([^"]+)".*?: (.+?)(?:\n|$)/g);
+    // Try to parse Zod-style errors. Restrict the gap between the field
+    // name and the ': ' separator to non-newline characters and bound it
+    // to avoid the polynomial backtracking CodeQL flagged on
+    // attacker-crafted repetitions of `at "!"`.
+    const zodMatch = error.match(/at "([^"\n]{1,256})"[^:\n]{0,256}: ([^\n]{1,4096})/g);
     if (zodMatch) {
       zodMatch.forEach(match => {
-        const [, field, message] = match.match(/at "([^"]+)".*?: (.+?)(?:\n|$)/) || [];
+        const [, field, message] = match.match(/at "([^"\n]{1,256})"[^:\n]{0,256}: ([^\n]{1,4096})/) || [];
         if (field && message) {
           errors.push({ field, message });
         }
       });
     }
 
-    // Try to parse "missing required parameter" errors
-    const missingMatch = error.match(/missing required.*?["`'](\w+)["`']/i);
+    // Try to parse "missing required parameter" errors. Bound the gap
+    // so the lazy quantifier cannot drive O(n^2) behaviour on large
+    // inputs without a closing quote.
+    const missingMatch = error.match(/missing required[^"`'\n]{0,256}["`'](\w{1,128})["`']/i);
     if (missingMatch) {
       errors.push({
         field: missingMatch[1]!,
@@ -99,7 +105,7 @@ function formatArgs(args: unknown): string[] {
     } else if (typeof value === 'string') {
       valueStr = value.length > 50 ? `"${value.slice(0, 47)}..."` : `"${value}"`;
     } else if (typeof value === 'object') {
-      valueStr = JSON.stringify(value);
+      valueStr = safeStringify(value);
       if (valueStr.length > 50) {
         valueStr = valueStr.slice(0, 47) + '...';
       }

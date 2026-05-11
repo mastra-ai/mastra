@@ -45,9 +45,9 @@ import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
   sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
-  skills: ['/skills'],
+  skills: ['skills'],
   bm25: true,
-  autoIndexPaths: ['/docs', '/src'],
+  autoIndexPaths: ['docs', 'src'],
 })
 // highlight-end
 
@@ -185,7 +185,7 @@ When adding features:
 For every new feature: Write code → Write tests → Run tests → Update docs
 
 Always explain your reasoning and steps.`,
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -201,9 +201,9 @@ import { devAssistant } from './agents/dev-assistant'
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
   sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
-  skills: ['/skills'],
+  skills: ['skills'],
   bm25: true,
-  autoIndexPaths: ['/docs', '/src'],
+  autoIndexPaths: ['docs', 'src'],
 })
 
 export const mastra = new Mastra({
@@ -215,7 +215,7 @@ export const mastra = new Mastra({
 
 ## Test the assistant
 
-Start Mastra Studio and interact with the agent to see it in action.
+Start [Studio](/docs/studio/overview) and interact with the agent to see it in action.
 
 ```bash npm2yarn
 npm run dev

@@ -183,8 +183,9 @@ AI agents are the next platform shift. Understanding how to build them is now a 
     {
       slug: 'build-a-workflow',
       title: 'Build a Workflow',
-      durationMin: 5,
-      status: 'comingSoon',
+      durationMin: 7.5,
+      youtubeId: 'Xu0N43frgMs',
+      status: 'published',
       module: 'Workflows',
       preview: {
         intro:
@@ -200,7 +201,8 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       slug: 'agents-vs-workflows',
       title: 'Agents vs. Workflows',
       durationMin: 3,
-      status: 'comingSoon',
+      youtubeId: 'kiFhVZyHG84',
+      status: 'published',
       module: 'Workflows',
       preview: {
         intro: 'Before we keep building, get a clear mental model for when to use an agent vs. when to use a workflow.',
@@ -212,10 +214,11 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       },
     },
     {
-      slug: 'connect-agents-and-workflows',
-      title: 'Connect Agent to a Workflow',
-      durationMin: 5,
-      status: 'comingSoon',
+      slug: 'agents-in-workflows',
+      title: 'Agents in Workflows',
+      durationMin: 9,
+      youtubeId: 'hHtUcuDqFrY',
+      status: 'published',
       module: 'Workflows',
       preview: {
         intro:
@@ -230,116 +233,89 @@ AI agents are the next platform shift. Understanding how to build them is now a 
 
     // Module 4: Memory
     {
-      slug: 'why-agents-forget',
-      title: 'Why Agents "Forget"',
-      durationMin: 4,
-      status: 'comingSoon',
+      slug: 'how-memory-works',
+      title: 'How Memory Works',
+      durationMin: 5.5,
+      youtubeId: 'RvtDJJhI8FE',
+      status: 'published',
       module: 'Memory',
       preview: {
         intro:
-          'Show the problem: ask your agent for a plan, then follow up with "do that again but change X." Without memory, each call is stateless. Introduce context engineering and how Mastra memory works.',
+          'The model is stateless between calls. Memory is what lets follow-ups work. Trace a real conversation in Studio to see exactly what context the agent received, and learn the lastMessages setting that controls how much history gets included per call.',
         bullets: [
-          'Why an LLM is stateless between calls',
-          'Context engineering: choosing what context the model gets per call',
-          'Thread and resource IDs: what gets stored and retrieved',
+          'Why the model is stateless and what Mastra does about it',
+          'Context engineering: deciding what the model gets to see per call',
+          'lastMessages: the setting that controls recent history in the context window',
         ],
       },
     },
     {
-      slug: 'turn-on-memory',
-      title: 'Turn On Memory',
+      slug: 'observational-memory',
+      title: 'Observational Memory',
       durationMin: 5,
-      status: 'comingSoon',
+      youtubeId: 'x2UQ7zIdrbI',
+      status: 'published',
       module: 'Memory',
       preview: {
         intro:
-          'Enable memory on your agent and make semantic recall visible in Studio. Force older information out of recent history so recall has to retrieve it, then verify in the trace.',
+          'Raw message history piles up fast. Enable Observational Memory to automatically compress older context into denser observations, then test resource-scoped memory so preferences carry across threads for the same user.',
         bullets: [
-          'Memory setup: agent configuration plus a storage provider',
-          'lastMessages controls recent history; semantic recall retrieves older messages by meaning',
-          'The key mental model: the agent retrieved and included context, it did not "remember"',
+          'OM compresses older history via Observer and Reflector background agents',
+          'Resource scope: memory follows the user across threads, not just within one conversation',
+          'OM replaces manual lastMessages tuning with automatic context management',
         ],
       },
     },
     {
-      slug: 'working-memory',
-      title: 'Working Memory with a Template, Plus Scope',
-      durationMin: 4,
-      status: 'comingSoon',
+      slug: 'guardrails-with-processors',
+      title: 'Guardrails with Processors',
+      durationMin: 5,
+      youtubeId: '9XHVGLld8kk',
+      status: 'published',
       module: 'Memory',
       preview: {
         intro:
-          'Add working memory: a short template that captures stable user facts. Then show one scoping choice — keep working memory per thread or per resource.',
+          'Once real users are involved, you need input guardrails. Add PromptInjectionDetector and ModerationProcessor to block hostile requests before the model ever sees them.',
         bullets: [
-          'Working memory is "always relevant" info the agent keeps updated over time',
-          'Resource scope persists across threads for the same user',
-          'Thread scope isolates memory per conversation',
+          'Processors intercept messages before the model call and after the response',
+          'PromptInjectionDetector: blocks injection, jailbreak, and system override attempts',
+          'ModerationProcessor: screens incoming messages for hate and harassment',
         ],
       },
     },
 
     // Module 5: Production
     {
-      slug: 'debug-with-traces',
-      title: 'Debug with Traces and One Simple Scorer',
-      durationMin: 5,
-      status: 'comingSoon',
-      module: 'Production',
-      preview: {
-        intro:
-          'Use Mastra Studio Traces to see what your agent actually did, then add one lightweight scorer so you can quantify "good vs bad" runs and iterate confidently.',
-        bullets: [
-          'Read a trace: inputs, tool calls, retrieved memory, and outputs',
-          'Spot the most common failure causes: missing context, wrong tool, weak prompt',
-          'Add a custom scorer: preprocess, analyze, generateScore, generateReason',
-        ],
-      },
-    },
-    {
-      slug: 'basic-rag',
-      title: 'Basic RAG: Add a Knowledge Base',
-      durationMin: 5,
-      status: 'comingSoon',
-      module: 'Production',
-      preview: {
-        intro:
-          'Add a small, curated knowledge base to your project, enable retrieval, and verify in Studio that the agent pulls relevant chunks into context before responding.',
-        bullets: [
-          'When to use a knowledge base: policies, product docs, FAQs, specs',
-          'The RAG pipeline: chunking, embeddings, vector store, retrieval at query time',
-          'Retrieved chunks show up in the trace for verification',
-        ],
-      },
-    },
-    {
-      slug: 'add-voice',
-      title: 'Add Voice to an Agent: STT/TTS',
+      slug: 'deploy-to-mastra-platform',
+      title: 'Deploy to Mastra Platform',
       durationMin: 4,
-      status: 'comingSoon',
+      youtubeId: 'O1FnS_qrsPs',
+      status: 'published',
       module: 'Production',
       preview: {
         intro:
-          'Introduce where voice fits in an agent system. Demo TTS so the agent speaks its response, explain STT, and make it clear voice is just another interface layer on the same agent.',
+          'Deploy the Theme Park agent from your local Studio environment to a live public endpoint using Mastra Server.',
         bullets: [
-          'Mastra voice: a unified interface for TTS, STT, and realtime STS',
-          'Adding voice enables .voice.speak() / .voice.listen() style flows',
-          'Provider swap (OpenAI, ElevenLabs, etc.) — the pattern stays the same',
+          'Explore the Swagger UI to see every agent already exposed as HTTP endpoints',
+          'Run mastra server deploy to build, upload, and get a stable public URL',
+          'Mastra is already an HTTP server — Mastra Server puts it somewhere public',
         ],
       },
     },
     {
-      slug: 'deployment-and-next-steps',
-      title: 'Deployment and Next Steps',
-      durationMin: 4,
-      status: 'comingSoon',
+      slug: 'chat-with-agent-in-slack',
+      title: 'Chat With Agent in Slack',
+      durationMin: 9,
+      youtubeId: 'fD6M6n_OdJI',
+      status: 'published',
       module: 'Production',
       preview: {
         intro:
-          'What changes when you move from Studio to production, and how to call your agent from an app via HTTP or SDK.',
+          'Connect the deployed Theme Park agent to Slack so you can message it from anywhere — same tools, memory, and workflows, from a DM.',
         bullets: [
-          'Runtime choices: Node, Bun, Deno, Cloudflare-style environments',
-          'Mastra becomes an HTTP server with API endpoints and streaming',
-          'Frontend integration with AI SDK UI, CopilotKit, or Assistant UI',
+          'Add the Slack adapter and a channels config to the agent',
+          'Mastra exposes the webhook route automatically — no handler to write',
+          'Channels also supports Discord and Telegram through the same pattern',
         ],
       },
     },

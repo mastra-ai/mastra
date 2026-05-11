@@ -152,7 +152,7 @@ MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   options: {
     contextExtractor: (input, output) => {
       // Extract context dynamically based on the query
@@ -171,7 +171,7 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   options: {
     context: [
       // Simulate retrieved documents from vector database
@@ -196,7 +196,7 @@ import { createContextPrecisionScorer } from '@mastra/evals/scorers/prebuilt'
 import { myAgent } from './agent'
 
 const scorer = createContextPrecisionScorer({
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   options: {
     contextExtractor: (input, output) => {
       // Extract context from agent's retrieved documents
@@ -245,6 +245,6 @@ Choose the right scorer for your needs:
 
 ## Related
 
-- [Answer Relevancy Scorer](/reference/evals/answer-relevancy) - Evaluates if answers address the question
-- [Faithfulness Scorer](/reference/evals/faithfulness) - Measures answer groundedness in context
-- [Custom Scorers](/docs/evals/custom-scorers) - Creating your own evaluation metrics
+- [Answer Relevancy Scorer](/reference/evals/answer-relevancy): Evaluates if answers address the question
+- [Faithfulness Scorer](/reference/evals/faithfulness): Measures answer groundedness in context
+- [Custom Scorers](/docs/evals/custom-scorers): Creating your own evaluation metrics
