@@ -195,8 +195,10 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       );
 
       if (toolCallPart && toolCallPart.type === 'tool-invocation') {
-        // Return the args even if it's undefined or empty object
-        return toolCallPart.toolInvocation.args || {};
+        const args = toolCallPart.toolInvocation.args || {};
+        if (typeof args === 'object' && Object.keys(args).length > 0) {
+          return args;
+        }
       }
     }
 
@@ -205,7 +207,10 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       const toolInvocation = msg.content.toolInvocations.find(inv => inv.toolCallId === toolCallId);
 
       if (toolInvocation) {
-        return toolInvocation.args || {};
+        const args = toolInvocation.args || {};
+        if (typeof args === 'object' && Object.keys(args).length > 0) {
+          return args;
+        }
       }
     }
   }

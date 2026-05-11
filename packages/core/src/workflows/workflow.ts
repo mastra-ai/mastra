@@ -2654,11 +2654,12 @@ export class Workflow<
     const nestedAbortCb = () => {
       abort();
     };
-    run.abortController.signal.addEventListener('abort', nestedAbortCb);
-    abortSignal.addEventListener('abort', async () => {
+    const parentAbortCb = async () => {
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
       await run.cancel();
-    });
+    };
+    run.abortController.signal.addEventListener('abort', nestedAbortCb);
+    abortSignal.addEventListener('abort', parentAbortCb);
 
     const unwatch = useSharedPubsub
       ? () => {}
@@ -2676,46 +2677,51 @@ export class Workflow<
 
     let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
 
-    if (isTimeTravel) {
-      res = await run.timeTravel({
-        inputData: timeTravel?.inputData,
-        resumeData: timeTravel?.resumeData,
-        initialState: state,
-        step: timeTravel?.steps,
-        context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
-        nestedStepsContext: timeTravel?.nestedStepResults as any,
-        requestContext,
-        ...observabilityContext,
-        outputWriter,
-        outputOptions: { includeState: true, includeResumeLabels: true },
-        perStep,
-      });
-    } else if (restart) {
-      res = await run.restart({ requestContext, ...observabilityContext, outputWriter });
-    } else if (isResume) {
-      res = await run.resume({
-        resumeData,
-        step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
-        requestContext,
-        ...observabilityContext,
-        outputWriter,
-        outputOptions: { includeState: true, includeResumeLabels: true },
-        label: resume.label,
-        perStep,
-      });
-    } else {
-      res = await run.start({
-        inputData,
-        requestContext,
-        ...observabilityContext,
-        outputWriter,
-        initialState: state,
-        outputOptions: { includeState: true, includeResumeLabels: true },
-        perStep,
-      } as any);
+    try {
+      if (isTimeTravel) {
+        res = await run.timeTravel({
+          inputData: timeTravel?.inputData,
+          resumeData: timeTravel?.resumeData,
+          initialState: state,
+          step: timeTravel?.steps,
+          context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
+          nestedStepsContext: timeTravel?.nestedStepResults as any,
+          requestContext,
+          ...observabilityContext,
+          outputWriter,
+          outputOptions: { includeState: true, includeResumeLabels: true },
+          perStep,
+        });
+      } else if (restart) {
+        res = await run.restart({ requestContext, ...observabilityContext, outputWriter });
+      } else if (isResume) {
+        res = await run.resume({
+          resumeData,
+          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
+          requestContext,
+          ...observabilityContext,
+          outputWriter,
+          outputOptions: { includeState: true, includeResumeLabels: true },
+          label: resume.label,
+          perStep,
+        });
+      } else {
+        res = await run.start({
+          inputData,
+          requestContext,
+          ...observabilityContext,
+          outputWriter,
+          initialState: state,
+          outputOptions: { includeState: true, includeResumeLabels: true },
+          perStep,
+        } as any);
+      }
+    } finally {
+      run.abortController.signal.removeEventListener('abort', nestedAbortCb);
+      abortSignal.removeEventListener('abort', parentAbortCb);
+      unwatch();
     }
 
-    unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
@@ -3011,6 +3017,11 @@ export class Workflow<
       activeStepsPath: includeAllFields || fieldsSet.has('activeStepsPath') ? snapshotState.activeStepsPath : undefined,
       serializedStepGraph:
         includeAllFields || fieldsSet.has('serializedStepGraph') ? snapshotState.serializedStepGraph : undefined,
+      suspendedPaths: includeAllFields || fieldsSet.has('suspendedPaths') ? snapshotState.suspendedPaths : undefined,
+      resumeLabels: includeAllFields || fieldsSet.has('resumeLabels') ? snapshotState.resumeLabels : undefined,
+      waitingPaths: includeAllFields || fieldsSet.has('waitingPaths') ? snapshotState.waitingPaths : undefined,
+      ...(fieldsSet.has('requestContext') ? { requestContext: snapshotState.requestContext } : {}),
+      ...(fieldsSet.has('tracingContext') ? { tracingContext: snapshotState.tracingContext } : {}),
     };
 
     // Clean up undefined/empty values if field filtering is active
@@ -3022,6 +3033,11 @@ export class Workflow<
       if (!fieldsSet.has('steps')) delete result.steps;
       if (result.activeStepsPath === undefined) delete result.activeStepsPath;
       if (result.serializedStepGraph === undefined) delete result.serializedStepGraph;
+      if (result.suspendedPaths === undefined) delete result.suspendedPaths;
+      if (result.resumeLabels === undefined) delete result.resumeLabels;
+      if (result.waitingPaths === undefined) delete result.waitingPaths;
+      if (result.requestContext === undefined) delete result.requestContext;
+      if (result.tracingContext === undefined) delete result.tracingContext;
     }
 
     return result;

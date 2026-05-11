@@ -10,7 +10,7 @@ export interface ThreadsProps {
 }
 
 export const Threads = ({ children }: ThreadsProps) => {
-  return <nav className="bg-surface2 min-h-full overflow-hidden">{children}</nav>;
+  return <nav className="min-h-full overflow-hidden">{children}</nav>;
 };
 
 export interface ThreadLinkProps {

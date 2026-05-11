@@ -1559,6 +1559,15 @@ export class EventedWorkflow<
     resourceId?: string;
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+    if (this.stepFlow.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     const runIdToUse = options?.runId || randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -1734,7 +1743,7 @@ export class EventedRun<
         status: 'running',
         value: {},
         context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
         suspendedPaths: {},
@@ -1817,7 +1826,7 @@ export class EventedRun<
         status: 'running',
         value: {},
         context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
         suspendedPaths: {},
@@ -1842,7 +1851,7 @@ export class EventedRun<
         workflowId: this.workflowId,
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         initialState: initialStateToUse,
         perStep,
       },

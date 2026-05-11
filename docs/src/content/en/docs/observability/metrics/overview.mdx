@@ -45,7 +45,7 @@ import { Mastra } from '@mastra/core/mastra'
 import { LibSQLStore } from '@mastra/libsql'
 import { DuckDBStore } from '@mastra/duckdb'
 import { MastraCompositeStore } from '@mastra/core/storage'
-import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability'
+import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   storage: new MastraCompositeStore({
@@ -62,7 +62,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
@@ -94,7 +94,7 @@ Mastra auto-instruments agent runs, workflow steps, tool calls, and model genera
 1. **Token usage**: Extracted from the `usage` attribute on model generation spans.
 1. **Cost estimation**: Runs each token metric through an embedded pricing registry that matches by provider and model name.
 
-Before storage, all metric labels pass through a cardinality filter that blocks known high-cardinality values (such as trace IDs and UUIDs) to keep storage efficient. Metrics are then batched by an internal event buffer and flushed to storage by the `DefaultExporter`.
+Before storage, all metric labels pass through a cardinality filter that blocks known high-cardinality values (such as trace IDs and UUIDs) to keep storage efficient. Metrics are then batched by an internal event buffer and flushed to storage by the `MastraStorageExporter`.
 
 ## Next steps
 
@@ -102,4 +102,4 @@ Before storage, all metric labels pass through a cardinality filter that blocks 
 - [Tracing overview](/docs/observability/tracing/overview)
 - [Studio observability](/docs/studio/observability)
 - [Observability overview](/docs/observability/overview)
-- [DefaultExporter reference](/docs/observability/tracing/exporters/default)
+- [MastraStorageExporter reference](/docs/observability/tracing/exporters/mastra-storage)

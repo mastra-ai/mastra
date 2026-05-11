@@ -404,8 +404,33 @@ export async function processWorkflowForEach(
     }
   }
 
-  if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
-    // Foreach completed all iterations - advance to next step
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+
+  if (
+    (idx >= targetLen && currentResult?.output?.filter((r: any) => r !== null)?.length >= targetLen) ||
+    (prevResult as any)?.output?.length === 0
+  ) {
+    // Foreach completed all iterations or the previous result is an empty array - advance to next step
+    // If the previous result is an empty array, we need to create a new result with an empty array output, save to stroage and stepResults
+    let result = currentResult;
+    if ((prevResult as any)?.output?.length === 0) {
+      result = {
+        status: 'success',
+        output: [],
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+        payload: (prevResult as any)?.output,
+      };
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: step.step.id,
+        result,
+        requestContext,
+      });
+      stepResults[step.step.id] = result as any;
+    }
+
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       runId,
@@ -417,7 +442,7 @@ export async function processWorkflowForEach(
         resumeSteps,
         stepResults,
         timeTravel,
-        prevResult: currentResult,
+        prevResult: result,
         resumeData: undefined, // No resumeData when advancing past foreach
         activeSteps,
         requestContext,
@@ -432,8 +457,6 @@ export async function processWorkflowForEach(
     // wait for the 'null' values to be filled from the concurrent run
     return;
   }
-
-  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
