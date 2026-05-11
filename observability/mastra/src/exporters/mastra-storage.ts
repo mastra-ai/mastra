@@ -7,9 +7,6 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
-  ObservabilityDropEvent,
-  ObservabilityDropReason,
-  ObservabilityDropSignal,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import type { ObservabilityStorage, TracingStorageStrategy, MastraCompositeStore } from '@mastra/core/storage';
@@ -26,14 +23,8 @@ import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
 
-/**
- * Configuration for the DefaultExporter's batching, retry, and strategy behavior.
- *
- * @deprecated Use `MastraStorageExporterConfig` from `@mastra/observability` instead.
- * This interface is kept for backward compatibility and will be removed in a
- * future major version.
- */
-interface DefaultExporterConfig extends BaseExporterConfig {
+/** Configuration for the MastraStorageExporter's batching, retry, and strategy behavior. */
+export interface MastraStorageExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBufferSize?: number; // Default: 10000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -48,7 +39,7 @@ interface DefaultExporterConfig extends BaseExporterConfig {
  * Resolves the final tracing storage strategy based on config and observability store hints
  */
 function resolveTracingStorageStrategy(
-  config: DefaultExporterConfig,
+  config: MastraStorageExporterConfig,
   observabilityStorage: ObservabilityStorage,
   storageName: string,
   logger: IMastraLogger,
@@ -72,18 +63,13 @@ function resolveTracingStorageStrategy(
 type Resolve = (value: void | PromiseLike<void>) => void;
 
 /**
- * @deprecated Use `MastraStorageExporter` from `@mastra/observability` instead.
- * This class is preserved unchanged so existing integrations (including code
- * that matches on the `mastra-default-observability-exporter` exporter name)
- * keep working. It will be removed in a future major version.
- *
- * Default storage-backed exporter. Buffers observability events and flushes them
- * in batches to the configured ObservabilityStorage backend with retry support.
+ * Storage-backed exporter. Buffers observability events and flushes them in
+ * batches to the configured ObservabilityStorage backend with retry support.
  */
-export class DefaultExporter extends BaseExporter {
-  name = 'mastra-default-observability-exporter';
+export class MastraStorageExporter extends BaseExporter {
+  name = 'mastra-storage-exporter';
 
-  #config: DefaultExporterConfig;
+  #config: MastraStorageExporterConfig;
   #isInitializing = false;
   #initPromises: Set<Resolve> = new Set();
   #eventBuffer: EventBuffer;
@@ -92,12 +78,11 @@ export class DefaultExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
-  #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
-  #unsupportedSignals: Set<ObservabilityDropSignal> = new Set();
+  #unsupportedSignals: Set<string> = new Set();
 
-  constructor(config: DefaultExporterConfig = {}) {
+  constructor(config: MastraStorageExporterConfig = {}) {
     super(config);
 
     // Set default configuration
@@ -120,18 +105,17 @@ export class DefaultExporter extends BaseExporter {
   async init(options: InitExporterOptions): Promise<void> {
     try {
       this.#isInitializing = true;
-      this.#emitDropEvent = options.emitDropEvent;
 
       this.#storage = options.mastra?.getStorage();
       if (!this.#storage) {
-        this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
+        this.logger.warn('MastraStorageExporter disabled: Storage not available. Traces will not be persisted.');
         return;
       }
 
       this.#observabilityStorage = await this.#storage.getStore('observability');
       if (!this.#observabilityStorage) {
         this.logger.warn(
-          'DefaultExporter disabled: Observability storage not available. Traces will not be persisted.',
+          'MastraStorageExporter disabled: Observability storage not available. Traces will not be persisted.',
         );
         return;
       }
@@ -227,60 +211,17 @@ export class DefaultExporter extends BaseExporter {
     }
   }
 
-  private sanitizeDropError(error: unknown): ObservabilityDropEvent['error'] {
-    if (error instanceof MastraError) {
-      return {
-        id: error.id,
-        domain: String(error.domain),
-        message: error.message,
-      };
-    }
-
-    if (error instanceof Error) {
-      return { message: error.message };
-    }
-
-    return { message: String(error) };
-  }
-
-  private emitDrop(
-    signal: ObservabilityDropSignal,
-    reason: ObservabilityDropReason,
-    count: number,
-    error?: unknown,
-  ): void {
-    if (count === 0) return;
-
-    const dropEvent: ObservabilityDropEvent = {
-      type: 'drop',
-      signal,
-      reason,
-      count,
-      timestamp: new Date(),
-      exporterName: this.name,
-      ...(this.#observabilityStorage ? { storageName: this.#observabilityStorage.constructor.name } : {}),
-      ...(error === undefined ? {} : { error: this.sanitizeDropError(error) }),
-    };
-
-    this.#emitDropEvent?.(dropEvent);
-  }
-
   /**
    * Flush a batch of create events for a single signal type.
    * On "not implemented" errors, disables the signal for future flushes.
    * On other errors, re-adds events to the buffer for retry.
    */
   private async flushCreates<T extends BufferedEvent>(
-    signal: ObservabilityDropSignal,
+    signal: string,
     events: T[],
     storageCall: (events: T[]) => Promise<void>,
   ): Promise<void> {
-    if (events.length === 0) return;
-    if (this.#unsupportedSignals.has(signal)) {
-      this.emitDrop(signal, 'unsupported-storage', events.length);
-      return;
-    }
-
+    if (this.#unsupportedSignals.has(signal) || events.length === 0) return;
     try {
       await storageCall(events);
     } catch (error) {
@@ -291,10 +232,8 @@ export class DefaultExporter extends BaseExporter {
       ) {
         this.logger.warn(error.message);
         this.#unsupportedSignals.add(signal);
-        this.emitDrop(signal, 'unsupported-storage', events.length, error);
       } else {
-        const dropped = this.#eventBuffer.reAddCreates(events);
-        this.emitDrop(signal, 'retry-exhausted', dropped.length, error);
+        this.#eventBuffer.reAddCreates(events);
       }
     }
   }
@@ -308,12 +247,7 @@ export class DefaultExporter extends BaseExporter {
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
   ): Promise<void> {
-    const deferredCountAtEntry = deferredUpdates.length;
-    if (events.length === 0) return;
-    if (this.#unsupportedSignals.has('tracing')) {
-      this.emitDrop('tracing', 'unsupported-storage', events.length);
-      return;
-    }
+    if (this.#unsupportedSignals.has('tracing') || events.length === 0) return;
 
     const partials: UpdateSpanPartial[] = [];
     for (const event of events) {
@@ -344,13 +278,10 @@ export class DefaultExporter extends BaseExporter {
       ) {
         this.logger.warn(error.message);
         this.#unsupportedSignals.add('tracing');
-        deferredUpdates.length = 0;
-        this.emitDrop('tracing', 'unsupported-storage', events.length + deferredCountAtEntry, error);
       } else {
         // Clear deferred to avoid double-adding — re-add all original events instead
         deferredUpdates.length = 0;
-        const dropped = this.#eventBuffer.reAddUpdates(events);
-        this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
+        this.#eventBuffer.reAddUpdates(events);
       }
     }
   }
@@ -436,13 +367,13 @@ export class DefaultExporter extends BaseExporter {
       this.flushCreates('feedback', createFeedbackEvents, events =>
         this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
       ),
-      this.flushCreates('log', createLogEvents, events =>
+      this.flushCreates('logs', createLogEvents, events =>
         this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
       ),
-      this.flushCreates('metric', createMetricEvents, events =>
+      this.flushCreates('metrics', createMetricEvents, events =>
         this.#observabilityStorage!.batchCreateMetrics({ metrics: events.map(m => buildMetricRecord(m)) }),
       ),
-      this.flushCreates('score', createScoreEvents, events =>
+      this.flushCreates('scores', createScoreEvents, events =>
         this.#observabilityStorage!.batchCreateScores({ scores: events.map(s => buildScoreRecord(s)) }),
       ),
       this.flushCreates('tracing', createSpanEvents, async events => {
@@ -459,13 +390,7 @@ export class DefaultExporter extends BaseExporter {
     await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true);
 
     if (deferredUpdates.length > 0) {
-      if (this.#unsupportedSignals.has('tracing')) {
-        this.emitDrop('tracing', 'unsupported-storage', deferredUpdates.length);
-        deferredUpdates.length = 0;
-      } else {
-        const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
-        this.emitDrop('tracing', 'retry-exhausted', dropped.length);
-      }
+      this.#eventBuffer.reAddUpdates(deferredUpdates);
     }
 
     const elapsed = Date.now() - startTime;
@@ -569,6 +494,6 @@ export class DefaultExporter extends BaseExporter {
     // Flush any remaining events
     await this.flush();
 
-    this.logger.info('DefaultExporter shutdown complete');
+    this.logger.info('MastraStorageExporter shutdown complete');
   }
 }

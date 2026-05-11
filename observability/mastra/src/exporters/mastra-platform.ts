@@ -13,30 +13,24 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 
-/**
- * @deprecated Use `MastraPlatformExporterConfig` from `@mastra/observability`
- * instead. This type is kept for backward compatibility and will be removed in
- * a future major version.
- */
-export interface CloudExporterConfig extends BaseExporterConfig {
+export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
 
-  // Cloud-specific configuration
-  accessToken?: string; // Cloud access token (from env or config)
+  accessToken?: string; // Mastra Observability access token (from env or config)
   projectId?: string; // Project ID for project-scoped collector routes
-  endpoint?: string; // Base cloud endpoint
-  tracesEndpoint?: string; // Explicit cloud traces endpoint override
-  logsEndpoint?: string; // Explicit cloud logs endpoint override
-  metricsEndpoint?: string; // Explicit cloud metrics endpoint override
-  scoresEndpoint?: string; // Explicit cloud scores endpoint override
-  feedbackEndpoint?: string; // Explicit cloud feedback endpoint override
+  endpoint?: string; // Base observability endpoint
+  tracesEndpoint?: string; // Explicit traces endpoint override
+  logsEndpoint?: string; // Explicit logs endpoint override
+  metricsEndpoint?: string; // Explicit metrics endpoint override
+  scoresEndpoint?: string; // Explicit scores endpoint override
+  feedbackEndpoint?: string; // Explicit feedback endpoint override
 }
 
-type CloudSignal = 'traces' | 'logs' | 'metrics' | 'scores' | 'feedback';
+type PlatformSignal = 'traces' | 'logs' | 'metrics' | 'scores' | 'feedback';
 
-const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
+const SIGNAL_PUBLISH_SUFFIXES: Record<PlatformSignal, string> = {
   traces: '/spans/publish',
   logs: '/logs/publish',
   metrics: '/metrics/publish',
@@ -44,9 +38,9 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   feedback: '/feedback/publish',
 };
 
-const DEFAULT_CLOUD_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
+const DEFAULT_PLATFORM_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
 
-const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
+const SIGNAL_PUBLISH_SEGMENTS: Record<PlatformSignal, string> = {
   traces: 'spans',
   logs: 'logs',
   metrics: 'metrics',
@@ -65,7 +59,7 @@ function trimTrailingSlashes(value: string): string {
 function createInvalidEndpointError(endpoint: string, text: string, cause?: unknown): MastraError {
   return new MastraError(
     {
-      id: `CLOUD_EXPORTER_INVALID_ENDPOINT`,
+      id: `MASTRA_PLATFORM_EXPORTER_INVALID_ENDPOINT`,
       text,
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.USER,
@@ -81,8 +75,8 @@ const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function createInvalidProjectIdError(projectId: string): MastraError {
   return new MastraError({
-    id: `CLOUD_EXPORTER_INVALID_PROJECT_ID`,
-    text: 'CloudExporter projectId must only contain letters, numbers, hyphens, and underscores.',
+    id: `MASTRA_PLATFORM_EXPORTER_INVALID_PROJECT_ID`,
+    text: 'MastraPlatformExporter projectId must only contain letters, numbers, hyphens, and underscores.',
     domain: ErrorDomain.MASTRA_OBSERVABILITY,
     category: ErrorCategory.USER,
     details: {
@@ -94,7 +88,7 @@ function createInvalidProjectIdError(projectId: string): MastraError {
 function resolveBaseEndpoint(baseEndpoint: string): string {
   const normalizedEndpoint = trimTrailingSlashes(baseEndpoint);
   const invalidText =
-    'CloudExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.';
+    'MastraPlatformExporter endpoint must be a base origin like "https://collector.example.com" with no path, search, or hash.';
 
   try {
     const parsedEndpoint = new URL(normalizedEndpoint);
@@ -111,7 +105,7 @@ function resolveBaseEndpoint(baseEndpoint: string): string {
   }
 }
 
-function buildSignalPath(signal: CloudSignal, projectId?: string): string {
+function buildSignalPath(signal: PlatformSignal, projectId?: string): string {
   const signalSegment = SIGNAL_PUBLISH_SEGMENTS[signal];
   if (!projectId) {
     return `/ai/${signalSegment}/publish`;
@@ -120,13 +114,13 @@ function buildSignalPath(signal: CloudSignal, projectId?: string): string {
   return `/projects/${projectId}/ai/${signalSegment}/publish`;
 }
 
-function buildSignalEndpoint(baseEndpoint: string, signal: CloudSignal, projectId?: string): string {
+function buildSignalEndpoint(baseEndpoint: string, signal: PlatformSignal, projectId?: string): string {
   return `${baseEndpoint}${buildSignalPath(signal, projectId)}`;
 }
 
-function resolveExplicitSignalEndpoint(signal: CloudSignal, endpoint: string, projectId?: string): string {
+function resolveExplicitSignalEndpoint(signal: PlatformSignal, endpoint: string, projectId?: string): string {
   const normalizedEndpoint = trimTrailingSlashes(endpoint);
-  const invalidText = `CloudExporter ${signal}Endpoint must be a base origin like "https://collector.example.com" or a full ${signal} publish URL ending in "${SIGNAL_PUBLISH_SUFFIXES[signal]}".`;
+  const invalidText = `MastraPlatformExporter ${signal}Endpoint must be a base origin like "https://collector.example.com" or a full ${signal} publish URL ending in "${SIGNAL_PUBLISH_SUFFIXES[signal]}".`;
 
   try {
     const parsedEndpoint = new URL(normalizedEndpoint);
@@ -155,14 +149,14 @@ function resolveExplicitSignalEndpoint(signal: CloudSignal, endpoint: string, pr
   }
 }
 
-function deriveSignalEndpointFromTracesEndpoint(signal: CloudSignal, tracesEndpoint: string): string {
+function deriveSignalEndpointFromTracesEndpoint(signal: PlatformSignal, tracesEndpoint: string): string {
   if (signal === 'traces') {
     return tracesEndpoint;
   }
 
   const normalizedTracesEndpoint = trimTrailingSlashes(tracesEndpoint);
   const invalidText =
-    'CloudExporter tracesEndpoint must be a base origin like "https://collector.example.com" or a full traces publish URL ending in "/spans/publish".';
+    'MastraPlatformExporter tracesEndpoint must be a base origin like "https://collector.example.com" or a full traces publish URL ending in "/spans/publish".';
 
   try {
     const parsedEndpoint = new URL(normalizedTracesEndpoint);
@@ -184,17 +178,17 @@ function deriveSignalEndpointFromTracesEndpoint(signal: CloudSignal, tracesEndpo
   }
 }
 
-interface MastraCloudBuffer {
-  spans: MastraCloudSpanRecord[];
-  logs: MastraCloudLogRecord[];
-  metrics: MastraCloudMetricRecord[];
-  scores: MastraCloudScoreRecord[];
-  feedback: MastraCloudFeedbackRecord[];
+interface MastraPlatformBuffer {
+  spans: MastraPlatformSpanRecord[];
+  logs: MastraPlatformLogRecord[];
+  metrics: MastraPlatformMetricRecord[];
+  scores: MastraPlatformScoreRecord[];
+  feedback: MastraPlatformFeedbackRecord[];
   firstEventTime?: Date;
   totalSize: number;
 }
 
-type MastraCloudSpanRecord = AnyExportedSpan & {
+type MastraPlatformSpanRecord = AnyExportedSpan & {
   spanId: string;
   spanType: string;
   startedAt: Date;
@@ -204,12 +198,12 @@ type MastraCloudSpanRecord = AnyExportedSpan & {
   updatedAt: Date | null;
 };
 
-type MastraCloudLogRecord = LogEvent['log'];
-type MastraCloudMetricRecord = MetricEvent['metric'];
-type MastraCloudScoreRecord = ScoreEvent['score'];
-type MastraCloudFeedbackRecord = FeedbackEvent['feedback'];
+type MastraPlatformLogRecord = LogEvent['log'];
+type MastraPlatformMetricRecord = MetricEvent['metric'];
+type MastraPlatformScoreRecord = ScoreEvent['score'];
+type MastraPlatformFeedbackRecord = FeedbackEvent['feedback'];
 
-type ResolvedCloudConfig = {
+type ResolvedPlatformConfig = {
   logger: BaseExporterConfig['logger'];
   logLevel: NonNullable<BaseExporterConfig['logLevel']>;
   maxBatchSize: number;
@@ -223,22 +217,15 @@ type ResolvedCloudConfig = {
   feedbackEndpoint: string;
 };
 
-/**
- * @deprecated Use `MastraPlatformExporter` from `@mastra/observability` instead.
- * This class is preserved unchanged so existing integrations (including code
- * that matches on the `CLOUD_EXPORTER_*` error IDs or the
- * `mastra-cloud-observability-exporter` exporter name) keep working. It will
- * be removed in a future major version.
- */
-export class CloudExporter extends BaseExporter {
-  name = 'mastra-cloud-observability-exporter';
+export class MastraPlatformExporter extends BaseExporter {
+  name = 'mastra-platform-exporter';
 
-  private readonly cloudConfig: Readonly<ResolvedCloudConfig>;
-  private buffer: MastraCloudBuffer;
+  private readonly platformConfig: Readonly<ResolvedPlatformConfig>;
+  private buffer: MastraPlatformBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
 
-  constructor(config: CloudExporterConfig = {}) {
+  constructor(config: MastraPlatformExporterConfig = {}) {
     super(config);
 
     if (config.projectId !== undefined && !VALID_PROJECT_ID.test(config.projectId)) {
@@ -246,8 +233,14 @@ export class CloudExporter extends BaseExporter {
     }
 
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
-    const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
-    const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
+    // Treat an empty MASTRA_PROJECT_ID as unset so deployments that always
+    // export the variable (e.g. CI templates) don't have to special-case it.
+    const envProjectId = process.env.MASTRA_PROJECT_ID === '' ? undefined : process.env.MASTRA_PROJECT_ID;
+    const rawProjectId = config.projectId ?? envProjectId;
+    if (rawProjectId !== undefined && !VALID_PROJECT_ID.test(rawProjectId)) {
+      throw createInvalidProjectIdError(rawProjectId);
+    }
+    const projectId = rawProjectId;
     if (!accessToken) {
       this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
     }
@@ -264,7 +257,7 @@ export class CloudExporter extends BaseExporter {
     }
 
     const resolveConfiguredSignalEndpoint = (
-      signal: Exclude<CloudSignal, 'traces'>,
+      signal: Exclude<PlatformSignal, 'traces'>,
       explicitEndpoint?: string,
     ): string => {
       if (explicitEndpoint) {
@@ -278,7 +271,7 @@ export class CloudExporter extends BaseExporter {
       return buildSignalEndpoint(baseEndpoint!, signal, projectId);
     };
 
-    this.cloudConfig = {
+    this.platformConfig = {
       logger: this.logger,
       logLevel: config.logLevel ?? LogLevel.INFO,
       maxBatchSize: config.maxBatchSize ?? 1000,
@@ -303,12 +296,11 @@ export class CloudExporter extends BaseExporter {
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    // Cloud Observability only process SPAN_ENDED events
     if (event.type !== TracingEventType.SPAN_ENDED) {
       return;
     }
 
-    if (!DEFAULT_CLOUD_SPAN_FILTER(event.exportedSpan)) {
+    if (!DEFAULT_PLATFORM_SPAN_FILTER(event.exportedSpan)) {
       return;
     }
 
@@ -395,8 +387,8 @@ export class CloudExporter extends BaseExporter {
     }
   }
 
-  private formatSpan(span: AnyExportedSpan): MastraCloudSpanRecord {
-    const spanRecord: MastraCloudSpanRecord = {
+  private formatSpan(span: AnyExportedSpan): MastraPlatformSpanRecord {
+    const spanRecord: MastraPlatformSpanRecord = {
       ...span,
       spanId: span.id,
       spanType: span.type,
@@ -410,25 +402,25 @@ export class CloudExporter extends BaseExporter {
     return spanRecord;
   }
 
-  private formatLog(log: LogEvent['log']): MastraCloudLogRecord {
+  private formatLog(log: LogEvent['log']): MastraPlatformLogRecord {
     return {
       ...log,
     };
   }
 
-  private formatMetric(metric: MetricEvent['metric']): MastraCloudMetricRecord {
+  private formatMetric(metric: MetricEvent['metric']): MastraPlatformMetricRecord {
     return {
       ...metric,
     };
   }
 
-  private formatScore(score: ScoreEvent['score']): MastraCloudScoreRecord {
+  private formatScore(score: ScoreEvent['score']): MastraPlatformScoreRecord {
     return {
       ...score,
     };
   }
 
-  private formatFeedback(feedback: FeedbackEvent['feedback']): MastraCloudFeedbackRecord {
+  private formatFeedback(feedback: FeedbackEvent['feedback']): MastraPlatformFeedbackRecord {
     return {
       ...feedback,
     };
@@ -447,15 +439,13 @@ export class CloudExporter extends BaseExporter {
   }
 
   private shouldFlush(): boolean {
-    // Size-based flush
-    if (this.buffer.totalSize >= this.cloudConfig.maxBatchSize) {
+    if (this.buffer.totalSize >= this.platformConfig.maxBatchSize) {
       return true;
     }
 
-    // Time-based flush
     if (this.buffer.firstEventTime && this.buffer.totalSize > 0) {
       const elapsed = Date.now() - this.buffer.firstEventTime.getTime();
-      if (elapsed >= this.cloudConfig.maxBatchWaitMs) {
+      if (elapsed >= this.platformConfig.maxBatchWaitMs) {
         return true;
       }
     }
@@ -471,7 +461,7 @@ export class CloudExporter extends BaseExporter {
       void this.flush().catch(error => {
         const mastraError = new MastraError(
           {
-            id: `CLOUD_EXPORTER_FAILED_TO_SCHEDULE_FLUSH`,
+            id: `MASTRA_PLATFORM_EXPORTER_FAILED_TO_SCHEDULE_FLUSH`,
             domain: ErrorDomain.MASTRA_OBSERVABILITY,
             category: ErrorCategory.USER,
           },
@@ -480,18 +470,17 @@ export class CloudExporter extends BaseExporter {
         this.logger.trackException(mastraError);
         this.logger.error('Scheduled flush failed', mastraError);
       });
-    }, this.cloudConfig.maxBatchWaitMs);
+    }, this.platformConfig.maxBatchWaitMs);
   }
 
   private async flushBuffer(): Promise<void> {
-    // Clear timer since we're flushing
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
 
     if (this.buffer.totalSize === 0) {
-      return; // Nothing to flush
+      return;
     }
 
     const startTime = Date.now();
@@ -501,9 +490,8 @@ export class CloudExporter extends BaseExporter {
     const scoresCopy = [...this.buffer.scores];
     const feedbackCopy = [...this.buffer.feedback];
     const batchSize = this.buffer.totalSize;
-    const flushReason = this.buffer.totalSize >= this.cloudConfig.maxBatchSize ? 'size' : 'time';
+    const flushReason = this.buffer.totalSize >= this.platformConfig.maxBatchSize ? 'size' : 'time';
 
-    // Reset buffer immediately to prevent blocking new events
     this.resetBuffer();
 
     const results = await Promise.all([
@@ -536,20 +524,20 @@ export class CloudExporter extends BaseExporter {
   }
 
   /**
-   * Uploads a signal batch to the configured cloud API using fetchWithRetry.
+   * Uploads a signal batch to the configured Mastra Observability API using fetchWithRetry.
    */
-  private async batchUpload<T>(signal: CloudSignal, records: T[]): Promise<void> {
+  private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
     const headers = {
-      Authorization: `Bearer ${this.cloudConfig.accessToken}`,
+      Authorization: `Bearer ${this.platformConfig.accessToken}`,
       'Content-Type': 'application/json',
     };
 
-    const endpointMap: Record<CloudSignal, string> = {
-      traces: this.cloudConfig.tracesEndpoint,
-      logs: this.cloudConfig.logsEndpoint,
-      metrics: this.cloudConfig.metricsEndpoint,
-      scores: this.cloudConfig.scoresEndpoint,
-      feedback: this.cloudConfig.feedbackEndpoint,
+    const endpointMap: Record<PlatformSignal, string> = {
+      traces: this.platformConfig.tracesEndpoint,
+      logs: this.platformConfig.logsEndpoint,
+      metrics: this.platformConfig.metricsEndpoint,
+      scores: this.platformConfig.scoresEndpoint,
+      feedback: this.platformConfig.feedbackEndpoint,
     };
 
     const options: RequestInit = {
@@ -558,13 +546,13 @@ export class CloudExporter extends BaseExporter {
       body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
     };
 
-    await fetchWithRetry(endpointMap[signal], options, this.cloudConfig.maxRetries);
+    await fetchWithRetry(endpointMap[signal], options, this.platformConfig.maxRetries);
   }
 
   private async flushSignalBatch<T>(
-    signal: CloudSignal,
+    signal: PlatformSignal,
     records: T[],
-  ): Promise<{ signal: CloudSignal; succeeded: boolean }> {
+  ): Promise<{ signal: PlatformSignal; succeeded: boolean }> {
     if (records.length === 0) {
       return { signal, succeeded: true };
     }
@@ -573,7 +561,7 @@ export class CloudExporter extends BaseExporter {
       await this.batchUpload(signal, records);
       return { signal, succeeded: true };
     } catch (error) {
-      const errorId = `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD_${signal.toUpperCase()}` as Uppercase<string>;
+      const errorId = `MASTRA_PLATFORM_EXPORTER_FAILED_TO_BATCH_UPLOAD_${signal.toUpperCase()}` as Uppercase<string>;
       const mastraError = new MastraError(
         {
           id: errorId,
@@ -603,12 +591,11 @@ export class CloudExporter extends BaseExporter {
   }
 
   /**
-   * Force flush any buffered spans without shutting down the exporter.
-   * This is useful in serverless environments where you need to ensure spans
+   * Force flush any buffered events without shutting down the exporter.
+   * This is useful in serverless environments where you need to ensure events
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
-    // Skip if disabled
     if (this.isDisabled) {
       return;
     }
@@ -636,12 +623,10 @@ export class CloudExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    // Skip if disabled
     if (this.isDisabled) {
       return;
     }
 
-    // Clear any pending timer
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
@@ -652,7 +637,7 @@ export class CloudExporter extends BaseExporter {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
+          id: `MASTRA_PLATFORM_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
           domain: ErrorDomain.MASTRA_OBSERVABILITY,
           category: ErrorCategory.USER,
           details: {
@@ -666,6 +651,6 @@ export class CloudExporter extends BaseExporter {
       this.logger.error('Failed to flush remaining events during shutdown', mastraError);
     }
 
-    this.logger.info('CloudExporter shutdown complete');
+    this.logger.info('MastraPlatformExporter shutdown complete');
   }
 }

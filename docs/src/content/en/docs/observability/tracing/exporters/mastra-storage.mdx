@@ -1,13 +1,19 @@
 ---
-title: "Default exporter | Tracing | Observability"
+title: "Mastra Storage exporter | Tracing | Observability"
 description: "Store traces locally for development and debugging"
 packages:
   - "@mastra/observability"
 ---
 
-# Default exporter
+# Mastra Storage exporter
 
-The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
+The `MastraStorageExporter` persists traces to your configured storage backend, making them accessible through Studio. It requires no external services.
+
+:::note
+
+`MastraStorageExporter` was previously called `DefaultExporter`. The original `DefaultExporter` class is still exported from `@mastra/observability` for backward compatibility, but it is deprecated. New code should use `MastraStorageExporter`.
+
+:::
 
 :::warning[Production Observability]
 Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, route the observability storage domain to [ClickHouse](/reference/storage/clickhouse) through [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
@@ -24,7 +30,7 @@ Observability data can quickly overwhelm general-purpose databases in production
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
@@ -36,7 +42,7 @@ export const mastra = new Mastra({
     configs: {
       local: {
         serviceName: 'my-service',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -45,14 +51,14 @@ export const mastra = new Mastra({
 
 ### Recommended Configuration
 
-Include DefaultExporter in your observability configuration:
+Include MastraStorageExporter in your observability configuration:
 
 ```typescript
 import { Mastra } from '@mastra/core'
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 import { LibSQLStore } from '@mastra/libsql'
@@ -67,8 +73,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Studio
-          new CloudExporter(), // Sends observability data to hosted Mastra Studio (requires MASTRA_CLOUD_ACCESS_TOKEN)
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -88,7 +94,7 @@ Access your traces through Studio:
 
 ## Tracing strategies
 
-DefaultExporter automatically selects the optimal tracing strategy based on your storage provider. You can also override this selection if needed.
+MastraStorageExporter automatically selects the optimal tracing strategy based on your storage provider. You can also override this selection if needed.
 
 ### Available Strategies
 
@@ -101,7 +107,7 @@ DefaultExporter automatically selects the optimal tracing strategy based on your
 ### Strategy Configuration
 
 ```typescript
-new DefaultExporter({
+new MastraStorageExporter({
   strategy: 'auto', // Default - let storage provider decide
   // or explicitly set:
   // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
@@ -117,7 +123,7 @@ new DefaultExporter({
 
 Different storage providers support different tracing strategies. Some providers support observability for production workloads, while others are intended primarily for local development.
 
-If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects the optimal strategy for the storage provider. If you set the strategy to a mode that the storage provider doesn't support, you will get an error message.
+If you set the strategy to `'auto'`, the `MastraStorageExporter` automatically selects the optimal strategy for the storage provider. If you set an explicit strategy that the storage provider doesn't support, the exporter logs a warning and falls back to the provider's preferred strategy.
 
 ### Providers with Observability Support
 
@@ -176,7 +182,7 @@ For both batch strategies (`batch-with-updates` and `insert-only`), traces are f
 
 ### Error handling
 
-The DefaultExporter includes robust error handling for production use:
+The MastraStorageExporter includes robust error handling for production use:
 
 - **Retry Logic**: Exponential backoff (500ms, 1s, 2s, 4s)
 - **Transient Failures**: Automatic retry with backoff
@@ -222,22 +228,22 @@ class DropAlertExporter extends BaseExporter {
 
 ```typescript
 // Zero config - recommended for most users
-new DefaultExporter()
+new MastraStorageExporter()
 
 // Development override
-new DefaultExporter({
+new MastraStorageExporter({
   strategy: 'realtime', // Immediate visibility for debugging
 })
 
 // High-throughput production
-new DefaultExporter({
+new MastraStorageExporter({
   maxBatchSize: 2000, // Larger batches
   maxBatchWaitMs: 10000, // Wait longer to fill batches
   maxBufferSize: 50000, // Handle longer outages
 })
 
 // Low-latency production
-new DefaultExporter({
+new MastraStorageExporter({
   maxBatchSize: 100, // Smaller batches
   maxBatchWaitMs: 1000, // Flush quickly
 })
@@ -246,6 +252,6 @@ new DefaultExporter({
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [CloudExporter](/docs/observability/tracing/exporters/cloud)
+- [MastraPlatformExporter](/docs/observability/tracing/exporters/mastra-platform)
 - [Composite Storage](/reference/storage/composite): Combine multiple storage providers
 - [Storage Configuration](/docs/memory/storage)

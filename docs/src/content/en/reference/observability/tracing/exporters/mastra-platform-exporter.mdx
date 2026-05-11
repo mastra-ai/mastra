@@ -1,46 +1,46 @@
 ---
-title: "Reference: CloudExporter | Observability"
-description: API reference for the deprecated CloudExporter (replaced by MastraPlatformExporter)
+title: "Reference: MastraPlatformExporter | Observability"
+description: API reference for the MastraPlatformExporter (formerly CloudExporter)
 packages:
   - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# CloudExporter
+# MastraPlatformExporter
 
-**Added in:** `@mastra/observability@1.8.0`. **Deprecated in `1.12.0`** in favor of [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter).
-
-:::warning[Deprecated]
-
-`CloudExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. The two classes share the same constructor, environment variables, and runtime behavior; `CloudExporter` keeps its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs so monitoring rules built against it keep working.
-
-:::
+**Added in:** `@mastra/observability@1.12.0`. Earlier releases (`@mastra/observability@1.8.0` through `1.11.x`) export the same exporter as the deprecated `CloudExporter`.
 
 Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform for online visualization and monitoring.
+
+:::note
+
+`MastraPlatformExporter` was previously called `CloudExporter`. The original `CloudExporter` class is still exported from `@mastra/observability` so existing imports keep working, but it is deprecated and will be removed in a future major version. New code should use `MastraPlatformExporter`.
+
+:::
 
 ## Constructor
 
 ```typescript prettier:false
-new CloudExporter(config?: CloudExporterConfig)
+new MastraPlatformExporter(config?: MastraPlatformExporterConfig)
 ```
 
 <PropertiesTable
   props={[
   {
     name: 'config',
-    type: 'CloudExporterConfig',
+    type: 'MastraPlatformExporterConfig',
     description: 'Configuration options',
     required: false,
   },
 ]}
 />
 
-## `CloudExporterConfig`
+## `MastraPlatformExporterConfig`
 
 ```typescript
-interface CloudExporterConfig extends BaseExporterConfig {
-  /** Maximum number of spans per batch. Default: 1000 */
+interface MastraPlatformExporterConfig extends BaseExporterConfig {
+  /** Maximum number of buffered events per batch (spans, logs, metrics, scores, feedback). Default: 1000 */
   maxBatchSize?: number
 
   /** Maximum wait time before flushing in milliseconds. Default: 5000 */
@@ -49,28 +49,28 @@ interface CloudExporterConfig extends BaseExporterConfig {
   /** Maximum retry attempts. Default: 3 */
   maxRetries?: number
 
-  /** Cloud access token (from env or config) */
+  /** Mastra Observability access token (from env or config) */
   accessToken?: string
 
   /** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
   projectId?: string
 
-  /** Base cloud observability endpoint */
+  /** Base observability endpoint */
   endpoint?: string
 
-  /** Explicit cloud traces endpoint override */
+  /** Explicit traces endpoint override */
   tracesEndpoint?: string
 
-  /** Explicit cloud logs endpoint override */
+  /** Explicit logs endpoint override */
   logsEndpoint?: string
 
-  /** Explicit cloud metrics endpoint override */
+  /** Explicit metrics endpoint override */
   metricsEndpoint?: string
 
-  /** Explicit cloud scores endpoint override */
+  /** Explicit scores endpoint override */
   scoresEndpoint?: string
 
-  /** Explicit cloud feedback endpoint override */
+  /** Explicit feedback endpoint override */
   feedbackEndpoint?: string
 }
 ```
@@ -84,15 +84,17 @@ Extends `BaseExporterConfig`, which includes:
 
 The exporter reads these environment variables if not provided in config:
 
-- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token for `CloudExporter` requests
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token for `MastraPlatformExporter` requests
 - `MASTRA_PROJECT_ID` - Project ID to use when deriving project-scoped collector routes such as `/projects/:projectId/ai/spans/publish`
 - `MASTRA_CLOUD_TRACES_ENDPOINT` - Traces endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://observability.mastra.ai` in `@mastra/observability@1.9.2` and later
 
 ## Properties
 
 ```typescript prettier:false
-readonly name = 'mastra-cloud-observability-exporter';
+readonly name = 'mastra-platform-exporter';
 ```
+
+The deprecated `CloudExporter` class continues to use `'mastra-cloud-observability-exporter'` as its `name` for backward compatibility.
 
 ## Methods
 
@@ -102,9 +104,9 @@ readonly name = 'mastra-cloud-observability-exporter';
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
-Processes tracing events for Cloud export.
+Processes tracing events for export to the Mastra platform.
 
-Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED` are ignored. Matching spans are buffered and uploaded to the Cloud traces endpoint on the next flush.
+Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED` are ignored. Matching spans are buffered and uploaded to the traces endpoint on the next flush.
 
 <PropertiesTable
   props={[
@@ -125,9 +127,9 @@ Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED`
 async onLogEvent(event: LogEvent): Promise<void>
 ```
 
-Processes log signals for Cloud export.
+Processes log signals for export.
 
-Every `LogEvent` passed to this handler is buffered and exported to the Cloud logs endpoint derived from the configured base endpoint. Unlike tracing, there is no additional event-status filtering at the `CloudExporter` level. If the exporter is disabled, this method becomes a no-op.
+Every `LogEvent` passed to this handler is buffered and exported to the logs endpoint derived from the configured base endpoint. Unlike tracing, there is no additional event-status filtering at the `MastraPlatformExporter` level. If the exporter is disabled, this method becomes a no-op.
 
 <PropertiesTable
   props={[
@@ -148,9 +150,9 @@ Every `LogEvent` passed to this handler is buffered and exported to the Cloud lo
 async onMetricEvent(event: MetricEvent): Promise<void>
 ```
 
-Processes metric signals for Cloud export.
+Processes metric signals for export.
 
-Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. There is no additional filtering by metric subtype or status inside `CloudExporter`; the exporter forwards every metric event it receives unless it is disabled.
+Every `MetricEvent` passed to this handler is buffered and exported to the metrics endpoint derived from the configured base endpoint. There is no additional filtering by metric subtype or status inside `MastraPlatformExporter`; the exporter forwards every metric event it receives unless it is disabled.
 
 <PropertiesTable
   props={[
@@ -171,9 +173,9 @@ Every `MetricEvent` passed to this handler is buffered and exported to the Cloud
 async onScoreEvent(event: ScoreEvent): Promise<void>
 ```
 
-Processes score signals for Cloud export.
+Processes score signals for export.
 
-Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud scores endpoint derived from the configured base endpoint. There is no extra filtering at the exporter layer beyond the disabled-exporter check, so all score events received by this method are forwarded.
+Every `ScoreEvent` passed to this handler is buffered and exported to the scores endpoint derived from the configured base endpoint. There is no extra filtering at the exporter layer beyond the disabled-exporter check, so all score events received by this method are forwarded.
 
 <PropertiesTable
   props={[
@@ -194,9 +196,9 @@ Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud 
 async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 ```
 
-Processes feedback signals for Cloud export.
+Processes feedback signals for export.
 
-Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. There is no feedback-type filtering inside `CloudExporter`; all feedback events received here are forwarded unless the exporter is disabled.
+Every `FeedbackEvent` passed to this handler is buffered and exported to the feedback endpoint derived from the configured base endpoint. There is no feedback-type filtering inside `MastraPlatformExporter`; all feedback events received here are forwarded unless the exporter is disabled.
 
 <PropertiesTable
   props={[
@@ -250,6 +252,8 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 - Drops batches after all retries fail
 - Logs errors but continues processing new events
 
+Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `id` prefix. The deprecated `CloudExporter` continues to emit `CLOUD_EXPORTER_*` `id`s.
+
 ### Endpoint routing
 
 - Base origins derive signal endpoints automatically
@@ -261,42 +265,39 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
 - `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for their respective signal type
-- All supported signal batches are uploaded to their matching Cloud publish endpoints during `flush()` and `shutdown()`
+- All supported signal batches are uploaded to their matching publish endpoints during `flush()` and `shutdown()`
 
-## `MastraCloudSpanRecord`
+## Span wire format
 
-Internal format for cloud spans:
+The shape of each span sent to Mastra Platform is documented here for reference only — it is not exported from `@mastra/observability` and should not be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
 
 ```typescript
-interface MastraCloudSpanRecord {
-  traceId: string
-  spanId: string
-  parentSpanId: string | null
-  name: string
-  spanType: string
-  attributes: Record<string, any> | null
-  metadata: Record<string, any> | null
-  startedAt: Date
-  endedAt: Date | null
-  input: any
-  output: any
-  error: any
-  isEvent: boolean
+type MastraPlatformSpanRecord = AnyExportedSpan & {
+  // Aliases derived from the source span
+  spanId: string // alias for span.id
+  spanType: string // alias for span.type
+  startedAt: Date // alias for span.startTime
+  endedAt: Date | null // alias for span.endTime ?? null
+  error: AnyExportedSpan['errorInfo'] | null
+
+  // Stamped at export time
   createdAt: Date
   updatedAt: Date | null
 }
 ```
 
+The spread `AnyExportedSpan` also carries the original `id`, `type`, `name`, `traceId`, `parentSpanId`, `isRootSpan`, `isEvent`, `startTime`, `endTime`, `entityType`, `entityId`, `entityName`, `tags`, `attributes`, `metadata`, `input`, `output`, and `errorInfo`. See [Interfaces](/reference/observability/tracing/interfaces) for `AnyExportedSpan`.
+
 ## Usage
 
 ```typescript
-import { CloudExporter } from '@mastra/observability'
+import { MastraPlatformExporter } from '@mastra/observability'
 
 // Uses environment variable for token
-const exporter = new CloudExporter()
+const exporter = new MastraPlatformExporter()
 
 // Explicit configuration
-const customExporter = new CloudExporter({
+const customExporter = new MastraPlatformExporter({
   accessToken: 'your-token',
   projectId: 'project_123',
   maxBatchSize: 500,
@@ -304,6 +305,22 @@ const customExporter = new CloudExporter({
   logLevel: 'debug',
 })
 ```
+
+## Migrating from `CloudExporter`
+
+The two classes share the same constructor signature, environment variables, and behavior. To migrate, replace the import and constructor:
+
+```typescript
+// Before
+import { CloudExporter } from '@mastra/observability'
+const exporter = new CloudExporter()
+
+// After
+import { MastraPlatformExporter } from '@mastra/observability'
+const exporter = new MastraPlatformExporter()
+```
+
+The original `CloudExporter` is preserved unchanged so dashboards or alert rules that match the previous `CLOUD_EXPORTER_*` error IDs or `mastra-cloud-observability-exporter` exporter name keep working until you migrate.
 
 ## See also
 
@@ -314,7 +331,7 @@ const customExporter = new CloudExporter({
 
 ### Other Exporters
 
-- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
+- [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter): Storage persistence
 - [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
 - [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
 - [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
