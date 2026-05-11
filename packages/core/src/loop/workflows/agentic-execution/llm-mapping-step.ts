@@ -16,6 +16,35 @@ import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
+/**
+ * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts are
+ * converted to `type: 'image-data'` or `type: 'file-data'` as the AI SDK
+ * provider layer expects. AI SDK performs this same normalization internally in
+ * `resolveToolResultOutput`, but Mastra calls toModelOutput directly and stores
+ * the result, so we need to replicate this mapping.
+ */
+function normalizeModelOutput(output: unknown): unknown {
+  if (
+    output == null ||
+    typeof output !== 'object' ||
+    (output as any).type !== 'content' ||
+    !Array.isArray((output as any).value)
+  ) {
+    return output;
+  }
+  const value = (output as any).value as Array<Record<string, unknown>>;
+  return {
+    ...(output as any),
+    value: value.map(item => {
+      if (item.type !== 'media') return item;
+      if (typeof item.mediaType === 'string' && (item.mediaType as string).startsWith('image/')) {
+        return { type: 'image-data', data: item.data, mediaType: item.mediaType };
+      }
+      return { type: 'file-data', data: item.data, mediaType: item.mediaType };
+    }),
+  };
+}
+
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
@@ -129,6 +158,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
           | { toModelOutput?: (output: unknown) => unknown }
           | undefined;
+
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
           const parentSpan = observabilityContext?.tracingContext?.currentSpan;
@@ -146,6 +176,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           });
           try {
             modelOutput = await tool.toModelOutput(toolCall.result);
+            // Normalize media parts to image-data/file-data as AI SDK expects
+            modelOutput = normalizeModelOutput(modelOutput);
             mappingSpan?.end({ output: modelOutput });
           } catch (err) {
             mappingSpan?.error({ error: err as Error, endSpan: true });
