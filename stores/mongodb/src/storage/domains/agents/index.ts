@@ -224,13 +224,18 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
       const now = new Date();
 
+      // Default visibility to 'private' when an authorId is set; leave undefined for legacy unowned rows.
+      const visibility = agent.visibility ?? (agent.authorId ? 'private' : undefined);
+
       // Create the thin agent record with status='draft'
       const newAgent: StorageAgentType = {
         id: agent.id,
         status: 'draft',
         activeVersionId: undefined,
         authorId: agent.authorId,
+        visibility,
         metadata: agent.metadata,
+        starCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -238,7 +243,13 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       await collection.insertOne(this.serializeAgent(newAgent));
 
       // Extract config fields from the flat input
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+      const {
+        id: _id,
+        authorId: _authorId,
+        visibility: _visibility,
+        metadata: _metadata,
+        ...snapshotConfig
+      } = agent;
 
       // Create version 1 from the config
       const versionId = randomUUID();
@@ -293,6 +304,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const metadataFields = {
         authorId: updates.authorId,
         activeVersionId: updates.activeVersionId,
+        visibility: updates.visibility,
         metadata: updates.metadata,
         status: updates.status,
       };
@@ -301,6 +313,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
+      }
+      if (metadataFields.visibility !== undefined) {
+        updateDoc.visibility = metadataFields.visibility;
       }
       if (metadataFields.status !== undefined) {
         updateDoc.status = metadataFields.status;
@@ -365,7 +380,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata, status } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -392,6 +407,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       }
       if (authorId) {
         filter.authorId = authorId;
+      }
+      if (visibility) {
+        filter.visibility = visibility;
       }
       if (metadata) {
         for (const [key, value] of Object.entries(metadata)) {
@@ -459,7 +477,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       status: rest.status,
       activeVersionId: rest.activeVersionId,
       authorId: rest.authorId,
+      visibility: (rest.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: rest.metadata,
+      starCount: rest.starCount === null || rest.starCount === undefined ? 0 : Number(rest.starCount),
       createdAt: rest.createdAt instanceof Date ? rest.createdAt : new Date(rest.createdAt),
       updatedAt: rest.updatedAt instanceof Date ? rest.updatedAt : new Date(rest.updatedAt),
     };
@@ -475,7 +495,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       status: agent.status,
       activeVersionId: agent.activeVersionId,
       authorId: agent.authorId,
+      visibility: agent.visibility,
       metadata: agent.metadata,
+      starCount: agent.starCount,
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     };
