@@ -1,6 +1,7 @@
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
+import { withOmDebugSpan } from '../debug-trace';
 import { filterObservedMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
@@ -43,6 +44,10 @@ export class ObservationStep {
    * builds system message, filters observed.
    */
   async prepare(): Promise<StepContext> {
+    return withOmDebugSpan('om.step.prepare', this.turn.observabilityContext, () => this._prepareImpl());
+  }
+
+  private async _prepareImpl(): Promise<StepContext> {
     if (this._prepared) throw new Error(`Step ${this.stepNumber} already prepared`);
 
     const { threadId, resourceId, messageList } = this.turn;

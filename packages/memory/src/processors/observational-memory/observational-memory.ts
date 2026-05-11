@@ -179,6 +179,7 @@ function parseActivationTTL(value: number | string | undefined, fieldPath: strin
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
+import { withOmDebugSpan } from './debug-trace';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -1015,27 +1016,29 @@ export class ObservationalMemory {
    * Returns the existing record if one exists, otherwise initializes a new one.
    */
   async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
-    const ids = this.getStorageIds(threadId, resourceId);
-    let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    return withOmDebugSpan('om.getOrCreateRecord', undefined, async () => {
+      const ids = this.getStorageIds(threadId, resourceId);
+      let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
 
-    if (!record) {
-      // Capture the timezone used for Observer date formatting
-      const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!record) {
+        // Capture the timezone used for Observer date formatting
+        const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      record = await this.storage.initializeObservationalMemory({
-        threadId: ids.threadId,
-        resourceId: ids.resourceId,
-        scope: this.scope,
-        config: {
-          observation: this.observationConfig,
-          reflection: this.reflectionConfig,
+        record = await this.storage.initializeObservationalMemory({
+          threadId: ids.threadId,
+          resourceId: ids.resourceId,
           scope: this.scope,
-        },
-        observedTimezone,
-      });
-    }
+          config: {
+            observation: this.observationConfig,
+            reflection: this.reflectionConfig,
+            scope: this.scope,
+          },
+          observedTimezone,
+        });
+      }
 
-    return record;
+      return record;
+    });
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -2631,6 +2634,25 @@ ${formattedMessages}
    * ```
    */
   async getStatus(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+    record: ObservationalMemoryRecord;
+    pendingTokens: number;
+    threshold: number;
+    effectiveObservationTokensThreshold: number;
+    unbufferedPendingTokens: number;
+    shouldObserve: boolean;
+    shouldBuffer: boolean;
+    shouldReflect: boolean;
+    bufferedChunkCount: number;
+    bufferedChunkTokens: number;
+    canActivate: boolean;
+    asyncObservationEnabled: boolean;
+    asyncReflectionEnabled: boolean;
+    scope: 'resource' | 'thread';
+  }> {
+    return withOmDebugSpan('om.getStatus', undefined, () => this._getStatusImpl(opts));
+  }
+
+  private async _getStatusImpl(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
