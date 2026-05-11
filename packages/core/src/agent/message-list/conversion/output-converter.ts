@@ -350,30 +350,39 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
 
-  const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
+  // Convert per UI message: an assistant turn with a tool call splits into
+  // [assistant, tool] model messages, so a batch convert + index-based attach
+  // would misplace message-level providerOptions onto the tool message.
+  const converted: AIV5Type.ModelMessage[] = [];
+  for (const uiMsg of preprocessed) {
+    const produced = AIV5.convertToModelMessages([uiMsg]);
+    if (produced.length === 0) continue;
 
-  // Restore message-level providerOptions from metadata.providerMetadata
-  // This preserves providerOptions through the DB → UI → Model conversion
-  const withProviderOptions = result.map((modelMsg, index) => {
-    const uiMsg = preprocessed[index];
+    const providerMetadata =
+      uiMsg.metadata && typeof uiMsg.metadata === 'object' && 'providerMetadata' in uiMsg.metadata
+        ? (uiMsg.metadata as { providerMetadata?: AIV5Type.ProviderMetadata }).providerMetadata
+        : undefined;
 
-    if (
-      uiMsg?.metadata &&
-      typeof uiMsg.metadata === 'object' &&
-      'providerMetadata' in uiMsg.metadata &&
-      uiMsg.metadata.providerMetadata
-    ) {
-      return {
-        ...modelMsg,
-        providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
-      } satisfies AIV5Type.ModelMessage;
+    if (providerMetadata) {
+      let target = -1;
+      for (let index = produced.length - 1; index >= 0; index--) {
+        if (produced[index]?.role === uiMsg.role) {
+          target = index;
+          break;
+        }
+      }
+      if (target !== -1) {
+        produced[target] = { ...produced[target], providerOptions: providerMetadata } as AIV5Type.ModelMessage;
+      }
     }
 
-    return modelMsg;
-  });
+    converted.push(...produced);
+  }
+
+  const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  const anthropicCompat = ensureAnthropicCompatibleMessages(withProviderOptions, dbMessages);
+  const anthropicCompat = ensureAnthropicCompatibleMessages(withFileMetadata, dbMessages);
 
   return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
 }
