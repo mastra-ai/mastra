@@ -195,6 +195,29 @@ export class DuckDBConnection extends MastraBase {
   }
 
   /**
+   * Execute multiple SQL statements in order using a single DuckDB connection.
+   *
+   * This is intended for schema setup/migrations where statements have no
+   * parameters and must remain ordered, but opening a connection per statement
+   * would dominate initialization cost. Blank statements are skipped. Like
+   * calling execute() repeatedly, this does not wrap statements in a transaction,
+   * so prior statements can remain applied if a later statement fails.
+   */
+  async executeBatch(sqlStatements: readonly string[]): Promise<void> {
+    const statements = sqlStatements.map(statement => statement.trim()).filter(Boolean);
+    if (statements.length === 0) return;
+
+    const connection = await this.getConnection();
+    try {
+      const sql =
+        statements.map((statement, i) => `-- executeBatch statement ${i + 1}\n${statement}`).join('\n;\n') + '\n;';
+      await connection.run(sql);
+    } finally {
+      this.closeConnection(connection);
+    }
+  }
+
+  /**
    * Escape a value for safe inline SQL use.
    * DuckDB prepared statements can't handle NULL for parameters typed as ANY,
    * so for complex INSERT/UPDATE operations we inline values safely.

@@ -2,8 +2,7 @@ import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import { comboboxStyles } from './combobox-styles';
-import type { ButtonProps } from '@/ds/components/Button/Button';
-import { buttonVariants } from '@/ds/components/Button/Button';
+import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
@@ -24,7 +23,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: Extract<ButtonProps['variant'], 'default' | 'ghost' | 'link'>;
+  /** Kept for API compatibility; trigger styling is intrinsic to the Combobox now. */
+  variant?: 'default' | 'ghost' | 'link';
   size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -41,7 +41,6 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'default',
   size = 'default',
   open,
   onOpenChange,
@@ -68,15 +67,18 @@ export function Combobox({
       >
         <BaseCombobox.Trigger
           className={cn(
-            buttonVariants({ variant, size }),
             comboboxStyles.trigger,
+            formElementSizes[size],
             error && comboboxStyles.triggerError,
             className,
           )}
         >
-          <span className="truncate flex items-center gap-2">
+          {/* Keep truncation off the outer wrapper so start adornments are not clipped. */}
+          <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
-            <BaseCombobox.Value placeholder={placeholder} />
+            <span className="truncate">
+              <BaseCombobox.Value placeholder={placeholder} />
+            </span>
           </span>
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>
@@ -91,25 +93,21 @@ export function Combobox({
               <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
               <BaseCombobox.List className={comboboxStyles.list}>
                 {(option: ComboboxOption) => (
-                  <BaseCombobox.Item
-                    key={option.value}
-                    value={option}
-                    className={cn(comboboxStyles.item, comboboxStyles.itemSelected)}
-                  >
-                    <span className={comboboxStyles.checkContainer}>
-                      <BaseCombobox.ItemIndicator>
-                        <Check className={comboboxStyles.checkIcon} />
-                      </BaseCombobox.ItemIndicator>
+                  <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>
+                    {option.start}
+                    <span className={comboboxStyles.optionText}>
+                      <span className={comboboxStyles.optionLabel}>{option.label}</span>
+                      {option.description && (
+                        <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                      )}
                     </span>
-                    <span className={comboboxStyles.optionContent}>
-                      {option.start}
-                      <span className={comboboxStyles.optionText}>
-                        <span className={comboboxStyles.optionLabel}>{option.label}</span>
-                        {option.description && (
-                          <span className={comboboxStyles.optionDescription}>{option.description}</span>
-                        )}
-                      </span>
+                    <span className={comboboxStyles.itemRightSlot}>
                       {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                      <span className={comboboxStyles.checkContainer}>
+                        <BaseCombobox.ItemIndicator>
+                          <Check className={comboboxStyles.checkIcon} />
+                        </BaseCombobox.ItemIndicator>
+                      </span>
                     </span>
                   </BaseCombobox.Item>
                 )}

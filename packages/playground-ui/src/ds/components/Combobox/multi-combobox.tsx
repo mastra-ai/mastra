@@ -3,7 +3,7 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import type { ComboboxOption } from './combobox';
 import { comboboxStyles } from './combobox-styles';
-import { buttonVariants } from '@/ds/components/Button/Button';
+import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +18,7 @@ export type MultiComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
+  /** Kept for API compatibility; trigger styling is intrinsic to the Combobox now. */
   variant?: 'default' | 'outline' | 'ghost';
   size?: FormElementSize;
   open?: boolean;
@@ -35,7 +36,6 @@ export function MultiCombobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'default',
   size = 'md',
   open,
   onOpenChange,
@@ -65,8 +65,8 @@ export function MultiCombobox({
       >
         <BaseCombobox.Trigger
           className={cn(
-            buttonVariants({ variant, size }),
             comboboxStyles.trigger,
+            formElementSizes[size],
             error && comboboxStyles.triggerError,
             className,
           )}
@@ -89,7 +89,7 @@ export function MultiCombobox({
                 {(option: ComboboxOption) => {
                   const isSelected = value.includes(option.value);
                   return (
-                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>
+                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.itemMulti}>
                       <span
                         className={cn(
                           comboboxStyles.checkbox,

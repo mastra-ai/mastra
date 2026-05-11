@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -16,6 +17,7 @@ import { createTool, isValidationError } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
+import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -54,7 +56,7 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt } from './types';
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt, AppResources } from './types';
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -243,6 +245,30 @@ export class MCPServer extends MCPServerBase {
       resources?: MCPServerResources;
       prompts?: MCPServerPrompts;
       /**
+       * Optional MCP App resources configuration.
+       *
+       * Registers `ui://` resources that serve interactive HTML UIs as defined
+       * by the MCP Apps extension (SEP-1865). These are automatically merged
+       * into the resource system and served alongside any user-provided resources.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   appResources: {
+       *     'ui://weather/dashboard': {
+       *       name: 'Weather Dashboard',
+       *       html: '<html>...</html>',
+       *       meta: { csp: { connectDomains: ['https://api.weather.com'] } },
+       *     },
+       *   },
+       * });
+       * ```
+       */
+      appResources?: AppResources;
+      /**
        * Optional custom JSON Schema validator forwarded to the underlying MCP
        * SDK server. Use this to opt into a non-default validator
        * implementation.
@@ -271,7 +297,9 @@ export class MCPServer extends MCPServerBase {
     },
   ) {
     super(opts);
-    this.resourceOptions = opts.resources;
+
+    // Merge appResources into the resource system
+    this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
     this.promptOptions = opts.prompts;
     this.jsonSchemaValidator = opts.jsonSchemaValidator;
 
@@ -280,12 +308,23 @@ export class MCPServer extends MCPServerBase {
       logging: { enabled: true },
     };
 
-    if (opts.resources) {
+    if (this.resourceOptions) {
       capabilities.resources = { subscribe: true, listChanged: true };
     }
 
     if (opts.prompts) {
       capabilities.prompts = { listChanged: true };
+    }
+
+    // Advertise MCP Apps extension if any tool has UI metadata or appResources are configured
+    const hasUiTools = Object.values(this.convertedTools).some(
+      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+    );
+    if (hasUiTools || opts.appResources) {
+      capabilities.extensions = {
+        ...capabilities.extensions,
+        'io.modelcontextprotocol/ui': {},
+      };
     }
 
     this.server = new Server(
@@ -409,6 +448,100 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Merges appResources into the resource system alongside any user-provided resources.
+   *
+   * App resources are auto-registered as `ui://` resources with the MCP Apps MIME type.
+   * If the user also provides a `resources` config, the two are merged — user callbacks
+   * take precedence for overlapping URIs.
+   */
+  private mergeAppResources(
+    userResources: MCPServerResources | undefined,
+    appResources: AppResources | undefined,
+  ): MCPServerResources | undefined {
+    if (!appResources || Object.keys(appResources).length === 0) {
+      return userResources;
+    }
+
+    // Resolve HTML content for all app resources (read files once at startup)
+    const resolvedAppResources = new Map<string, { resource: Resource; html: string }>();
+    for (const [uri, appResource] of Object.entries(appResources)) {
+      let html: string;
+      if (appResource.html) {
+        html = appResource.html;
+      } else if (appResource.htmlPath) {
+        html = readFileSync(appResource.htmlPath, 'utf-8');
+      } else {
+        this.logger.warn(`App resource '${uri}' has neither html nor htmlPath — skipping`);
+        continue;
+      }
+
+      const resource: Resource = {
+        uri,
+        name: appResource.name,
+        ...(appResource.description ? { description: appResource.description } : {}),
+        mimeType: RESOURCE_MIME_TYPE,
+        ...(appResource.meta ? { _meta: { ui: appResource.meta } } : {}),
+      };
+
+      resolvedAppResources.set(uri, { resource, html });
+    }
+
+    if (resolvedAppResources.size === 0) {
+      return userResources;
+    }
+
+    // Build merged resource callbacks
+    const appListResources = async () => {
+      return Array.from(resolvedAppResources.values()).map(r => r.resource);
+    };
+
+    const appGetResourceContent = async ({ uri }: { uri: string }) => {
+      const appRes = resolvedAppResources.get(uri);
+      if (appRes) {
+        return { text: appRes.html };
+      }
+      throw new Error(`App resource not found: ${uri}`);
+    };
+
+    if (!userResources) {
+      return {
+        listResources: appListResources,
+        getResourceContent: appGetResourceContent,
+      };
+    }
+
+    // Merge: user resources take precedence, app resources are appended
+    return {
+      listResources: async ({ extra }) => {
+        const userResourceList = await userResources.listResources({ extra });
+        const appResourceList = await appListResources();
+        // Filter out app resources that conflict with user-defined ones
+        const userUris = new Set(userResourceList.map(r => r.uri));
+        const nonConflicting = appResourceList.filter(r => !userUris.has(r.uri));
+        return [...userResourceList, ...nonConflicting];
+      },
+      getResourceContent: async ({ uri, extra }) => {
+        // Try user resources first, fall back to app resources
+        const appRes = resolvedAppResources.get(uri);
+        if (appRes) {
+          // Check if user also defines this URI — if so, prefer user
+          try {
+            const userResourceList = await userResources.listResources({ extra });
+            if (userResourceList.some(r => r.uri === uri)) {
+              return userResources.getResourceContent({ uri, extra });
+            }
+          } catch {
+            // If user listResources fails, fall through to app resource
+          }
+          return { text: appRes.html };
+        }
+        return userResources.getResourceContent({ uri, extra });
+      },
+      ...(userResources.resourceTemplates ? { resourceTemplates: userResources.resourceTemplates } : {}),
+    };
+  }
+
+  /**
    * Creates a new Server instance configured with all handlers for HTTP sessions.
    * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
    */
@@ -424,6 +557,20 @@ export class MCPServer extends MCPServerBase {
 
     if (this.promptOptions) {
       capabilities.prompts = { listChanged: true };
+    }
+
+    // Re-apply extension capabilities for the new server instance
+    const hasUiTools = Object.values(this.convertedTools).some(
+      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+    );
+    if (hasUiTools || this.resourceOptions) {
+      const hasUiResources = this.definedResources?.some(r => r.uri.startsWith('ui://'));
+      if (hasUiTools || hasUiResources) {
+        capabilities.extensions = {
+          ...capabilities.extensions,
+          'io.modelcontextprotocol/ui': {},
+        };
+      }
     }
 
     const serverInstance = new Server(
@@ -469,7 +616,17 @@ export class MCPServer extends MCPServerBase {
           }
           const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
           if (toolMeta) {
-            toolSpec._meta = toolMeta;
+            // Normalize UI metadata for backward compatibility with older hosts:
+            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
+            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
+            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
+            if (uiMeta?.resourceUri && !legacyUri) {
+              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+            } else if (legacyUri && !uiMeta?.resourceUri) {
+              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
+            } else {
+              toolSpec._meta = toolMeta;
+            }
           }
           return toolSpec;
         }),
@@ -2205,5 +2362,58 @@ export class MCPServer extends MCPServerBase {
       this.logger.trackException(mastraError);
       throw mastraError;
     }
+  }
+
+  /**
+   * Reads the content of a resource by URI.
+   *
+   * Used by the Studio API to proxy `ui://` resource reads for MCP Apps rendering.
+   *
+   * @param uri - The resource URI to read (e.g. `ui://weather/dashboard`)
+   * @returns Promise resolving to the resource content
+   */
+  public async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    if (!this.resourceOptions?.getResourceContent) {
+      throw new MastraError({
+        id: 'MCP_SERVER_RESOURCES_NOT_CONFIGURED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { uri },
+      });
+    }
+
+    const extra = {} as any;
+    const result = await this.resourceOptions.getResourceContent({ uri, extra });
+    const contents = Array.isArray(result) ? result : [result];
+
+    return {
+      contents: contents.map(c => ({
+        uri,
+        ...('text' in c && c.text !== undefined ? { text: c.text } : {}),
+        ...('blob' in c && c.blob !== undefined ? { blob: c.blob } : {}),
+      })),
+    };
+  }
+
+  /**
+   * Lists all resources available on this MCP server.
+   *
+   * Used by the Studio API to discover `ui://` resources for MCP Apps.
+   *
+   * @returns Promise resolving to the list of resources
+   */
+  public async listResources(): Promise<{ resources: Resource[] }> {
+    if (!this.resourceOptions?.listResources) {
+      return { resources: [] };
+    }
+
+    const extra = {} as any;
+    if (this.definedResources) {
+      return { resources: this.definedResources };
+    }
+
+    const resources = await this.resourceOptions.listResources({ extra });
+    this.definedResources = resources;
+    return { resources };
   }
 }

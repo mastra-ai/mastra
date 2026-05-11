@@ -82,6 +82,27 @@ export const ManyTabs: Story = {
   ),
 };
 
+export const PillVariant: Story = {
+  render: () => (
+    <Tabs defaultTab="overview" className="w-[500px]">
+      <TabList variant="pill">
+        <Tab value="overview">Overview</Tab>
+        <Tab value="projects">Projects</Tab>
+        <Tab value="account">Account</Tab>
+      </TabList>
+      <TabContent value="overview">
+        <div className="p-4 text-neutral5">Overview content</div>
+      </TabContent>
+      <TabContent value="projects">
+        <div className="p-4 text-neutral5">Projects content</div>
+      </TabContent>
+      <TabContent value="account">
+        <div className="p-4 text-neutral5">Account content</div>
+      </TabContent>
+    </Tabs>
+  ),
+};
+
 export const WithClosableTabs: Story = {
   render: () => (
     <Tabs defaultTab="file1" className="w-[400px]">

@@ -98,11 +98,7 @@ export const AgentBadge = ({
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
         ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger
-            backgroundTaskTaskId={bgEntry.taskId}
-            backgroundTaskStartedAt={bgEntry.startedAt}
-            backgroundTaskCompletedAt={bgEntry.completedAt}
-          />
+          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
         ) : null
       }
     >

@@ -2712,5 +2712,22 @@ describe('Tracing', () => {
 
       span.end();
     });
+
+    it('forwards scorerName and targetEntityType from ScoreInput onto the ExportedScore', async () => {
+      const { buildScoreEvent } = await import('./recorded');
+      const event = buildScoreEvent({
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        score: {
+          scorerId: 'accuracy',
+          scorerName: 'Accuracy Scorer',
+          score: 0.9,
+          targetEntityType: 'agent' as any,
+        },
+      });
+
+      expect(event.score.scorerName).toBe('Accuracy Scorer');
+      expect(event.score.targetEntityType).toBe('agent');
+    });
   });
 });

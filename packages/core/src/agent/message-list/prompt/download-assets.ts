@@ -13,6 +13,9 @@ export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; down
         method: 'GET',
       },
       downloadRetries,
+      {
+        shouldRetryResponse: response => response.status >= 500,
+      },
     );
 
     if (!response.ok) {

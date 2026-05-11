@@ -10,10 +10,12 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
+import { PUBSUB_SYMBOL } from './constants';
 import type { Workflow } from './types';
 import { createStep, createWorkflow } from './workflow';
 
@@ -671,6 +673,82 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(childRuns?.runs.length).toBe(1);
       // Regression guard for #15246: child workflow snapshots must inherit the parent's resourceId.
       expect(childRuns?.runs[0]?.resourceId).toBe('workspace-1');
+    });
+  });
+
+  describe('Nested workflow abort listener cleanup (issue #16125)', () => {
+    it('removes abort listeners after nested workflow execution completes', async () => {
+      const activeAbortListeners = new Map<AbortSignal, Set<EventListenerOrEventListenerObject>>();
+      const originalAddEventListener = AbortSignal.prototype.addEventListener;
+      const originalRemoveEventListener = AbortSignal.prototype.removeEventListener;
+      const addAbortListener = (signal: AbortSignal, listener: EventListenerOrEventListenerObject) => {
+        let listeners = activeAbortListeners.get(signal);
+        if (!listeners) {
+          listeners = new Set();
+          activeAbortListeners.set(signal, listeners);
+        }
+        listeners.add(listener);
+      };
+      const removeAbortListener = (signal: AbortSignal, listener: EventListenerOrEventListenerObject) => {
+        activeAbortListeners.get(signal)?.delete(listener);
+      };
+
+      const addEventListenerSpy = vi.spyOn(AbortSignal.prototype, 'addEventListener').mockImplementation(function (
+        this: AbortSignal,
+        ...args: Parameters<EventTarget['addEventListener']>
+      ) {
+        const [type, listener] = args;
+        if (type === 'abort' && listener) {
+          addAbortListener(this, listener);
+        }
+        return originalAddEventListener.apply(this, args);
+      });
+      const removeEventListenerSpy = vi
+        .spyOn(AbortSignal.prototype, 'removeEventListener')
+        .mockImplementation(function (this: AbortSignal, ...args: Parameters<EventTarget['removeEventListener']>) {
+          const [type, listener] = args;
+          if (type === 'abort' && listener) {
+            removeAbortListener(this, listener);
+          }
+          return originalRemoveEventListener.apply(this, args);
+        });
+
+      try {
+        const childStep = createStep({
+          id: 'abort-cleanup-child-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ echoed: z.string() }),
+          execute: async ({ inputData }) => ({ echoed: inputData.value }),
+        });
+
+        const childWorkflow = createWorkflow({
+          id: 'abort-cleanup-child-workflow',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ echoed: z.string() }),
+          steps: [childStep],
+        })
+          .then(childStep)
+          .commit();
+
+        const result = await (childWorkflow as any).execute({
+          inputData: { value: 'hello' },
+          state: {},
+          setState: vi.fn(),
+          suspend: vi.fn(),
+          [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+          mastra: new Mastra({ logger: false }),
+          abort: vi.fn(),
+          abortSignal: new AbortController().signal,
+          engine: 'default',
+          bail: vi.fn(),
+        });
+
+        expect(result).toEqual({ echoed: 'hello' });
+        expect([...activeAbortListeners.values()].reduce((count, listeners) => count + listeners.size, 0)).toBe(0);
+      } finally {
+        addEventListenerSpy.mockRestore();
+        removeEventListenerSpy.mockRestore();
+      }
     });
   });
 });

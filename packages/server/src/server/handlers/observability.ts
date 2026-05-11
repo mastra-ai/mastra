@@ -16,17 +16,22 @@ import {
   getSpanArgsSchema,
   getSpanResponseSchema,
   dateRangeSchema,
-  branchesFilterSchema,
-  branchesOrderBySchema,
-  listBranchesResponseSchema,
-  getBranchArgsSchema,
-  getBranchResponseSchema,
 } from '@mastra/core/storage';
+// `branches*`, `listBranches*`, and `getBranch*` schemas are new in
+// @mastra/core@1.32.0; route them through a shim that tolerates older cores
+// (see ./observability-storage-schemas.ts for full rationale).
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import { getObservabilityStore, getStorage } from './observability-shared';
+import {
+  branchesFilterSchema,
+  branchesOrderBySchema,
+  listBranchesResponseSchema,
+  getBranchArgsSchema,
+  getBranchResponseSchema,
+} from './observability-storage-schemas';
 
 export * from './observability-new-endpoints';
 

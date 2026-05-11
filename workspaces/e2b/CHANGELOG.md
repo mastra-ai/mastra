@@ -1,5 +1,13 @@
 # @mastra/e2b
 
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Fixed S3 mounts in E2B sandboxes by honoring the configured region and verifying that the FUSE mount attached successfully. ([#16222](https://github.com/mastra-ai/mastra/pull/16222))
+
+  Mount failures that previously appeared successful now surface a clear error, making region, credential, and endpoint compatibility problems easier to diagnose.
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,323 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.10
+
+### Patch Changes
+
+- Fixed memory thread write methods (`update`, `delete`, `deleteMessages`, `clone`) silently sending requests without the required `agentId`. The methods now resolve `agentId` from a per-call argument first, then the constructor, and throw a clear error if neither is set — before any HTTP request is issued. Reads are unchanged. ([#16310](https://github.com/mastra-ai/mastra/pull/16310))
+
+  ```ts
+  // Either set agentId on the thread once...
+  const thread = client.getMemoryThread({ threadId: 't1', agentId: 'a1' });
+  await thread.update({ title: 'Renamed' });
+  await thread.delete();
+
+  // ...or pass it per call.
+  const thread = client.getMemoryThread({ threadId: 't1' });
+  await thread.update({ agentId: 'a1', title: 'Renamed' });
+  await thread.delete({ agentId: 'a1' });
+  ```
+
+  Fixed `MastraClient.deleteThread()` issuing `DELETE /api` (an empty URL) when called without `agentId` or `networkId`. The method now requires exactly one of the two, enforced both at runtime and in the type signature.
+
+  ```ts
+  await client.deleteThread('t1', { agentId: 'a1' });
+  await client.deleteThread('t1', { networkId: 'n1' });
+  ```
+
+## 1.18.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/core@1.33.0-alpha.9
+
+## 1.18.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`c50ebc3`](https://github.com/mastra-ai/mastra/commit/c50ebc34da71044558315735e69bfb94fcfb74bf), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4)]:
+  - @mastra/core@1.33.0-alpha.8
+  - @mastra/schema-compat@1.2.10-alpha.0
+
+## 1.18.0-alpha.7
+
+### Minor Changes
+
+- Added streamed function-call argument events to `@mastra/client-js` Responses streams. You can now read finalized tool arguments directly from the stream: ([#16285](https://github.com/mastra-ai/mastra/pull/16285))
+
+  ```ts
+  for await (const event of stream) {
+    if (event.type === 'response.function_call_arguments.done') {
+      console.log(event.arguments);
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6742347`](https://github.com/mastra-ai/mastra/commit/6742347d71955d7639adc9ddf6ff8282de7ee3ba), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`62666c3`](https://github.com/mastra-ai/mastra/commit/62666c367eaeac3941ead454b1d38810cc855721), [`4af2160`](https://github.com/mastra-ai/mastra/commit/4af2160322f4718cac421930cce85641e9512389), [`136c959`](https://github.com/mastra-ai/mastra/commit/136c9592fb0eeb0cd212f28629d8a29b7557a2fc), [`4df7cc7`](https://github.com/mastra-ai/mastra/commit/4df7cc79342fd065fe7fdeef93c094db14b12bcd), [`aca3121`](https://github.com/mastra-ai/mastra/commit/aca31211233dac25459f140ea4fcfb3a5af64c18), [`9cdf38e`](https://github.com/mastra-ai/mastra/commit/9cdf38e58506e1109c8b38f97cd7770978a4218e), [`990851e`](https://github.com/mastra-ai/mastra/commit/990851edcb0e30be5c2c18b6532f1a876cc2d335), [`6068a6c`](https://github.com/mastra-ai/mastra/commit/6068a6c42950fad3ebfc92346417896ba60803d2), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`e2a079c`](https://github.com/mastra-ai/mastra/commit/e2a079cc3755b1895f7bd5dc36e9be81b11c7c22), [`534a456`](https://github.com/mastra-ai/mastra/commit/534a456a25e4df1e5407e7e632f4cb3b1fa14f9d), [`36bae07`](https://github.com/mastra-ai/mastra/commit/36bae07c0e70b1b3006f2fd20830e8883dcbd066)]:
+  - @mastra/core@1.33.0-alpha.7
+
+## 1.18.0-alpha.6
+
+### Minor Changes
+
+- Fix `orderBy` shape mismatch for paginated list methods. ([#16323](https://github.com/mastra-ai/mastra/pull/16323))
+
+  The server expects `orderBy` as a structured object (`{ field, direction }`),
+  but several SDK methods were sending `orderBy` and `sortDirection` as flat
+  strings, which caused server-side schema validation to fail.
+
+  Affected methods:
+  - `MastraClient.listMemoryThreads`
+  - `Agent.listVersions`
+  - `StoredAgent.listVersions`
+  - `StoredPromptBlock.listVersions`
+  - `StoredScorer.listVersions`
+
+  Before:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: 'createdAt', sortDirection: 'DESC' });
+  ```
+
+  After:
+
+  ```ts
+  client.listMemoryThreads({ orderBy: { field: 'createdAt', direction: 'DESC' } });
+  ```
+
+  The flat `sortDirection` parameter has been removed from the affected param
+  types in favor of the nested `orderBy.direction` field.
+
+### Patch Changes
+
+- Updated dependencies [[`b560d6f`](https://github.com/mastra-ai/mastra/commit/b560d6f88b9b904b15c10f75c949eb145bc27684), [`36b3bbf`](https://github.com/mastra-ai/mastra/commit/36b3bbf5a8d59f7e23d47e29340e76c681b4929c), [`b275631`](https://github.com/mastra-ai/mastra/commit/b275631dc10541a482b2e2d4a3e3cfa843bd5fa1)]:
+  - @mastra/core@1.33.0-alpha.6
+
+## 1.18.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`bae019e`](https://github.com/mastra-ai/mastra/commit/bae019ecb6694da96909f7ec7b9eb3a0a33aa887), [`33f5061`](https://github.com/mastra-ai/mastra/commit/33f5061cd1c0335020c3faae61ce96de822854fa), [`99869ec`](https://github.com/mastra-ai/mastra/commit/99869ecb1f2aa6dfcc44fa4e843e5ee0344efa64), [`d86f031`](https://github.com/mastra-ai/mastra/commit/d86f031eb6b0b2570145afafea664e59bf688962)]:
+  - @mastra/core@1.33.0-alpha.5
+
+## 1.18.0-alpha.4
+
+### Minor Changes
+
+- Added experimental A2A Agent Card signature verification to `getAgentCard`. ([#16207](https://github.com/mastra-ai/mastra/pull/16207))
+
+  **Example**
+
+  ```ts
+  const card = await a2a.getAgentCard({
+    verifySignature: {
+      algorithms: ['ES256'],
+      keyProvider: async ({ kid, jku }) => {
+        return fetchTrustedPublicJwk({ kid, jku });
+      },
+    },
+  });
+  ```
+
+  When verification is configured, `client-js` now verifies signed Agent Cards when the server includes `signatures`. Unsigned cards are still returned unchanged.
+
+  This also adds the new exported types `GetAgentCardOptions`, `VerifyAgentCardSignatureOptions`, `AgentCardVerificationKey`, and `AgentCardSignatureKeyProviderInput`.
+
+- Add `agent.resumeStreamUntilIdle()` to resume a suspended agent stream and keep the SSE connection open through the follow-up turn. ([#16260](https://github.com/mastra-ai/mastra/pull/16260))
+
+### Patch Changes
+
+- Updated dependencies [[`9f17410`](https://github.com/mastra-ai/mastra/commit/9f1741080def23d42ee50b39887a385ae316a3c6), [`c6eb39e`](https://github.com/mastra-ai/mastra/commit/c6eb39ea6dca381c6563cb240237fbe608e02f93), [`900d086`](https://github.com/mastra-ai/mastra/commit/900d086bb737b9cf2fcf68f11b0389b801a2738c), [`4c0e286`](https://github.com/mastra-ai/mastra/commit/4c0e28637c9cfb4f416549b55e97ebfa13319dfc), [`25184ff`](https://github.com/mastra-ai/mastra/commit/25184ffaf1293ec95119426eb1a1f8d38831b96c), [`aebde9c`](https://github.com/mastra-ai/mastra/commit/aebde9cfacf56592c6b6350cae721740fe090b8a)]:
+  - @mastra/core@1.33.0-alpha.4
+
+## 1.17.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047), [`087e413`](https://github.com/mastra-ai/mastra/commit/087e4133e5d6efa36619e9556c16750e4179c047)]:
+  - @mastra/core@1.33.0-alpha.3
+
+## 1.17.2-alpha.2
+
+### Patch Changes
+
+- Regenerate route types to include `TRAJECTORY` and `STEP` entityType variants on the score response (follow-up to #16249). ([#16288](https://github.com/mastra-ai/mastra/pull/16288))
+
+- Updated dependencies [[`d1fdbd0`](https://github.com/mastra-ai/mastra/commit/d1fdbd012add5623cb7e6b7f882b605ab358bbb4), [`d91ebe2`](https://github.com/mastra-ai/mastra/commit/d91ebe28ee065d8f2ed6df741c3c07f58d359529)]:
+  - @mastra/core@1.33.0-alpha.2
+
+## 1.17.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d)]:
+  - @mastra/core@1.33.0-alpha.1
+
+## 1.17.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ac47842`](https://github.com/mastra-ai/mastra/commit/ac478427aa7a5f5fdaed633a911218689b438c60)]:
+  - @mastra/core@1.33.0-alpha.0
+
+## 1.17.1
+
+### Patch Changes
+
+- Updated dependencies [[`cc0469d`](https://github.com/mastra-ai/mastra/commit/cc0469d671d6f7a426013e4425f9501da6fa45f2)]:
+  - @mastra/core@1.32.1
+
+## 1.17.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cc0469d`](https://github.com/mastra-ai/mastra/commit/cc0469d671d6f7a426013e4425f9501da6fa45f2)]:
+  - @mastra/core@1.32.1-alpha.0
+
+## 1.17.0
+
+### Minor Changes
+
+- Extend the schedules storage schema to support owned schedules and richer trigger audit. This is a breaking schema change to `mastra_schedules` and `mastra_schedule_triggers`; scheduled workflows are still in alpha so no compat shim is provided. ([#16166](https://github.com/mastra-ai/mastra/pull/16166))
+  - `Schedule` gains optional `ownerType` / `ownerId` so a schedule row can be attributed to an owning subsystem (e.g. an agent that owns a heartbeat schedule). Workflow schedules leave both fields unset.
+  - `ScheduleTrigger.status` is renamed to `outcome` and the type is widened to `ScheduleTriggerOutcome` so future outcome values can be added without another rename.
+  - `ScheduleTrigger` gains a stable `id` primary key and new `triggerKind`, `parentTriggerId`, and `metadata` fields. `triggerKind` distinguishes `schedule-fire` rows from later `queue-drain` rows (used by upcoming heartbeat work); `parentTriggerId` links related rows; `metadata` carries outcome-specific context.
+  - The libsql, pg, and mongodb adapters all add the new columns/indexes. Their `@mastra/core` peer dependency is tightened to `>=1.32.0-0 <2.0.0-0` so installing a new storage adapter against an older core (or vice-versa) surfaces a peer-dependency warning at install time instead of silently writing/reading the wrong field.
+  - Scheduler producer, server schemas/handler, and client SDK types are updated to use the new fields. The `triggers` response on `GET /api/schedules/:id/triggers` now returns `outcome` instead of `status`.
+  - The bundled Studio (Mastra CLI) is updated to read `outcome` so the schedule detail page keeps polling and rendering publish-failure rows correctly.
+
+- Added `getMcpServerResources()` and `readMcpServerResource()` methods to `MastraClient` for listing and reading MCP server resources from the client SDK. These methods enable frontend applications to fetch app resource HTML for interactive MCP Apps rendering. ([#16004](https://github.com/mastra-ai/mastra/pull/16004))
+
+  ```ts
+  const client = new MastraClient();
+
+  // List resources on an MCP server
+  const resources = await client.getMcpServerResources('my-server');
+
+  // Read a specific app resource
+  const resource = await client.readMcpServerResource('my-server', 'ui://calculator/app');
+  ```
+
+- Added schedule methods to the client for the new scheduled workflows feature. ([#15830](https://github.com/mastra-ai/mastra/pull/15830))
+
+  ```typescript
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+
+  const schedules = await client.listSchedules({ workflowId: 'daily-report' });
+  const schedule = await client.getSchedule('wf_daily-report');
+  const triggers = await client.listScheduleTriggers('wf_daily-report', { limit: 50 });
+
+  await client.pauseSchedule('wf_daily-report');
+  await client.resumeSchedule('wf_daily-report');
+  ```
+
+  Pause is durable across redeploys. Resume recomputes the next fire time from now so a long-paused schedule does not fire a backlog.
+
+- Added `listBranches` and `getBranch` endpoints. Use these to find specific runs of an agent, workflow, tool, or processor — even when they are nested inside another trace — and to fetch the subtree of spans rooted at any single span. ([#16177](https://github.com/mastra-ai/mastra/pull/16177))
+
+  ```
+  GET /observability/branches?spanType=agent_run&entityName=Observer
+  GET /observability/traces/:traceId/branches/:spanId?depth=1
+  ```
+
+  Each row in `listBranches` is a single anchor span (one of `AGENT_RUN`, `WORKFLOW_RUN`, `PROCESSOR_RUN`, `SCORER_RUN`, `RAG_INGESTION`, `TOOL_CALL`, `MCP_TOOL_CALL`), so entities that always run as a child (e.g., an `Observer` agent inside a workflow) — previously not listable through `listTraces` — are now queryable via the HTTP API. `getBranch` accepts an optional `depth` (`0` = anchor only; omitted = full subtree).
+
+  Follow-up to https://github.com/mastra-ai/mastra/pull/16154 which added the underlying `@mastra/core` storage APIs.
+
+- Fixed Vector resource return types so they match what the server actually returns. Previously the types declared shapes that did not exist at runtime, leading to runtime failures with no TypeScript errors. ([#16036](https://github.com/mastra-ai/mastra/pull/16036))
+
+  **What changed**
+  - `vector.getIndexes()` now returns `string[]` (was `{ indexes: string[] }`)
+  - `vector.upsert()` now returns `{ ids: string[] }` (was `string[]`)
+  - `vector.query()` now returns `QueryResult[]` (was `{ results: QueryResult[] }`)
+
+  **Before**
+
+  ```ts
+  const response = await client.getVector('docs').getIndexes();
+  console.log(response.indexes); // undefined at runtime
+  ```
+
+  **After**
+
+  ```ts
+  const indexes = await client.getVector('docs').getIndexes();
+  console.log(indexes[0]); // 'docs-index'
+  ```
+
+  Closes #15089.
+
+### Patch Changes
+
+- Fixed client stream handling for step completion and finish chunks that omit step result details. ([#9146](https://github.com/mastra-ai/mastra/pull/9146))
+
+- Added MCP Apps extension support (SEP-1865). MCPServer now accepts an `appResources` config to register interactive `ui://` HTML resources. MCPClient preserves full tool `_meta` (including `ui.resourceUri`) when converting MCP tools to Mastra tools. Both advertise the `io.modelcontextprotocol/ui` extension capability. ([#16004](https://github.com/mastra-ai/mastra/pull/16004))
+
+  **Example — MCPServer with app resources:**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'my-server',
+    tools: { myTool },
+    appResources: {
+      dashboard: {
+        name: 'Dashboard',
+        description: 'Interactive dashboard UI',
+        html: '<html>...</html>',
+      },
+    },
+  });
+  ```
+
+- Added server-generated route contract types for the JavaScript client SDK and updated the SDK to use those generated request and response types. ([#15519](https://github.com/mastra-ai/mastra/pull/15519))
+
+- Updated dependencies [[`6dcd65f`](https://github.com/mastra-ai/mastra/commit/6dcd65f2a34069e6dc43ba35f1d11119b9b40bef), [`86c0298`](https://github.com/mastra-ai/mastra/commit/86c0298e647306423c842f9d5ac827bd616bd13d), [`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`7fce309`](https://github.com/mastra-ai/mastra/commit/7fce30912b14170bfc41f0ac736cca0f39fe0cd4), [`1d64a76`](https://github.com/mastra-ai/mastra/commit/1d64a765861a0772ea187bab76e5ed37bf82d042), [`1c2dda8`](https://github.com/mastra-ai/mastra/commit/1c2dda805fbfccc0abf55d4cb20cc34402dc3f0c), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`7997c2e`](https://github.com/mastra-ai/mastra/commit/7997c2e55ddd121562a4098cd8d2b89c68433bf1), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`a0d9b6d`](https://github.com/mastra-ai/mastra/commit/a0d9b6d6b810aeaa9e177a0dcc99a4402e609634), [`e97ccb9`](https://github.com/mastra-ai/mastra/commit/e97ccb900f8b7a390ce82c9f8eb8d6eb2c5e3777), [`c5daf48`](https://github.com/mastra-ai/mastra/commit/c5daf48556e98c46ae06caf00f92c249912007e9), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`cd96779`](https://github.com/mastra-ai/mastra/commit/cd9677937f113b2856dc8b9f3d4bdabcee58bb2e), [`b0c7022`](https://github.com/mastra-ai/mastra/commit/b0c70224f80dad7c0cdbfb22cbff22e0f75c064f), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d)]:
+  - @mastra/core@1.32.0
+
+## 1.17.0-alpha.4
+
+### Minor Changes
+
+- Added `getMcpServerResources()` and `readMcpServerResource()` methods to `MastraClient` for listing and reading MCP server resources from the client SDK. These methods enable frontend applications to fetch app resource HTML for interactive MCP Apps rendering. ([#16004](https://github.com/mastra-ai/mastra/pull/16004))
+
+  ```ts
+  const client = new MastraClient();
+
+  // List resources on an MCP server
+  const resources = await client.getMcpServerResources('my-server');
+
+  // Read a specific app resource
+  const resource = await client.readMcpServerResource('my-server', 'ui://calculator/app');
+  ```
+
+### Patch Changes
+
+- Added MCP Apps extension support (SEP-1865). MCPServer now accepts an `appResources` config to register interactive `ui://` HTML resources. MCPClient preserves full tool `_meta` (including `ui.resourceUri`) when converting MCP tools to Mastra tools. Both advertise the `io.modelcontextprotocol/ui` extension capability. ([#16004](https://github.com/mastra-ai/mastra/pull/16004))
+
+  **Example — MCPServer with app resources:**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'my-server',
+    tools: { myTool },
+    appResources: {
+      dashboard: {
+        name: 'Dashboard',
+        description: 'Interactive dashboard UI',
+        html: '<html>...</html>',
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`1d64a76`](https://github.com/mastra-ai/mastra/commit/1d64a765861a0772ea187bab76e5ed37bf82d042), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`a0d9b6d`](https://github.com/mastra-ai/mastra/commit/a0d9b6d6b810aeaa9e177a0dcc99a4402e609634)]:
+  - @mastra/core@1.32.0-alpha.4
+
 ## 1.17.0-alpha.3
 
 ### Minor Changes
