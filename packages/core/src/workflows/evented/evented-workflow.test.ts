@@ -79,9 +79,6 @@ createWorkflowTestSuite({
     resumeNested: true, // Nested resume works but input value from previous step lost (26 vs 27)
     resumeDountil: true,
 
-    // Time travel - different result structure
-    timeTravelConditional: true,
-
     // Streaming - legacy API timeout issue
     streamingSuspendResumeLegacy: true,
 
@@ -97,9 +94,6 @@ createWorkflowTestSuite({
 
     // Callback - state test uses stateSchema/setState (WIP in evented)
     callbackStateOnError: true,
-
-    // Time travel - conditional perStep inherits timeTravelConditional issues
-    timeTravelConditionalPerStep: true,
 
     // Resume error tests - evented engine error behavior may differ
     resumeNotSuspendedWorkflow: true,

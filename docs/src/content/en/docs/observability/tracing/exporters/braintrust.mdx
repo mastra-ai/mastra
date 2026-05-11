@@ -93,6 +93,43 @@ new BraintrustExporter({
 })
 ```
 
+## Attach traces to Braintrust evals
+
+When you run Mastra inside Braintrust `Eval()` or `logger.traced()`, pass the Braintrust logger and `currentSpan` resolver to the exporter. Import `currentSpan` from the same `braintrust` package instance that creates the eval or traced span.
+
+This helps Mastra attach its spans under the active Braintrust span when your app and `@mastra/braintrust` resolve different installed copies of the Braintrust SDK.
+
+```typescript title="src/mastra/index.ts"
+import { currentSpan, initLogger } from 'braintrust'
+import { BraintrustExporter } from '@mastra/braintrust'
+
+const logger = initLogger({
+  projectName: 'my-project',
+  apiKey: process.env.BRAINTRUST_API_KEY,
+})
+
+const exporter = new BraintrustExporter({
+  braintrustLogger: logger,
+  currentSpan,
+})
+```
+
+Use the configured Mastra instance inside the Braintrust eval task. The `currentSpan` resolver above reads the active span created by `Eval()`.
+
+```typescript title="src/evals/braintrust.ts"
+import { Eval } from 'braintrust'
+import { mastra } from '../mastra'
+
+await Eval('my-project', {
+  data: () => [{ input: 'Say hello', expected: 'Hello' }],
+  task: async input => {
+    const agent = mastra.getAgent('assistant')
+    return (await agent.generate(input)).text
+  },
+  scores: [],
+})
+```
+
 ## Querying Braintrust with returned `spanId`
 
 For Braintrust, use `spanId` as the root span identifier when searching for traces because Braintrust root-span queries are typically faster than trace-id queries.

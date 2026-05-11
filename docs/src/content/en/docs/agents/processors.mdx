@@ -399,6 +399,14 @@ new ToolCallFilter({
 })
 ```
 
+Set `preserveModelOutput: true` to keep compact `toModelOutput` history for filtered completed tool results. The filter keeps only the model-facing output and removes raw tool args and raw results.
+
+```typescript
+new ToolCallFilter({
+  preserveModelOutput: true,
+})
+```
+
 See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
 
 ### `ToolSearchProcessor`

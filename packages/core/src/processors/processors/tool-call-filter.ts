@@ -15,6 +15,15 @@ type V2ToolInvocationPart = {
     result?: unknown;
     state: 'call' | 'result';
   };
+  providerMetadata?: {
+    mastra?: Record<string, unknown>;
+  };
+};
+
+export type ToolCallFilterOptions = {
+  exclude?: string[];
+  filterAfterToolSteps?: number;
+  preserveModelOutput?: boolean;
 };
 
 /**
@@ -29,14 +38,16 @@ export class ToolCallFilter implements Processor {
   name = 'ToolCallFilter';
   private exclude: string[] | 'all';
   private filterAfterToolSteps: number | undefined;
+  private preserveModelOutput: boolean;
 
   /**
    * Create a filter for tool calls and results.
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
    * @param options.filterAfterToolSteps Enable agentic loop step filtering and preserve tool calls/results from this many recent tool-producing steps.
+   * @param options.preserveModelOutput Preserve sanitized model-facing output from completed filtered tool results with providerMetadata.mastra.modelOutput.
    */
-  constructor(options: { exclude?: string[]; filterAfterToolSteps?: number } = {}) {
+  constructor(options: ToolCallFilterOptions = {}) {
     // If no options or exclude is provided, exclude all tools
     if (!options || !options.exclude) {
       this.exclude = 'all'; // Exclude all tools
@@ -46,6 +57,7 @@ export class ToolCallFilter implements Processor {
     }
 
     this.filterAfterToolSteps = options.filterAfterToolSteps;
+    this.preserveModelOutput = options.preserveModelOutput ?? false;
   }
 
   async processInput(args: {
@@ -129,6 +141,86 @@ export class ToolCallFilter implements Processor {
     return message.content.parts.filter((part: any) => part.type === 'tool-invocation');
   }
 
+  private getToolCallId(invocation: V2ToolInvocationPart['toolInvocation']): string | undefined {
+    return invocation.toolCallId ?? (invocation as any).toolCall?.id;
+  }
+
+  private getPreservedModelOutputPart(part: V2ToolInvocationPart): { type: 'text'; text: string } | null {
+    if (!this.preserveModelOutput || part.toolInvocation.state !== 'result') {
+      return null;
+    }
+
+    const mastraMetadata = part.providerMetadata?.mastra;
+    if (!mastraMetadata || !Object.hasOwn(mastraMetadata, 'modelOutput')) {
+      return null;
+    }
+
+    const modelOutput = mastraMetadata.modelOutput;
+    if (modelOutput == null) {
+      return null;
+    }
+
+    const text = this.modelOutputToText(modelOutput);
+    if (!text) {
+      return null;
+    }
+
+    return {
+      type: 'text',
+      text: `${part.toolInvocation.toolName} result:\n${text}`,
+    };
+  }
+
+  private modelOutputToText(modelOutput: unknown): string | null {
+    if (typeof modelOutput === 'string') {
+      return modelOutput;
+    }
+
+    if (typeof modelOutput === 'number' || typeof modelOutput === 'boolean' || typeof modelOutput === 'bigint') {
+      return String(modelOutput);
+    }
+
+    if (Array.isArray(modelOutput)) {
+      const text = modelOutput
+        .map(part => this.modelOutputToText(part))
+        .filter((part): part is string => Boolean(part))
+        .join('\n');
+      return text || this.safeStringify(modelOutput);
+    }
+
+    if (modelOutput && typeof modelOutput === 'object') {
+      const output = modelOutput as Record<string, unknown>;
+      if (output.type === 'text') {
+        if (typeof output.value === 'string') {
+          return output.value;
+        }
+        if (typeof output.text === 'string') {
+          return output.text;
+        }
+      }
+
+      if ('value' in output) {
+        return this.modelOutputToText(output.value);
+      }
+
+      if ('text' in output && typeof output.text === 'string') {
+        return output.text;
+      }
+
+      return this.safeStringify(modelOutput);
+    }
+
+    return null;
+  }
+
+  private safeStringify(value: unknown): string | null {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+
   private filterAllToolCalls(messages: MastraDBMessage[], preserveToolCallIds = new Set<string>()): MastraDBMessage[] {
     return messages
       .map(message => {
@@ -144,12 +236,18 @@ export class ToolCallFilter implements Processor {
           return message;
         }
 
-        const nonToolParts = message.content.parts.filter((part: any) => {
+        const nonToolParts = message.content.parts.flatMap((part: any) => {
           if (part.type !== 'tool-invocation') {
-            return true;
+            return [part];
           }
 
-          return preserveToolCallIds.has(part.toolInvocation?.toolCallId ?? part.toolInvocation?.toolCall?.id);
+          const toolCallId = this.getToolCallId(part.toolInvocation);
+          if (toolCallId && preserveToolCallIds.has(toolCallId)) {
+            return [part];
+          }
+
+          const modelOutputPart = this.getPreservedModelOutputPart(part);
+          return modelOutputPart ? [modelOutputPart] : [];
         });
 
         if (nonToolParts.length === 0) {
@@ -192,7 +290,10 @@ export class ToolCallFilter implements Processor {
         const invocation = invocationPart.toolInvocation;
 
         if (this.exclude.includes(invocation.toolName)) {
-          excludedToolCallIds.add(invocation.toolCallId);
+          const toolCallId = this.getToolCallId(invocation);
+          if (toolCallId) {
+            excludedToolCallIds.add(toolCallId);
+          }
         }
       }
     }
@@ -211,31 +312,30 @@ export class ToolCallFilter implements Processor {
           return message;
         }
 
-        const filteredParts = message.content.parts.filter((part: any) => {
+        const filteredParts = message.content.parts.flatMap((part: any) => {
           if (part.type !== 'tool-invocation') {
-            return true;
+            return [part];
           }
 
           const invocationPart = part as unknown as V2ToolInvocationPart;
           const invocation = invocationPart.toolInvocation;
+          const toolCallId = this.getToolCallId(invocation);
 
-          if (preserveToolCallIds.has(invocation.toolCallId ?? (invocation as any).toolCall?.id)) {
-            return true;
+          if (toolCallId && preserveToolCallIds.has(toolCallId)) {
+            return [part];
           }
 
-          if (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) {
-            return false;
+          const shouldExclude =
+            (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) ||
+            (invocation.state === 'result' && toolCallId !== undefined && excludedToolCallIds.has(toolCallId)) ||
+            (invocation.state === 'result' && this.exclude.includes(invocation.toolName));
+
+          if (!shouldExclude) {
+            return [part];
           }
 
-          if (invocation.state === 'result' && excludedToolCallIds.has(invocation.toolCallId)) {
-            return false;
-          }
-
-          if (invocation.state === 'result' && this.exclude.includes(invocation.toolName)) {
-            return false;
-          }
-
-          return true;
+          const modelOutputPart = this.getPreservedModelOutputPart(invocationPart);
+          return modelOutputPart ? [modelOutputPart] : [];
         });
 
         if (filteredParts.length === 0) {
@@ -251,7 +351,8 @@ export class ToolCallFilter implements Processor {
         if (Array.isArray(originalToolInvocations)) {
           const filteredToolInvocations = originalToolInvocations.filter(
             (inv: any) =>
-              preserveToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id) || !this.exclude.includes(inv.toolName),
+              preserveToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id) ||
+              (!this.exclude.includes(inv.toolName) && !excludedToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id)),
           );
           if (filteredToolInvocations.length > 0) {
             updatedContent.toolInvocations = filteredToolInvocations;

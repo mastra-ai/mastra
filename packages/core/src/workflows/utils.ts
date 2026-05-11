@@ -295,7 +295,8 @@ export const createTimeTravelExecutionParams = (params: {
       break;
     }
     const stepIds = getStepIds(entry);
-    if (stepIds.includes(firstStepId)) {
+    const isTargetEntry = stepIds.includes(firstStepId);
+    if (isTargetEntry) {
       const innerExecutionPath = stepIds?.length > 1 ? [stepIds?.findIndex(s => s === firstStepId)] : [];
       //parallel and loop steps will have more than one step id,
       // and if the step is one of those, we need the index for the execution path
@@ -353,7 +354,15 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      const defaultStepStatus = steps?.includes(stepId) ? 'running' : 'success';
+      // Siblings of the time-travel target inside a conditional were not selected by the
+      // branch's condition, so they should be reported as skipped rather than as a fake
+      // success (otherwise their empty output leaks into the conditional's aggregated result).
+      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const defaultStepStatus = steps?.includes(stepId)
+        ? 'running'
+        : isUnselectedConditionalSibling
+          ? 'skipped'
+          : 'success';
       const status = ['failed', 'canceled'].includes(stepContext?.status)
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);

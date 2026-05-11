@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from './default';
-import { CloudExporter, DefaultExporter, TestExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter, TestExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -622,7 +622,7 @@ describe('Observability Registry', () => {
 
   describe('Default Config', () => {
     beforeEach(() => {
-      // Mock environment variable for CloudExporter
+      // Mock environment variable for MastraPlatformExporter
       vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', 'test-token-123');
     });
 
@@ -647,9 +647,8 @@ describe('Observability Registry', () => {
       // Verify exporters
       const exporters = defaultInstance?.getExporters();
       expect(exporters).toHaveLength(2);
-      console.log(exporters);
-      expect(exporters?.[0]).toBeInstanceOf(DefaultExporter);
-      expect(exporters?.[1]).toBeInstanceOf(CloudExporter);
+      expect(exporters?.[0]).toBeInstanceOf(MastraStorageExporter);
+      expect(exporters?.[1]).toBeInstanceOf(MastraPlatformExporter);
 
       // Verify processors
       const processors = defaultInstance?.getSpanOutputProcessors();
@@ -1017,11 +1016,11 @@ describe('Observability Registry', () => {
       });
     });
 
-    it('should handle CloudExporter gracefully when token is missing', async () => {
-      // Clear the token environment variable
-      const originalToken = process.env.MASTRA_CLOUD_ACCESS_TOKEN;
-      delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
-      vi.unstubAllEnvs(); // Make sure mock is cleared
+    it('should handle MastraPlatformExporter gracefully when token is missing', async () => {
+      // Empty string is treated as "missing" by the exporter; using vi.stubEnv
+      // keeps Vitest's env restoration intact so the suite-level afterEach
+      // can roll it back without leaking the test value into later tests.
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', '');
 
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
 
@@ -1029,13 +1028,13 @@ describe('Observability Registry', () => {
       // Note: ConsoleLogger.debug() calls console.info() internally
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      // CloudExporter should not throw, but log debug message instead
-      const exporter = new CloudExporter({ logger });
+      // MastraPlatformExporter should not throw, but log debug message instead
+      const exporter = new MastraPlatformExporter({ logger });
 
       // Verify debug message was logged with exporter name
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+          'mastra-platform-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
         ),
       );
 
@@ -1058,12 +1057,7 @@ describe('Observability Registry', () => {
       // Should not throw when exporting
       await expect(exporter.exportTracingEvent(event)).resolves.not.toThrow();
 
-      // Restore mocks
       infoSpy.mockRestore();
-      // Restore env var safely (avoid setting to string "undefined")
-      if (originalToken !== undefined) {
-        process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
-      }
     });
   });
 });

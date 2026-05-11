@@ -329,7 +329,8 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
-                  label: 'Cloud',
+                  label: 'CloudExporter (deprecated)',
+                  className: 'sidebar-item-deprecated',
                 },
                 {
                   type: 'doc',
@@ -340,7 +341,8 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/default-exporter',
-                  label: 'Default',
+                  label: 'DefaultExporter (deprecated)',
+                  className: 'sidebar-item-deprecated',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/laminar', label: 'Laminar' },
                 { type: 'doc', id: 'observability/tracing/exporters/langfuse', label: 'Langfuse' },
@@ -348,6 +350,16 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/langsmith',
                   label: 'LangSmith',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-platform-exporter',
+                  label: 'MastraPlatformExporter',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-storage-exporter',
+                  label: 'MastraStorageExporter',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/otel', label: 'OpenTelemetry' },
                 { type: 'doc', id: 'observability/tracing/exporters/posthog', label: 'PostHog' },
