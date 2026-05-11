@@ -5,7 +5,28 @@
 
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text, renderImage, getImageDimensions, imageFallback, getCapabilities, getCellDimensions } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import type { Component, TUI } from '@mariozechner/pi-tui';
+
+/**
+ * Minimal Component that returns pre-computed lines verbatim.
+ *
+ * Used for inline images: the kitty/iTerm2 escape sequence is a single
+ * "line" (no \n) that visually occupies multiple terminal rows. We must
+ * not pass it through `Text` (which wraps based on visibleWidth) because
+ * pi-tui's CSI parser misidentifies `\x1b[NA` (cursor-up) when it's
+ * adjacent to a kitty `\x1b_G` APC start, which corrupts visibleWidth and
+ * causes the wrapping logic to slice the image escape mid-payload.
+ *
+ * Box still calls visibleWidth on the line for padding, but that only
+ * affects trailing spaces — it does not mangle the escape sequence.
+ */
+class RawLinesComponent implements Component {
+  constructor(private readonly lines: string[]) {}
+  render(): string[] {
+    return this.lines;
+  }
+  invalidate(): void {}
+}
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
@@ -1562,12 +1583,21 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         //   - emit the image sequence on the final line, prefixed with a
         //     cursor-up escape so the terminal draws the image back at the
         //     first reserved row.
+        //
+        // Emit these via a RawLinesComponent rather than Text instances:
+        // pi-tui's Text wraps via visibleWidth, and visibleWidth misparses
+        // `\x1b[NA` immediately followed by a kitty `\x1b_G` APC start
+        // (its CSI scanner stops at `G`, swallowing the APC introducer).
+        // That makes Text think the line is thousands of columns wide and
+        // slice the kitty payload, which renders raw base64.
         const borderPrefix = borderFn('│') + ' ';
+        const lines: string[] = [];
         for (let i = 0; i < rendered.rows - 1; i++) {
-          this.contentBox.addChild(new Text(borderPrefix, 0, 0));
+          lines.push(borderPrefix);
         }
         const moveUp = rendered.rows > 1 ? `\x1b[${rendered.rows - 1}A` : '';
-        this.contentBox.addChild(new Text(borderPrefix + moveUp + rendered.sequence, 0, 0));
+        lines.push(borderPrefix + moveUp + rendered.sequence);
+        this.contentBox.addChild(new RawLinesComponent(lines));
       } else {
         this.contentBox.addChild(
           new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
