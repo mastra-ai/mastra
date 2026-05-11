@@ -40,7 +40,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
           className={cn('h-full w-full rounded-[inherit]', showMask && MASK_CLASSES, viewPortClassName)}
           style={maxHeight ? { maxHeight } : undefined}
         >
-          {children}
+          <ScrollAreaPrimitive.Content>{children}</ScrollAreaPrimitive.Content>
         </ScrollAreaPrimitive.Viewport>
         {(orientation === 'vertical' || orientation === 'both') && <ScrollBar orientation="vertical" />}
         {(orientation === 'horizontal' || orientation === 'both') && <ScrollBar orientation="horizontal" />}
@@ -51,24 +51,25 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
 );
 ScrollArea.displayName = 'ScrollArea';
 
-const ScrollBar = React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Scrollbar>>(
-  ({ className, orientation = 'vertical', ...props }, ref) => (
-    <ScrollAreaPrimitive.Scrollbar
-      ref={ref}
-      orientation={orientation}
-      className={cn(
-        'flex touch-none select-none transition-opacity duration-normal ease-out-custom',
-        'opacity-0 data-[hovering]:opacity-100 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
-        orientation === 'vertical' && 'h-full w-1.5 p-px',
-        orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
-        className,
-      )}
-      {...props}
-    >
-      <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-neutral4/30 hover:bg-neutral4/60 transition-colors duration-normal" />
-    </ScrollAreaPrimitive.Scrollbar>
-  ),
-);
+const ScrollBar = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Scrollbar>
+>(({ className, orientation = 'vertical', ...props }, ref) => (
+  <ScrollAreaPrimitive.Scrollbar
+    ref={ref}
+    orientation={orientation}
+    className={cn(
+      'flex touch-none select-none transition-opacity duration-normal ease-out-custom',
+      'opacity-0 data-[hovering]:opacity-100 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
+      orientation === 'vertical' && 'h-full w-1.5 p-px',
+      orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
+      className,
+    )}
+    {...props}
+  >
+    <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-neutral4/30 hover:bg-neutral4/60 transition-colors duration-normal" />
+  </ScrollAreaPrimitive.Scrollbar>
+));
 ScrollBar.displayName = 'ScrollBar';
 
 export { ScrollArea, ScrollBar };
