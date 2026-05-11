@@ -22,11 +22,13 @@ function toRecord(task: BackgroundTask): Record<string, any> {
     args: task.args,
     result: task.result ?? null,
     error: task.error ?? null,
+    suspend_payload: task.suspendPayload ?? null,
     retry_count: task.retryCount,
     max_retries: task.maxRetries,
     timeout_ms: task.timeoutMs,
     createdAt: task.createdAt.toISOString(),
     startedAt: task.startedAt?.toISOString() ?? null,
+    suspendedAt: task.suspendedAt?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,
   };
 }
@@ -44,11 +46,13 @@ function fromRecord(record: Record<string, any>): BackgroundTask {
     runId: record.run_id ?? '',
     result: record.result ?? undefined,
     error: record.error ?? undefined,
+    suspendPayload: record.suspend_payload ?? undefined,
     retryCount: Number(record.retry_count ?? 0),
     maxRetries: Number(record.max_retries ?? 0),
     timeoutMs: Number(record.timeout_ms ?? 300_000),
     createdAt: new Date(record.createdAt),
     startedAt: record.startedAt ? new Date(record.startedAt) : undefined,
+    suspendedAt: record.suspendedAt ? new Date(record.suspendedAt) : undefined,
     completedAt: record.completedAt ? new Date(record.completedAt) : undefined,
   };
 }
@@ -76,8 +80,10 @@ export class BackgroundTasksStorageCloudflare extends BackgroundTasksStorage {
     if ('status' in update) merged.status = update.status!;
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
+    if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
     await this.#db.putKV({ tableName: TABLE_BACKGROUND_TASKS, key: taskId, value: toRecord(merged) });
   }
@@ -101,6 +107,7 @@ export class BackgroundTasksStorageCloudflare extends BackgroundTasksStorage {
     if (filter.agentId) tasks = tasks.filter(t => t.agentId === filter.agentId);
     if (filter.threadId) tasks = tasks.filter(t => t.threadId === filter.threadId);
     if (filter.toolName) tasks = tasks.filter(t => t.toolName === filter.toolName);
+    if (filter.toolCallId) tasks = tasks.filter(t => t.toolCallId === filter.toolCallId);
     if (filter.runId) tasks = tasks.filter(t => t.runId === filter.runId);
     // Date range filtering
     const dateCol = filter.dateFilterBy ?? 'createdAt';

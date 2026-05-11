@@ -329,7 +329,8 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
-                  label: 'Cloud',
+                  label: 'CloudExporter (deprecated)',
+                  className: 'sidebar-item-deprecated',
                 },
                 {
                   type: 'doc',
@@ -340,7 +341,8 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/default-exporter',
-                  label: 'Default',
+                  label: 'DefaultExporter (deprecated)',
+                  className: 'sidebar-item-deprecated',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/laminar', label: 'Laminar' },
                 { type: 'doc', id: 'observability/tracing/exporters/langfuse', label: 'Langfuse' },
@@ -348,6 +350,16 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/langsmith',
                   label: 'LangSmith',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-platform-exporter',
+                  label: 'MastraPlatformExporter',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-storage-exporter',
+                  label: 'MastraStorageExporter',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/otel', label: 'OpenTelemetry' },
                 { type: 'doc', id: 'observability/tracing/exporters/posthog', label: 'PostHog' },
@@ -375,6 +387,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
+        { type: 'doc', id: 'processors/cost-guard-processor', label: 'CostGuardProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
@@ -386,6 +399,9 @@ const sidebars = {
           id: 'processors/prompt-injection-detector',
           label: 'PromptInjectionDetector',
         },
+        { type: 'doc', id: 'processors/provider-history-compat', label: 'ProviderHistoryCompat' },
+        { type: 'doc', id: 'processors/regex-filter-processor', label: 'RegexFilterProcessor' },
+        { type: 'doc', id: 'processors/response-cache', label: 'ResponseCache' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
         { type: 'doc', id: 'processors/stream-error-retry-processor', label: 'StreamErrorRetryProcessor' },
@@ -575,6 +591,7 @@ const sidebars = {
         { type: 'doc', id: 'workflows/run', label: 'Run Class' },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
+        { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {
           type: 'category',
           label: 'Methods',

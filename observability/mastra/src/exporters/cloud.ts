@@ -13,6 +13,11 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 
+/**
+ * @deprecated Use `MastraPlatformExporterConfig` from `@mastra/observability`
+ * instead. This type is kept for backward compatibility and will be removed in
+ * a future major version.
+ */
 export interface CloudExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -218,6 +223,13 @@ type ResolvedCloudConfig = {
   feedbackEndpoint: string;
 };
 
+/**
+ * @deprecated Use `MastraPlatformExporter` from `@mastra/observability` instead.
+ * This class is preserved unchanged so existing integrations (including code
+ * that matches on the `CLOUD_EXPORTER_*` error IDs or the
+ * `mastra-cloud-observability-exporter` exporter name) keep working. It will
+ * be removed in a future major version.
+ */
 export class CloudExporter extends BaseExporter {
   name = 'mastra-cloud-observability-exporter';
 
@@ -237,7 +249,7 @@ export class CloudExporter extends BaseExporter {
     const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
     const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
     if (!accessToken) {
-      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
+      this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
     const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;

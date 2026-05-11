@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { generateTypes } from '@internal/types-builder';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { defineConfig } from 'tsup';
 
 /**
@@ -36,10 +36,11 @@ async function rewritePathAliases(rootDir: string) {
   }
 }
 
-export default defineConfig({
+export default defineConfig(options => ({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
-  clean: true,
+  // Skip clean in watch so consumers don't see a missing dist mid-rebuild.
+  clean: !options.watch,
   dts: false,
   splitting: true,
   treeshake: {
@@ -51,4 +52,4 @@ export default defineConfig({
     await generateTypes(process.cwd());
     await rewritePathAliases(process.cwd());
   },
-});
+}));

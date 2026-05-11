@@ -246,8 +246,8 @@ describe('Conversation Handlers', () => {
       object: 'list',
       data: [
         { id: 'msg_user', type: 'message', role: 'user' },
-        { id: 'msg_assistant_tool:0:call', type: 'function_call', call_id: 'call_123', name: 'release-status' },
-        { id: 'msg_tool:0:output', type: 'function_call_output', call_id: 'call_123' },
+        { id: 'call_123', type: 'function_call', call_id: 'call_123', name: 'release-status' },
+        { id: 'call_123:output', type: 'function_call_output', call_id: 'call_123' },
         { id: 'msg_assistant_text', type: 'message', role: 'assistant' },
       ],
     });

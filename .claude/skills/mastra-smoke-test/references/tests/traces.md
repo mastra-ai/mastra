@@ -120,7 +120,7 @@ curl -s "http://localhost:4111/api/observability/traces?page=0&perPage=100" | \
 - `traceId` values returned in earlier generate/workflow responses resolve
   via `/observability/traces/:traceId`
 
-**Note:** local traces are in-memory only (DefaultExporter). They disappear
+**Note:** local traces are in-memory only (MastraStorageExporter). They disappear
 on dev server restart. Run the agent/tool/workflow tests in the same dev
 server session as the traces test.
 

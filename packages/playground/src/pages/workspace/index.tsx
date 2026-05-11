@@ -7,6 +7,10 @@ import {
   PermissionDenied,
   SessionExpired,
   Spinner,
+  Tab,
+  TabContent,
+  TabList,
+  Tabs,
   is401UnauthorizedError,
   is403ForbiddenError,
   toast,
@@ -507,98 +511,87 @@ export default function Workspace() {
           />
         )}
 
-        {/* Tab Navigation */}
-        <div className="flex gap-2 border-b border-border1">
-          {hasFilesystem && (
-            <button
-              onClick={() => setActiveTab('files')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'files'
-                  ? 'border-accent1 text-neutral6'
-                  : 'border-transparent text-neutral4 hover:text-neutral5'
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              Files
-            </button>
-          )}
-          {hasSkills && (
-            <button
-              onClick={() => setActiveTab('skills')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'skills'
-                  ? 'border-accent1 text-neutral6'
-                  : 'border-transparent text-neutral4 hover:text-neutral5'
-              }`}
-            >
-              <Wand2 className="h-4 w-4" />
-              Skills
-              {isSkillsConfigured && skills.length > 0 && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-neutral4">{skills.length}</span>
+        {(hasFilesystem || hasSkills) && (
+          <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={activeTab}>
+            <TabList>
+              {hasFilesystem && (
+                <Tab value="files">
+                  <FileText className="h-4 w-4" />
+                  Files
+                </Tab>
               )}
-            </button>
-          )}
-        </div>
+              {hasSkills && (
+                <Tab value="skills">
+                  <Wand2 className="h-4 w-4" />
+                  Skills
+                  {isSkillsConfigured && skills.length > 0 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-neutral4">{skills.length}</span>
+                  )}
+                </Tab>
+              )}
+            </TabList>
 
-        {/* Tab Content */}
-        <div className="pb-8">
-          {activeTab === 'files' && hasFilesystem && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <FileBrowser
-                  entries={files}
-                  currentPath={currentPath}
-                  isLoading={isLoadingFiles}
-                  error={filesError}
-                  onNavigate={setCurrentPath}
-                  onFileSelect={setSelectedFile}
-                  onRefresh={() => refetchFiles()}
-                  onCreateDirectory={
-                    isReadOnly ? undefined : path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })
-                  }
-                  onDelete={
-                    isReadOnly
-                      ? undefined
-                      : path =>
-                          deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
-                  }
-                />
-                {selectedFile && (
-                  <FileViewer
-                    path={selectedFile}
-                    content={fileContent?.content ?? ''}
-                    isLoading={isLoadingFileContent}
-                    mimeType={fileContent?.mimeType}
-                    onClose={() => setSelectedFile(null)}
+            {hasFilesystem && (
+              <TabContent value="files" className="pb-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <FileBrowser
+                    entries={files}
+                    currentPath={currentPath}
+                    isLoading={isLoadingFiles}
+                    error={filesError}
+                    onNavigate={setCurrentPath}
+                    onFileSelect={setSelectedFile}
+                    onRefresh={() => refetchFiles()}
+                    onCreateDirectory={
+                      isReadOnly
+                        ? undefined
+                        : path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })
+                    }
+                    onDelete={
+                      isReadOnly
+                        ? undefined
+                        : path =>
+                            deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
+                    }
                   />
-                )}
-              </div>
-            </div>
-          )}
+                  {selectedFile && (
+                    <FileViewer
+                      path={selectedFile}
+                      content={fileContent?.content ?? ''}
+                      isLoading={isLoadingFileContent}
+                      mimeType={fileContent?.mimeType}
+                      onClose={() => setSelectedFile(null)}
+                    />
+                  )}
+                </div>
+              </TabContent>
+            )}
 
-          {activeTab === 'skills' && hasSkills && (
-            <SkillsTable
-              skills={skills}
-              isLoading={isLoadingSkills}
-              isSkillsConfigured={isSkillsConfigured}
-              hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
-              basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
-              onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
-              onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
-              onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
-              updatingSkillName={updatingSkillName ?? undefined}
-              removingSkillName={removingSkillName ?? undefined}
-              mountPaths={mountPaths}
-            />
-          )}
+            {hasSkills && (
+              <TabContent value="skills" className="pb-8">
+                <SkillsTable
+                  skills={skills}
+                  isLoading={isLoadingSkills}
+                  isSkillsConfigured={isSkillsConfigured}
+                  hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
+                  basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
+                  onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+                  onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
+                  onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
+                  updatingSkillName={updatingSkillName ?? undefined}
+                  removingSkillName={removingSkillName ?? undefined}
+                  mountPaths={mountPaths}
+                />
+              </TabContent>
+            )}
+          </Tabs>
+        )}
 
-          {/* Show default tab if only one is available */}
-          {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-            <div className="py-12 text-center text-neutral4">
-              <p>No workspace capabilities are configured.</p>
-            </div>
-          )}
-        </div>
+        {!hasFilesystem && !hasSkills && !isLoadingInfo && (
+          <div className="py-12 text-center text-neutral4">
+            <p>No workspace capabilities are configured.</p>
+          </div>
+        )}
       </PageLayout.MainArea>
 
       {/* Add Skill Dialog */}

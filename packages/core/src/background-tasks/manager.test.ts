@@ -4,7 +4,7 @@ import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
-import type { TaskContext } from './types';
+import type { BackgroundTaskManagerConfig, TaskContext } from './types';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -13,19 +13,51 @@ function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
 
 const testStorage = new MockStore();
 
-const mastra = new Mastra({
-  logger: false,
-  storage: testStorage,
-});
-
 /** Wait for async microtasks/timers to settle */
 const tick = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Spin up a private Mastra + bg-task manager scoped to a single test. Tests
+ * that need a different manager config than the shared `manager` from
+ * `beforeEach` must use this — reusing the shared `mastra` causes the bg-task
+ * workflow registration on Mastra to bind to the *first* manager that called
+ * `init()`. Subsequent managers registering against the same Mastra see
+ * `__hasInternalWorkflow(...) === true` and skip re-registration, so their
+ * dispatches actually run through the first manager's workflow and fail to
+ * find the executor in `taskContexts`.
+ */
+async function makeLocalManager(config: BackgroundTaskManagerConfig) {
+  const localMastra = new Mastra({ logger: false, storage: testStorage });
+  await localMastra.startEventEngine();
+  const isolatedPubsub = new EventEmitterPubSub();
+  const mgr = new BackgroundTaskManager(config);
+  mgr.__registerMastra(localMastra);
+  await mgr.init(isolatedPubsub);
+  return {
+    mgr,
+    localMastra,
+    isolatedPubsub,
+    cleanup: async () => {
+      await mgr.shutdown();
+      await isolatedPubsub.close();
+      await localMastra.stopEventEngine();
+    },
+  };
+}
 
 describe('BackgroundTaskManager', () => {
   let pubsub: EventEmitterPubSub;
   let manager: BackgroundTaskManager;
+  let mastra: Mastra;
 
   beforeEach(async () => {
+    // Fresh Mastra per test so the workflow engine's per-Mastra processor +
+    // internal-workflow registry stays clean between tests.
+    mastra = new Mastra({
+      logger: false,
+      storage: testStorage,
+    });
+    await mastra.startEventEngine();
     pubsub = new EventEmitterPubSub();
     manager = new BackgroundTaskManager({
       globalConcurrency: 3,
@@ -40,6 +72,7 @@ describe('BackgroundTaskManager', () => {
   afterEach(async () => {
     await manager.shutdown();
     await pubsub.close();
+    await mastra.stopEventEngine();
     const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
     await backgroundTasksStore?.dangerouslyClearAll();
   });
@@ -258,15 +291,12 @@ describe('BackgroundTaskManager', () => {
     });
 
     it('backpressure reject throws on limit', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-      const rejectManager = new BackgroundTaskManager({
+      const { mgr: rejectManager, cleanup } = await makeLocalManager({
         enabled: true,
         globalConcurrency: 1,
         perAgentConcurrency: 1,
         backpressure: 'reject',
       });
-      rejectManager.__registerMastra(mastra);
-      await rejectManager.init(isolatedPubsub);
 
       let resolver!: () => void;
       const executeFn = vi.fn().mockImplementation(
@@ -290,20 +320,16 @@ describe('BackgroundTaskManager', () => {
       ).rejects.toThrow('Concurrency limit reached');
 
       resolver();
-      await rejectManager.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
 
     it('backpressure fallback-sync returns signal', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-      const syncManager = new BackgroundTaskManager({
+      const { mgr: syncManager, cleanup } = await makeLocalManager({
         enabled: true,
         globalConcurrency: 1,
         perAgentConcurrency: 1,
         backpressure: 'fallback-sync',
       });
-      syncManager.__registerMastra(mastra);
-      await syncManager.init(isolatedPubsub);
 
       let resolver!: () => void;
       const executeFn = vi.fn().mockImplementation(
@@ -326,8 +352,7 @@ describe('BackgroundTaskManager', () => {
       expect(result.fallbackToSync).toBe(true);
 
       resolver();
-      await syncManager.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
   });
 
@@ -364,13 +389,10 @@ describe('BackgroundTaskManager', () => {
         return 'success';
       });
 
-      const isolatedPubsub = new EventEmitterPubSub();
-      const retryManager = new BackgroundTaskManager({
+      const { mgr: retryManager, cleanup } = await makeLocalManager({
         enabled: true,
         defaultRetries: { retryDelayMs: 0 },
       });
-      retryManager.__registerMastra(mastra);
-      await retryManager.init(isolatedPubsub);
 
       const { task } = await retryManager.enqueue(
         { toolName: 'flaky-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', maxRetries: 3, runId: 'run-1' },
@@ -384,20 +406,16 @@ describe('BackgroundTaskManager', () => {
       expect(result?.result).toBe('success');
       expect(executeFn).toHaveBeenCalledTimes(3);
 
-      await retryManager.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
 
     it('fails after exhausting retries', async () => {
       const executeFn = vi.fn().mockRejectedValue(new Error('Always fails'));
 
-      const isolatedPubsub = new EventEmitterPubSub();
-      const retryManager = new BackgroundTaskManager({
+      const { mgr: retryManager, cleanup } = await makeLocalManager({
         enabled: true,
         defaultRetries: { retryDelayMs: 0 },
       });
-      retryManager.__registerMastra(mastra);
-      await retryManager.init(isolatedPubsub);
 
       const { task } = await retryManager.enqueue(
         { toolName: 'bad-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', maxRetries: 2, runId: 'run-1' },
@@ -410,8 +428,7 @@ describe('BackgroundTaskManager', () => {
       expect(result?.status).toBe('failed');
       expect(executeFn).toHaveBeenCalledTimes(3); // initial + 2 retries
 
-      await retryManager.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
   });
 
@@ -548,10 +565,7 @@ describe('BackgroundTaskManager', () => {
   describe('callbacks', () => {
     it('invokes onTaskComplete callback', async () => {
       const onComplete = vi.fn();
-      const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({ enabled: true, onTaskComplete: onComplete });
-      mgr.__registerMastra(mastra);
-      await mgr.init(isolatedPubsub);
+      const { mgr, cleanup } = await makeLocalManager({ enabled: true, onTaskComplete: onComplete });
 
       const executeFn = vi.fn().mockResolvedValue('result');
       await mgr.enqueue(
@@ -563,16 +577,12 @@ describe('BackgroundTaskManager', () => {
       expect(onComplete).toHaveBeenCalledTimes(1);
       expect(onComplete.mock.calls[0]![0].status).toBe('completed');
 
-      await mgr.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
 
     it('invokes onTaskFailed callback', async () => {
       const onFailed = vi.fn();
-      const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({ enabled: true, onTaskFailed: onFailed });
-      mgr.__registerMastra(mastra);
-      await mgr.init(isolatedPubsub);
+      const { mgr, cleanup } = await makeLocalManager({ enabled: true, onTaskFailed: onFailed });
 
       const executeFn = vi.fn().mockRejectedValue(new Error('oops'));
       await mgr.enqueue(
@@ -584,8 +594,7 @@ describe('BackgroundTaskManager', () => {
       expect(onFailed).toHaveBeenCalledTimes(1);
       expect(onFailed.mock.calls[0]![0].status).toBe('failed');
 
-      await mgr.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
 
     it('invokes per-task onComplete callback', async () => {
@@ -620,13 +629,10 @@ describe('BackgroundTaskManager', () => {
 
   describe('cleanup', () => {
     it('deletes old completed tasks', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({
+      const { mgr, cleanup } = await makeLocalManager({
         enabled: true,
         cleanup: { completedTtlMs: 100, failedTtlMs: 200 },
       });
-      mgr.__registerMastra(mastra);
-      await mgr.init(isolatedPubsub);
 
       const executeFn = vi.fn().mockResolvedValue('ok');
       await mgr.enqueue(
@@ -644,18 +650,14 @@ describe('BackgroundTaskManager', () => {
       const { tasks: after } = await mgr.listTasks({});
       expect(after.length).toBe(0);
 
-      await mgr.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
 
     it('keeps recent completed tasks', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({
+      const { mgr, cleanup } = await makeLocalManager({
         enabled: true,
         cleanup: { completedTtlMs: 60_000 },
       });
-      mgr.__registerMastra(mastra);
-      await mgr.init(isolatedPubsub);
 
       const executeFn = vi.fn().mockResolvedValue('ok');
       await mgr.enqueue(
@@ -669,18 +671,14 @@ describe('BackgroundTaskManager', () => {
       const { tasks: afterTasks } = await mgr.listTasks({});
       expect(afterTasks.length).toBe(1);
 
-      await mgr.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
     });
 
     it('deletes old failed tasks with separate TTL', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({
+      const { mgr, cleanup } = await makeLocalManager({
         enabled: true,
         cleanup: { completedTtlMs: 50, failedTtlMs: 100 },
       });
-      mgr.__registerMastra(mastra);
-      await mgr.init(isolatedPubsub);
 
       const executeFn = vi.fn().mockRejectedValue(new Error('fail'));
       await mgr.enqueue(
@@ -696,134 +694,323 @@ describe('BackgroundTaskManager', () => {
 
       expect((await mgr.listTasks({})).total).toBe(0);
 
-      await mgr.shutdown();
-      await isolatedPubsub.close();
+      await cleanup();
+    });
+  });
+
+  describe('suspend/resume', () => {
+    it('suspends mid-execution and persists status + suspendPayload', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        await opts.suspend({ awaiting: 'human-approval' });
+        // Code after suspend runs but its return value is discarded.
+        return 'should-be-ignored';
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'csusp1', args: { ask: 'go?' }, agentId: 'a1', runId: 'r1' },
+        ctx(executeFn),
+      );
+
+      await tick(200);
+
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.status).toBe('suspended');
+      expect(suspended?.suspendPayload).toEqual({ awaiting: 'human-approval' });
+      expect(suspended?.result).toBeUndefined();
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits a background-task-suspended chunk on the manager stream', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        await opts.suspend({ ask: 'pause' });
+      });
+
+      const chunks: any[] = [];
+      const abortController = new AbortController();
+      const stream = manager.stream({ abortSignal: abortController.signal });
+      const consumer = (async () => {
+        for await (const chunk of stream as any) chunks.push(chunk);
+      })();
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'csusp2', args: {}, agentId: 'a1', runId: 'r2' },
+        ctx(executeFn),
+      );
+
+      await tick(200);
+      abortController.abort();
+      await consumer;
+
+      const suspendedChunk = chunks.find(c => c.type === 'background-task-suspended');
+      expect(suspendedChunk).toBeDefined();
+      expect(suspendedChunk.payload.taskId).toBe(task.id);
+      expect(suspendedChunk.payload.suspendPayload).toEqual({ ask: 'pause' });
+    });
+
+    it('resumes a suspended task with resumeData and completes', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'approval' });
+          return undefined;
+        }
+        return { approvedBy: (opts.resumeData as { user: string }).user };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cres1', args: {}, agentId: 'a1', runId: 'r3' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+
+      await manager.resume(task.id, { user: 'alice' });
+      await tick(200);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ approvedBy: 'alice' });
+      expect(completed?.suspendPayload).toBeUndefined();
+      expect(executeFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('emits background-task-resumed on the stream when resumed', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'go' });
+          return undefined;
+        }
+        return 'ok';
+      });
+
+      const chunks: any[] = [];
+      const abortController = new AbortController();
+      const stream = manager.stream({ abortSignal: abortController.signal });
+      const consumer = (async () => {
+        for await (const chunk of stream as any) chunks.push(chunk);
+      })();
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cres2', args: {}, agentId: 'a1', runId: 'r4' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      await manager.resume(task.id, { go: true });
+      await tick(200);
+      abortController.abort();
+      await consumer;
+
+      expect(chunks.some(c => c.type === 'background-task-suspended' && c.payload.taskId === task.id)).toBe(true);
+      expect(chunks.some(c => c.type === 'background-task-resumed' && c.payload.taskId === task.id)).toBe(true);
+      expect(chunks.some(c => c.type === 'background-task-completed' && c.payload.taskId === task.id)).toBe(true);
+    });
+
+    it('cancels a suspended task and publishes task.cancelled', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        await opts.suspend({});
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'ccsusp', args: {}, agentId: 'a1', runId: 'r5' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+
+      await manager.cancel(task.id);
+      await tick(50);
+
+      const cancelled = await manager.getTask(task.id);
+      expect(cancelled?.status).toBe('cancelled');
+    });
+
+    it('throws when resuming a task that is not suspended', async () => {
+      const executeFn = vi.fn().mockResolvedValue('done');
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cnotsusp', args: {}, agentId: 'a1', runId: 'r6' },
+        ctx(executeFn),
+      );
+      await tick(150);
+      await expect(manager.resume(task.id)).rejects.toThrow(/Cannot resume task in status 'completed'/);
+    });
+
+    it('preserves retry counter across suspend/resume', async () => {
+      let calls = 0;
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        calls++;
+        if (calls === 1) {
+          // First attempt: throw to record a retry.
+          throw new Error('first-attempt-fails');
+        }
+        if (calls === 2) {
+          // Second attempt (retry): suspend.
+          await opts.suspend({ at: 'attempt-2' });
+          return undefined;
+        }
+        // Resume: complete.
+        return { resumeData: opts.resumeData };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cretry', args: {}, agentId: 'a1', runId: 'r7', maxRetries: 3 },
+        ctx(executeFn),
+      );
+      await tick(300);
+
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.status).toBe('suspended');
+      // After the first failed attempt, retryCount was bumped to 1; suspending
+      // mid-attempt-2 leaves it at 1 (not bumped — only failures bump).
+      expect(suspended?.retryCount).toBe(1);
+
+      await manager.resume(task.id, { ok: true });
+      await tick(300);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ resumeData: { ok: true } });
+      // Resume re-entered the step at attempt = task.retryCount = 1, did NOT
+      // re-run the failed attempt 0. Total executor calls: 1 (failed) +
+      // 1 (suspended) + 1 (resumed) = 3, not 4.
+      expect(calls).toBe(3);
     });
   });
 
   describe('recovery on startup', () => {
-    it('fails stale running tasks from a previous process', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-
-      const mgr1 = new BackgroundTaskManager();
-      mgr1.__registerMastra(mastra);
-      await mgr1.init(isolatedPubsub);
-
-      const storage = await mgr1.getStorage();
-      await storage.createTask({
-        id: 'stale-task',
-        status: 'running',
-        toolName: 'tool',
-        toolCallId: 'call-1',
-        args: {},
-        agentId: 'a1',
-        retryCount: 0,
-        maxRetries: 0,
-        timeoutMs: 300_000,
-        createdAt: new Date(),
-        startedAt: new Date(),
-        runId: 'run-1',
+    it('recovers stale running tasks with retries available', async () => {
+      // Pre-seed storage with a task in 'running' status as if a previous
+      // process crashed mid-execution. A fresh manager.init() should flip
+      // it to pending and re-dispatch via the workflow.
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
       });
 
-      await mgr1.shutdown();
-
-      const mgr2 = new BackgroundTaskManager();
-      mgr2.__registerMastra(mastra);
-      await mgr2.init(isolatedPubsub);
-
-      await tick();
-
-      const task = await mgr2.getTask('stale-task');
-      expect(task).toBeDefined();
-      expect(task!.status).toBe('failed');
-      expect(task!.error?.message).toContain('terminated');
-
-      await mgr2.shutdown();
-      await isolatedPubsub.close();
-    });
-
-    it('retries stale running tasks if retries remain', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-
-      const mgr1 = new BackgroundTaskManager();
-      mgr1.__registerMastra(mastra);
-      await mgr1.init(isolatedPubsub);
-
-      const storage = await mgr1.getStorage();
-      const executeFn = vi.fn().mockResolvedValue('recovered');
-
-      await storage.createTask({
-        id: 'retry-task',
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'stale-1',
         status: 'running',
-        toolName: 'tool',
-        toolCallId: 'call-1',
+        toolName: 't',
+        toolCallId: 'c',
         args: {},
-        agentId: 'a1',
+        agentId: 'a',
+        runId: 'r',
         retryCount: 0,
-        maxRetries: 3,
-        timeoutMs: 300_000,
+        maxRetries: 1,
+        timeoutMs: 5000,
         createdAt: new Date(),
-        startedAt: new Date(),
-        runId: 'run-1',
+        startedAt: new Date(Date.now() - 60_000),
       });
 
-      await mgr1.shutdown();
+      // Register the context BEFORE init's recoverStaleTasks fires. The
+      // backgroundTaskManager is set synchronously by Mastra's constructor;
+      // init() is fire-and-forget after.
+      local.backgroundTaskManager!.registerTaskContext(
+        'stale-1',
+        ctx(async () => 'recovered'),
+      );
+      await local.startEventEngine();
 
-      // Restart — register context for the recovered task before init dispatches it
-      const mgr2 = new BackgroundTaskManager();
-      mgr2.__registerMastra(mastra);
-      mgr2.registerTaskContext('retry-task', ctx(executeFn));
-      await mgr2.init(isolatedPubsub);
+      try {
+        const mgr = local.backgroundTaskManager!;
 
-      await tick();
+        // Recovery is async during init — give it time to flip + re-dispatch.
+        await tick(200);
 
-      const task = await mgr2.getTask('retry-task');
-      expect(task).toBeDefined();
-      expect(task!.status).toBe('completed');
-
-      await mgr2.shutdown();
-      await isolatedPubsub.close();
+        const completed = await mgr.getTask('stale-1');
+        expect(completed?.status).toBe('completed');
+        expect(completed?.result).toBe('recovered');
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopEventEngine();
+      }
     });
 
-    it('re-dispatches pending tasks from a previous process', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
+    it('re-dispatches stale pending tasks on init', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
 
-      const mgr1 = new BackgroundTaskManager();
-      mgr1.__registerMastra(mastra);
-      await mgr1.init(isolatedPubsub);
-
-      const storage = await mgr1.getStorage();
-      const executeFn = vi.fn().mockResolvedValue('dispatched');
-
-      await storage.createTask({
-        id: 'pending-task',
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'pending-1',
         status: 'pending',
-        toolName: 'tool',
-        toolCallId: 'call-1',
+        toolName: 't',
+        toolCallId: 'c',
         args: {},
-        agentId: 'a1',
+        agentId: 'a',
+        runId: 'r',
         retryCount: 0,
         maxRetries: 0,
-        timeoutMs: 300_000,
+        timeoutMs: 5000,
         createdAt: new Date(),
-        runId: 'run-1',
       });
 
-      await mgr1.shutdown();
+      local.backgroundTaskManager!.registerTaskContext(
+        'pending-1',
+        ctx(async () => 'late-pickup'),
+      );
+      await local.startEventEngine();
 
-      const mgr2 = new BackgroundTaskManager();
-      mgr2.__registerMastra(mastra);
-      mgr2.registerTaskContext('pending-task', ctx(executeFn));
-      await mgr2.init(isolatedPubsub);
+      try {
+        const mgr = local.backgroundTaskManager!;
 
+        await tick(200);
+
+        const completed = await mgr.getTask('pending-1');
+        expect(completed?.status).toBe('completed');
+        expect(completed?.result).toBe('late-pickup');
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopEventEngine();
+      }
+    });
+
+    it('leaves suspended tasks alone on init recovery', async () => {
+      // First mastra: enqueue a task that suspends.
+      const seedStorage = new MockStore();
+      const m1 = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+      await m1.startEventEngine();
       await tick();
+      const mgr1 = m1.backgroundTaskManager!;
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        await opts.suspend({ checkpoint: 1 });
+      });
+      const { task } = await mgr1.enqueue(
+        { toolName: 't', toolCallId: 'crec', args: {}, agentId: 'a1', runId: 'r8' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await mgr1.getTask(task.id))?.status).toBe('suspended');
+      await mgr1.shutdown();
+      await m1.stopEventEngine();
 
-      const task = await mgr2.getTask('pending-task');
-      expect(task).toBeDefined();
-      expect(task!.status).toBe('completed');
-
-      await mgr2.shutdown();
-      await isolatedPubsub.close();
+      // Second mastra over the same storage — recovery should NOT touch
+      // the suspended row.
+      const m2 = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+      await m2.startEventEngine();
+      await tick(150);
+      try {
+        const mgr2 = m2.backgroundTaskManager!;
+        const stillSuspended = await mgr2.getTask(task.id);
+        expect(stillSuspended?.status).toBe('suspended');
+        expect(stillSuspended?.suspendPayload).toEqual({ checkpoint: 1 });
+      } finally {
+        await m2.backgroundTaskManager?.shutdown();
+        await m2.stopEventEngine();
+      }
     });
   });
 
@@ -940,10 +1127,7 @@ describe('BackgroundTaskManager', () => {
     });
 
     it('throttles progress output chunks while still emitting completion', async () => {
-      const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({ enabled: true, progressThrottleMs: 100 });
-      mgr.__registerMastra(mastra);
-      await mgr.init(isolatedPubsub);
+      const { mgr, cleanup } = await makeLocalManager({ enabled: true, progressThrottleMs: 100 });
 
       const abortController = new AbortController();
       const stream = mgr.stream({ abortSignal: abortController.signal });
@@ -997,8 +1181,7 @@ describe('BackgroundTaskManager', () => {
       } finally {
         dateNow.mockRestore();
         abortController.abort();
-        await mgr.shutdown();
-        await isolatedPubsub.close();
+        await cleanup();
       }
     });
 
