@@ -93,25 +93,21 @@ export function Combobox({
               <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
               <BaseCombobox.List className={comboboxStyles.list}>
                 {(option: ComboboxOption) => (
-                  <BaseCombobox.Item
-                    key={option.value}
-                    value={option}
-                    className={cn(comboboxStyles.item, comboboxStyles.itemSelected)}
-                  >
-                    <span className={comboboxStyles.checkContainer}>
-                      <BaseCombobox.ItemIndicator>
-                        <Check className={comboboxStyles.checkIcon} />
-                      </BaseCombobox.ItemIndicator>
+                  <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>
+                    {option.start}
+                    <span className={comboboxStyles.optionText}>
+                      <span className={comboboxStyles.optionLabel}>{option.label}</span>
+                      {option.description && (
+                        <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                      )}
                     </span>
-                    <span className={comboboxStyles.optionContent}>
-                      {option.start}
-                      <span className={comboboxStyles.optionText}>
-                        <span className={comboboxStyles.optionLabel}>{option.label}</span>
-                        {option.description && (
-                          <span className={comboboxStyles.optionDescription}>{option.description}</span>
-                        )}
-                      </span>
+                    <span className={comboboxStyles.itemRightSlot}>
                       {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                      <span className={comboboxStyles.checkContainer}>
+                        <BaseCombobox.ItemIndicator>
+                          <Check className={comboboxStyles.checkIcon} />
+                        </BaseCombobox.ItemIndicator>
+                      </span>
                     </span>
                   </BaseCombobox.Item>
                 )}
