@@ -1002,6 +1002,25 @@ describe('createLLMMappingStep toModelOutput', () => {
         }),
       }),
     );
+
+    // The emitted tool-result chunk should also carry modelOutput on providerMetadata
+    // so harness consumers (e.g. mastracode TUI) can read it without going through the messageList.
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          providerMetadata: expect.objectContaining({
+            mastra: expect.objectContaining({
+              modelOutput: {
+                type: 'text',
+                value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+              },
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it('should normalize media parts in toModelOutput to image-data/file-data', async () => {
