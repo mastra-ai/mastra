@@ -304,12 +304,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       }) ?? true;
 
     if (shouldPersist) {
+      const result = finalStatus === 'success' && prevResult?.status === 'success' ? prevResult.output : prevResult;
+
       await workflowsStore?.updateWorkflowState({
         workflowName: workflowId,
         runId,
         opts: {
           status: finalStatus,
-          result: prevResult,
+          result,
         },
       });
     }

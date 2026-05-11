@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { EventCallback, SubscribeOptions } from '../../events/types';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
 import { ProcessorStepSchema } from '../../processors/step-schema';
@@ -51,6 +52,13 @@ const rebindRegistryWorkflows = () => {
     (entry.workflow as any).__registerMastra?.(registeredMastra);
   }
 };
+
+class DeferredSubscribePubSub extends EventEmitterPubSub {
+  override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await super.subscribe(topic, cb, options);
+  }
+}
 
 // @ts-expect-error - TS2589: EventedWorkflow types cause excessively deep type instantiation
 createWorkflowTestSuite({
@@ -764,6 +772,127 @@ describe('Workflow (Evented Engine Specific)', () => {
       expect(resumeResult.status).toBe('success');
 
       await mastra.stopWorkers();
+    });
+
+    it('should persist final workflow output as snapshot result', async () => {
+      const addStep = createStep({
+        id: 'add',
+        inputSchema: z.object({ a: z.number(), b: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        execute: async ({ inputData }) => ({ result: inputData.a + inputData.b }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'persist-final-output',
+        inputSchema: z.object({ a: z.number(), b: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+      });
+
+      workflow.then(addStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'persist-final-output': workflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun({ runId: 'persist-final-output-run' });
+        const result = await run.start({ inputData: { a: 1, b: 2 } });
+
+        expect(result.status).toBe('success');
+        if (result.status === 'success') {
+          expect(result.result).toEqual({ result: 3 });
+        }
+
+        const workflowsStore = await testStorage.getStore('workflows');
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: 'persist-final-output',
+          runId: 'persist-final-output-run',
+        });
+
+        expect(snapshot?.status).toBe('success');
+        expect(snapshot?.result).toEqual({ result: 3 });
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('should stream resume step results after subscribing', async () => {
+      const suspendStep = createStep({
+        id: 'suspend-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+        resumeSchema: z.object({ suffix: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData?.suffix) {
+            return suspend({ reason: 'waiting' });
+          }
+
+          return { value: `${inputData.value}${resumeData.suffix}` };
+        },
+      });
+
+      const finalStep = createStep({
+        id: 'final-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => ({ value: `${inputData.value}!` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'resume-stream-events',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+      workflow.then(suspendStep).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'resume-stream-events': workflow },
+        pubsub: new DeferredSubscribePubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun({ runId: 'resume-stream-events-run' });
+        const initialStream = run.stream({ inputData: { value: 'A' } });
+
+        for await (const _event of initialStream.fullStream) {
+          // consume until suspended
+        }
+
+        const initialResult = await initialStream.result;
+        expect(initialResult.status).toBe('suspended');
+
+        const resumeStream = run.resumeStream({
+          step: 'suspend-step',
+          resumeData: { suffix: 'B' },
+        });
+
+        const events: StreamEvent[] = [];
+        for await (const event of resumeStream.fullStream) {
+          events.push(JSON.parse(JSON.stringify(event)));
+        }
+
+        const resumeResult = await resumeStream.result;
+        expect(resumeResult.status).toBe('success');
+
+        const completedEvents = events.filter(
+          event => event.type === 'workflow-step-result' && (event as any).payload?.status === 'success',
+        );
+
+        expect(completedEvents.map(event => (event as any).payload.id)).toEqual(['suspend-step', 'final-step']);
+        expect((completedEvents[0] as any).payload.output).toEqual({ value: 'AB' });
+        expect((completedEvents[1] as any).payload.output).toEqual({ value: 'AB!' });
+      } finally {
+        await mastra.stopWorkers();
+      }
     });
 
     it('should handle errors from agent.stream() with full error details', async () => {
