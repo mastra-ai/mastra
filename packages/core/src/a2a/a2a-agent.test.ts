@@ -7,6 +7,13 @@ import { RequestContext } from '../request-context';
 
 import { A2AAgent } from './a2a-agent';
 
+type StreamEventWithOptionalId = {
+  type: string;
+  payload?: {
+    id?: string;
+  };
+};
+
 const baseCard: AgentCard = {
   name: 'Remote Agent',
   description: 'A remote agent',
@@ -469,9 +476,9 @@ describe('A2AAgent', () => {
     });
 
     const stream = await agent.stream('Buffered request', { runId: 'stream-run-1' });
-    const events = [];
+    const events: StreamEventWithOptionalId[] = [];
     for await (const event of stream.fullStream) {
-      events.push(event);
+      events.push(event as StreamEventWithOptionalId);
     }
 
     expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
@@ -518,9 +525,9 @@ describe('A2AAgent', () => {
     });
 
     const stream = await agent.stream('Hello stream', { runId: 'stream-run-2' });
-    const events = [];
+    const events: StreamEventWithOptionalId[] = [];
     for await (const event of stream.fullStream) {
-      events.push(event);
+      events.push(event as StreamEventWithOptionalId);
     }
 
     expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
