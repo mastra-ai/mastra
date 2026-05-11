@@ -1,0 +1,242 @@
+import { PassThrough } from 'node:stream';
+
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+const mocks = vi.hoisted(() => {
+  const spawn = vi.fn();
+  const ndJsonStream = vi.fn(() => ({ readable: {}, writable: {} }));
+  const connectionInstances: MockClientSideConnection[] = [];
+  let onPrompt: ((connection: MockClientSideConnection) => Promise<void> | void) | undefined;
+
+  class MockClientSideConnection {
+    client: any;
+    initialize = vi.fn().mockResolvedValue({});
+    authenticate = vi.fn().mockResolvedValue({});
+    newSession = vi.fn().mockResolvedValue({ sessionId: 'session-1' });
+    cancel = vi.fn().mockResolvedValue({});
+    prompt = vi.fn(async () => {
+      await onPrompt?.(this);
+      return { stopReason: 'end_turn' };
+    });
+
+    constructor(toClient: () => any) {
+      this.client = toClient();
+      connectionInstances.push(this);
+    }
+  }
+
+  return {
+    spawn,
+    ndJsonStream,
+    connectionInstances,
+    MockClientSideConnection,
+    get onPrompt() {
+      return onPrompt;
+    },
+    set onPrompt(value: ((connection: MockClientSideConnection) => Promise<void> | void) | undefined) {
+      onPrompt = value;
+    },
+  };
+});
+
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<object>();
+  return {
+    ...actual,
+    spawn: mocks.spawn,
+  };
+});
+
+vi.mock('@agentclientprotocol/sdk', async importOriginal => {
+  const actual = await importOriginal<object>();
+  return {
+    ...actual,
+    ClientSideConnection: mocks.MockClientSideConnection,
+    ndJsonStream: mocks.ndJsonStream,
+    PROTOCOL_VERSION: 1,
+  };
+});
+
+function createProcess() {
+  return {
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    killed: false,
+    kill: vi.fn(function (this: { killed: boolean }) {
+      this.killed = true;
+      return true;
+    }),
+  };
+}
+
+describe('createACPTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.connectionInstances.length = 0;
+    mocks.onPrompt = undefined;
+    mocks.spawn.mockImplementation(() => createProcess());
+  });
+
+  it('creates a Mastra tool with ACP input and output schemas', async () => {
+    const { createACPTool } = await import('../tool');
+
+    const tool = createACPTool({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude-agent-acp',
+      args: [],
+    });
+
+    expect(tool.id).toBe('claude-code');
+    expect(tool.description).toBe('Build anything with Claude Code');
+    expect(tool.inputSchema).toBeDefined();
+    expect(tool.outputSchema).toBeDefined();
+    expect((tool.inputSchema as any).safeParse({ task: 'build it' }).success).toBe(true);
+    expect((tool.outputSchema as any).safeParse({ output: 'done' }).success).toBe(true);
+  });
+
+  it('sends the task to the ACP connection when executed', async () => {
+    const { createACPTool } = await import('../tool');
+
+    const tool = createACPTool({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude-agent-acp',
+      args: [],
+      persistSession: true,
+    });
+
+    const result = await tool.execute?.({ task: 'write tests' } as any, {} as any);
+    const connection = mocks.connectionInstances[0];
+
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'claude-agent-acp',
+      [],
+      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
+    );
+    expect(connection?.prompt).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'write tests' }],
+    });
+    expect(result).toEqual({ output: '' });
+  });
+});
+
+describe('ACPConnection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.connectionInstances.length = 0;
+    mocks.onPrompt = undefined;
+    mocks.spawn.mockImplementation(() => createProcess());
+  });
+
+  it('lazy initializes the ACP process on first prompt and collects agent message chunks', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      args: ['--acp'],
+      persistSession: true,
+    });
+
+    expect(mocks.spawn).not.toHaveBeenCalled();
+
+    mocks.onPrompt = async acpConnection => {
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'hello ' },
+        },
+      });
+      await acpConnection.client.sessionUpdate({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'world' },
+        },
+      });
+    };
+
+    await expect(connection.prompt('implement feature')).resolves.toBe('hello world');
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the ACP prompt when the abort signal fires', async () => {
+    const { ACPConnection } = await import('../connection');
+    const controller = new AbortController();
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    let resolvePrompt: (value: { stopReason: 'cancelled' }) => void;
+    const promptPromise = new Promise<{ stopReason: 'cancelled' }>(resolve => {
+      resolvePrompt = resolve;
+    });
+
+    const outputPromise = connection.prompt('stop me', controller.signal);
+    const acpConnection = mocks.connectionInstances[0];
+    acpConnection!.prompt.mockReturnValue(promptPromise);
+
+    controller.abort(new Error('stop'));
+    resolvePrompt!({ stopReason: 'cancelled' });
+
+    await expect(outputPromise).rejects.toThrow('stop');
+    expect(acpConnection?.cancel).toHaveBeenCalledWith({ sessionId: 'session-1' });
+  });
+
+  it('auto-selects the first permission option', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    await connection.prompt('needs permission');
+    const client = mocks.connectionInstances[0]?.client;
+
+    await expect(
+      client.requestPermission({
+        sessionId: 'session-1',
+        toolCallId: 'tool-1',
+        options: [{ optionId: 'allow_once', name: 'Allow once', kind: 'allow_once' }],
+      }),
+    ).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'allow_once' } });
+  });
+
+  it('delegates permission requests to onPermissionRequest callback', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const handler = vi.fn().mockResolvedValue({ outcome: { outcome: 'cancelled' } });
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+      onPermissionRequest: handler,
+    });
+
+    await connection.prompt('needs custom permission');
+    const client = mocks.connectionInstances[0]?.client;
+
+    const request = {
+      sessionId: 'session-1',
+      toolCallId: 'tool-1',
+      options: [{ optionId: 'allow_once', name: 'Allow once', kind: 'allow_once' }],
+    };
+
+    await expect(client.requestPermission(request)).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    expect(handler).toHaveBeenCalledWith(request);
+  });
+});
