@@ -45,8 +45,23 @@
  *   - `imageSuppressedByOverlay()` — is there an overlay covering me?
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { deleteKittyImage } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+
+const DEBUG_OVERLAY = process.env.MC_DEBUG_OVERLAY === '1';
+function markOverlay(event: 'open' | 'close'): void {
+  if (!DEBUG_OVERLAY) return;
+  try {
+    const dir = '/tmp/tui';
+    fs.mkdirSync(dir, { recursive: true });
+    const ts = Date.now();
+    fs.writeFileSync(path.join(dir, `overlay-${event}-${ts}.marker`), `${event}\n`);
+  } catch {
+    // best-effort
+  }
+}
 
 /**
  * Marker interface for components the manager tracks. The manager doesn't
@@ -101,9 +116,9 @@ class ImageManager {
    * now (because an overlay is on screen). Components consult this every
    * frame from `render()`.
    *
-   * Also detects overlay open/close transitions and issues a kitty delete
-   * the moment an overlay appears so the prior placement doesn't bleed
-   * through the popup background.
+   * Detects overlay open/close transitions and forces a full screen
+   * redraw on each transition so popup-composited cells from the
+   * previous frame can't leak into surrounding rows.
    */
   imageSuppressedByOverlay(): boolean {
     if (!this.ui) return false;
@@ -111,18 +126,60 @@ class ImageManager {
     if (overlayUp !== this.overlayActive) {
       this.overlayActive = overlayUp;
       if (overlayUp) {
+        markOverlay('open');
         // Overlay just opened: erase the placement so popup cells are
-        // genuinely empty. The next no-overlay frame will re-emit the
-        // kitty sequence (different line vs previousLines) and the
-        // diff renderer re-places it.
+        // genuinely empty (pi-tui's compositeLineAt won't paint over
+        // image-bearing lines, so we have to clear the graphics layer
+        // ourselves).
         if (this.active) this.deletePlacement(this.active);
+        this.forceFullRedraw();
       } else {
-        // Overlay just closed: force a render so the image's line is
-        // re-emitted promptly.
-        this.ui.requestRender();
+        markOverlay('close');
+        // Overlay just closed: wipe any stale popup glyphs from the
+        // viewport and re-emit the kitty escape so the diff renderer
+        // re-places the image.
+        this.forceFullRedraw();
       }
     }
     return overlayUp;
+  }
+
+  /**
+   * Force pi-tui to repaint the entire viewport on the next frame.
+   *
+   * We clear pi-tui's `previousLines` cache so its differential renderer
+   * sees a "first render" and rewrites every row, and we send a
+   * clear-screen escape so any popup glyphs composited onto rows the
+   * diff renderer thinks haven't changed are physically wiped.
+   *
+   * This avoids the class of bugs where overlay-composited rows (or
+   * shrink-path edge cases at the bottom of the viewport) leave ghost
+   * popup text or backgrounds after an overlay closes.
+   */
+  private forceFullRedraw(): void {
+    if (!this.ui) return;
+    try {
+      // Reset the differential renderer's prior-frame snapshot. On the
+      // next render pi-tui treats it as a first render and writes every
+      // line, so any popup glyphs composited last frame are overwritten
+      // even on rows the diff would otherwise consider unchanged.
+      // pi-tui's snapshot fields are declared private; reach in
+      // intentionally via an untyped alias.
+      const tuiInternals = this.ui as unknown as {
+        previousLines: string[];
+        previousWidth: number;
+        previousHeight: number;
+      };
+      tuiInternals.previousLines = [];
+      tuiInternals.previousWidth = 0;
+      tuiInternals.previousHeight = 0;
+      // Clear the visible viewport + scrollback so leftover popup
+      // backgrounds painted last frame are wiped from the terminal.
+      this.ui.terminal.write('\x1b[2J\x1b[H\x1b[3J');
+      this.ui.requestRender();
+    } catch {
+      // best-effort
+    }
   }
 
   private deletePlacement(reg: Registration): void {
