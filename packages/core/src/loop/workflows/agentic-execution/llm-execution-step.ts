@@ -350,6 +350,13 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
+    if (['tool-call', 'tool-call-input-streaming-start'].includes(chunk.type)) {
+      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
+      if (interjectedSignals.length > 0) {
+        return { collectedChunks, interjectedSignals };
+      }
+    }
+
     chunk = await addToolPayloadTransformToChunk(chunk, {
       tools,
       policy: toolPayloadTransform,
@@ -515,7 +522,8 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     // Drain signals only at stream boundaries so follow-ups do not split visible assistant text
-    // or separate a tool call from its result.
+    // or separate a tool call from its result. Tool calls are handled before enqueueing so
+    // an interjection can cancel a not-yet-visible tool call from the current step.
     if (['text-end', 'reasoning-end', 'tool-result', 'finish'].includes(chunk.type)) {
       const interjectedSignals = drainPendingSignals?.(runId) ?? [];
       if (interjectedSignals.length > 0) {

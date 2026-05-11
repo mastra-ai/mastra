@@ -483,6 +483,117 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('drops a not-yet-visible current-step tool call when draining a follow-up signal', async () => {
+    const prompts: any[][] = [];
+    let callCount = 0;
+    let continueToToolCall!: () => void;
+    const waitBeforeToolCall = new Promise<void>(resolve => {
+      continueToToolCall = resolve;
+    });
+
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        callCount += 1;
+        const callIndex = callCount;
+        prompts.push(prompt);
+
+        if (callIndex === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: 'id-1',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'I will check' });
+                await waitBeforeToolCall;
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: 'stale-tool-call',
+                  toolName: 'staleTool',
+                  input: '{}',
+                });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        }
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: 'signal response' },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'tool-interjection-signal-agent',
+      name: 'Tool Interjection Signal Agent',
+      instructions: 'Test',
+      model,
+    });
+
+    const subscription = await agent.subscribeToThread({
+      threadId: 'tool-interjection-thread',
+      resourceId: 'tool-interjection-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const chunks: any[] = [];
+    const runPromise = (async () => {
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) return;
+        chunks.push(next.value);
+        if (next.value.type === 'finish' || next.value.type === 'error' || next.value.type === 'abort') return;
+      }
+    })();
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'tool-interjection-thread', resource: 'tool-interjection-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+    const signalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'Actually stop and answer this instead' },
+      { resourceId: 'tool-interjection-user', threadId: 'tool-interjection-thread' },
+    );
+    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+
+    continueToToolCall();
+    await waitForCondition(() => callCount === 2);
+    await runPromise;
+
+    expect(chunks.map(chunk => chunk.type)).not.toContain('tool-call');
+    expect(JSON.stringify(prompts[1])).toContain('Actually stop and answer this instead');
+    expect(JSON.stringify(prompts[1])).not.toContain('stale-tool-call');
+
+    subscription.unsubscribe();
+  });
+
   it('interrupts an active reasoning stream to drain thread-targeted follow-up signals', async () => {
     const prompts: any[][] = [];
     let callCount = 0;
