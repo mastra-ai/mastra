@@ -18,6 +18,7 @@ export * from './inmemory-db';
 export * from './shared';
 export * from './datasets';
 export * from './experiments';
+export * from './rollouts';
 export * from './background-tasks';
 export * from './schedules';
 export * from './schedules';

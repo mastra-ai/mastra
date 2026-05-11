@@ -61,6 +61,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { resolveVersionFromRollout } from './rollout-utils';
 import {
   sanitizeBody,
   validateBody,
@@ -720,6 +721,12 @@ export async function getAgentFromSystem({
     throw new HTTPException(400, { message: 'Agent ID is required' });
   }
 
+  // If no explicit version was requested, check for an active rollout
+  let effectiveVersionOptions = versionOptions;
+  if (!effectiveVersionOptions && requestContext) {
+    effectiveVersionOptions = await resolveRolloutVersionOptions(mastra, agentId, requestContext, logger);
+  }
+
   let agent: Agent | null | undefined;
 
   try {
@@ -755,7 +762,7 @@ export async function getAgentFromSystem({
       if (editorAgent) {
         agent = await editorAgent.applyStoredOverrides(
           agent,
-          versionOptions ?? { status: 'published' },
+          effectiveVersionOptions ?? { status: 'published' },
           requestContext,
         );
       }
@@ -768,7 +775,7 @@ export async function getAgentFromSystem({
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
-      agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId, effectiveVersionOptions)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -779,6 +786,43 @@ export async function getAgentFromSystem({
   }
 
   return agent;
+}
+
+/**
+ * Check for an active rollout and resolve the version to use.
+ * Returns version options if a rollout is active, undefined otherwise.
+ */
+async function resolveRolloutVersionOptions(
+  mastra: Context['mastra'],
+  agentId: string,
+  requestContext: RequestContext,
+  logger: ReturnType<Context['mastra']['getLogger']>,
+): Promise<{ versionId: string } | undefined> {
+  try {
+    const storage = mastra.getStorage();
+    if (!storage) return undefined;
+
+    const rolloutsStore = await storage.getStore('rollouts');
+    if (!rolloutsStore) return undefined;
+
+    const rollout = await rolloutsStore.getActiveRollout(agentId);
+    if (!rollout) return undefined;
+
+    const versionId = await resolveVersionFromRollout(rollout, requestContext);
+    logger.debug('Resolved version from rollout', { agentId, rolloutId: rollout.id, versionId });
+
+    // Opportunistic, throttled rollback evaluation backed by the observability
+    // OLAP aggregate API. Fire-and-forget — never blocks request resolution.
+    if (rollout.rules && rollout.rules.length > 0) {
+      const evaluator = await mastra.getRolloutEvaluator();
+      evaluator?.scheduleEvaluation(agentId, rollout);
+    }
+
+    return { versionId };
+  } catch (error) {
+    logger.debug('Error resolving rollout version, falling back to default', error);
+    return undefined;
+  }
 }
 
 async function formatAgent({
@@ -1167,22 +1211,19 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       validateBody({ messages });
 
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
-        requestContext: serverRequestContext,
-      });
-
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1488,22 +1529,19 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
 
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
-        requestContext: serverRequestContext,
-      });
-
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
       stashVersionOverrides(serverRequestContext, versions);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1582,19 +1620,16 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
 
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(
-          serverRequestContext,
-          bodyRequestContext as Record<string, unknown> | undefined,
-        ),
-        requestContext: serverRequestContext,
-      });
-
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -2179,6 +2214,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,

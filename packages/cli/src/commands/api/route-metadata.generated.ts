@@ -387,6 +387,127 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/rollout": {
+    "method": "GET",
+    "path": "/agents/:agentId/rollout",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/rollout": {
+    "method": "POST",
+    "path": "/agents/:agentId/rollout",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /agents/:agentId/rollout": {
+    "method": "PATCH",
+    "path": "/agents/:agentId/rollout",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "candidateWeight"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/rollout/promote": {
+    "method": "POST",
+    "path": "/agents/:agentId/rollout/promote",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "versionId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/rollout/rollback": {
+    "method": "POST",
+    "path": "/agents/:agentId/rollout/rollback",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /agents/:agentId/rollout": {
+    "method": "DELETE",
+    "path": "/agents/:agentId/rollout",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /agents/:agentId/rollout/results": {
+    "method": "GET",
+    "path": "/agents/:agentId/rollout/results",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /agents/:agentId/rollouts": {
+    "method": "GET",
+    "path": "/agents/:agentId/rollouts",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "page",
+      "perPage"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "rollouts",
+      "paginationProperty": "page"
+    }
+  },
   "GET /auth/capabilities": {
     "method": "GET",
     "path": "/auth/capabilities",

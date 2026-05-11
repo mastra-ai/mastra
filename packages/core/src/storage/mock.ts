@@ -12,6 +12,7 @@ import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
+import { RolloutsInMemory } from './domains/rollouts/inmemory';
 import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
@@ -65,6 +66,7 @@ export class InMemoryStore extends MastraCompositeStore {
       channels: new InMemoryChannelsStorage(),
       datasets: new DatasetsInMemory({ db: this.#db }),
       experiments: new ExperimentsInMemory({ db: this.#db }),
+      rollouts: new RolloutsInMemory({ db: this.#db }),
       promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
       scorerDefinitions: new InMemoryScorerDefinitionsStorage({ db: this.#db }),
       mcpClients: new InMemoryMCPClientsStorage({ db: this.#db }),

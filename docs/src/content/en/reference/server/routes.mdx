@@ -75,6 +75,154 @@ GET /api/agents/my-agent?versionId=abc123
 }
 ```
 
+## Agent rollouts
+
+Rollouts split traffic between agent versions for canary releases and A/B experiments. Only one rollout can be active per agent. See [Rollouts](/docs/agents/rollouts) for the conceptual overview.
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/agents/:agentId/rollout` | Get the active rollout, including live score summaries |
+| `POST` | `/api/agents/:agentId/rollout` | Start a canary rollout or A/B experiment |
+| `PATCH` | `/api/agents/:agentId/rollout` | Update the candidate weight (canary only) |
+| `POST` | `/api/agents/:agentId/rollout/promote` | Promote the candidate or pick an A/B winner |
+| `POST` | `/api/agents/:agentId/rollout/rollback` | Roll back to the stable version |
+| `DELETE` | `/api/agents/:agentId/rollout` | Cancel an active rollout |
+| `GET` | `/api/agents/:agentId/rollout/results` | Per-version score breakdown (avg, stddev, min, max) |
+| `GET` | `/api/agents/:agentId/rollouts` | List rollout history (paginated) |
+
+Allocation weights are fractional values in `[0, 1]` and must sum to `1`. The default `routingKey` is `resourceId`, which makes each user sticky to one version for the duration of the rollout.
+
+### Start rollout request body
+
+`POST /api/agents/:agentId/rollout` accepts a discriminated union on `type`.
+
+Canary:
+
+```typescript prettier:false
+{
+  type: 'canary';
+  candidateVersionId: string;       // Version ID of the candidate
+  candidateWeight: number;          // Fractional traffic for the candidate (0-1, exclusive)
+  routingKey?: string;              // Request context field to hash for sticky routing (default: resourceId)
+  rules?: Array<{
+    scorerId: string;               // Scorer to monitor
+    threshold: number;              // Minimum acceptable average score (0-1)
+    windowSize: number;             // Number of recent scores to evaluate
+    action: 'rollback';
+  }>;
+}
+```
+
+A/B test:
+
+```typescript prettier:false
+{
+  type: 'ab_test';
+  allocations: Array<{
+    versionId: string;
+    weight: number;                 // Fractional weight (0-1); weights must sum to 1
+    label?: string;                 // Human-readable label (e.g. "control", "variant")
+  }>;                               // Minimum 2 allocations
+  routingKey?: string;
+}
+```
+
+### Update rollout request body
+
+`PATCH /api/agents/:agentId/rollout` updates the candidate weight on an active canary rollout. The stable allocation is recalculated as `1 - candidateWeight`.
+
+```typescript prettier:false
+{
+  candidateWeight: number;          // New fractional traffic for the candidate (0-1, exclusive)
+}
+```
+
+### Promote rollout request body
+
+`POST /api/agents/:agentId/rollout/promote` promotes a version to become the new active version and completes the rollout. For canary rollouts, the body can be omitted — the candidate is promoted. For A/B tests, specify which version wins.
+
+```typescript prettier:false
+{
+  versionId?: string;               // For A/B tests: which version to promote
+}
+```
+
+### Rollout response
+
+`GET`, `POST`, and `PATCH` on `/api/agents/:agentId/rollout` return the rollout record. `GET` enriches each allocation with live score summaries from the observability OLAP store.
+
+```typescript prettier:false
+{
+  id: string;
+  agentId: string;
+  type: 'canary' | 'ab_test';
+  status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+  stableVersionId: string;
+  allocations: Array<{
+    versionId: string;
+    weight: number;                 // Fractional weight (0-1)
+    label?: string;
+    scores?: Record<string, { avg: number; count: number }>;
+  }>;
+  routingKey?: string;
+  rules?: Array<{
+    scorerId: string;
+    threshold: number;
+    windowSize: number;
+    action: 'rollback';
+  }>;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date | null;
+}
+```
+
+`POST /promote`, `POST /rollback`, and `DELETE` return `{ success: true, rollout }` with the same rollout shape.
+
+### Rollout results response
+
+`GET /api/agents/:agentId/rollout/results` returns per-allocation score statistics computed from the scores store.
+
+```typescript prettier:false
+{
+  rolloutId: string;
+  type: 'canary' | 'ab_test';
+  allocations: Array<{
+    versionId: string;
+    label?: string;
+    requestCount: number;
+    scores: Record<
+      string,                       // scorerId
+      {
+        avg: number;
+        stddev: number;
+        count: number;
+        min: number;
+        max: number;
+      }
+    >;
+  }>;
+}
+```
+
+### List rollouts query parameters
+
+`GET /api/agents/:agentId/rollouts` accepts standard pagination query parameters and returns a page of rollout records.
+
+| Parameter | Type | Default | Description |
+| - | - | - | - |
+| `page` | `number` | `1` | Page number (1-indexed) |
+| `perPage` | `number` | — | Results per page (max `100`) |
+
+```typescript prettier:false
+{
+  rollouts: RolloutRecord[];
+  total: number;
+  page: number;
+  perPage: number;
+}
+```
+
 ## Workflows
 
 | Method | Path | Description |

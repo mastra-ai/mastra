@@ -704,6 +704,21 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test rollout for rollout routes (test-agent must have an active rollout)
+    const rollouts = await storage.getStore('rollouts');
+    if (rollouts) {
+      await rollouts.createRollout({
+        id: 'test-rollout',
+        agentId: 'test-agent',
+        type: 'canary',
+        stableVersionId: 'stable-v1',
+        allocations: [
+          { versionId: 'stable-v1', weight: 0.9, label: 'stable' },
+          { versionId: 'candidate-v2', weight: 0.1, label: 'candidate' },
+        ],
+      });
+    }
+
     const backgroundTasks = await storage.getStore('backgroundTasks');
     if (backgroundTasks) {
       await backgroundTasks.createTask({

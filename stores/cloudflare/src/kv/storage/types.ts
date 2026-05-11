@@ -31,6 +31,7 @@ import type {
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
   TABLE_SKILL_BLOBS,
+  TABLE_ROLLOUTS,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
   SpanRecord,
@@ -163,6 +164,7 @@ export type RecordTypes = {
   [TABLE_SKILLS]: StorageSkillType;
   [TABLE_SKILL_VERSIONS]: SkillVersion;
   [TABLE_SKILL_BLOBS]: StorageBlobEntry;
+  [TABLE_ROLLOUTS]: Record<string, any>;
   mastra_background_tasks: Record<string, any>;
   [TABLE_SCHEDULES]: Record<string, any>;
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;

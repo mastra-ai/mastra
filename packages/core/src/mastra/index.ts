@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { RolloutEvaluator } from '../agent/rollout';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
@@ -578,6 +579,7 @@ export class Mastra<
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Cache for stored scorers to allow in-memory modifications to persist across requests
   #storedScorersCache: Map<string, MastraScorer<any, any, any, any>> = new Map();
+
   // Registry for prompt blocks (stored or code-defined)
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
@@ -723,6 +725,48 @@ export class Mastra<
    */
   public getStoredScorerCache() {
     return this.#storedScorersCache;
+  }
+
+  #rolloutEvaluator: RolloutEvaluator | undefined;
+  #rolloutEvaluatorInitialized = false;
+
+  /**
+   * Gets a {@link RolloutEvaluator} that performs throttled, OLAP-backed rollback
+   * evaluation for active rollouts. Returns `undefined` when either the rollouts
+   * storage domain or observability storage domain is unavailable.
+   *
+   * Lazily constructed on first access — no work is performed unless rollouts
+   * are actually used.
+   * @internal
+   */
+  public async getRolloutEvaluator(): Promise<RolloutEvaluator | undefined> {
+    if (this.#rolloutEvaluatorInitialized) return this.#rolloutEvaluator;
+    this.#rolloutEvaluatorInitialized = true;
+
+    const storage = this.getStorage();
+    if (!storage) return undefined;
+
+    const [rolloutsStorage, observability] = await Promise.all([
+      storage.getStore('rollouts'),
+      storage.getStore('observability'),
+    ]);
+    if (!rolloutsStorage || !observability) return undefined;
+
+    const logger = this.getLogger();
+    this.#rolloutEvaluator = new RolloutEvaluator({
+      rolloutsStorage,
+      observability,
+      onRollback: async (agentId, rolloutId) => {
+        try {
+          await rolloutsStorage.completeRollout(rolloutId, 'rolled_back', new Date());
+          logger?.info('Rollout auto-rolled back', { agentId, rolloutId });
+          this.#editor?.agent.clearCache(agentId);
+        } catch (err) {
+          logger?.error('Failed to auto-rollback rollout', { agentId, rolloutId, error: err });
+        }
+      },
+    });
+    return this.#rolloutEvaluator;
   }
 
   /**

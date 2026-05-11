@@ -142,6 +142,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/rollouts',
+          label: 'Rollouts',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {

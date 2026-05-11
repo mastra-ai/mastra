@@ -18,6 +18,7 @@ import type {
   DatasetVersion,
   Experiment,
   ExperimentResult,
+  RolloutRecord,
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
@@ -77,6 +78,9 @@ export class InMemoryDB {
   readonly experiments = new Map<string, Experiment>();
   readonly experimentResults = new Map<string, ExperimentResult>();
 
+  // Rollout domain maps
+  readonly rollouts = new Map<string, RolloutRecord>();
+
   // Background tasks domain
   readonly backgroundTasks = new Map<string, BackgroundTask>();
 
@@ -119,6 +123,7 @@ export class InMemoryDB {
     this.datasetVersions.clear();
     this.experiments.clear();
     this.experimentResults.clear();
+    this.rollouts.clear();
     this.backgroundTasks.clear();
     this.schedules.clear();
     this.scheduleTriggers.length = 0;

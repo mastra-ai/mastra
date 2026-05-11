@@ -36,6 +36,8 @@ export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 
+// Rollout tables
+export const TABLE_ROLLOUTS = 'mastra_rollouts';
 // Schedules tables
 export const TABLE_SCHEDULES = 'mastra_schedules';
 export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
@@ -73,6 +75,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
+  | typeof TABLE_ROLLOUTS
+  | typeof TABLE_BACKGROUND_TASKS
   | typeof TABLE_BACKGROUND_TASKS
   | typeof TABLE_SCHEDULES
   | typeof TABLE_SCHEDULE_TRIGGERS
@@ -471,6 +475,21 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+// Rollout schemas
+export const ROLLOUTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  agentId: { type: 'text', nullable: false },
+  type: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  stableVersionId: { type: 'text', nullable: false },
+  allocations: { type: 'jsonb', nullable: false },
+  routingKey: { type: 'text', nullable: true },
+  rules: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  completedAt: { type: 'timestamp', nullable: true },
+};
+
 /**
  * Schema definitions for all core tables.
  */
@@ -555,6 +574,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_ROLLOUTS]: ROLLOUTS_SCHEMA,
   [TABLE_BACKGROUND_TASKS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     tool_call_id: { type: 'text', nullable: false },

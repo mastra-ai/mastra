@@ -7161,6 +7161,666 @@ export interface PostAgentsAgentIdStreamUi_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agents/:agentId/rollout
+// ============================================================================
+export type GetAgentsAgentIdRollout_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type GetAgentsAgentIdRollout_Response = {
+  /** Rollout ID */
+  id: string;
+  /** Agent ID */
+  agentId: string;
+  type: 'canary' | 'ab_test';
+  status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+  /** Version ID that was active when the rollout started */
+  stableVersionId: string;
+  /** Traffic allocations with score summaries */
+  allocations: {
+    /** Agent version ID for this allocation */
+    versionId: string;
+    /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+    weight: number;
+    /** Human-readable label (e.g. "stable", "candidate", "control") */
+    label?: string | undefined;
+    /** Per-scorer score summaries */
+    scores?:
+      | {
+          [key: string]: {
+            /** Average score */
+            avg: number;
+            /** Number of scores */
+            count: number;
+          };
+        }
+      | undefined;
+  }[];
+  /** Request context field used for sticky routing */
+  routingKey?: string | undefined;
+  /** Auto-rollback rules (canary only) */
+  rules?:
+    | {
+        /** Scorer ID to monitor */
+        scorerId: string;
+        /** Minimum acceptable average score (0-1) */
+        threshold: number;
+        /** Number of recent scores to evaluate */
+        windowSize: number;
+        /** Action to take when rule is breached */
+        action: 'rollback';
+      }[]
+    | undefined;
+  /** When the rollout was created */
+  createdAt: Date;
+  /** When the rollout was last updated */
+  updatedAt: Date;
+  /** When the rollout was completed/rolled back/cancelled */
+  completedAt?: (Date | null) | undefined;
+} | null;
+
+export type GetAgentsAgentIdRollout_Request = Simplify<
+  (GetAgentsAgentIdRollout_PathParams extends never ? {} : { params: GetAgentsAgentIdRollout_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdRollout_RouteContract {
+  pathParams: GetAgentsAgentIdRollout_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentsAgentIdRollout_Request;
+  response: GetAgentsAgentIdRollout_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/rollout
+// ============================================================================
+export type PostAgentsAgentIdRollout_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdRollout_Body =
+  | {
+      type: 'canary';
+      /** Version ID of the candidate */
+      candidateVersionId: string;
+      /** Initial fractional traffic for the candidate (0-1, e.g. 0.01 for 1%) */
+      candidateWeight: number;
+      /** Request context field to hash for sticky routing (default: resourceId) */
+      routingKey?: string | undefined;
+      /** Auto-rollback rules based on scorer thresholds */
+      rules?:
+        | {
+            /** Scorer ID to monitor */
+            scorerId: string;
+            /** Minimum acceptable average score (0-1) */
+            threshold: number;
+            /** Number of recent scores to evaluate */
+            windowSize: number;
+            /** Action to take when rule is breached */
+            action: 'rollback';
+          }[]
+        | undefined;
+    }
+  | {
+      type: 'ab_test';
+      /** Traffic allocations (weights must sum to 1) */
+      allocations: {
+        /** Agent version ID for this allocation */
+        versionId: string;
+        /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+        weight: number;
+        /** Human-readable label (e.g. "stable", "candidate", "control") */
+        label?: string | undefined;
+      }[];
+      /** Request context field to hash for sticky routing (default: resourceId) */
+      routingKey?: string | undefined;
+    };
+
+export type PostAgentsAgentIdRollout_Response = {
+  /** Rollout ID */
+  id: string;
+  /** Agent ID */
+  agentId: string;
+  type: 'canary' | 'ab_test';
+  status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+  /** Version ID that was active when the rollout started */
+  stableVersionId: string;
+  /** Traffic allocations with score summaries */
+  allocations: {
+    /** Agent version ID for this allocation */
+    versionId: string;
+    /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+    weight: number;
+    /** Human-readable label (e.g. "stable", "candidate", "control") */
+    label?: string | undefined;
+    /** Per-scorer score summaries */
+    scores?:
+      | {
+          [key: string]: {
+            /** Average score */
+            avg: number;
+            /** Number of scores */
+            count: number;
+          };
+        }
+      | undefined;
+  }[];
+  /** Request context field used for sticky routing */
+  routingKey?: string | undefined;
+  /** Auto-rollback rules (canary only) */
+  rules?:
+    | {
+        /** Scorer ID to monitor */
+        scorerId: string;
+        /** Minimum acceptable average score (0-1) */
+        threshold: number;
+        /** Number of recent scores to evaluate */
+        windowSize: number;
+        /** Action to take when rule is breached */
+        action: 'rollback';
+      }[]
+    | undefined;
+  /** When the rollout was created */
+  createdAt: Date;
+  /** When the rollout was last updated */
+  updatedAt: Date;
+  /** When the rollout was completed/rolled back/cancelled */
+  completedAt?: (Date | null) | undefined;
+};
+
+export type PostAgentsAgentIdRollout_Request = Simplify<
+  (PostAgentsAgentIdRollout_PathParams extends never ? {} : { params: PostAgentsAgentIdRollout_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdRollout_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdRollout_Body
+        ? { body?: PostAgentsAgentIdRollout_Body }
+        : { body: PostAgentsAgentIdRollout_Body })
+>;
+
+export interface PostAgentsAgentIdRollout_RouteContract {
+  pathParams: PostAgentsAgentIdRollout_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdRollout_Body;
+  request: PostAgentsAgentIdRollout_Request;
+  response: PostAgentsAgentIdRollout_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /agents/:agentId/rollout
+// ============================================================================
+export type PatchAgentsAgentIdRollout_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PatchAgentsAgentIdRollout_Body = {
+  /** New fractional traffic for the candidate (0-1, canary only) */
+  candidateWeight: number;
+};
+
+export type PatchAgentsAgentIdRollout_Response = {
+  /** Rollout ID */
+  id: string;
+  /** Agent ID */
+  agentId: string;
+  type: 'canary' | 'ab_test';
+  status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+  /** Version ID that was active when the rollout started */
+  stableVersionId: string;
+  /** Traffic allocations with score summaries */
+  allocations: {
+    /** Agent version ID for this allocation */
+    versionId: string;
+    /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+    weight: number;
+    /** Human-readable label (e.g. "stable", "candidate", "control") */
+    label?: string | undefined;
+    /** Per-scorer score summaries */
+    scores?:
+      | {
+          [key: string]: {
+            /** Average score */
+            avg: number;
+            /** Number of scores */
+            count: number;
+          };
+        }
+      | undefined;
+  }[];
+  /** Request context field used for sticky routing */
+  routingKey?: string | undefined;
+  /** Auto-rollback rules (canary only) */
+  rules?:
+    | {
+        /** Scorer ID to monitor */
+        scorerId: string;
+        /** Minimum acceptable average score (0-1) */
+        threshold: number;
+        /** Number of recent scores to evaluate */
+        windowSize: number;
+        /** Action to take when rule is breached */
+        action: 'rollback';
+      }[]
+    | undefined;
+  /** When the rollout was created */
+  createdAt: Date;
+  /** When the rollout was last updated */
+  updatedAt: Date;
+  /** When the rollout was completed/rolled back/cancelled */
+  completedAt?: (Date | null) | undefined;
+};
+
+export type PatchAgentsAgentIdRollout_Request = Simplify<
+  (PatchAgentsAgentIdRollout_PathParams extends never ? {} : { params: PatchAgentsAgentIdRollout_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchAgentsAgentIdRollout_Body extends never
+      ? {}
+      : {} extends PatchAgentsAgentIdRollout_Body
+        ? { body?: PatchAgentsAgentIdRollout_Body }
+        : { body: PatchAgentsAgentIdRollout_Body })
+>;
+
+export interface PatchAgentsAgentIdRollout_RouteContract {
+  pathParams: PatchAgentsAgentIdRollout_PathParams;
+  queryParams: never;
+  body: PatchAgentsAgentIdRollout_Body;
+  request: PatchAgentsAgentIdRollout_Request;
+  response: PatchAgentsAgentIdRollout_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/rollout/promote
+// ============================================================================
+export type PostAgentsAgentIdRolloutPromote_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdRolloutPromote_Body =
+  | {
+      /** For A/B tests: which version to promote. Omit to keep the current stable version. */
+      versionId?: string | undefined;
+    }
+  | undefined;
+
+export type PostAgentsAgentIdRolloutPromote_Response = {
+  success: boolean;
+  rollout: {
+    /** Rollout ID */
+    id: string;
+    /** Agent ID */
+    agentId: string;
+    type: 'canary' | 'ab_test';
+    status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+    /** Version ID that was active when the rollout started */
+    stableVersionId: string;
+    /** Traffic allocations with score summaries */
+    allocations: {
+      /** Agent version ID for this allocation */
+      versionId: string;
+      /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+      weight: number;
+      /** Human-readable label (e.g. "stable", "candidate", "control") */
+      label?: string | undefined;
+      /** Per-scorer score summaries */
+      scores?:
+        | {
+            [key: string]: {
+              /** Average score */
+              avg: number;
+              /** Number of scores */
+              count: number;
+            };
+          }
+        | undefined;
+    }[];
+    /** Request context field used for sticky routing */
+    routingKey?: string | undefined;
+    /** Auto-rollback rules (canary only) */
+    rules?:
+      | {
+          /** Scorer ID to monitor */
+          scorerId: string;
+          /** Minimum acceptable average score (0-1) */
+          threshold: number;
+          /** Number of recent scores to evaluate */
+          windowSize: number;
+          /** Action to take when rule is breached */
+          action: 'rollback';
+        }[]
+      | undefined;
+    /** When the rollout was created */
+    createdAt: Date;
+    /** When the rollout was last updated */
+    updatedAt: Date;
+    /** When the rollout was completed/rolled back/cancelled */
+    completedAt?: (Date | null) | undefined;
+  };
+};
+
+export type PostAgentsAgentIdRolloutPromote_Request = Simplify<
+  (PostAgentsAgentIdRolloutPromote_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdRolloutPromote_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdRolloutPromote_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdRolloutPromote_Body
+        ? { body?: PostAgentsAgentIdRolloutPromote_Body }
+        : { body: PostAgentsAgentIdRolloutPromote_Body })
+>;
+
+export interface PostAgentsAgentIdRolloutPromote_RouteContract {
+  pathParams: PostAgentsAgentIdRolloutPromote_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdRolloutPromote_Body;
+  request: PostAgentsAgentIdRolloutPromote_Request;
+  response: PostAgentsAgentIdRolloutPromote_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/rollout/rollback
+// ============================================================================
+export type PostAgentsAgentIdRolloutRollback_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdRolloutRollback_Response = {
+  success: boolean;
+  rollout: {
+    /** Rollout ID */
+    id: string;
+    /** Agent ID */
+    agentId: string;
+    type: 'canary' | 'ab_test';
+    status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+    /** Version ID that was active when the rollout started */
+    stableVersionId: string;
+    /** Traffic allocations with score summaries */
+    allocations: {
+      /** Agent version ID for this allocation */
+      versionId: string;
+      /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+      weight: number;
+      /** Human-readable label (e.g. "stable", "candidate", "control") */
+      label?: string | undefined;
+      /** Per-scorer score summaries */
+      scores?:
+        | {
+            [key: string]: {
+              /** Average score */
+              avg: number;
+              /** Number of scores */
+              count: number;
+            };
+          }
+        | undefined;
+    }[];
+    /** Request context field used for sticky routing */
+    routingKey?: string | undefined;
+    /** Auto-rollback rules (canary only) */
+    rules?:
+      | {
+          /** Scorer ID to monitor */
+          scorerId: string;
+          /** Minimum acceptable average score (0-1) */
+          threshold: number;
+          /** Number of recent scores to evaluate */
+          windowSize: number;
+          /** Action to take when rule is breached */
+          action: 'rollback';
+        }[]
+      | undefined;
+    /** When the rollout was created */
+    createdAt: Date;
+    /** When the rollout was last updated */
+    updatedAt: Date;
+    /** When the rollout was completed/rolled back/cancelled */
+    completedAt?: (Date | null) | undefined;
+  };
+};
+
+export type PostAgentsAgentIdRolloutRollback_Request = Simplify<
+  (PostAgentsAgentIdRolloutRollback_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdRolloutRollback_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentsAgentIdRolloutRollback_RouteContract {
+  pathParams: PostAgentsAgentIdRolloutRollback_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentsAgentIdRolloutRollback_Request;
+  response: PostAgentsAgentIdRolloutRollback_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agents/:agentId/rollout
+// ============================================================================
+export type DeleteAgentsAgentIdRollout_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type DeleteAgentsAgentIdRollout_Response = {
+  success: boolean;
+  rollout: {
+    /** Rollout ID */
+    id: string;
+    /** Agent ID */
+    agentId: string;
+    type: 'canary' | 'ab_test';
+    status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+    /** Version ID that was active when the rollout started */
+    stableVersionId: string;
+    /** Traffic allocations with score summaries */
+    allocations: {
+      /** Agent version ID for this allocation */
+      versionId: string;
+      /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+      weight: number;
+      /** Human-readable label (e.g. "stable", "candidate", "control") */
+      label?: string | undefined;
+      /** Per-scorer score summaries */
+      scores?:
+        | {
+            [key: string]: {
+              /** Average score */
+              avg: number;
+              /** Number of scores */
+              count: number;
+            };
+          }
+        | undefined;
+    }[];
+    /** Request context field used for sticky routing */
+    routingKey?: string | undefined;
+    /** Auto-rollback rules (canary only) */
+    rules?:
+      | {
+          /** Scorer ID to monitor */
+          scorerId: string;
+          /** Minimum acceptable average score (0-1) */
+          threshold: number;
+          /** Number of recent scores to evaluate */
+          windowSize: number;
+          /** Action to take when rule is breached */
+          action: 'rollback';
+        }[]
+      | undefined;
+    /** When the rollout was created */
+    createdAt: Date;
+    /** When the rollout was last updated */
+    updatedAt: Date;
+    /** When the rollout was completed/rolled back/cancelled */
+    completedAt?: (Date | null) | undefined;
+  };
+};
+
+export type DeleteAgentsAgentIdRollout_Request = Simplify<
+  (DeleteAgentsAgentIdRollout_PathParams extends never ? {} : { params: DeleteAgentsAgentIdRollout_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentsAgentIdRollout_RouteContract {
+  pathParams: DeleteAgentsAgentIdRollout_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAgentsAgentIdRollout_Request;
+  response: DeleteAgentsAgentIdRollout_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/rollout/results
+// ============================================================================
+export type GetAgentsAgentIdRolloutResults_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type GetAgentsAgentIdRolloutResults_Response = {
+  rolloutId: string;
+  type: 'canary' | 'ab_test';
+  allocations: {
+    versionId: string;
+    label?: string | undefined;
+    requestCount: number;
+    scores: {
+      [key: string]: {
+        avg: number;
+        stddev: number;
+        count: number;
+        min: number;
+        max: number;
+      };
+    };
+  }[];
+};
+
+export type GetAgentsAgentIdRolloutResults_Request = Simplify<
+  (GetAgentsAgentIdRolloutResults_PathParams extends never
+    ? {}
+    : { params: GetAgentsAgentIdRolloutResults_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdRolloutResults_RouteContract {
+  pathParams: GetAgentsAgentIdRolloutResults_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentsAgentIdRolloutResults_Request;
+  response: GetAgentsAgentIdRolloutResults_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/rollouts
+// ============================================================================
+export type GetAgentsAgentIdRollouts_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type GetAgentsAgentIdRollouts_QueryParams = {
+  /** Page number (1-indexed) */
+  page?: number | undefined;
+  /** Results per page */
+  perPage?: number | undefined;
+};
+
+export type GetAgentsAgentIdRollouts_Response = {
+  rollouts: {
+    /** Rollout ID */
+    id: string;
+    /** Agent ID */
+    agentId: string;
+    type: 'canary' | 'ab_test';
+    status: 'active' | 'completed' | 'rolled_back' | 'cancelled';
+    /** Version ID that was active when the rollout started */
+    stableVersionId: string;
+    /** Traffic allocations with score summaries */
+    allocations: {
+      /** Agent version ID for this allocation */
+      versionId: string;
+      /** Fractional traffic weight (0-1, e.g. 0.05 for 5%) */
+      weight: number;
+      /** Human-readable label (e.g. "stable", "candidate", "control") */
+      label?: string | undefined;
+      /** Per-scorer score summaries */
+      scores?:
+        | {
+            [key: string]: {
+              /** Average score */
+              avg: number;
+              /** Number of scores */
+              count: number;
+            };
+          }
+        | undefined;
+    }[];
+    /** Request context field used for sticky routing */
+    routingKey?: string | undefined;
+    /** Auto-rollback rules (canary only) */
+    rules?:
+      | {
+          /** Scorer ID to monitor */
+          scorerId: string;
+          /** Minimum acceptable average score (0-1) */
+          threshold: number;
+          /** Number of recent scores to evaluate */
+          windowSize: number;
+          /** Action to take when rule is breached */
+          action: 'rollback';
+        }[]
+      | undefined;
+    /** When the rollout was created */
+    createdAt: Date;
+    /** When the rollout was last updated */
+    updatedAt: Date;
+    /** When the rollout was completed/rolled back/cancelled */
+    completedAt?: (Date | null) | undefined;
+  }[];
+  total: number;
+  page: number;
+  perPage: number;
+};
+
+export type GetAgentsAgentIdRollouts_Request = Simplify<
+  (GetAgentsAgentIdRollouts_PathParams extends never ? {} : { params: GetAgentsAgentIdRollouts_PathParams }) &
+    (GetAgentsAgentIdRollouts_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdRollouts_QueryParams
+        ? { query?: GetAgentsAgentIdRollouts_QueryParams }
+        : { query: GetAgentsAgentIdRollouts_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdRollouts_RouteContract {
+  pathParams: GetAgentsAgentIdRollouts_PathParams;
+  queryParams: GetAgentsAgentIdRollouts_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdRollouts_Request;
+  response: GetAgentsAgentIdRollouts_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /auth/capabilities
 // ============================================================================
 export type GetAuthCapabilities_Response =
@@ -75362,6 +76022,14 @@ export interface RouteTypes {
   'POST /agents/:agentId/streamVNext': PostAgentsAgentIdStreamVNext_RouteContract;
   'POST /agents/:agentId/stream/vnext/ui': PostAgentsAgentIdStreamVnextUi_RouteContract;
   'POST /agents/:agentId/stream/ui': PostAgentsAgentIdStreamUi_RouteContract;
+  'GET /agents/:agentId/rollout': GetAgentsAgentIdRollout_RouteContract;
+  'POST /agents/:agentId/rollout': PostAgentsAgentIdRollout_RouteContract;
+  'PATCH /agents/:agentId/rollout': PatchAgentsAgentIdRollout_RouteContract;
+  'POST /agents/:agentId/rollout/promote': PostAgentsAgentIdRolloutPromote_RouteContract;
+  'POST /agents/:agentId/rollout/rollback': PostAgentsAgentIdRolloutRollback_RouteContract;
+  'DELETE /agents/:agentId/rollout': DeleteAgentsAgentIdRollout_RouteContract;
+  'GET /agents/:agentId/rollout/results': GetAgentsAgentIdRolloutResults_RouteContract;
+  'GET /agents/:agentId/rollouts': GetAgentsAgentIdRollouts_RouteContract;
   'GET /auth/capabilities': GetAuthCapabilities_RouteContract;
   'GET /auth/me': GetAuthMe_RouteContract;
   'GET /auth/sso/login': GetAuthSsoLogin_RouteContract;
@@ -75770,6 +76438,24 @@ export interface Client {
   };
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
+  };
+  '/agents/:agentId/rollout': {
+    DELETE: DeleteAgentsAgentIdRollout_RouteContract;
+    GET: GetAgentsAgentIdRollout_RouteContract;
+    PATCH: PatchAgentsAgentIdRollout_RouteContract;
+    POST: PostAgentsAgentIdRollout_RouteContract;
+  };
+  '/agents/:agentId/rollout/promote': {
+    POST: PostAgentsAgentIdRolloutPromote_RouteContract;
+  };
+  '/agents/:agentId/rollout/results': {
+    GET: GetAgentsAgentIdRolloutResults_RouteContract;
+  };
+  '/agents/:agentId/rollout/rollback': {
+    POST: PostAgentsAgentIdRolloutRollback_RouteContract;
+  };
+  '/agents/:agentId/rollouts': {
+    GET: GetAgentsAgentIdRollouts_RouteContract;
   };
   '/agents/:agentId/skills/:skillName': {
     GET: GetAgentsAgentIdSkillsSkillName_RouteContract;

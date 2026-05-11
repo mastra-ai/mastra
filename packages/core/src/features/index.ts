@@ -24,4 +24,5 @@ export const coreFeatures = new Set<string>([
   'channels',
   'deploy-diagnosis',
   'model-inference-span',
+  'agent-rollouts',
 ]);

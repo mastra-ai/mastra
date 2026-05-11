@@ -24,7 +24,7 @@ Use the editor when you want to:
 
 - **Let non-developers iterate**: Give subject-matter experts and prompt engineers a way to tune agent behavior without touching code or waiting for deploys.
 - **Version everything**: Every save creates a snapshot so you can compare changes, roll back instantly, and audit what changed and when.
-- **Run experiments**: Route different users or requests to different agent versions for A/B testing, canary rollouts, or prompt experimentation.
+- **Run experiments**: Route different users or requests to different agent versions for A/B testing, canary rollouts, or prompt experimentation. See [Rollouts](/docs/agents/rollouts).
 - **Target specific versions**: Pin a version per request, per user, or per environment so production stays stable while new versions are tested.
 - **Manage tools at runtime**: Add integration tools from Composio or Arcade, or connect MCP servers, without updating code.
 - **Override code agents**: Change the instructions, tools, or variables of a code-defined agent while keeping the original code as the baseline.
@@ -288,4 +288,5 @@ If version resolution fails (for example, when the editor is not configured or t
 
 - Set up [prompts](/docs/editor/prompts) to build reusable instruction templates.
 - Add [tools](/docs/editor/tools) from integration providers and MCP servers.
+- Roll out new versions safely with [Rollouts](/docs/agents/rollouts).
 - Explore the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.

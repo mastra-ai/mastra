@@ -2453,3 +2453,62 @@ export interface ExperimentReviewCounts {
   reviewed: number;
   complete: number;
 }
+
+// Rollout types
+
+export type RolloutType = 'canary' | 'ab_test';
+export type RolloutStatus = 'active' | 'completed' | 'rolled_back' | 'cancelled';
+
+export interface RolloutAllocation {
+  versionId: string;
+  /** Fractional traffic weight in [0, 1]. Per rollout, weights must sum to 1. */
+  weight: number;
+  label?: string;
+}
+
+export interface RolloutRule {
+  scorerId: string;
+  threshold: number;
+  windowSize: number;
+  action: 'rollback';
+}
+
+export interface RolloutRecord {
+  id: string;
+  agentId: string;
+  type: RolloutType;
+  status: RolloutStatus;
+  stableVersionId: string;
+  allocations: RolloutAllocation[];
+  routingKey?: string;
+  rules?: RolloutRule[];
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+}
+
+export interface CreateRolloutInput {
+  id?: string;
+  agentId: string;
+  type: RolloutType;
+  stableVersionId: string;
+  allocations: RolloutAllocation[];
+  routingKey?: string;
+  rules?: RolloutRule[];
+}
+
+export interface UpdateRolloutInput {
+  id: string;
+  allocations?: RolloutAllocation[];
+  rules?: RolloutRule[];
+}
+
+export interface ListRolloutsInput {
+  agentId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListRolloutsOutput {
+  rollouts: RolloutRecord[];
+  pagination: PaginationInfo;
+}

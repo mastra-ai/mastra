@@ -1,0 +1,150 @@
+---
+title: "Rollouts | Agents"
+description: "Gradually shift traffic between agent versions with canary rollouts and A/B experiments, with deterministic per-user routing and optional auto-rollback."
+packages:
+  - "@mastra/core"
+  - "@mastra/server"
+---
+
+# Rollouts
+
+**Added in:** `@mastra/core@1.30.0`
+
+Rollouts split traffic between agent versions so you can validate a new version on a slice of users before promoting it. Mastra supports two rollout types: **canary** rollouts (stable plus one candidate, with optional auto-rollback) and **A/B experiments** (multiple versions with fixed weights).
+
+When a rollout is active and the request does not pin an `agentVersionId`, generate and stream endpoints resolve the version from the rollout's traffic split. Resolution is deterministic per user, so the same user gets the same version for the duration of the rollout.
+
+## Requirements
+
+Rollouts depend on two other Mastra features:
+
+- [**Editor**](/docs/editor/overview) provides the versioned agents that rollouts route between. Candidate and stable allocations both reference editor version IDs, and promoting a rollout activates a version through the editor.
+- [**Observability**](/docs/observability/overview) provides the score aggregates that auto-rollback rules evaluate. Without an observability storage domain, scorer-driven rollback rules are a no-op.
+
+Both must be configured on your `Mastra` instance before starting a rollout.
+
+## When to use rollouts
+
+Use rollouts when you want to:
+
+- Ship a new agent version to a small percentage of traffic and watch quality metrics before promoting it.
+- Run an A/B experiment to compare two or more versions on live traffic.
+- Auto-rollback a candidate version if a scorer drops below a threshold.
+
+## How traffic is split
+
+Each request is mapped to a deterministic bucket. Mastra hashes `(routingKey + agentId)` to a 32-bit integer, normalizes it to a fraction in `[0, 1)`, and walks the rollout's allocations in order until the cumulative weight covers the bucket.
+
+The default `routingKey` is `resourceId`, so each user is sticky to one version per rollout. You can pick a different field from the request context (for example `userId` or `tenantId`) when starting the rollout.
+
+## Weights
+
+Allocation weights are fractional values in `[0, 1]` and the weights of a rollout must sum to `1`. For example, `0.05` means 5% of traffic.
+
+For canary rollouts, you only supply `candidateWeight`; the stable allocation is derived as `1 - candidateWeight`.
+
+## Quickstart
+
+Start a canary rollout that sends 5% of traffic to a new version and rolls back automatically if the `quality` scorer drops below `0.7` over the last 100 requests:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/support-agent/rollout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "canary",
+    "candidateVersionId": "version-abc123",
+    "candidateWeight": 0.05,
+    "rules": [
+      {
+        "scorerId": "quality",
+        "threshold": 0.7,
+        "windowSize": 100,
+        "action": "rollback"
+      }
+    ]
+  }'
+```
+
+Increase the candidate weight as confidence grows:
+
+```bash
+curl -X PATCH http://localhost:4111/api/agents/support-agent/rollout \
+  -H "Content-Type: application/json" \
+  -d '{ "candidateWeight": 0.5 }'
+```
+
+Promote the candidate to become the new stable version:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/support-agent/rollout/promote
+```
+
+## A/B experiments
+
+Use `ab_test` to compare two or more versions with fixed weights. The weights must sum to `1`:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/support-agent/rollout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "ab_test",
+    "allocations": [
+      { "versionId": "version-A", "weight": 0.5, "label": "control" },
+      { "versionId": "version-B", "weight": 0.5, "label": "variant" }
+    ]
+  }'
+```
+
+When you decide a winner, promote it by version ID:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/support-agent/rollout/promote \
+  -H "Content-Type: application/json" \
+  -d '{ "versionId": "version-B" }'
+```
+
+## Auto-rollback
+
+Canary rollouts can declare rules that watch a scorer's average score over a sliding window. Mastra collects scorer results in memory while the rollout is active and evaluates the rules periodically. If the candidate's average score drops below the threshold over `windowSize` recent scores, the rollout is marked `rolled_back` and traffic returns to the stable version.
+
+Each rule has the shape:
+
+```ts
+interface RolloutRule {
+  scorerId: string // scorer to monitor
+  threshold: number // minimum acceptable average score (0-1)
+  windowSize: number // number of recent scores to evaluate
+  action: 'rollback'
+}
+```
+
+Rules only apply to canary rollouts. Server restarts reset the in-memory window — "no data yet" is treated as "keep running".
+
+## Endpoints
+
+Rollouts are managed through the agent rollout HTTP routes. See [Server routes — Agent rollouts](/reference/server/routes#agent-rollouts) for full request and response shapes.
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/agents/:agentId/rollout` | Get the active rollout, including live score summaries |
+| `POST` | `/agents/:agentId/rollout` | Start a canary rollout or A/B experiment |
+| `PATCH` | `/agents/:agentId/rollout` | Update the candidate weight (canary only) |
+| `POST` | `/agents/:agentId/rollout/promote` | Promote the candidate or pick an A/B winner |
+| `POST` | `/agents/:agentId/rollout/rollback` | Roll back to the stable version |
+| `DELETE` | `/agents/:agentId/rollout` | Cancel an active rollout |
+| `GET` | `/agents/:agentId/rollout/results` | Per-version score breakdown (avg, stddev, min, max) |
+| `GET` | `/agents/:agentId/rollouts` | List rollout history (paginated) |
+
+Only one rollout can be active per agent at a time. Activating a specific agent version through the editor cancels any active rollout for that agent.
+
+## Storage
+
+Rollouts are persisted in the `mastra_rollouts` storage domain. Storage adapters that support rollouts: `@mastra/libsql`, `@mastra/pg`, `@mastra/mongodb`, plus the in-memory store.
+
+## Related
+
+- [Agent overview](/docs/agents/overview)
+- [Editor overview](/docs/editor/overview)
+- [Observability overview](/docs/observability/overview)
+- [Scorers](/docs/evals/overview)
+- [Server routes — Agent rollouts](/reference/server/routes#agent-rollouts)

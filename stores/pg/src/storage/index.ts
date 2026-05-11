@@ -26,6 +26,7 @@ import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
+import { RolloutsPG } from './domains/rollouts';
 import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
@@ -52,6 +53,7 @@ const ALL_DOMAINS = [
   WorkflowsPG,
   DatasetsPG,
   ExperimentsPG,
+  RolloutsPG,
   BackgroundTasksPG,
   ChannelsPG,
   SchedulesPG,
@@ -90,6 +92,7 @@ export {
   MemoryPG,
   ObservabilityPG,
   PromptBlocksPG,
+  RolloutsPG,
   ScorerDefinitionsPG,
   ScoresPG,
   SchedulesPG,
@@ -172,6 +175,7 @@ export class PostgresStore extends MastraCompositeStore {
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),
+        rollouts: new RolloutsPG(domainConfig),
         backgroundTasks: new BackgroundTasksPG(domainConfig),
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),

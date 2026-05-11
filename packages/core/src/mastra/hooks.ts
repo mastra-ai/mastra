@@ -85,6 +85,7 @@ export function createOnScorerHook(mastra: Mastra) {
           structuredOutput: !!structuredOutput,
         },
       };
+
       // Legacy score-store emission. This path is being deprecated.
       // ScoreEvent emission already happens inside MastraScorer.run() (see
       // packages/core/src/evals/base.ts). The hook must not republish or every
