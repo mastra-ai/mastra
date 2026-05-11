@@ -3,37 +3,74 @@
  */
 
 import { SpanType } from '@mastra/core/observability';
-import { describe, it, expect } from 'vitest';
-import { formatInput, formatOutput, kindFor, toDate, safeStringify, SPAN_TYPE_TO_KIND } from './utils';
+import { afterEach, beforeEach, describe, it, expect } from 'vitest';
+import { __setObservabilityFeaturesForTest } from './features';
+import { formatInput, formatOutput, getSpanTypeToKind, kindFor, toDate, safeStringify } from './utils';
 
 describe('kindFor', () => {
-  it.each([
-    [SpanType.AGENT_RUN, 'agent'],
-    [SpanType.MODEL_GENERATION, 'workflow'],
-    [SpanType.MODEL_STEP, 'llm'],
-    [SpanType.MODEL_CHUNK, 'task'],
-    [SpanType.TOOL_CALL, 'tool'],
-    [SpanType.MCP_TOOL_CALL, 'tool'],
-    [SpanType.WORKFLOW_RUN, 'workflow'],
-    [SpanType.WORKFLOW_STEP, 'task'],
-    [SpanType.WORKFLOW_CONDITIONAL, 'task'],
-    [SpanType.WORKFLOW_CONDITIONAL_EVAL, 'task'],
-    [SpanType.WORKFLOW_PARALLEL, 'task'],
-    [SpanType.WORKFLOW_LOOP, 'task'],
-    [SpanType.WORKFLOW_SLEEP, 'task'],
-    [SpanType.WORKFLOW_WAIT_EVENT, 'task'],
-    [SpanType.PROCESSOR_RUN, 'task'],
-    [SpanType.GENERIC, 'task'],
-  ])('maps %s to %s kind', (spanType, expectedKind) => {
-    expect(kindFor(spanType)).toBe(expectedKind);
+  describe('with model-inference-span feature (current hierarchy)', () => {
+    beforeEach(() => {
+      __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+    });
+    afterEach(() => {
+      __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+    });
+
+    it.each([
+      [SpanType.AGENT_RUN, 'agent'],
+      [SpanType.MODEL_GENERATION, 'workflow'],
+      // MODEL_STEP wraps processors + inference + tool work, so it's a workflow.
+      [SpanType.MODEL_STEP, 'workflow'],
+      // MODEL_INFERENCE is the actual provider call — the LLM-kind span.
+      [SpanType.MODEL_INFERENCE, 'llm'],
+      [SpanType.MODEL_CHUNK, 'task'],
+      [SpanType.TOOL_CALL, 'tool'],
+      [SpanType.MCP_TOOL_CALL, 'tool'],
+      [SpanType.WORKFLOW_RUN, 'workflow'],
+      [SpanType.WORKFLOW_STEP, 'task'],
+      [SpanType.WORKFLOW_CONDITIONAL, 'task'],
+      [SpanType.WORKFLOW_CONDITIONAL_EVAL, 'task'],
+      [SpanType.WORKFLOW_PARALLEL, 'task'],
+      [SpanType.WORKFLOW_LOOP, 'task'],
+      [SpanType.WORKFLOW_SLEEP, 'task'],
+      [SpanType.WORKFLOW_WAIT_EVENT, 'task'],
+      [SpanType.PROCESSOR_RUN, 'task'],
+      [SpanType.GENERIC, 'task'],
+    ])('maps %s to %s kind', (spanType, expectedKind) => {
+      expect(kindFor(spanType)).toBe(expectedKind);
+    });
+
+    it('returns task for unknown span types', () => {
+      expect(kindFor('unknown_type' as SpanType)).toBe('task');
+    });
   });
 
-  it('returns task for unknown span types', () => {
-    expect(kindFor('unknown_type' as SpanType)).toBe('task');
+  describe('legacy hierarchy (older paired @mastra/observability)', () => {
+    beforeEach(() => {
+      __setObservabilityFeaturesForTest(undefined);
+    });
+    afterEach(() => {
+      __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+    });
+
+    it('keeps MODEL_STEP as the LLM-kind span', () => {
+      expect(kindFor(SpanType.MODEL_STEP)).toBe('llm');
+    });
+
+    it('does not map MODEL_INFERENCE specially (falls through to task)', () => {
+      expect(kindFor(SpanType.MODEL_INFERENCE)).toBe('task');
+    });
   });
 });
 
-describe('SPAN_TYPE_TO_KIND mapping', () => {
+describe('span-type → Datadog kind mapping', () => {
+  beforeEach(() => {
+    __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+  });
+  afterEach(() => {
+    __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
+  });
+
   it('maps all SpanType values to a Datadog kind (explicitly or via task fallback)', () => {
     const spanTypes = Object.values(SpanType);
     for (const spanType of spanTypes) {
@@ -43,26 +80,26 @@ describe('SPAN_TYPE_TO_KIND mapping', () => {
     }
   });
 
-  it('only explicitly maps non-task span types', () => {
-    // Verify that only the expected span types have explicit mappings
+  it('only explicitly maps non-task span types under the current hierarchy', () => {
     const expectedMappings = {
       [SpanType.AGENT_RUN]: 'agent',
       [SpanType.MODEL_GENERATION]: 'workflow',
-      [SpanType.MODEL_STEP]: 'llm',
+      [SpanType.MODEL_STEP]: 'workflow',
+      [SpanType.MODEL_INFERENCE]: 'llm',
       [SpanType.TOOL_CALL]: 'tool',
       [SpanType.MCP_TOOL_CALL]: 'tool',
       [SpanType.WORKFLOW_RUN]: 'workflow',
     };
 
-    expect(Object.keys(SPAN_TYPE_TO_KIND).length).toBe(Object.keys(expectedMappings).length);
+    const active = getSpanTypeToKind();
+    expect(Object.keys(active).length).toBe(Object.keys(expectedMappings).length);
 
     for (const [spanType, expectedKind] of Object.entries(expectedMappings)) {
-      expect(SPAN_TYPE_TO_KIND[spanType as SpanType]).toBe(expectedKind);
+      expect(active[spanType as SpanType]).toBe(expectedKind);
     }
   });
 
   it('defaults unmapped types to task', () => {
-    // These should not have explicit mappings and should fall back to 'task'
     const taskTypes = [
       SpanType.MODEL_CHUNK,
       SpanType.WORKFLOW_STEP,
@@ -76,8 +113,9 @@ describe('SPAN_TYPE_TO_KIND mapping', () => {
       SpanType.GENERIC,
     ];
 
+    const active = getSpanTypeToKind();
     for (const spanType of taskTypes) {
-      expect(SPAN_TYPE_TO_KIND[spanType]).toBeUndefined();
+      expect(active[spanType]).toBeUndefined();
       expect(kindFor(spanType)).toBe('task');
     }
   });

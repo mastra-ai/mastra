@@ -1,6 +1,7 @@
 import * as AIV5 from '@internal/ai-sdk-v5';
 import * as AIV6 from '@internal/ai-v6';
 
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -27,6 +28,15 @@ function withOptionalFields<T extends Record<string, unknown>, U extends Record<
     }
   }
   return target as T & Partial<U>;
+}
+
+function getDisplayTransform(
+  providerMetadata: unknown,
+  phase: 'input-available' | 'output-available' | 'error',
+  fallback: unknown,
+) {
+  const transform = getTransformedToolPayload(providerMetadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
 function getToolNameFromType(type: string): string {
@@ -483,21 +493,21 @@ export class AIV6Adapter {
           return {
             ...base,
             state: 'input-streaming',
-            input: part.toolInvocation.args,
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
           } as AIV6Type.UIMessage['parts'][number];
 
         case 'call':
           return {
             ...base,
             state: 'input-available',
-            input: part.toolInvocation.args,
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
           } as AIV6Type.UIMessage['parts'][number];
 
         case 'approval-requested':
           return {
             ...base,
             state: 'approval-requested',
-            input: part.toolInvocation.args,
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
             approval: {
               id: part.toolInvocation.approval?.id || part.toolInvocation.toolCallId,
             },
@@ -507,7 +517,7 @@ export class AIV6Adapter {
           return {
             ...base,
             state: 'approval-responded',
-            input: part.toolInvocation.args,
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
             approval: {
               id: part.toolInvocation.approval?.id || part.toolInvocation.toolCallId,
               approved: part.toolInvocation.approval?.approved ?? false,
@@ -520,8 +530,12 @@ export class AIV6Adapter {
             {
               ...base,
               state: 'output-error',
-              input: part.toolInvocation.args,
-              errorText: part.toolInvocation.errorText || '',
+              input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
+              errorText: getDisplayTransform(
+                part.providerMetadata,
+                'error',
+                part.toolInvocation.errorText || '',
+              ) as string,
             },
             {
               rawInput: part.toolInvocation.rawInput,
@@ -540,7 +554,7 @@ export class AIV6Adapter {
           return {
             ...base,
             state: 'output-denied',
-            input: part.toolInvocation.args,
+            input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
             approval: {
               id: part.toolInvocation.approval?.id || part.toolInvocation.toolCallId,
               approved: false,
@@ -553,8 +567,12 @@ export class AIV6Adapter {
             {
               ...base,
               state: 'output-available',
-              input: part.toolInvocation.args,
-              output: part.toolInvocation.result,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', part.toolInvocation.args),
+              output: getDisplayTransform(
+                part.providerMetadata,
+                'output-available',
+                getDisplayTransform(part.providerMetadata, 'error', part.toolInvocation.result),
+              ),
             },
             {
               preliminary: part.preliminary,

@@ -529,13 +529,12 @@ describe('Agent Client Methods', () => {
     const result = await agent.listVersions({
       page: 0,
       perPage: 10,
-      orderBy: 'createdAt',
-      sortDirection: 'DESC',
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
 
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/stored/agents/test-agent/versions?page=0&perPage=10&orderBy=createdAt&sortDirection=DESC`,
+      `${clientOptions.baseUrl}/api/stored/agents/test-agent/versions?page=0&perPage=10&orderBy%5Bfield%5D=createdAt&orderBy%5Bdirection%5D=DESC`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

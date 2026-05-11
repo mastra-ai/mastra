@@ -34,6 +34,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       reflectorModelOverride: null,
       omObservationThreshold: null,
       omReflectionThreshold: null,
+      omCavemanObservations: null,
       subagentModels: {},
     },
     preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },

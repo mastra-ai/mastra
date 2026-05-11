@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.9.0-alpha.3",
+  "version": "1.9.0-alpha.10",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -51,11 +51,13 @@
     "devtools"
   ],
   "dependencies": {
+    "@babel/parser": "^7.28.4",
+    "@babel/types": "^7.28.4",
     "@clack/prompts": "^1.1.0",
     "@expo/devcert": "^1.2.1",
-    "archiver": "^7.0.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
+    "archiver": "^7.0.1",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
@@ -64,7 +66,7 @@
     "local-pkg": "^1.1.2",
     "openapi-fetch": "^0.17.0",
     "picocolors": "^1.1.1",
-    "posthog-node": "5.17.2",
+    "posthog-node": "^5.30.6",
     "semver": "^7.7.4",
     "serve": "^14.2.6",
     "serve-handler": "^6.1.7",

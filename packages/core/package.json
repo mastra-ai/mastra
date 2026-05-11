@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.33.0-alpha.3",
+  "version": "1.33.0-alpha.9",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -501,6 +501,16 @@
         "default": "./dist/workflows/evented/index.cjs"
       }
     },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.js"
+      },
+      "require": {
+        "types": "./dist/worker/index.d.ts",
+        "default": "./dist/worker/index.cjs"
+      }
+    },
     "./workspace": {
       "import": {
         "types": "./dist/workspace/index.d.ts",
@@ -729,14 +739,12 @@
     "hono": "^4.12.8",
     "hono-openapi": "^1.3.0",
     "ignore": "^7.0.5",
-    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "tokenx": "^1.3.0",
     "lru-cache": "^11.2.7",
     "p-map": "^7.0.4",
     "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
-    "radash": "^12.1.1",
     "ws": "^8.20.0",
     "xxhash-wasm": "^1.1.0"
   },
@@ -788,7 +796,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
     "fast-deep-equal": "^3.1.3",
-    "globby": "^14.1.0",
+    "tinyglobby": "^0.2.16",
     "rollup": "^4.59.0",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",

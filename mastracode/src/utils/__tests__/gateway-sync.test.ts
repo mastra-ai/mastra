@@ -1,121 +1,106 @@
-import type { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchProvidersFromGateways, generateTypesContent } from '../gateway-sync.js';
+const registrySyncGateways = vi.fn();
+const registryGetLastRefreshTime = vi.fn<() => Date | null>();
+const registryGetInstance = vi.fn(() => ({
+  syncGateways: registrySyncGateways,
+  getLastRefreshTime: registryGetLastRefreshTime,
+}));
 
-function createGateway(id: string, providers: Record<string, ProviderConfig>, shouldEnable = true): MastraModelGateway {
-  return {
-    id,
-    name: id,
-    shouldEnable: vi.fn().mockReturnValue(shouldEnable),
-    fetchProviders: vi.fn().mockResolvedValue(providers),
-    buildUrl: vi.fn().mockReturnValue(undefined),
-    getApiKey: vi.fn().mockResolvedValue('test-key'),
-    resolveLanguageModel: vi.fn(),
-  } as unknown as MastraModelGateway;
-}
+vi.mock('@mastra/core/llm', () => ({
+  GatewayRegistry: {
+    getInstance: registryGetInstance,
+  },
+}));
 
-describe('gateway-sync', () => {
-  const originalMastraGatewayApiKey = process.env.MASTRA_GATEWAY_API_KEY;
+describe('gateway-sync wrapper', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    registrySyncGateways.mockReset();
+    registrySyncGateways.mockResolvedValue(undefined);
+    registryGetLastRefreshTime.mockReset();
+    registryGetLastRefreshTime.mockReturnValue(null);
+    registryGetInstance.mockClear();
+  });
 
   afterEach(() => {
-    if (originalMastraGatewayApiKey === undefined) {
-      delete process.env.MASTRA_GATEWAY_API_KEY;
-      return;
-    }
-
-    process.env.MASTRA_GATEWAY_API_KEY = originalMastraGatewayApiKey;
+    vi.useRealTimers();
   });
 
-  it('prefixes gateway providers and includes mastra gateway models', async () => {
-    process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
-    const modelsDev = createGateway('models.dev', {
-      openai: {
-        name: 'OpenAI',
-        gateway: 'models.dev',
-        apiKeyEnvVar: 'OPENAI_API_KEY',
-        models: ['gpt-4.1'],
-      },
-    });
-    const netlify = createGateway('netlify', {
-      xai: {
-        name: 'xAI',
-        gateway: 'netlify',
-        apiKeyEnvVar: 'NETLIFY_API_KEY',
-        models: ['grok-3-mini'],
-      },
-    });
-    const mastra = createGateway('mastra', {
-      google: {
-        name: 'Google',
-        gateway: 'mastra',
-        apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
-        models: ['gemini-2.5-flash'],
-      },
-    });
+  it('delegates to GatewayRegistry.syncGateways with dynamic loading enabled', async () => {
+    const { syncGateways } = await import('../gateway-sync.js');
 
-    const { providers, models } = await fetchProvidersFromGateways([modelsDev, netlify, mastra]);
+    await syncGateways(true);
 
-    expect(providers.openai).toBeDefined();
-    expect(providers['netlify/xai']).toBeDefined();
-    expect(providers['mastra/google']).toBeDefined();
-    expect(models['mastra/google']).toEqual(['gemini-2.5-flash']);
+    expect(registryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
+    expect(registrySyncGateways).toHaveBeenCalledWith(true);
   });
 
-  it('skips mastra gateway providers when MASTRA_GATEWAY_API_KEY is not set', async () => {
-    delete process.env.MASTRA_GATEWAY_API_KEY;
+  it('skips the network sync when the global cache was refreshed recently', async () => {
+    registryGetLastRefreshTime.mockReturnValue(new Date(Date.now() - 60_000));
+    const { syncGateways } = await import('../gateway-sync.js');
 
-    const modelsDev = createGateway('models.dev', {
-      openai: {
-        name: 'OpenAI',
-        gateway: 'models.dev',
-        apiKeyEnvVar: 'OPENAI_API_KEY',
-        models: ['gpt-4.1'],
-      },
-    });
-    const netlify = createGateway('netlify', {
-      xai: {
-        name: 'xAI',
-        gateway: 'netlify',
-        apiKeyEnvVar: 'NETLIFY_API_KEY',
-        models: ['grok-3-mini'],
-      },
-    });
+    await syncGateways();
 
-    // Use a gateway with shouldEnable=true and real providers so skipping
-    // is driven by MastraGateway's own shouldEnable() checking the env var,
-    // not by the mock hardcoding false.
-    const mastra = createGateway(
-      'mastra',
-      {
-        myMastra: {
-          name: 'Mastra',
-          gateway: 'mastra',
-          apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
-          models: ['gemini-2.5-flash'],
-        },
-      },
-      true,
-    );
-
-    // Override shouldEnable to use the real env-var check
-    (mastra.shouldEnable as ReturnType<typeof vi.fn>).mockImplementation(() => !!process.env['MASTRA_GATEWAY_API_KEY']);
-
-    const { providers } = await fetchProvidersFromGateways([modelsDev, netlify, mastra]);
-
-    expect(providers.openai).toBeDefined();
-    expect(providers['netlify/xai']).toBeDefined();
-    // Mastra providers are skipped because MASTRA_GATEWAY_API_KEY is not set
-    expect(providers['mastra/myMastra']).toBeUndefined();
-    expect(providers['mastra']).toBeUndefined();
+    expect(registrySyncGateways).not.toHaveBeenCalled();
   });
 
-  it('generates types for quoted gateway provider ids', () => {
-    const content = generateTypesContent({
-      'mastra/google': ['gemini-2.5-flash'],
-    });
+  it('runs the sync when the last refresh is older than the interval', async () => {
+    registryGetLastRefreshTime.mockReturnValue(new Date(Date.now() - 10 * 60_000));
+    const { syncGateways } = await import('../gateway-sync.js');
 
-    expect(content).toContain("readonly 'mastra/google': readonly ['gemini-2.5-flash'];");
-    expect(content).toContain('[P in Provider]: `${P}/${ProviderModelsMap[P][number]}`;');
+    await syncGateways();
+
+    expect(registrySyncGateways).toHaveBeenCalledWith(true);
+  });
+
+  it('runs the sync when no previous refresh time is recorded', async () => {
+    registryGetLastRefreshTime.mockReturnValue(null);
+    const { syncGateways } = await import('../gateway-sync.js');
+
+    await syncGateways();
+
+    expect(registrySyncGateways).toHaveBeenCalledWith(true);
+  });
+
+  it('always syncs when force=true even if recently refreshed', async () => {
+    registryGetLastRefreshTime.mockReturnValue(new Date(Date.now() - 1_000));
+    const { syncGateways } = await import('../gateway-sync.js');
+
+    await syncGateways(true);
+
+    expect(registrySyncGateways).toHaveBeenCalledWith(true);
+  });
+
+  it('does not throw when the registry sync rejects', async () => {
+    const error = new Error('boom');
+    registrySyncGateways.mockRejectedValueOnce(error);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { syncGateways } = await import('../gateway-sync.js');
+
+    await expect(syncGateways(true)).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledWith('[GatewaySync] Sync failed:', error);
+    errorSpy.mockRestore();
+  });
+
+  it('startGatewaySync schedules a periodic sync that clears on stop', async () => {
+    vi.useFakeTimers();
+    registryGetLastRefreshTime.mockReturnValue(null);
+    const { startGatewaySync, stopGatewaySync } = await import('../gateway-sync.js');
+
+    startGatewaySync(1_000);
+    // Initial sync fires immediately (skip-if-recent passed because no prior refresh)
+    await vi.advanceTimersByTimeAsync(0);
+    expect(registrySyncGateways).toHaveBeenCalledTimes(1);
+
+    // Mark "recently synced" so the next interval tick should skip
+    registryGetLastRefreshTime.mockReturnValue(new Date());
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(registrySyncGateways).toHaveBeenCalledTimes(1);
+
+    stopGatewaySync();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(registrySyncGateways).toHaveBeenCalledTimes(1);
   });
 });
