@@ -133,12 +133,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
         return {
           ...obj,
-          value: (obj.value as Array<Record<string, unknown>>).map(item => {
-            if (item.type !== 'media') return item;
-            if (typeof item.mediaType === 'string' && item.mediaType.startsWith('image/')) {
-              return { type: 'image-data', data: item.data, mediaType: item.mediaType };
+          value: (obj.value as unknown[]).map(item => {
+            if (item == null || typeof item !== 'object') return item;
+            const part = item as Record<string, unknown>;
+            if (part.type !== 'media') return part;
+            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
+              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
             }
-            return { type: 'file-data', data: item.data, mediaType: item.mediaType };
+            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
           }),
         };
       }

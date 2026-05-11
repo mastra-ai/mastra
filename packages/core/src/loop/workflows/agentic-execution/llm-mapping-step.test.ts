@@ -1061,6 +1061,55 @@ describe('createLLMMappingStep toModelOutput', () => {
     );
   });
 
+  it('should not throw when toModelOutput returns malformed content entries', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).resolves.not.toThrow();
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [null, undefined, 'not-an-object', { type: 'image-data', data: 'abc', mediaType: 'image/png' }],
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
   it('should NOT call toModelOutput for tools without it defined', async () => {
     const llmMappingStep = createLLMMappingStep(
       {
