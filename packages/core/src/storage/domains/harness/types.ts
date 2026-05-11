@@ -173,6 +173,15 @@ export interface SessionRecord {
   origin: 'top-level' | 'subagent-tool';
 
   /**
+   * Depth of this session in the subagent tree. `0` for top-level sessions;
+   * `parent.subagentDepth + 1` for sessions spawned via `spawn_subagent`.
+   * Used by the built-in spawn tool to enforce `subagents.maxDepth`. Read
+   * once at hydration; written once at session create. Defaults to `0`
+   * when absent on records persisted before this field landed.
+   */
+  subagentDepth?: number;
+
+  /**
    * True when the session was created with `threadId: { fresh: true }` and
    * therefore owns the underlying thread under `MemoryStorage`. Read by the
    * harness layer on cascade-delete to decide whether to tear the thread

@@ -39,11 +39,14 @@ export type {
 
 export {
   HarnessConfigError,
+  HarnessQueueFullError,
   HarnessSessionClosedError,
   HarnessSessionLockedError,
   HarnessSessionNotFoundError,
   HarnessStorageError,
+  HarnessSubagentDepthExceededError,
   HarnessThreadNotFoundError,
+  HarnessValidationError,
 } from './errors';
 
 /**
@@ -70,6 +73,7 @@ export type {
   SessionResolveByThread,
   SessionResolveOptions,
   ShutdownOptions,
+  SubagentDefinition,
   ThreadCloneOptions,
   ThreadCreateOptions,
   ThreadDeleteOptions,

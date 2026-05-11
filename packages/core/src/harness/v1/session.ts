@@ -47,6 +47,7 @@ import type {
   TaskUpdatedEvent,
 } from './events';
 import type { Harness } from './harness';
+import { createSpawnSubagentTool, SPAWN_SUBAGENT_TOOL_ID } from './spawn-subagent-tool';
 import type {
   AgentResult,
   AgentStream,
@@ -171,6 +172,7 @@ export class Session {
   readonly resourceId: string;
   readonly threadId: string;
   readonly parentSessionId?: string;
+  readonly subagentDepth: number;
   readonly createdAt: number;
 
   private _record: SessionRecord;
@@ -230,6 +232,7 @@ export class Session {
     this.resourceId = internals.record.resourceId;
     this.threadId = internals.record.threadId;
     this.parentSessionId = internals.record.parentSessionId;
+    this.subagentDepth = internals.record.subagentDepth ?? 0;
     this.createdAt = internals.record.createdAt;
 
     this._record = internals.record;
@@ -1510,6 +1513,16 @@ export class Session {
     if (mode.tools) toolsets[`mode:${mode.id}`] = mode.tools;
     if (mode.additionalTools) toolsets[`mode:${mode.id}:add`] = mode.additionalTools;
     if (callAdditional) toolsets[`call:additional`] = callAdditional;
+
+    // Built-in `spawn_subagent` tool. Registered automatically when the
+    // harness has any subagent types configured. Closes over this session
+    // so the tool can resolve the registry, create child sessions, bridge
+    // events back, and enforce the depth cap (§9).
+    const spawn = createSpawnSubagentTool(this);
+    if (spawn) {
+      toolsets['harness:builtin'] = { [SPAWN_SUBAGENT_TOOL_ID]: spawn };
+    }
+
     return Object.keys(toolsets).length === 0 ? undefined : toolsets;
   }
 
@@ -1547,9 +1560,11 @@ export class Session {
       registerPlanApproval: () => {
         throw new HarnessConfigError('ctx.registerPlanApproval', 'not implemented in this milestone');
       },
-      // Subagent linkage — base session has no parent.
-      subagentDepth: 0,
-      source: 'parent',
+      // Subagent linkage — set from the record so spawned sessions report
+      // their depth + parent linkage on the harness slot.
+      subagentDepth: this._record.subagentDepth ?? 0,
+      source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
+      parentSessionId: this._record.parentSessionId,
       getSubagentModel: () => null,
     };
     return new RequestContext([['harness', harnessSlot]]);

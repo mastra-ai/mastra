@@ -97,6 +97,23 @@ export class HarnessQueueFullError extends Error {
 }
 
 /**
+ * `spawn_subagent` called from a session whose `subagentDepth` is at or
+ * above `HarnessConfig.subagents.maxDepth`. Surfaces as a tool error
+ * payload (not a thrown exception) so the parent agent can recover and
+ * continue without aborting the whole turn.
+ */
+export class HarnessSubagentDepthExceededError extends Error {
+  readonly name = 'HarnessSubagentDepthExceededError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly depth: number,
+    public readonly maxDepth: number,
+  ) {
+    super(`Session "${sessionId}" cannot spawn a subagent: depth ${depth} ≥ maxDepth ${maxDepth}`);
+  }
+}
+
+/**
  * Durable write rejected by the storage adapter — exhausted the harness's
  * one transparent retry. `cause` carries the underlying storage error.
  */

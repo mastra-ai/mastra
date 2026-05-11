@@ -54,6 +54,7 @@ import type {
   SessionLoadByIdOptions,
   SessionResolveOptions,
   ShutdownOptions,
+  SubagentDefinition,
   ThreadCloneOptions,
   ThreadCreateOptions,
   ThreadDeleteOptions,
@@ -67,6 +68,7 @@ import type {
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
+const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
 
 export class Harness {
   /** Process-scoped owner id used as the lease holder for all sessions. */
@@ -89,6 +91,8 @@ export class Harness {
   private readonly _liveSessions = new Map<string, Session>();
   private readonly _leaseTtlMs: number;
   private readonly _maxQueueDepth: number;
+  private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
+  private readonly _subagentMaxDepth: number;
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -103,6 +107,29 @@ export class Harness {
     if (this._maxQueueDepth < 1) {
       throw new HarnessConfigError('sessions.maxQueueDepth', 'must be a positive integer');
     }
+
+    // Subagent registry. Shape validation up front (uniqueness, mutual
+    // exclusion of tool overlays); agent-existence resolution happens at
+    // _bindMastra so it matches how modes are validated.
+    const subagentTypes = new Map<string, SubagentDefinition>();
+    if (config.subagents) {
+      for (const [agentType, def] of Object.entries(config.subagents.types ?? {})) {
+        if (typeof def?.agentId !== 'string' || def.agentId.length === 0) {
+          throw new HarnessConfigError(`subagents.types["${agentType}"].agentId`, 'is required');
+        }
+        if (typeof def.description !== 'string' || def.description.length === 0) {
+          throw new HarnessConfigError(`subagents.types["${agentType}"].description`, 'is required');
+        }
+        subagentTypes.set(agentType, def);
+      }
+      this._subagentMaxDepth = config.subagents.maxDepth ?? DEFAULT_SUBAGENT_MAX_DEPTH;
+      if (this._subagentMaxDepth < 1) {
+        throw new HarnessConfigError('subagents.maxDepth', 'must be a positive integer');
+      }
+    } else {
+      this._subagentMaxDepth = DEFAULT_SUBAGENT_MAX_DEPTH;
+    }
+    this._subagentTypes = subagentTypes;
 
     // Validate mode shape (uniqueness, tools/additionalTools mutual
     // exclusion, transitionsTo resolution) up front. Agent-existence
@@ -212,6 +239,26 @@ export class Harness {
         );
       }
     }
+    for (const [agentType, def] of this._subagentTypes) {
+      let agent: Agent | undefined;
+      try {
+        agent = mastra.getAgent(def.agentId as never) as Agent | undefined;
+      } catch {
+        agent = undefined;
+      }
+      if (!agent) {
+        throw new HarnessConfigError(
+          `subagents.types["${agentType}"].agentId`,
+          `references unknown agent "${def.agentId}" — Mastra has no such agent registered`,
+        );
+      }
+      if (def.modeId !== undefined && !this._modesById.has(def.modeId)) {
+        throw new HarnessConfigError(
+          `subagents.types["${agentType}"].modeId`,
+          `references unknown mode "${def.modeId}"`,
+        );
+      }
+    }
     this._mastra = mastra;
   }
 
@@ -254,6 +301,26 @@ export class Harness {
       throw new HarnessConfigError('modeId', `unknown mode "${modeId}"`);
     }
     return this.mastra.getAgent(mode.agentId as never) as Agent;
+  }
+
+  /**
+   * @internal — Session reads the subagent-type registry when wiring
+   * the built-in `spawn_subagent` tool. Returns undefined for unknown
+   * types so the tool can return a `HarnessValidationError`-shaped
+   * payload rather than throwing through the agent stream.
+   */
+  _getSubagentType(agentType: string): SubagentDefinition | undefined {
+    return this._subagentTypes.get(agentType);
+  }
+
+  /** @internal — Session reads this to render the `agentType` enum in the spawn tool's input schema. */
+  _listSubagentTypeIds(): string[] {
+    return Array.from(this._subagentTypes.keys());
+  }
+
+  /** @internal — Session enforces the subagent depth cap inside the spawn tool. */
+  _getSubagentMaxDepth(): number {
+    return this._subagentMaxDepth;
   }
 
   /** @internal — Session reads the resolved mode for per-turn overlays. */
@@ -356,6 +423,7 @@ export class Harness {
         origin: opts.origin ?? 'top-level',
         modeId: opts.modeId,
         modelId: opts.modelId,
+        subagentDepth: opts.subagentDepth,
       });
     }
 
@@ -388,6 +456,7 @@ export class Harness {
           origin: opts.origin ?? 'top-level',
           modeId: opts.modeId,
           modelId: opts.modelId,
+          subagentDepth: opts.subagentDepth,
         });
       }
       return this._hydrate(storage, stored);
@@ -403,6 +472,7 @@ export class Harness {
       origin: opts.origin ?? 'top-level',
       modeId: opts.modeId,
       modelId: opts.modelId,
+      subagentDepth: opts.subagentDepth,
     });
   }
 
@@ -441,6 +511,7 @@ export class Harness {
       modeId: opts.modeId,
       modelId: opts.modelId,
       parentSessionId: opts.parentSessionId,
+      subagentDepth: opts.subagentDepth,
     });
   }
 
@@ -459,6 +530,7 @@ export class Harness {
       origin: 'top-level' | 'subagent-tool';
       modeId?: string;
       modelId?: string;
+      subagentDepth?: number;
     },
   ): Promise<Session> {
     const sessionId = init.sessionId ?? `sess-${randomUUID()}`;
@@ -485,6 +557,7 @@ export class Harness {
       parentSessionId: init.parentSessionId,
       origin: init.origin,
       ownsThread: init.ownsThread,
+      subagentDepth: init.subagentDepth ?? 0,
       modeId,
       modelId: init.modelId ?? '',
       subagentModelOverrides: {},

@@ -203,10 +203,77 @@ export interface HarnessConfigCommon {
     maxQueueDepth?: number;
   };
 
-  // Remaining fields (workspace, subagents, skills, goals, files,
-  // intervals, observationalMemory) land here as we wire them up.
+  /**
+   * Subagent type registry (§9). When `types` is non-empty, the harness
+   * registers a built-in `spawn_subagent` tool on every session. The tool's
+   * `agentType` enum is drawn from the keys of this map.
+   *
+   * Validated at construction (or registration): each entry's `agentId`
+   * must reference an agent visible to the harness, and each entry's
+   * optional `modeId` must reference a mode in `modes`. Unknown ids throw
+   * `HarnessConfigError`.
+   *
+   * `maxDepth` caps the subagent tree depth. A `spawn_subagent` call from
+   * a session at depth equal to or greater than `maxDepth` returns a tool
+   * error containing `HarnessSubagentDepthExceededError`. Default: `1`
+   * (the top-level session can spawn one level of subagents).
+   */
+  subagents?: {
+    maxDepth?: number;
+    types: Record<string, SubagentDefinition>;
+  };
+
+  // Remaining fields (workspace, skills, goals, files, intervals,
+  // observationalMemory) land here as we wire them up.
 
   [key: string]: unknown;
+}
+
+/**
+ * Subagent definition (§9). Declares one entry in
+ * `HarnessConfig.subagents.types`. Each entry pins a backing agent and
+ * optionally a mode + default model + tool surface override.
+ *
+ * The map key is the `agentType` referenced by `spawn_subagent` calls and
+ * `subagent_*` events.
+ */
+export interface SubagentDefinition {
+  /** Backing agent id. Must reference a key in `HarnessConfig.agents`. */
+  agentId: string;
+
+  /**
+   * Mode the subagent's session runs in. Resolves in `HarnessConfig.modes`.
+   * If unset, the subagent inherits the parent's mode.
+   */
+  modeId?: string;
+
+  /**
+   * Surfaced in the parent agent's `spawn_subagent` tool description so
+   * the model can pick the right type.
+   */
+  description: string;
+
+  /**
+   * Default model id for this subagent type. Used when the spawn call does
+   * not pass `modelOverride`. Falls back to the harness's resolved default
+   * for the subagent's mode when unset.
+   */
+  defaultModelId?: string;
+
+  /**
+   * Tool surface override for this subagent type. When set, the subagent
+   * runs with exactly these tools (replaces the backing agent's tools).
+   * Mutually exclusive with the mode's own `tools` overlay — caller wins.
+   */
+  tools?: ToolsInput;
+
+  /**
+   * Workspace ownership model for the subagent session. `'inherit'` reuses
+   * the parent's workspace; `'fresh'` provisions a new one. Default:
+   * `'inherit'`. Workspace plumbing lands in a later slice — the field is
+   * accepted now so configs don't need to change later.
+   */
+  workspace?: 'inherit' | 'fresh';
 }
 
 /**
@@ -231,6 +298,12 @@ interface SessionResolveCommon {
   origin?: 'top-level' | 'subagent-tool';
   modeId?: string;
   modelId?: string;
+  /**
+   * @internal — used by the built-in `spawn_subagent` tool to record the
+   * child's depth in the subagent tree (parent + 1). Top-level callers
+   * should leave this unset; it defaults to `0`.
+   */
+  subagentDepth?: number;
 }
 
 export interface SessionResolveByThread extends SessionResolveCommon {
