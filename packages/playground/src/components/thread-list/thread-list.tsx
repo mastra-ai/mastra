@@ -5,12 +5,18 @@ import { cn } from '@/lib/utils';
 
 export interface ThreadListProps {
   children: ReactNode;
+  'aria-label'?: string;
 }
 
-export const ThreadList = ({ children }: ThreadListProps) => {
+export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads' }: ThreadListProps) => {
   return (
     <div className="h-full w-full py-2 pl-2">
-      <nav className="bg-surface2 rounded-3xl border border-border2/40 h-full overflow-y-auto p-1">{children}</nav>
+      <nav
+        aria-label={ariaLabel}
+        className="bg-surface2 rounded-3xl border border-border2/40 h-full overflow-y-auto p-1"
+      >
+        {children}
+      </nav>
     </div>
   );
 };

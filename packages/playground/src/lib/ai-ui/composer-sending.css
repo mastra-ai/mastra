@@ -3,12 +3,15 @@
     transform: translate3d(0, 300%, 0);
     opacity: 0;
   }
+
   15% {
     opacity: 0.35;
   }
+
   85% {
     opacity: 0.35;
   }
+
   100% {
     transform: translate3d(0, -200%, 0);
     opacity: 0;

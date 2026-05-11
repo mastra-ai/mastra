@@ -52,7 +52,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
 
   return (
     <>
-      <ThreadList>
+      <ThreadList aria-label="Workflow runs">
         <ThreadListNewItem as={Link} to={paths.workflowLink(workflowId)}>
           <Icon>
             <Plus />
@@ -75,9 +75,11 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                 deleteLabel="delete run"
               >
                 <span className="flex flex-col items-start gap-1 text-left">
-                  {typeof run?.snapshot === 'object' && <WorkflowRunStatusBadge status={run.snapshot.status} />}
+                  {run?.snapshot && typeof run.snapshot === 'object' && (
+                    <WorkflowRunStatusBadge status={run.snapshot.status} />
+                  )}
                   <span className="truncate">{run.runId}</span>
-                  {typeof run?.snapshot === 'object' && run?.snapshot?.timestamp && (
+                  {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
                     <span>{formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}</span>
                   )}
                 </span>
