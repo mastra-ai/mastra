@@ -35,9 +35,9 @@ describe('createBrightDataSearchTool', () => {
     });
   });
 
-  it('should create a tool with id web-search', () => {
+  it('should create a tool with id brightdata-search', () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
-    expect(tool.id).toBe('web-search');
+    expect(tool.id).toBe('brightdata-search');
     expect(tool.description).toBeDefined();
     expect(tool.description!.length).toBeGreaterThan(0);
   });

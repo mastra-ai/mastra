@@ -21,9 +21,9 @@ describe('createBrightDataFetchTool', () => {
     mockScrapeUrl.mockResolvedValue('# Example Page\n\nHello world.');
   });
 
-  it('should create a tool with id web-fetch', () => {
+  it('should create a tool with id brightdata-fetch', () => {
     const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
-    expect(tool.id).toBe('web-fetch');
+    expect(tool.id).toBe('brightdata-fetch');
     expect(tool.description).toBeDefined();
     expect(tool.description!.length).toBeGreaterThan(0);
   });

@@ -33,7 +33,7 @@ const outputSchema = z.object({
 
 export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
   return createTool({
-    id: 'web-search',
+    id: 'brightdata-search',
     description:
       "Search Google and get back parsed organic results (link, title, description). Uses Bright Data's SERP API which bypasses bot detection. Supports country targeting and pagination via result offset.",
     inputSchema,
@@ -51,11 +51,12 @@ export function createBrightDataSearchTool(config?: BrightDataClientOptions) {
 
         const organic = Array.isArray(response.organic) ? response.organic : [];
         const results = organic
-          .map((entry: any) => {
+          .map((entry: unknown) => {
             if (!entry || typeof entry !== 'object') return null;
-            const link = typeof entry.link === 'string' ? entry.link.trim() : '';
-            const title = typeof entry.title === 'string' ? entry.title.trim() : '';
-            const description = typeof entry.description === 'string' ? entry.description.trim() : '';
+            const e = entry as Record<string, unknown>;
+            const link = typeof e.link === 'string' ? e.link.trim() : '';
+            const title = typeof e.title === 'string' ? e.title.trim() : '';
+            const description = typeof e.description === 'string' ? e.description.trim() : '';
             if (!link || !title) return null;
             return { link, title, description };
           })

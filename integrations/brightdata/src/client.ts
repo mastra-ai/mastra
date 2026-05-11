@@ -19,6 +19,7 @@ export async function closeClient(client: BrightDataClient): Promise<void> {
     try {
       await close.call(client);
     } catch {
+      // best-effort cleanup; never mask the primary tool error from the finally block
     }
   }
 }

@@ -26,7 +26,7 @@ const agent = new Agent({
   id: 'realtime-information-agent',
   name: 'Realtime Information Agent',
   instructions:
-    'You are a realtime information agent. Use web-search to find pages, and web-fetch to read them.',
+    'You are a realtime information agent. Use brightdata-search to find pages, and brightdata-fetch to read them.',
   model: 'anthropic/claude-sonnet-4-6',
   tools,
 });
@@ -45,7 +45,7 @@ const search = createBrightDataSearchTool({ apiKey: 'brd_...' });
 const fetch = createBrightDataFetchTool(); // uses BRIGHTDATA_API_TOKEN env var
 ```
 
-### Web Search (`web-search`)
+### Web Search (`brightdata-search`)
 
 ```typescript
 import { createBrightDataSearchTool } from '@mastra/brightdata';
@@ -65,7 +65,7 @@ const searchTool = createBrightDataSearchTool();
 // }
 ```
 
-### Web Fetch (`web-fetch`)
+### Web Fetch (`brightdata-fetch`)
 
 ```typescript
 import { createBrightDataFetchTool } from '@mastra/brightdata';
@@ -96,7 +96,7 @@ const agent = new Agent({
   id: 'rag-agent',
   name: 'Research Assistant',
   model: 'anthropic/claude-sonnet-4-6',
-  instructions: `You are a research assistant. Use web-search to find relevant pages, then use web-fetch to get full markdown content from the best results.`,
+  instructions: `You are a research assistant. Use brightdata-search to find relevant pages, then use brightdata-fetch to get full markdown content from the best results.`,
   tools: createBrightDataTools(),
 });
 ```

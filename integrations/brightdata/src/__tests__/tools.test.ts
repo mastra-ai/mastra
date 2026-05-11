@@ -22,8 +22,8 @@ describe('createBrightDataTools', () => {
   it('should create tools with correct ids', () => {
     const tools = createBrightDataTools({ apiKey: 'test-key' });
 
-    expect(tools.webSearch.id).toBe('web-search');
-    expect(tools.webFetch.id).toBe('web-fetch');
+    expect(tools.webSearch.id).toBe('brightdata-search');
+    expect(tools.webFetch.id).toBe('brightdata-fetch');
   });
 
   it('should create tools that all have descriptions', () => {

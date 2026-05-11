@@ -15,7 +15,7 @@ const outputSchema = z.object({
 
 export function createBrightDataFetchTool(config?: BrightDataClientOptions) {
   return createTool({
-    id: 'web-fetch',
+    id: 'brightdata-fetch',
     description:
       "Fetch a webpage and return its content as markdown. Uses Bright Data's Web Unlocker which bypasses bot detection and CAPTCHAs. Pass any URL, including pages that block normal scrapers.",
     inputSchema,
