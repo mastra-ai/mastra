@@ -33,7 +33,7 @@ import {
   taskWriteTool,
 } from './tools';
 import type { TaskItemSnapshot } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -56,10 +56,6 @@ import type {
   TokenUsage,
   ToolCategory,
 } from './types';
-
-function createEmptyTokenUsage(): TokenUsage {
-  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-}
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -1057,6 +1053,8 @@ export class Harness<TState = {}> {
           promptTokens: savedUsage.promptTokens ?? 0,
           completionTokens: savedUsage.completionTokens ?? 0,
           totalTokens: savedUsage.totalTokens ?? 0,
+          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
         };
       } else {
         this.tokenUsage = createEmptyTokenUsage();
@@ -1453,6 +1451,7 @@ export class Harness<TState = {}> {
     }
 
     const operationId = ++this.currentOperationId;
+    this.abortRequested = false;
     this.abortController = new AbortController();
     this.currentTraceId = null;
     const agent = this.getCurrentAgent();
@@ -2619,7 +2618,7 @@ export class Harness<TState = {}> {
 
   /**
    * Respond to a pending plan approval.
-   * On approval: switches to the default mode, then resolves the promise.
+   * On approval: resolves the suspended plan tool, then switches to the default mode.
    * On rejection: resolves with feedback (stays in current mode).
    */
   async respondToPlanApproval({
@@ -2632,15 +2631,16 @@ export class Harness<TState = {}> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
+    this.pendingPlanApprovals.delete(planId);
+    resolve(response);
+
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
+        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
         await this.switchMode({ modeId: defaultMode.id });
       }
     }
-
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
   }
 
   private async handleToolApprove({

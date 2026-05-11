@@ -32,6 +32,7 @@ export type {
   OnDelegationCompleteHandler,
   DelegationConfig,
   MessageFilterContext,
+  SubAgent,
   /** @deprecated Use MessageFilterContext instead */
   MessageFilterContext as ContextFilterContext,
   // Iteration hook types

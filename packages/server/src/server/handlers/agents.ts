@@ -488,10 +488,8 @@ async function getSerializedAgentDefinition({
       const agents = await agent.listAgents({ requestContext });
       serializedAgentAgents = Object.entries(agents || {}).reduce<Record<string, SerializedAgentDefinition>>(
         (acc, [key, agent]) => {
-          return {
-            ...acc,
-            [key]: { id: agent.id, name: agent.name },
-          };
+          acc[key] = { id: agent.id, name: agent.name ?? key };
+          return acc;
         },
         {},
       );
@@ -716,7 +714,7 @@ export async function getAgentFromSystem({
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
   requestContext?: RequestContext;
-}) {
+}): Promise<Agent> {
   const logger = mastra.getLogger();
 
   if (!agentId) {
@@ -729,7 +727,7 @@ export async function getAgentFromSystem({
     effectiveVersionOptions = await resolveRolloutVersionOptions(mastra, agentId, requestContext, logger);
   }
 
-  let agent;
+  let agent: Agent | null | undefined;
 
   try {
     agent = mastra.getAgentById(agentId);
@@ -745,8 +743,9 @@ export async function getAgentFromSystem({
         try {
           const subAgents = await ag.listAgents();
 
-          if (subAgents[agentId]) {
-            agent = subAgents[agentId];
+          const subAgent = subAgents[agentId];
+          if (subAgent instanceof Agent) {
+            agent = subAgent;
             break;
           }
         } catch (error) {

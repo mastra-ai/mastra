@@ -195,6 +195,16 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
 
+    if (!reminderPart.precedesMessageId && state.streamingComponent) {
+      const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, reminderComponent);
+        state.chatContainer.invalidate();
+        state.ui.requestRender();
+        return;
+      }
+    }
+
     addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
     state.ui.requestRender();
     return;

@@ -15,6 +15,7 @@
 import type {
   ObservabilityBridge,
   TracingEvent,
+  LogEvent,
   CreateSpanOptions,
   SpanType,
   SpanIds,
@@ -22,9 +23,11 @@ import type {
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
-import { SpanConverter, getSpanKind } from '@mastra/otel-exporter';
-import { trace as otelTrace, context as otelContext, isSpanContextValid } from '@opentelemetry/api';
+import { SpanConverter, convertLog, getSpanKind } from '@mastra/otel-exporter';
+import { trace as otelTrace, context as otelContext, isSpanContextValid, TraceFlags } from '@opentelemetry/api';
 import type { Span as OtelSpan, Context as OtelContext } from '@opentelemetry/api';
+import { logs as otelLogs } from '@opentelemetry/api-logs';
+import type { Logger as OtelLogger } from '@opentelemetry/api-logs';
 
 /**
  * Configuration for the OtelBridge
@@ -61,6 +64,7 @@ export type OtelBridgeConfig = {
 export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel';
   private otelTracer = otelTrace.getTracer('@mastra/otel-bridge', '1.0.0');
+  private otelLogger: OtelLogger = otelLogs.getLogger('@mastra/otel-bridge', '1.0.0');
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
   private spanConverter?: SpanConverter;
 
@@ -80,6 +84,74 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     if (event.type === TracingEventType.SPAN_ENDED) {
       await this.handleSpanEnded(event);
     }
+  }
+
+  /**
+   * Forward Mastra log events into the globally-registered OTEL LoggerProvider.
+   *
+   * If the user has not registered a LoggerProvider (e.g. via @opentelemetry/sdk-logs
+   * or NodeSDK's logRecordProcessor option), the API returns a no-op logger and
+   * emit() is a silent no-op — the bridge degrades gracefully.
+   *
+   * Trace correlation:
+   * - If the log carries a spanId we have an OTEL span for, emit under that span's
+   *   stored context so the log nests beneath it in the trace.
+   * - Else if the log carries traceId+spanId, attach a SpanContext built from those
+   *   IDs so backends still correlate by ID.
+   * - Else emit under whatever context is currently active.
+   */
+  async onLogEvent(event: LogEvent): Promise<void> {
+    if (this.isDisabled) return;
+
+    try {
+      const params = convertLog(event.log);
+
+      const attributes = { ...params.attributes };
+      if (params.traceId) attributes['mastra.traceId'] = params.traceId;
+      if (params.spanId) attributes['mastra.spanId'] = params.spanId;
+
+      const logContext = this.resolveLogContext(params.traceId, params.spanId);
+
+      this.otelLogger.emit({
+        timestamp: params.timestamp,
+        severityNumber: params.severityNumber,
+        severityText: params.severityText,
+        body: params.body,
+        attributes,
+        context: logContext,
+      });
+    } catch (error) {
+      this.logger.error('[OtelBridge] Failed to emit log:', error);
+    }
+  }
+
+  /**
+   * Pick the OTEL Context to emit a log under so trace correlation is correct.
+   */
+  private resolveLogContext(traceId?: string, spanId?: string): OtelContext {
+    // 1. Prefer the stored OTEL context for the originating Mastra span.
+    if (spanId) {
+      const entry = this.otelSpanMap.get(spanId);
+      if (entry) return entry.otelContext;
+    }
+
+    // 2. Fall back to a context with a span context built from the raw IDs,
+    //    but only when both IDs form a valid W3C span context. Injecting
+    //    malformed IDs would surface as garbage trace links downstream.
+    if (traceId && spanId) {
+      const candidate = {
+        traceId,
+        spanId,
+        traceFlags: TraceFlags.SAMPLED,
+        isRemote: false,
+      };
+      if (isSpanContextValid(candidate)) {
+        return otelTrace.setSpanContext(otelContext.active(), candidate);
+      }
+    }
+
+    // 3. Fall through to whatever is currently active.
+    return otelContext.active();
   }
 
   /**
@@ -284,17 +356,27 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    * instance is terminated.
    */
   async flush(): Promise<void> {
+    await this.flushProvider(otelTrace.getTracerProvider(), 'tracer');
+    await this.flushProvider(otelLogs.getLoggerProvider(), 'logger');
+  }
+
+  private async flushProvider(provider: unknown, label: 'tracer' | 'logger'): Promise<void> {
     try {
-      const provider = otelTrace.getTracerProvider();
-      // Check if the provider supports forceFlush (not all implementations do)
-      if (provider && 'forceFlush' in provider && typeof provider.forceFlush === 'function') {
-        await provider.forceFlush();
-        this.logger.debug('[OtelBridge] Flushed tracer provider');
+      if (
+        provider &&
+        typeof provider === 'object' &&
+        'forceFlush' in provider &&
+        typeof (provider as { forceFlush: unknown }).forceFlush === 'function'
+      ) {
+        await (provider as { forceFlush: () => Promise<void> }).forceFlush();
+        this.logger.debug(`[OtelBridge] Flushed ${label} provider`);
       } else {
-        this.logger.debug('[OtelBridge] Tracer provider does not support forceFlush');
+        this.logger.debug(
+          `[OtelBridge] ${label === 'tracer' ? 'Tracer' : 'Logger'} provider does not support forceFlush`,
+        );
       }
     } catch (error) {
-      this.logger.error('[OtelBridge] Failed to flush tracer provider:', error);
+      this.logger.error(`[OtelBridge] Failed to flush ${label} provider:`, error);
     }
   }
 

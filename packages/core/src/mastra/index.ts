@@ -2491,7 +2491,8 @@ export class Mastra<
    * This method allows dynamic registration of scorers after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a scorer with the same key already exists
+   * If a scorer with the same key already exists, this method leaves the existing
+   * scorer registered and returns.
    *
    * @example
    * ```typescript
@@ -3322,6 +3323,8 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
+    this.registerStaticWorkflowScorers(workflow);
+
     // If a schedule is declared, mark the flag and either register into the
     // running scheduler or trigger a lazy ensure.
     if (hasSchedule) {
@@ -3341,6 +3344,19 @@ export class Mastra<
         })();
       } else {
         this.#ensureScheduler();
+      }
+    }
+  }
+
+  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
+    for (const step of Object.values(workflow.steps ?? {})) {
+      const scorers = step.scorers;
+      if (!scorers || typeof scorers === 'function') {
+        continue;
+      }
+
+      for (const [, entry] of Object.entries(scorers)) {
+        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }
