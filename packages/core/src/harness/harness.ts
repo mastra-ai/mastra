@@ -2470,6 +2470,10 @@ export class Harness<TState = {}> {
     return this.currentTraceId;
   }
 
+  private getSubagentDisplayName(agentType: string): string | undefined {
+    return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
+  }
+
   // ===========================================================================
   // Display State
   // ===========================================================================
@@ -3003,9 +3007,11 @@ export class Harness<TState = {}> {
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
-      case 'subagent_start':
+      case 'subagent_start': {
+        const displayName = this.getSubagentDisplayName(event.agentType);
         ds.activeSubagents.set(event.toolCallId, {
           agentType: event.agentType,
+          ...(displayName !== undefined ? { displayName } : {}),
           task: event.task,
           modelId: event.modelId,
           forked: event.forked,
@@ -3014,6 +3020,7 @@ export class Harness<TState = {}> {
           status: 'running',
         });
         break;
+      }
 
       case 'subagent_text_delta': {
         const sub = ds.activeSubagents.get(event.toolCallId);

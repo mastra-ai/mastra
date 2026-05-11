@@ -126,9 +126,11 @@ describe('Processors Integration Tests', () => {
         ? filteredResult.get.all.db()
         : [filteredResult];
 
-    // Verify ToolCallFilter removed weather tool call messages
-    expect(filteredMessages).toHaveLength(3); // msg-1 (user), msg-5 (user), msg-6 (assistant with 'time' tool)
-    expect(filteredMessages.some(m => m.id === 'msg-2')).toBe(false); // Weather tool call removed
+    // Verify ToolCallFilter removed weather tool parts but preserved top-level assistant text
+    expect(filteredMessages).toHaveLength(4); // msg-1 (user), msg-2 (assistant text), msg-5 (user), msg-6 (assistant with 'time' tool)
+    const weatherMessage = filteredMessages.find(m => m.id === 'msg-2');
+    expect(weatherMessage).toBeDefined();
+    expect(typeof weatherMessage!.content === 'string' ? [] : weatherMessage!.content.parts).toEqual([]);
     expect(filteredMessages.some(m => m.id === 'msg-6')).toBe(true); // Time tool call preserved
     expect(filteredMessages.some(m => m.id === 'msg-1')).toBe(true); // User message preserved
     expect(filteredMessages.some(m => m.id === 'msg-5')).toBe(true); // User message preserved
@@ -467,9 +469,11 @@ describe('Processors Integration Tests', () => {
       ? weatherFilteredResult
       : weatherFilteredResult.get.all.db();
 
-    // Should have fewer messages (msg-2 with weather tool removed)
-    expect(weatherFilteredMessages.length).toBe(5);
-    expect(weatherFilteredMessages.some(m => m.id === 'msg-2')).toBe(false);
+    // Should preserve msg-2 top-level text while removing its weather tool parts
+    expect(weatherFilteredMessages.length).toBe(6);
+    const weatherMessage = weatherFilteredMessages.find(m => m.id === 'msg-2');
+    expect(weatherMessage).toBeDefined();
+    expect(typeof weatherMessage!.content === 'string' ? [] : weatherMessage!.content.parts).toEqual([]);
     expect(weatherFilteredMessages.some(m => m.id === 'msg-4')).toBe(true); // Calculator preserved
 
     // Test 2: Apply token limiting with a low limit to force truncation
@@ -533,9 +537,17 @@ describe('Processors Integration Tests', () => {
 
     const finalResult = finalMessageList.get.all.db();
 
-    // Should have no tool call messages
-    expect(combinedFilteredMessages.some(m => m.id === 'msg-2')).toBe(false);
-    expect(combinedFilteredMessages.some(m => m.id === 'msg-4')).toBe(false);
+    // Should have no tool call parts, while preserving top-level assistant text
+    const combinedWeatherMessage = combinedFilteredMessages.find(m => m.id === 'msg-2');
+    const combinedCalculatorMessage = combinedFilteredMessages.find(m => m.id === 'msg-4');
+    expect(combinedWeatherMessage).toBeDefined();
+    expect(combinedCalculatorMessage).toBeDefined();
+    expect(typeof combinedWeatherMessage!.content === 'string' ? [] : combinedWeatherMessage!.content.parts).toEqual(
+      [],
+    );
+    expect(
+      typeof combinedCalculatorMessage!.content === 'string' ? [] : combinedCalculatorMessage!.content.parts,
+    ).toEqual([]);
     // But should still have user messages and simple assistant response
     expect(combinedFilteredMessages.some(m => m.id === 'msg-1')).toBe(true);
     expect(combinedFilteredMessages.some(m => m.id === 'msg-6')).toBe(true);
