@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `listRootSpanJsonKeys` and `listLogJsonKeys` to the observability storage interface for discovering the distinct top-level keys found on root-span `metadata`/`attributes` and log `metadata`/`data`. The default implementations scan up to 250 recent records portably; storage backends can override with native SQL distinct-keys extraction for speed.
+Added `listRootSpanJsonKeys` and `listLogJsonKeys` so developers can discover the distinct top-level JSON keys present on root-span `metadata`/`attributes` and log `metadata`/`data` — useful for building autocomplete pickers and any UI that needs to enumerate what custom fields a project stores. A portable default scans recent records; backends can optionally provide faster native implementations.
 
 ```ts
 const storage = mastra.getStorage();

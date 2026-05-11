@@ -7,4 +7,4 @@ Added two observability discovery endpoints that return the distinct top-level k
 - `GET /observability/discovery/root-span-keys?field=metadata|attributes`
 - `GET /observability/discovery/log-keys?field=metadata|data`
 
-Both return `{ keys: string[] }` and are used by Studio's column picker to power autocomplete when adding custom columns.
+Both return `{ keys: string[] }`.
