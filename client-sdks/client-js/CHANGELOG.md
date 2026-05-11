@@ -1,5 +1,45 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.10
+
+### Patch Changes
+
+- Fixed memory thread write methods (`update`, `delete`, `deleteMessages`, `clone`) silently sending requests without the required `agentId`. The methods now resolve `agentId` from a per-call argument first, then the constructor, and throw a clear error if neither is set — before any HTTP request is issued. Reads are unchanged. ([#16310](https://github.com/mastra-ai/mastra/pull/16310))
+
+  ```ts
+  // Either set agentId on the thread once...
+  const thread = client.getMemoryThread({ threadId: 't1', agentId: 'a1' });
+  await thread.update({ title: 'Renamed' });
+  await thread.delete();
+
+  // ...or pass it per call.
+  const thread = client.getMemoryThread({ threadId: 't1' });
+  await thread.update({ agentId: 'a1', title: 'Renamed' });
+  await thread.delete({ agentId: 'a1' });
+  ```
+
+  Fixed `MastraClient.deleteThread()` issuing `DELETE /api` (an empty URL) when called without `agentId` or `networkId`. The method now requires exactly one of the two, enforced both at runtime and in the type signature.
+
+  ```ts
+  await client.deleteThread('t1', { agentId: 'a1' });
+  await client.deleteThread('t1', { networkId: 'n1' });
+  ```
+
+## 1.18.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/core@1.33.0-alpha.9
+
+## 1.18.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`c50ebc3`](https://github.com/mastra-ai/mastra/commit/c50ebc34da71044558315735e69bfb94fcfb74bf), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4)]:
+  - @mastra/core@1.33.0-alpha.8
+  - @mastra/schema-compat@1.2.10-alpha.0
+
 ## 1.18.0-alpha.7
 
 ### Minor Changes

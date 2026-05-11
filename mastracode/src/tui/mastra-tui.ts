@@ -594,6 +594,7 @@ export class MastraTUI {
       cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+      'github-copilot': accessLevel('github-copilot'),
     };
     // Gateway covers all providers
     const mgKey =

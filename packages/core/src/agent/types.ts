@@ -48,7 +48,7 @@ import type { Workflow } from '../workflows';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions, SubAgent } from './agent.types';
 import type { MessageList } from './message-list/index';
 export type {
   MastraDBMessage,
@@ -59,6 +59,7 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { SubAgent } from './agent.types';
 export type { MastraBrowser } from '../browser/browser';
 // Screencast types now on MastraBrowser directly
 export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
@@ -319,7 +320,7 @@ export interface AgentConfig<
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
-  agents?: DynamicArgument<Record<string, Agent>, TRequestContext>;
+  agents?: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */

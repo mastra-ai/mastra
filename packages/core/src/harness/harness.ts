@@ -33,7 +33,7 @@ import {
   taskWriteTool,
 } from './tools';
 import type { TaskItemSnapshot } from './tools';
-import { defaultDisplayState, defaultOMProgressState } from './types';
+import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -56,10 +56,6 @@ import type {
   TokenUsage,
   ToolCategory,
 } from './types';
-
-function createEmptyTokenUsage(): TokenUsage {
-  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-}
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -1057,6 +1053,8 @@ export class Harness<TState = {}> {
           promptTokens: savedUsage.promptTokens ?? 0,
           completionTokens: savedUsage.completionTokens ?? 0,
           totalTokens: savedUsage.totalTokens ?? 0,
+          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
         };
       } else {
         this.tokenUsage = createEmptyTokenUsage();

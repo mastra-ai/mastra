@@ -5,7 +5,7 @@ import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
 import { Harness } from './harness';
 import type { HarnessEvent } from './types';
-import { defaultDisplayState } from './types';
+import { createEmptyTokenUsage, defaultDisplayState } from './types';
 
 function createHarness(storage?: InMemoryStore) {
   const agent = new Agent({
@@ -31,7 +31,7 @@ describe('defaultDisplayState', () => {
     const ds = defaultDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
-    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools).toBeInstanceOf(Map);
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
@@ -71,7 +71,7 @@ describe('Harness.getDisplayState()', () => {
     const ds = harness.getDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
-    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
     expect(ds.pendingQuestion).toBeNull();
@@ -1321,7 +1321,7 @@ describe('resetThreadDisplayState', () => {
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(150);
 
     emit(harness, { type: 'thread_created', thread: { id: 'new', title: 'New' } } as any);
-    expect(harness.getDisplayState().tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(harness.getDisplayState().tokenUsage).toEqual(createEmptyTokenUsage());
   });
 
   it('preserves isRunning across thread_created', () => {

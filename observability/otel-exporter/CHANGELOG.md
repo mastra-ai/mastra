@@ -1,5 +1,46 @@
 # @mastra/otel-exporter
 
+## 1.1.0-alpha.3
+
+### Minor Changes
+
+- Added log export to `@mastra/otel-exporter`. Logs emitted on the Mastra observability bus are now forwarded to the configured OTLP endpoint alongside traces, using the same provider configuration. ([#13529](https://github.com/mastra-ai/mastra/pull/13529))
+
+  ```ts
+  import { OtelExporter } from '@mastra/otel-exporter';
+
+  new OtelExporter({
+    provider: {
+      custom: { endpoint: 'http://localhost:4318', protocol: 'http/json' },
+    },
+    // signals.logs defaults to true; set to false to disable.
+    signals: { traces: true, logs: true },
+  });
+  ```
+
+  Requires the matching OTLP log exporter package to be installed (e.g. `@opentelemetry/exporter-logs-otlp-http` for HTTP/JSON, or `-proto` / `-grpc` variants).
+
+  **Trace correlation:** Logs that carry `traceId` and `spanId` are attached to the OTEL log record's native trace context, so backends like Datadog, Grafana, and Honeycomb auto-correlate logs to traces.
+
+  **Other improvements:**
+  - Trace and log endpoints are always normalized to a single signal-path suffix, so `http://host:4318/`, `http://host:4318`, and `http://host:4318/v1/traces/` all produce well-formed URLs instead of malformed variants like `//v1/logs`.
+  - Calling `flush()` or `shutdown()` immediately after init no longer drops telemetry — teardown waits for setup to finish before draining providers.
+  - Debug log output no longer exposes credential fragments. Provider header values are fully redacted instead of printing prefix/suffix slices.
+  - When a dynamically-loaded OTLP exporter package is installed but does not expose the expected named export, Mastra now disables that signal with a clear error message instead of failing later with an opaque "X is not a constructor" error.
+
+### Patch Changes
+
+- Updated dependencies [[`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/core@1.33.0-alpha.9
+
+## 1.0.23-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4), [`33767a0`](https://github.com/mastra-ai/mastra/commit/33767a0e3762beeb33dab03b1608b6d5f405fc94)]:
+  - @mastra/core@1.33.0-alpha.8
+  - @mastra/observability@1.12.0-alpha.2
+
 ## 1.0.23-alpha.1
 
 ### Patch Changes

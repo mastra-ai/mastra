@@ -717,6 +717,65 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
     });
+
+    describe('deleteThread', () => {
+      it('should delete a thread with agentId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { agentId: 'agent-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1?agentId=agent-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should delete a network thread with networkId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { networkId: 'network-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/network/threads/thread-1?networkId=network-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should throw when neither agentId nor networkId is provided', () => {
+        expect(() => client.deleteThread('thread-1', {} as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when opts is missing entirely', () => {
+        expect(() => client.deleteThread('thread-1', undefined as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when both agentId and networkId are provided', () => {
+        expect(() => client.deleteThread('thread-1', { agentId: 'agent-1', networkId: 'network-1' } as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('Background Tasks', () => {

@@ -1,6 +1,6 @@
 ---
 title: "Reference: OtelBridge | Observability"
-description: OpenTelemetry bridge for Tracing
+description: OpenTelemetry bridge for traces and logs
 packages:
   - "@mastra/core"
   - "@mastra/langfuse"
@@ -18,7 +18,7 @@ The OpenTelemetry Bridge is currently **experimental**. APIs and configuration o
 
 :::
 
-Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans.
+Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans. Also forwards Mastra log events to the globally-registered OTEL `LoggerProvider`, emitting each log under the OTEL context of the originating Mastra span so trace-log correlation works automatically.
 
 ## Constructor
 
@@ -82,7 +82,40 @@ Executes a synchronous function within the OTEL context of a Mastra span.
 
 **Returns:** `T` - The result of the function execution.
 
-### shutdown
+### `onLogEvent`
+
+```typescript prettier:false
+async onLogEvent(event: LogEvent): Promise<void>
+```
+
+Forwards a Mastra log event to the globally-registered OTEL `LoggerProvider`. Trace correlation is resolved in this order:
+
+1. If the log carries a `spanId` the bridge has an OTEL span for, the log is emitted under that span's stored OTEL context.
+1. Otherwise, if the log carries `traceId` and `spanId`, those IDs are attached to the emitted log record's `SpanContext`.
+1. Otherwise, the log is emitted under whatever OTEL context is currently active.
+
+If no `LoggerProvider` is registered globally, emission is a silent no-op.
+
+<PropertiesTable
+  props={[
+  {
+    name: 'event',
+    type: 'LogEvent',
+    description: 'The Mastra log event to forward, as delivered by the observability bus',
+    required: true,
+  },
+]}
+/>
+
+### `flush`
+
+```typescript prettier:false
+async flush(): Promise<void>
+```
+
+Force flushes the global OTEL tracer provider and logger provider if they support `forceFlush`. Useful in serverless environments where you need to drain telemetry before the runtime terminates.
+
+### `shutdown`
 
 ```typescript prettier:false
 async shutdown(): Promise<void>
