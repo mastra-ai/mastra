@@ -17,11 +17,13 @@ If these are not available, **skip this section** and mark as ⏭️.
 ## Background
 
 Auth is controlled by the `server.auth` config in the Mastra constructor. When auth is enabled:
+
 - All API endpoints require a valid session
 - The browser redirects to WorkOS login
 - The session provides `authorId` for created entities
 
 When auth is disabled:
+
 - All endpoints are accessible without auth
 - A default/anonymous `authorId` may be used
 

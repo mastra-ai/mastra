@@ -11,6 +11,7 @@ curl -s http://localhost:4111/api/stored/workspaces | jq .
 ```
 
 **Verify:**
+
 - [ ] Response is JSON with `workspaces` array
 - [ ] Builder workspace appears in the list
 
@@ -21,6 +22,7 @@ curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
 ```
 
 **Verify:**
+
 - [ ] Returns the workspace object (not 404)
 - [ ] Has `id`, `name`, `status`, `metadata`, `filesystem` fields
 - [ ] `metadata.source` is `"builder"` for config-sourced workspaces
@@ -41,6 +43,7 @@ curl -s -X POST http://localhost:4111/api/stored/workspaces \
 ```
 
 **Verify:**
+
 - [ ] Returns 200/201 with the created workspace
 - [ ] `id` matches `"smoke-test-workspace"`
 - [ ] `metadata.source` is NOT `"builder"` (user-created)
@@ -57,6 +60,7 @@ curl -s -X PATCH http://localhost:4111/api/stored/workspaces/smoke-test-workspac
 ```
 
 **Verify:**
+
 - [ ] Returns updated workspace
 - [ ] `name` is now `"Updated Smoke Test Workspace"`
 - [ ] `updatedAt` changed
@@ -68,6 +72,7 @@ curl -s -X DELETE http://localhost:4111/api/stored/workspaces/smoke-test-workspa
 ```
 
 **Verify:**
+
 - [ ] Returns success (200/204)
 - [ ] `GET /stored/workspaces/smoke-test-workspace` now returns 404
 

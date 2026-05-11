@@ -1,47 +1,86 @@
 # Setup
 
-Verify the examples/agent dev server is running and the builder is configured correctly.
+Verify the `examples/agent` dev server is running and the builder is configured correctly.
 
 ## Steps
 
-### 1. Server Health Check
+### 0. Preflight — env vars
+
+Before starting the server, run preflight. It checks the four standard
+locations (shell env → `$BUILDER_SMOKE_RC` rc file → `examples/agent/.env`
+→ repo-root `.env*`) and exits non-zero if anything required is missing.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}' http://localhost:4111
-# Expected: 200
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh
 ```
 
-If not 200, start the server:
+Required:
+
+- `OPENAI_API_KEY` — `examples/agent` instantiates `OpenAIVoice` at module
+  load. Without a key the server crashes during bundle init, before HTTP
+  ever opens, with: `Error: No API key provided for speech model` from
+  `voice/openai/dist/index.js`.
+
+Recommended for non-auth runs:
+
+- `MASTRA_FGA_ENABLED=false` — if `AUTH_PROVIDER=workos` is set (it usually
+  is in `examples/agent/.env`), FGA auto-enables and throws `FGADeniedError`
+  on tool execution. Preflight warns about this exact combination.
+
+If preflight reports missing vars, fix them and re-run before continuing.
+Don't proceed assuming "the server might still start" — it won't.
+
+### 1. Zombie port check
+
+`mastra dev` auto-increments past `:4111` if it's busy (`:4112`, `:4113`…).
+If you don't catch this, every subsequent `curl` hits the wrong server.
+
+```bash
+lsof -i :4111
+# If a node/mastra process is listening from an earlier session, kill it:
+kill $(lsof -ti :4111) 2>/dev/null || true
+```
+
+### 2. Start the dev server
+
+`examples/agent/package.json` has **no `dev` script**. Use `mastra:dev`
+(server only) or `dev:ui` (server + playground). For smoke tests, prefer
+`mastra:dev` and use whichever browser tool the harness has wired up.
 
 ```bash
 cd examples/agent
-pnpm dev
+pnpm mastra:dev
 ```
 
-Wait for readiness (poll until 200):
+### 3. Wait for readiness
+
+The SPA shell at `/` can 200 before the API is mounted. Probe `/api/agents`
+instead — `wait-for-server.sh` handles this and also detects the
+port-bumped case.
 
 ```bash
-for i in {1..60}; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4111 || true)
-  [ "$code" = "200" ] && echo "Ready" && break
-  sleep 1
-done
+bash .claude/skills/builder-smoke-test/scripts/wait-for-server.sh
 ```
 
-### 2. Builder Settings
+If it reports the server is on `:4112`+ instead of `:4111`, stop, free the
+port, and restart — running on a non-default port will silently break the
+rest of the smoke (every curl in every reference assumes `:4111`).
+
+### 4. Builder settings
 
 ```bash
 curl -s http://localhost:4111/api/editor/builder/settings | jq .
 ```
 
 **Verify:**
+
 - [ ] Response contains `configuration.agent.workspace` with `type: "id"` and a `workspaceId`
 - [ ] Response contains `features` object (check for `skills: true`)
 - [ ] Response contains `models` or `modelPolicy` (allowed providers/models)
 
 Record the `workspaceId` — this is the **builder workspace ID** used in all subsequent tests.
 
-### 3. Baseline State
+### 5. Baseline state
 
 Record what already exists:
 
@@ -58,13 +97,14 @@ curl -s http://localhost:4111/api/stored/skills | jq '.skills | length'
 
 Note these counts — they help distinguish pre-existing entities from test-created ones.
 
-### 4. Builder Workspace Exists
+### 6. Builder workspace exists
 
 ```bash
 curl -s http://localhost:4111/api/stored/workspaces/<workspaceId> | jq .
 ```
 
 **Verify:**
+
 - [ ] Workspace exists in DB (not 404)
 - [ ] `metadata.source` is `"builder"`
 - [ ] `runtimeRegistered` is `true`
@@ -75,7 +115,10 @@ If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't 
 
 ## Checklist
 
-- [ ] Server responds 200
+- [ ] Preflight passes (all required vars present)
+- [ ] Port `:4111` is free, or the zombie has been killed
+- [ ] Server started with `pnpm mastra:dev`
+- [ ] `wait-for-server.sh` reports ready on `:4111` (not `:4112`+)
 - [ ] Builder settings endpoint returns valid config
 - [ ] Builder workspace exists in DB with correct metadata
 - [ ] Baseline entity counts recorded

@@ -15,23 +15,23 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 
 **Do not skip sections unless you hit an actual blocker.** "Seemed complex" or "I'll come back to it" are not valid reasons. Attempt every step — only stop when you literally cannot proceed. Report what you tried and what blocked you.
 
-| #   | Section                | Reference                          | When required                                       |
-| --- | ---------------------- | ---------------------------------- | --------------------------------------------------- |
-| 1   | **Setup**              | `references/setup.md`              | Always                                              |
-| 2   | **Workspace**          | `references/workspace.md`          | `--test workspace` or full                          |
-| 3   | **Reconciliation**     | `references/reconciliation.md`     | `--test reconciliation` or full (long-running, optional during quick smoke) |
-| 4   | **Defaults**           | `references/defaults.md`           | `--test defaults` or full                           |
-| 5   | **Model Policy**       | `references/model-policy.md`       | `--test model-policy` or full                       |
-| 6   | **Skills**             | `references/skills.md`             | `--test skills` or full                             |
-| 7   | **Registry**           | `references/registry.md`           | `--test registry` or full                           |
-| 8   | **Agents**             | `references/agents.md`             | `--test agents` or full                             |
-| 9   | **Picker Allowlists**  | `references/picker-allowlist.md`   | `--test pickers` or full                            |
-| 10  | **Stars**              | `references/stars.md`              | `--test stars` or full                              |
-| 11  | **Permissions / RBAC** | `references/permissions.md`        | `--test permissions` or full                        |
-| 12  | **Infrastructure**     | `references/infrastructure.md`     | `--test infrastructure` or full                     |
-| 13  | **Channels**           | `references/channels.md`           | `--test channels` or full                           |
-| 14  | **UI**                 | `references/ui.md`                 | `--test ui` or full                                 |
-| 15  | **Auth**               | `references/auth.md`               | `--test auth` or `--auth on`                        |
+| #   | Section                | Reference                        | When required                                                               |
+| --- | ---------------------- | -------------------------------- | --------------------------------------------------------------------------- |
+| 1   | **Setup**              | `references/setup.md`            | Always                                                                      |
+| 2   | **Workspace**          | `references/workspace.md`        | `--test workspace` or full                                                  |
+| 3   | **Reconciliation**     | `references/reconciliation.md`   | `--test reconciliation` or full (long-running, optional during quick smoke) |
+| 4   | **Defaults**           | `references/defaults.md`         | `--test defaults` or full                                                   |
+| 5   | **Model Policy**       | `references/model-policy.md`     | `--test model-policy` or full                                               |
+| 6   | **Skills**             | `references/skills.md`           | `--test skills` or full                                                     |
+| 7   | **Registry**           | `references/registry.md`         | `--test registry` or full                                                   |
+| 8   | **Agents**             | `references/agents.md`           | `--test agents` or full                                                     |
+| 9   | **Picker Allowlists**  | `references/picker-allowlist.md` | `--test pickers` or full                                                    |
+| 10  | **Stars**              | `references/stars.md`            | `--test stars` or full                                                      |
+| 11  | **Permissions / RBAC** | `references/permissions.md`      | `--test permissions` or full                                                |
+| 12  | **Infrastructure**     | `references/infrastructure.md`   | `--test infrastructure` or full                                             |
+| 13  | **Channels**           | `references/channels.md`         | `--test channels` or full                                                   |
+| 14  | **UI**                 | `references/ui.md`               | `--test ui` or full                                                         |
+| 15  | **Auth**               | `references/auth.md`             | `--test auth` or `--auth on`                                                |
 
 ### Execution flow
 
@@ -43,6 +43,7 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 ### Partial testing (`--test`)
 
 If `--test` is provided:
+
 1. Always run **Setup**.
 2. Run only the specified section(s).
 3. Skip everything else.
@@ -53,14 +54,14 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 `--scope` runs a curated group of related sections. Setup is always implied.
 
-| Scope          | Includes                                                  |
-| -------------- | --------------------------------------------------------- |
-| `rbac`         | permissions, auth                                         |
-| `skills`       | skills, registry, defaults                                |
-| `agents`       | agents, pickers, defaults, model-policy                   |
-| `infra`        | infrastructure, channels, reconciliation                  |
-| `ui`           | ui                                                        |
-| `quick`        | workspace, skills, agents, stars, ui (skips long-running) |
+| Scope    | Includes                                                  |
+| -------- | --------------------------------------------------------- |
+| `rbac`   | permissions, auth                                         |
+| `skills` | skills, registry, defaults                                |
+| `agents` | agents, pickers, defaults, model-policy                   |
+| `infra`  | infrastructure, channels, reconciliation                  |
+| `ui`     | ui                                                        |
+| `quick`  | workspace, skills, agents, stars, ui (skips long-running) |
 
 `--scope` and `--test` can be combined; the union is run.
 
@@ -94,44 +95,73 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 ## Parameters
 
-| Parameter           | Description                                                                                                  | Default              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------- |
-| `--test`            | Comma-separated section names (see table above).                                                             | (all sections)       |
-| `--scope`           | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.      | (none)               |
-| `--auth`            | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set.   | `auto`               |
-| `--fixtures-reset`  | Stop the dev server, wipe `examples/agent/mastra.db`, restart, restore the seeded public skills.             | `false`              |
-| `--clean`           | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                   | `false`              |
-| `--skip-browser`    | Run only API/`curl` checks. UI section is skipped.                                                           | `false`              |
+| Parameter          | Description                                                                                                | Default        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- | -------------- |
+| `--test`           | Comma-separated section names (see table above).                                                           | (all sections) |
+| `--scope`          | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.    | (none)         |
+| `--auth`           | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set. | `auto`         |
+| `--fixtures-reset` | Stop the dev server, wipe `examples/agent/mastra.db`, restart, restore the seeded public skills.           | `false`        |
+| `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                 | `false`        |
+| `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                         | `false`        |
 
 If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-skipped and reported as `⏭️ Skipped (no WORKOS_* env vars)`.
 
 ## Prerequisites
 
 - Working tree on the agent-builder feature branch.
-- `OPENAI_API_KEY` set (the example agent requires it at startup).
+- `OPENAI_API_KEY` set. `examples/agent` instantiates `OpenAIVoice` at module load — without a key the server crashes inside `OpenAIVoice` (`voice/openai/dist/index.js`: `Error: No API key provided for speech model`) before HTTP ever opens.
+- For non-auth runs, set `MASTRA_FGA_ENABLED=false` whenever `AUTH_PROVIDER=workos` is also set (FGA auto-enables in that combo and throws `FGADeniedError` on tool calls).
 - Optional: `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_ORGANIZATION_ID` for auth tests.
 - Optional: `BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID` if the registered browser provider is Stagehand/Browserbase.
 - Whichever browser MCP/tool the harness has access to. If neither is available, run with `--skip-browser` and report UI as `⏭️ Skipped (no browser tool)`.
 
-### Known auth gotcha
+### Env-var resolution order
 
-Setting `AUTH_PROVIDER=workos` auto-enables FGA, which throws `FGADeniedError` on tool execution. If you hit FGA errors during a non-auth run, set `MASTRA_FGA_ENABLED=false` in `examples/agent/.env` or unset `AUTH_PROVIDER` for the run.
+The smoke scripts (`preflight.sh`, `auth-detect.sh`) look for each variable in this order, first non-empty wins. They never mutate your environment.
+
+1. Already-exported shell env (`echo $VAR`).
+2. `$BUILDER_SMOKE_RC` — optional path to a personal rc file (e.g. `~/.config/mastra/builder-smoke.env`). Keeps team-specific secrets out of `examples/agent/.env`.
+3. `examples/agent/.env`.
+4. Repo-root `.env`, then `.env.local`.
+
+If you keep keys in `~/.zshrc` or a personal rc, either export them in your shell before running, or point `BUILDER_SMOKE_RC` at a sourceable file:
+
+```bash
+export BUILDER_SMOKE_RC="$HOME/.config/mastra/builder-smoke.env"
+```
+
+Run preflight to see exactly which vars are missing and where each found one came from:
+
+```bash
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+```
+
+Preflight is non-mutating. It exits non-zero if any required var is missing; fix it and re-run before continuing.
 
 ## Starting the dev server
 
 If the server is not running on `:4111`, the Setup section starts it. The convenience helpers live under `scripts/`:
 
 ```bash
-# Poll until :4111 responds 200 (60s budget)
+# Preflight env vars (exits non-zero if anything required is missing)
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+
+# Start the server — NOTE: examples/agent has no `pnpm dev`. Use mastra:dev.
+cd examples/agent
+pnpm mastra:dev
+
+# Poll /api/agents until 200 (60s budget). Detects mastra dev's port-bump.
 bash .claude/skills/builder-smoke-test/scripts/wait-for-server.sh
 
-# Detect auth state from env vars
+# Detect auth state from env vars (respects $BUILDER_SMOKE_RC + project .env files)
 bash .claude/skills/builder-smoke-test/scripts/auth-detect.sh
 # → prints `auth=on` or `auth=off`
 
 # Reset fixtures (only if --fixtures-reset is set)
 bash .claude/skills/builder-smoke-test/scripts/fixtures-reset.sh
 ```
+
+`wait-for-server.sh` probes `/api/agents` — not `/` — because the SPA shell can return 200 before the API mounts. If it reports the server is up on `:4112`+ instead of `:4111`, `mastra dev` fell through to the next port; stop, free `:4111`, and restart. Continuing on a non-default port silently breaks every curl in every reference.
 
 ## API base URL
 
@@ -143,37 +173,37 @@ BASE=http://localhost:4111/api
 
 ## Quick reference: key endpoints
 
-| Surface             | Endpoint                                                                                  |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| Builder settings    | `GET /editor/builder/settings`                                                            |
-| Builder infra       | `GET /editor/builder/infrastructure`                                                      |
-| Registries (list)   | `GET /editor/builder/registries`                                                          |
-| Registry search     | `GET /editor/builder/registries/:registryId/search?q=…`                                   |
-| Registry popular    | `GET /editor/builder/registries/:registryId/popular`                                      |
-| Registry preview    | `GET /editor/builder/registries/:registryId/preview?repository=…&skillName=…`             |
-| Registry install    | `POST /editor/builder/registries/:registryId/install`                                     |
-| Workspace CRUD      | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                                          |
-| Agent CRUD          | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                                              |
-| Agent star          | `PUT / DELETE /stored/agents/:id/star`                                                    |
-| Agent avatar        | `POST /stored/agents/:id/avatar` (owner-only)                                             |
-| Skill CRUD          | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                                              |
-| Skill publish       | `POST /stored/skills/:id/publish`                                                         |
-| Skill star          | `PUT / DELETE /stored/skills/:id/star`                                                    |
-| Role preview header | `X-Mastra-Role-Preview: <role>` (admin-only; see `references/permissions.md`)             |
-| Auth refresh        | `POST /auth/refresh`                                                                      |
+| Surface             | Endpoint                                                                      |
+| ------------------- | ----------------------------------------------------------------------------- |
+| Builder settings    | `GET /editor/builder/settings`                                                |
+| Builder infra       | `GET /editor/builder/infrastructure`                                          |
+| Registries (list)   | `GET /editor/builder/registries`                                              |
+| Registry search     | `GET /editor/builder/registries/:registryId/search?q=…`                       |
+| Registry popular    | `GET /editor/builder/registries/:registryId/popular`                          |
+| Registry preview    | `GET /editor/builder/registries/:registryId/preview?repository=…&skillName=…` |
+| Registry install    | `POST /editor/builder/registries/:registryId/install`                         |
+| Workspace CRUD      | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                              |
+| Agent CRUD          | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                                  |
+| Agent star          | `PUT / DELETE /stored/agents/:id/star`                                        |
+| Agent avatar        | `POST /stored/agents/:id/avatar` (owner-only)                                 |
+| Skill CRUD          | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                                  |
+| Skill publish       | `POST /stored/skills/:id/publish`                                             |
+| Skill star          | `PUT / DELETE /stored/skills/:id/star`                                        |
+| Role preview header | `X-Mastra-Role-Preview: <role>` (admin-only; see `references/permissions.md`) |
+| Auth refresh        | `POST /auth/refresh`                                                          |
 
 ## Builder Studio routes
 
-| Feature                | Route                                |
-| ---------------------- | ------------------------------------ |
-| Agent Builder shell    | `/agent-builder`                     |
-| Agents (default view)  | `/agent-builder`                     |
-| Agent detail / edit    | `/agent-builder/agents/:id`          |
-| Skills                 | `/agent-builder/skills`              |
-| Library (public skills)| `/agent-builder/library`             |
-| Skill detail           | `/agent-builder/skills/:id`          |
-| Workspaces             | `/agent-builder/workspaces`          |
-| Infrastructure (admin) | `/agent-builder/infrastructure`      |
+| Feature                 | Route                           |
+| ----------------------- | ------------------------------- |
+| Agent Builder shell     | `/agent-builder`                |
+| Agents (default view)   | `/agent-builder`                |
+| Agent detail / edit     | `/agent-builder/agents/:id`     |
+| Skills                  | `/agent-builder/skills`         |
+| Library (public skills) | `/agent-builder/library`        |
+| Skill detail            | `/agent-builder/skills/:id`     |
+| Workspaces              | `/agent-builder/workspaces`     |
+| Infrastructure (admin)  | `/agent-builder/infrastructure` |
 
 Mobile renders a bottom-bar with the same primary entries.
 
@@ -196,23 +226,23 @@ After testing, provide:
 **Server**: examples/agent @ localhost:4111
 **Auth**: on / off / auto-skipped
 
-| #  | Section            | Status | Notes                          |
-| -- | ------------------ | ------ | ------------------------------ |
-| 1  | Setup              | ✅/❌  |                                |
-| 2  | Workspace          | ✅/❌  |                                |
-| 3  | Reconciliation     | ✅/❌/⏭️ |                                |
-| 4  | Defaults           | ✅/❌  |                                |
-| 5  | Model Policy       | ✅/❌  |                                |
-| 6  | Skills             | ✅/❌  |                                |
-| 7  | Registry           | ✅/❌  |                                |
-| 8  | Agents             | ✅/❌  |                                |
-| 9  | Pickers            | ✅/❌  |                                |
-| 10 | Stars              | ✅/❌  |                                |
-| 11 | Permissions / RBAC | ✅/❌  |                                |
-| 12 | Infrastructure     | ✅/❌  |                                |
-| 13 | Channels           | ✅/❌  |                                |
-| 14 | UI                 | ✅/❌/⏭️ |                                |
-| 15 | Auth               | ✅/❌/⏭️ | (skipped if no WORKOS_* vars)  |
+| #   | Section            | Status   | Notes                           |
+| --- | ------------------ | -------- | ------------------------------- |
+| 1   | Setup              | ✅/❌    |                                 |
+| 2   | Workspace          | ✅/❌    |                                 |
+| 3   | Reconciliation     | ✅/❌/⏭️ |                                 |
+| 4   | Defaults           | ✅/❌    |                                 |
+| 5   | Model Policy       | ✅/❌    |                                 |
+| 6   | Skills             | ✅/❌    |                                 |
+| 7   | Registry           | ✅/❌    |                                 |
+| 8   | Agents             | ✅/❌    |                                 |
+| 9   | Pickers            | ✅/❌    |                                 |
+| 10  | Stars              | ✅/❌    |                                 |
+| 11  | Permissions / RBAC | ✅/❌    |                                 |
+| 12  | Infrastructure     | ✅/❌    |                                 |
+| 13  | Channels           | ✅/❌    |                                 |
+| 14  | UI                 | ✅/❌/⏭️ |                                 |
+| 15  | Auth               | ✅/❌/⏭️ | (skipped if no WORKOS\_\* vars) |
 
 **Issues found**: (list any)
 **Regressions**: (list any behavioral changes from a previous run)

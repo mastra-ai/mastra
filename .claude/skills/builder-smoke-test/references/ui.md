@@ -102,6 +102,7 @@ Navigate to the agent create or edit page.
 - [ ] Selecting a model updates the agent config
 
 Example verification:
+
 - If builder config allows `{ provider: 'openai' }` (wildcard), all OpenAI models should appear
 - If builder config allows `{ provider: 'anthropic', modelId: 'claude-opus-4-7' }`, only that specific model should appear
 

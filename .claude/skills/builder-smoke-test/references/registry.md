@@ -154,6 +154,7 @@ curl -s -X DELETE "$BASE/stored/skills/$INSTALLED_SKILL_ID" | jq .
 ## Checklist
 
 ### skills.sh
+
 - [ ] Registries list reflects enabled flag
 - [ ] Search returns results
 - [ ] Popular returns results
@@ -164,6 +165,7 @@ curl -s -X DELETE "$BASE/stored/skills/$INSTALLED_SKILL_ID" | jq .
 - [ ] Origin badge renders on installed skill
 
 ### Library Copy
+
 - [ ] Library page shows non-owned public skills
 - [ ] Copy button visible for non-owners
 - [ ] Copy produces a private skill with `library-copy` origin

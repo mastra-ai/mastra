@@ -15,7 +15,7 @@ curl -s "$BASE/editor/builder/settings" | jq '.features // .agent.features'
 ```
 
 - [ ] `tools`, `agents`, `workflows`, `skills`, `model`, `browser`, `stars` all `true`
-  (matches `examples/agent` config)
+      (matches `examples/agent` config)
 
 ### 2. Tool picker reflects registered tools
 

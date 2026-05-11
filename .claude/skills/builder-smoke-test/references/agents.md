@@ -21,6 +21,7 @@ curl -s -X POST http://localhost:4111/api/stored/agents \
 ```
 
 **Verify:**
+
 - [ ] Returns 200/201 with the created agent
 - [ ] `name` matches
 - [ ] `workspaceId` is auto-assigned to the builder workspace (from config)

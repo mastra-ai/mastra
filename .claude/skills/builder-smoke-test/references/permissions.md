@@ -4,12 +4,12 @@ Verify role-based gating across Studio and Agent Builder. Covers route-level RBA
 
 ## Default roles
 
-| Role    | Powers (summary)                                              |
-| ------- | ------------------------------------------------------------- |
-| viewer  | `*:read`                                                      |
-| member  | `*:read`, `*:execute`                                         |
-| admin   | `*:read`, `*:write`, `*:execute`, `*:publish`, `*:share`      |
-| owner   | `*`                                                           |
+| Role   | Powers (summary)                                         |
+| ------ | -------------------------------------------------------- |
+| viewer | `*:read`                                                 |
+| member | `*:read`, `*:execute`                                    |
+| admin  | `*:read`, `*:write`, `*:execute`, `*:publish`, `*:share` |
+| owner  | `*`                                                      |
 
 Public stored skills/agents short-circuit read checks (see authorship.ts). Auth disabled bypasses role checks entirely.
 

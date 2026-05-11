@@ -18,6 +18,7 @@ curl -s -X POST http://localhost:4111/api/stored/skills \
 ```
 
 **Verify:**
+
 - [ ] Returns 200/201 with the created skill
 - [ ] `name` matches
 - [ ] `workspaceId` is set to the builder workspace ID

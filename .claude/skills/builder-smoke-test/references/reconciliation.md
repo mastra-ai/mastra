@@ -7,6 +7,7 @@ These tests require server restarts and config changes, so they're more involved
 ## Background
 
 On startup, `ensureBuilderWorkspaces()`:
+
 1. Reads the builder config's `workspace` field
 2. Resolves the referenced `Workspace` instance from the Mastra constructor
 3. Snapshots the workspace config (name, filesystem, sandbox)
