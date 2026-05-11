@@ -71,10 +71,10 @@ export function AgentPlaygroundVersionBar({
 
   const { data } = useAgentVersions({
     agentId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
-  const versions = data?.versions ?? [];
+  const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const latestVersion = versions[0];
 
   const activeVersion = activeVersionId ? versions.find(v => v.id === activeVersionId) : undefined;
