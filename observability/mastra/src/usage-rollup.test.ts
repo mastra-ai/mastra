@@ -194,12 +194,12 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     visibleAgent.end();
     await tracing.flush();
 
-    const ended = exporter.endedSpans();
-    const exportedAgent = ended.find(s => (s.entityType === undefined ? false : true)) ?? ended[0];
     // The user-visible AGENT_RUN should be the sole exported span and carry the rolled-up usage.
+    const ended = exporter.endedSpans();
     expect(ended).toHaveLength(1);
-    expect(exportedAgent!.type).toBe(SpanType.AGENT_RUN);
-    const attrs = exportedAgent!.attributes as { internalUsage?: { inputTokens?: number; outputTokens?: number } };
+    const exportedAgent = ended[0]!;
+    expect(exportedAgent.type).toBe(SpanType.AGENT_RUN);
+    const attrs = exportedAgent.attributes as { internalUsage?: { inputTokens?: number; outputTokens?: number } };
     expect(attrs.internalUsage).toEqual({ inputTokens: 7, outputTokens: 3 });
   });
 
@@ -266,6 +266,71 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     expect(outputMetric).toBeDefined();
     expect(outputMetric!.metric.correlationContext.entityId).toBe('moderation');
     expect(outputMetric!.metric.value).toBe(25);
+  });
+
+  it('walks past ancestors filtered by excludeSpanTypes', async () => {
+    // A non-internal ancestor that matches `excludeSpanTypes` wouldn't reach
+    // exporters either — picking it as the rollup target would silently lose
+    // the `internalUsage` attribute. The walk must keep going.
+    const localExporter = new CollectingExporter();
+    const localTracing = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'test-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      excludeSpanTypes: [SpanType.PROCESSOR_RUN],
+      exporters: [localExporter],
+    });
+
+    const visibleAgent = localTracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'agent run: user-agent',
+      entityName: 'User Agent',
+      entityId: 'user-agent',
+    });
+    // PROCESSOR_RUN is dropped by excludeSpanTypes — must be skipped during rollup.
+    const excludedProcessor = visibleAgent.createChildSpan({
+      type: SpanType.PROCESSOR_RUN,
+      name: 'input processor: moderation',
+    });
+    const hiddenAgent = excludedProcessor.createChildSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'agent run: content-moderator',
+      tracingPolicy: { internal: InternalSpans.ALL },
+    });
+    const hiddenModel = hiddenAgent.createChildSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: "llm: 'mock'",
+      tracingPolicy: { internal: InternalSpans.ALL },
+    });
+
+    hiddenModel.end({
+      attributes: {
+        provider: 'mock-provider',
+        model: 'mock-model-id',
+        usage: { inputTokens: 42, outputTokens: 9 },
+      },
+    });
+    hiddenAgent.end();
+    excludedProcessor.end();
+    visibleAgent.end();
+    await localTracing.flush();
+
+    // PROCESSOR_RUN is dropped; the rollup landed on the AGENT_RUN above it
+    // so both attribute and metric attribution reach an exported span.
+    const ended = localExporter.endedSpans();
+    expect(ended.some(s => s.type === SpanType.PROCESSOR_RUN)).toBe(false);
+    const exportedAgent = ended.find(s => s.type === SpanType.AGENT_RUN)!;
+    expect(exportedAgent).toBeDefined();
+    expect((exportedAgent.attributes as { internalUsage?: { inputTokens?: number } }).internalUsage).toEqual({
+      inputTokens: 42,
+      outputTokens: 9,
+    });
+
+    const inputMetric = localExporter.metricEvents.find(e => e.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputMetric).toBeDefined();
+    expect(inputMetric!.metric.correlationContext.entityId).toBe('user-agent');
+
+    await localTracing.shutdown();
   });
 
   it('does not roll up when includeInternalSpans is true', async () => {

@@ -735,8 +735,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (!span.isInternal || this.config.includeInternalSpans) return undefined;
 
     // For excluded spans, end() options carry the only copy of attributes —
-    // the live span discards them. Read from there first, falling back to
-    // any prior values that survived an earlier update().
+    // the live span discards them in DefaultSpan#end. The liveAttrs fallback
+    // is dead for the default implementation but kept for non-DefaultSpan
+    // Span implementations that might preserve attributes on excluded spans.
     const endAttrs = (endOptions?.attributes as ModelGenerationAttributes | undefined) ?? undefined;
     const liveAttrs = span.attributes as ModelGenerationAttributes | undefined;
     const usage = endAttrs?.usage ?? liveAttrs?.usage;
@@ -760,13 +761,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private applyUsageRollup(target: { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string }): void {
     const { ancestor, usage, provider, model } = target;
 
-    // Mutate the live ancestor's attributes; export reads this object later.
-    // Ancestor is non-internal so its attributes weren't discarded at end-
-    // time-drop, and ancestor hasn't ended yet (we're inside a descendant's
-    // end()), so direct mutation is safe.
-    const attrs = (ancestor.attributes ?? {}) as { internalUsage?: UsageStats };
+    // Mutate the live ancestor's attributes directly. BaseSpan's constructor
+    // guarantees `attributes` is always at least `{}` (see spans/base.ts),
+    // and the ancestor hasn't ended yet (we're inside a descendant's end()),
+    // so the export will pick up the mutated field.
+    const attrs = ancestor.attributes as { internalUsage?: UsageStats };
     attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
-    (ancestor as { attributes: unknown }).attributes = attrs;
 
     try {
       emitTokenMetricsForUsage(usage, provider, model, this.getMetricsContext(ancestor));
@@ -776,16 +776,33 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Walk up the parent chain to find the closest ancestor that won't be
-   * filtered by internal-span filtering. Returns undefined when every
-   * ancestor is internal-and-filtered.
+   * Walk up the parent chain to find the closest ancestor that will actually
+   * reach exporters. Skips both internal-filtered ancestors and ancestors
+   * whose type matches `excludeSpanTypes`, so the rollup target is one whose
+   * mutated `internalUsage` attribute is visible in exported traces.
+   *
+   * Note: this does not preemptively run `spanFilter` — that filter can be
+   * async and have side effects, so the rare case of a `spanFilter`-dropped
+   * ancestor falls through.
    */
   private findExportedAncestor(span: AnySpan): AnySpan | undefined {
     let ancestor: AnySpan | undefined = span.parent;
-    while (ancestor && ancestor.isInternal && !this.config.includeInternalSpans) {
+    while (ancestor && this.isFilteredFromExport(ancestor)) {
       ancestor = ancestor.parent;
     }
     return ancestor;
+  }
+
+  /**
+   * Returns true when a span would be dropped by `getSpanForExport` for a
+   * reason cheap to check up-front (internal-span filtering or
+   * `excludeSpanTypes`). Used by `findExportedAncestor` to skip rollup
+   * targets that would silently lose their `internalUsage` attribute.
+   */
+  private isFilteredFromExport(span: AnySpan): boolean {
+    if (span.isInternal && !this.config.includeInternalSpans) return true;
+    if (this.config.excludeSpanTypes?.includes(span.type)) return true;
+    return false;
   }
 
   /**
