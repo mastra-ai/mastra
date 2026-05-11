@@ -66,10 +66,6 @@ createWorkflowTestSuite({
 
   // Skip only tests that actually fail - updated after BUG fixes 2026-02
   skipTests: {
-    // Validation - evented resolves instead of throwing
-    executionFlowNotDefined: true,
-    executionGraphNotCommitted: true,
-
     // Abort - returns 'success' not 'canceled', timeout on signal wait
     abortStatus: true,
     abortDuringStep: true,

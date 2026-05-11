@@ -2222,6 +2222,7 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
+    'ring-2.6-1t-free',
   ];
   readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly nebius: readonly [

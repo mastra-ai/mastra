@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.9.0-alpha.8",
+  "version": "1.9.0-alpha.10",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -51,8 +51,8 @@
     "devtools"
   ],
   "dependencies": {
-    "@babel/parser": "^7.28.4",
-    "@babel/types": "^7.28.4",
+    "@babel/parser": "^7.29.3",
+    "@babel/types": "^7.29.0",
     "@clack/prompts": "^1.1.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",

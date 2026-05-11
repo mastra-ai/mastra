@@ -1,5 +1,15 @@
 # @mastra/langfuse
 
+## 1.3.0-alpha.3
+
+### Patch Changes
+
+- Scope Langfuse traces to the agent or workflow that started them. See [Scoping evaluators per agent](https://mastra.ai/docs/observability/tracing/exporters/langfuse#scoping-evaluators-per-agent) for more info. ([#16393](https://github.com/mastra-ai/mastra/pull/16393))
+
+- Updated dependencies [[`6a569eb`](https://github.com/mastra-ai/mastra/commit/6a569eb89b006ba4714eeb92019c652ffa30e4e3), [`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/otel-exporter@1.1.0-alpha.3
+  - @mastra/core@1.33.0-alpha.9
+
 ## 1.3.0-alpha.2
 
 ### Patch Changes

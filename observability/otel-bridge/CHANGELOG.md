@@ -1,5 +1,34 @@
 # @mastra/otel-bridge
 
+## 1.1.0-alpha.3
+
+### Minor Changes
+
+- Added log forwarding to `@mastra/otel-bridge`. The bridge now also subscribes to Mastra log events and forwards them to the globally-registered OpenTelemetry `LoggerProvider`, alongside the spans it already creates. ([#13529](https://github.com/mastra-ai/mastra/pull/13529))
+
+  Logs that originate inside a Mastra span are emitted under that span's OTEL context, so backends like Datadog, Grafana, and Honeycomb correlate them with the surrounding trace automatically. Logs without trace context fall through to the currently active OTEL context.
+
+  To wire up logs alongside traces, register a `logRecordProcessor` on `NodeSDK`:
+
+  ```ts
+  import { NodeSDK } from '@opentelemetry/sdk-node';
+  import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+  import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+
+  const sdk = new NodeSDK({
+    // ...trace config as usual
+    logRecordProcessor: new BatchLogRecordProcessor(new OTLPLogExporter()),
+  });
+  ```
+
+  If no `LoggerProvider` is registered, log emission is a silent no-op — traces continue to work as configured.
+
+### Patch Changes
+
+- Updated dependencies [[`6a569eb`](https://github.com/mastra-ai/mastra/commit/6a569eb89b006ba4714eeb92019c652ffa30e4e3), [`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/otel-exporter@1.1.0-alpha.3
+  - @mastra/core@1.33.0-alpha.9
+
 ## 1.0.23-alpha.2
 
 ### Patch Changes

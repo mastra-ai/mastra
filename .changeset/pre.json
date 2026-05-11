@@ -149,6 +149,7 @@
     "busy-doodles-begin",
     "cache-metrics-harness-token-usage",
     "calm-cycles-wave",
+    "chubby-bars-behave",
     "common-kiwis-post",
     "curly-cougars-dress",
     "dark-rooms-build",
@@ -183,6 +184,7 @@
     "huge-papers-rest",
     "inngest-deployment-non-api-path",
     "jolly-rules-shout",
+    "langfuse-scope-trace-per-agent",
     "large-yaks-battle",
     "late-turtles-flow",
     "lazy-crews-itch",
@@ -193,6 +195,7 @@
     "loud-ads-double",
     "loud-dogs-repair",
     "lovely-shrimps-call",
+    "many-pans-call",
     "mastracode-16126-dependencies",
     "mastracode-gateway-sync-delegation",
     "mastracode-tokenx",
@@ -236,6 +239,7 @@
     "social-shirts-sort",
     "solid-snakes-double",
     "some-humans-follow",
+    "some-seas-speak",
     "some-turtles-write",
     "sour-owls-beam",
     "sour-seas-fix",
@@ -257,6 +261,7 @@
     "wicked-experts-care",
     "wise-terms-smell",
     "worker-cli-subcommands",
-    "worker-review-fixes"
+    "worker-review-fixes",
+    "workflow-scorers-register"
   ]
 }

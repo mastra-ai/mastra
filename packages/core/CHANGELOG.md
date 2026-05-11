@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.33.0-alpha.9
+
+### Minor Changes
+
+- Configured workflow step scorers now automatically emit scores through the observability score pipeline. ([#16371](https://github.com/mastra-ai/mastra/pull/16371))
+
 ## 1.33.0-alpha.8
 
 ### Minor Changes
