@@ -70,6 +70,8 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     if (!runId && !initialRunId) {
       closeStreamsAndReset();
     }
+    // Only react to run identity changes. `closeStreamsAndReset` comes from context
+    // and is intentionally excluded to avoid refiring on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, initialRunId]);
 
@@ -80,7 +82,10 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     }
   }, [error]);
 
-  // Auto-switch tabs when step detail opens/closes
+  // Auto-switch tabs when step detail opens/closes.
+  // `tab` is read but intentionally excluded from deps — including it would refire
+  // on every manual tab change and fight user navigation. We only want to react
+  // to stepDetail transitions.
   useEffect(() => {
     if (stepDetail) {
       setTab('node-details');

@@ -34,7 +34,6 @@ describe('ScrollArea', () => {
       const content = getContent(getViewport());
       expect(content.style.minWidth).toBe('0px');
     });
-
   });
 
   describe('orientation="horizontal"', () => {
@@ -50,7 +49,6 @@ describe('ScrollArea', () => {
       const content = getContent(getViewport());
       expect(content.style.minHeight).toBe('0px');
     });
-
   });
 
   describe('orientation="both"', () => {

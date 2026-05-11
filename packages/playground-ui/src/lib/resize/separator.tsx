@@ -9,10 +9,7 @@ export const PanelSeparator = () => {
         'focus:outline-hidden focus-visible:outline-hidden',
       )}
     >
-      <span
-        aria-hidden
-        className={cn('absolute inset-y-0 -left-1 -right-1', 'cursor-col-resize touch-none')}
-      >
+      <span aria-hidden className={cn('absolute inset-y-0 -left-1 -right-1', 'cursor-col-resize touch-none')}>
         <span
           className={cn(
             'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2',

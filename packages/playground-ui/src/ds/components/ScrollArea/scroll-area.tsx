@@ -118,7 +118,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
         <ScrollAreaPrimitive.Viewport
           ref={areaRef}
           className={cn('h-full w-full rounded-[inherit]', maskClasses(sides), viewPortClassName)}
-          style={Object.keys(viewportStyle).length > 0 ? viewportStyle : undefined}
+          style={viewportStyle}
         >
           <ScrollAreaPrimitive.Content style={contentStyle}>{children}</ScrollAreaPrimitive.Content>
         </ScrollAreaPrimitive.Viewport>

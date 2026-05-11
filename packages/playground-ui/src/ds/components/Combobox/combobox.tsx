@@ -14,6 +14,14 @@ export type ComboboxOption = {
   end?: React.ReactNode;
 };
 
+export type ComboboxVariant = 'default' | 'ghost' | 'link';
+
+const triggerVariantStyles: Record<ComboboxVariant, string> = {
+  default: comboboxStyles.triggerDefault,
+  ghost: comboboxStyles.triggerGhost,
+  link: comboboxStyles.triggerLink,
+};
+
 export type ComboboxProps = {
   options: ComboboxOption[];
   value?: string;
@@ -23,7 +31,7 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'ghost' | 'link';
+  variant?: ComboboxVariant;
   size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -68,11 +76,7 @@ export function Combobox({
         <BaseCombobox.Trigger
           className={cn(
             comboboxStyles.trigger,
-            variant === 'ghost'
-              ? comboboxStyles.triggerGhost
-              : variant === 'link'
-                ? comboboxStyles.triggerLink
-                : comboboxStyles.triggerDefault,
+            triggerVariantStyles[variant],
             formElementSizes[size],
             error && comboboxStyles.triggerError,
             className,

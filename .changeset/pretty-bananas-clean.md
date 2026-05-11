@@ -4,7 +4,7 @@
 
 **Added** new `pill-ghost` variant on `Tabs` and `sticky` prop on `TabList` for sticky tab headers.
 
-**Added** `variant` prop on `Combobox` (`default`, `ghost`, `link`) for flexible trigger styling.
+**Added** `variant` prop on `Combobox` (`default`, `ghost`, `link`) for flexible trigger styling. Note: this prop existed previously but was a no-op; it now actually drives the trigger appearance, so callers passing `variant` will see updated styles.
 
 **Improved** `EntityHeader` layout — title and children now share a single row with wrapping, and padding is tighter for denser headers.
 
