@@ -1457,7 +1457,23 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
-      stepResults = newStepResults;
+      // Persist (and thread forward) any state changes made inside the foreach body.
+      // Each iteration is a separate event in the evented engine, so unless we write
+      // the updated state back here, the next iteration / the step after the foreach
+      // would re-read the stale `__state` from storage instead of `state` (see
+      // resolveCurrentState's priority order). This is what makes setState() inside a
+      // foreach body propagate across iterations.
+      if (currentState) {
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: '__state',
+          result: currentState as any,
+          requestContext,
+        });
+      }
+
+      stepResults = { ...newStepResults, __state: currentState };
 
       // For foreach iterations, check if all iterations are complete before emitting events
       // This prevents emitting workflow.suspend when only some concurrent iterations have finished
