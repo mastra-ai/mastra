@@ -108,3 +108,65 @@ export const ChatMessages: Story = {
     </ScrollArea>
   ),
 };
+
+const MaskItems = () => (
+  <div className="space-y-3">
+    {Array.from({ length: 20 }).map((_, i) => (
+      <p key={i} className="text-sm text-neutral5">
+        Item {i + 1} — Lorem ipsum dolor sit amet
+      </p>
+    ))}
+  </div>
+);
+
+export const MaskDisabled: Story = {
+  name: 'Mask / disabled',
+  render: () => (
+    <ScrollArea mask={false} className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+      <MaskItems />
+    </ScrollArea>
+  ),
+};
+
+export const MaskTopOnly: Story = {
+  name: 'Mask / top only',
+  render: () => (
+    <ScrollArea mask={{ bottom: false }} className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+      <MaskItems />
+    </ScrollArea>
+  ),
+};
+
+export const MaskBothAxes: Story = {
+  name: 'Mask / both axes (orientation=both)',
+  render: () => (
+    <ScrollArea orientation="both" className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+      <div className="w-[600px] space-y-3">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <p key={i} className="text-sm text-neutral5 whitespace-nowrap">
+            Row {i + 1} — long horizontal content stretching past the viewport for x-axis overflow
+          </p>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
+};
+
+export const MaskYOnly: Story = {
+  name: 'Mask / y axis only (no horizontal fade)',
+  render: () => (
+    <ScrollArea
+      orientation="both"
+      mask={{ x: false }}
+      className="h-[200px] w-[260px] rounded-md border border-border1 p-4"
+    >
+      <div className="w-[600px] space-y-3">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <p key={i} className="text-sm text-neutral5 whitespace-nowrap">
+            Row {i + 1} — long horizontal content
+          </p>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
+};
