@@ -12,6 +12,7 @@ import type {
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   SendAgentSignalOptions,
+  SendAgentSignalResult,
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -44,7 +45,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   runId: string;
   resourceId: string;
   threadId: string;
-  streamOptions: AgentExecutionOptions<OUTPUT>;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
 export class AgentThreadStreamRuntime {
@@ -129,6 +130,20 @@ export class AgentThreadStreamRuntime {
   #notifyThreadRun(record: AgentThreadRunRecord<any>) {
     const key = this.#threadKey(record.resourceId, record.threadId);
     this.#threadRunSubscribers.get(key)?.forEach(listener => listener(record));
+  }
+
+  async #persistSignal(
+    agent: Agent<any, any, any, any>,
+    signal: CreatedAgentSignal,
+    resourceId: string,
+    threadId: string,
+    requestContext?: RequestContext,
+  ) {
+    const memory = await agent.getMemory({ requestContext });
+    if (!memory) return;
+    await memory.saveMessages({
+      messages: [signal.toDBMessage({ resourceId, threadId })],
+    });
   }
 
   registerRun<OUTPUT>(
@@ -218,7 +233,7 @@ export class AgentThreadStreamRuntime {
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
-        memory: withThreadMemory(pendingIdle.streamOptions.memory, pendingIdle.resourceId, pendingIdle.threadId),
+        memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
       });
 
       if ((idleQueue?.length ?? 0) > 0) {
@@ -356,10 +371,12 @@ export class AgentThreadStreamRuntime {
     agent: Agent<any, any, any, any>,
     signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
-  ): { accepted: true; runId: string; signal: CreatedAgentSignal } {
+  ): SendAgentSignalResult {
     const signal = createSignal(signalInput);
     let key: string | undefined;
     let runId = target.runId;
+    const activeBehavior = target.ifActive?.behavior ?? 'deliver';
+    const idleBehavior = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     if (target.resourceId && target.threadId) {
@@ -380,6 +397,30 @@ export class AgentThreadStreamRuntime {
         // id so early follow-ups still attach to the run that is starting.
         runId = activeRunId;
       }
+    }
+
+    const isActiveTarget = Boolean(
+      runId && (activeRecord?.output.status === 'running' || (key && this.#activeThreadRunIds.get(key) === runId)),
+    );
+    const resourceId = target.resourceId ?? activeRecord?.resourceId;
+    const threadId = target.threadId ?? activeRecord?.threadId;
+
+    if (isActiveTarget && activeBehavior !== 'deliver') {
+      if (activeBehavior === 'persist') {
+        if (!resourceId || !threadId) {
+          throw new Error('resourceId and threadId are required to persist an active signal');
+        }
+        const persisted = this.#persistSignal(
+          agent,
+          signal,
+          resourceId,
+          threadId,
+          target.ifIdle?.streamOptions?.requestContext,
+        );
+        void persisted.catch(() => {});
+        return { accepted: true, runId: runId!, signal, persisted };
+      }
+      return { accepted: true, runId: runId!, signal };
     }
 
     if (runId) {
@@ -407,22 +448,32 @@ export class AgentThreadStreamRuntime {
       }
     }
 
-    const resourceId = target.resourceId ?? activeRecord?.resourceId;
-    const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {
-      throw new Error('No active agent run found for signal target');
-    }
-    if (!target.ifIdle) {
       throw new Error('No active agent run found for signal target');
     }
 
     runId = randomUUID();
+    if (idleBehavior !== 'wake') {
+      if (idleBehavior === 'persist') {
+        const persisted = this.#persistSignal(
+          agent,
+          signal,
+          resourceId,
+          threadId,
+          target.ifIdle?.streamOptions?.requestContext,
+        );
+        void persisted.catch(() => {});
+        return { accepted: true, runId, signal, persisted };
+      }
+      return { accepted: true, runId, signal };
+    }
+
     key ??= this.#threadKey(resourceId, threadId);
     if (this.#activeThreadRunIds.has(key)) {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
       const idleQueue = this.#pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle.streamOptions });
+      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
       this.#pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
         this.#watchThreadRunCompletion(key, activeRecord);
@@ -436,9 +487,9 @@ export class AgentThreadStreamRuntime {
     this.#threadKeysByRunId.set(runId, key);
     void agent
       .stream(signal, {
-        ...(target.ifIdle.streamOptions as any),
+        ...(target.ifIdle?.streamOptions as any),
         runId,
-        memory: withThreadMemory(target.ifIdle.streamOptions.memory, resourceId, threadId),
+        memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
       .catch(() => {
         this.#threadKeysByRunId.delete(runId);

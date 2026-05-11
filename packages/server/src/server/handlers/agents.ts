@@ -1598,15 +1598,19 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
     runId,
     resourceId,
     threadId,
-    streamOptions,
+    ifActive,
+    ifIdle,
   }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
-      const ifIdleWithContext: { ifIdle?: { streamOptions: any } } = streamOptions
-        ? { ifIdle: { streamOptions: { ...streamOptions, requestContext: serverRequestContext } } }
-        : {};
+      const ifIdleWithContext = {
+        ifIdle: {
+          ...(ifIdle ?? {}),
+          streamOptions: { ...(ifIdle?.streamOptions ?? {}), requestContext: serverRequestContext } as any,
+        },
+      };
 
       if (effectiveThreadId && effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
@@ -1619,36 +1623,26 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       const agentSignal = signal as AgentSignalInput;
 
       if (runId) {
-        if (streamOptions) {
-          if (!effectiveResourceId || !effectiveThreadId) {
-            throw new HTTPException(400, {
-              message: 'resourceId and threadId are required when streamOptions are provided',
-            });
-          }
-          return agent.sendSignal(agentSignal, {
-            runId,
-            resourceId: effectiveResourceId,
-            threadId: effectiveThreadId,
-            ...ifIdleWithContext,
-          });
-        }
-
-        return agent.sendSignal(agentSignal, {
+        const result = await agent.sendSignal(agentSignal, {
           runId,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
+          ...(ifActive ? { ifActive } : {}),
         });
+        return { accepted: result.accepted, runId: result.runId, signal: result.signal };
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
         throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
       }
 
-      return agent.sendSignal(agentSignal, {
+      const result = await agent.sendSignal(agentSignal, {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
+      return { accepted: result.accepted, runId: result.runId, signal: result.signal };
     } catch (error) {
       return handleError(error, 'error sending agent signal');
     }

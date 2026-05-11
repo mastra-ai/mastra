@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 import {
   createSignal,
@@ -229,7 +230,7 @@ describe('Agent signals', () => {
     });
     const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
 
-    const signalResult = agent.sendSignal(
+    const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Hello from signal' },
       {
         resourceId: 'idle-user',
@@ -246,7 +247,7 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('requires ifIdle stream options before starting an idle thread run', () => {
+  it('starts an idle thread run by default when a thread-targeted signal is sent', async () => {
     const agent = new Agent({
       id: 'idle-signal-without-options-agent',
       name: 'Idle Signal Without Options Agent',
@@ -254,12 +255,106 @@ describe('Agent signals', () => {
       model: createTextStreamModel('signal response'),
     });
 
-    expect(() =>
-      agent.sendSignal(
-        { type: 'user-message', contents: 'Hello from signal' },
-        { resourceId: 'idle-user', threadId: 'idle-thread' },
-      ),
-    ).toThrow('No active agent run found for signal target');
+    const result = await agent.sendSignal(
+      { type: 'user-message', contents: 'Hello from signal' },
+      { resourceId: 'idle-user', threadId: 'idle-thread' },
+    );
+
+    expect(result).toEqual(expect.objectContaining({ accepted: true }));
+  });
+
+  it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
+    let streamCount = 0;
+    const memory = new MockMemory();
+    await memory.createThread({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
+    const agent = new Agent({
+      id: 'idle-persist-agent',
+      name: 'Idle Persist Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+      memory,
+    });
+
+    const result = agent.sendSignal(
+      { type: 'user-message', contents: 'persist without waking' },
+      { resourceId: 'idle-persist-user', threadId: 'idle-persist-thread', ifIdle: { behavior: 'persist' } },
+    );
+    await expect(result.persisted).resolves.toBeUndefined();
+
+    const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
+    expect(streamCount).toBe(0);
+    expect(recalled.messages).toHaveLength(1);
+    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ contents: 'persist without waking' });
+  });
+
+  it('discards an active signal when active behavior is discard', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+
+    const agent = new Agent({
+      id: 'active-discard-agent',
+      name: 'Active Discard Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          streamCount += 1;
+          prompts.push(prompt);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: `discard-${streamCount}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'first response' });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                if (streamCount === 1) {
+                  await firstFinished;
+                }
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'active-discard-thread', resource: 'active-discard-user' },
+    });
+    await agent.sendSignal(
+      { type: 'user-message', contents: 'discard while running' },
+      { resourceId: 'active-discard-user', threadId: 'active-discard-thread', ifActive: { behavior: 'discard' } },
+    );
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('first response');
+    expect(streamCount).toBe(1);
+    expect(JSON.stringify(prompts)).not.toContain('discard while running');
   });
 
   it('supports cross-instance thread subscriptions through the Mastra runtime', async () => {
@@ -293,7 +388,7 @@ describe('Agent signals', () => {
     expect(subscribedRun.value.text).toBe('shared response');
 
     const secondRunPromise = readNextRun(iterator);
-    const signalResult = runner.sendSignal(
+    const signalResult = await runner.sendSignal(
       { type: 'user-message', contents: 'Hello from shared signal' },
       {
         resourceId: 'shared-user',
@@ -372,7 +467,7 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    const signalResult = agent.sendSignal(
+    const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Hello while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
@@ -469,7 +564,7 @@ describe('Agent signals', () => {
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
     await waitForCondition(() => !!releaseReasoningChunk);
 
-    const signalResult = agent.sendSignal(
+    const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Stop reasoning and answer this' },
       { resourceId: 'interleaved-reasoning-user', threadId: 'interleaved-reasoning-thread' },
     );
@@ -527,7 +622,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const runPromise = readNextRun(iterator);
 
-    const firstSignal = agent.sendSignal(
+    const firstSignal = await agent.sendSignal(
       { type: 'user-message', contents: 'start idle stream' },
       {
         resourceId: 'idle-start-user',
@@ -536,7 +631,7 @@ describe('Agent signals', () => {
       },
     );
 
-    const followUp = agent.sendSignal(
+    const followUp = await agent.sendSignal(
       { type: 'user-message', contents: 'thread targeted follow up' },
       {
         resourceId: 'idle-start-user',
@@ -611,7 +706,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
 
     const firstRunPromise = readNextRun(iterator);
-    const firstIdle = agent.sendSignal(
+    const firstIdle = await agent.sendSignal(
       { type: 'user-message', contents: 'start first idle stream' },
       {
         resourceId: 'repeated-idle-user',
@@ -619,7 +714,7 @@ describe('Agent signals', () => {
         ifIdle: { streamOptions: { memory: { resource: 'repeated-idle-user', thread: 'repeated-idle-thread' } } },
       },
     );
-    agent.sendSignal(
+    await agent.sendSignal(
       { type: 'user-message', contents: 'first active interjection' },
       { runId: firstIdle.runId, resourceId: 'repeated-idle-user', threadId: 'repeated-idle-thread' },
     );
@@ -630,7 +725,7 @@ describe('Agent signals', () => {
     expect(JSON.stringify(prompts[0])).toContain('first active interjection');
 
     const secondRunPromise = readNextRun(iterator);
-    const secondIdle = agent.sendSignal(
+    const secondIdle = await agent.sendSignal(
       { type: 'user-message', contents: 'start second idle stream' },
       {
         resourceId: 'repeated-idle-user',
@@ -638,7 +733,7 @@ describe('Agent signals', () => {
         ifIdle: { streamOptions: { memory: { resource: 'repeated-idle-user', thread: 'repeated-idle-thread' } } },
       },
     );
-    agent.sendSignal(
+    await agent.sendSignal(
       { type: 'user-message', contents: 'second active interjection' },
       { runId: secondIdle.runId, resourceId: 'repeated-idle-user', threadId: 'repeated-idle-thread' },
     );
@@ -736,7 +831,7 @@ describe('Agent signals', () => {
     await nextTick();
     expect(firstStarted).toBe(true);
 
-    const signalResult = secondAgent.sendSignal(
+    const signalResult = await secondAgent.sendSignal(
       { type: 'user-message', contents: 'Hello from another agent' },
       {
         resourceId: 'cross-agent-user',
@@ -1015,7 +1110,7 @@ describe('Agent signals', () => {
       model,
     });
 
-    const stream = agent.sendSignal(
+    const stream = await agent.sendSignal(
       { type: 'system-reminder', contents: 'continue', attributes: { reminderType: 'test-reminder' } },
       {
         resourceId: 'system-signal-user',

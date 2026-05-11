@@ -661,8 +661,16 @@ export const observeAgentBodySchema = z.object({
   offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });
 
+const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
+const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
+
 const sendAgentSignalBaseBodySchema = z.object({
   signal: agentSignalSchema,
+  ifActive: z
+    .object({
+      behavior: signalActiveBehaviorSchema.optional(),
+    })
+    .optional(),
 });
 
 export const sendAgentSignalBodySchema = z.union([
@@ -670,13 +678,18 @@ export const sendAgentSignalBodySchema = z.union([
     runId: z.string(),
     resourceId: z.string().optional(),
     threadId: z.string().optional(),
-    streamOptions: z.undefined().optional(),
+    ifIdle: z.undefined().optional(),
   }),
   sendAgentSignalBaseBodySchema.extend({
     runId: z.string().optional(),
     resourceId: z.string(),
     threadId: z.string(),
-    streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+    ifIdle: z
+      .object({
+        behavior: signalIdleBehaviorSchema.optional(),
+        streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+      })
+      .optional(),
   }),
 ]);
 

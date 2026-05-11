@@ -51,6 +51,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
+import type { CreatedAgentSignal } from './signals';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -77,7 +78,22 @@ export type ToolsInput = Record<
 
 export type AgentInstructions = SystemMessage;
 
-export type { AgentSignalInput as AgentSignal, AgentSignalType, AgentSignalDataPart } from './signals';
+export type {
+  AgentSignalInput as AgentSignal,
+  AgentSignalType,
+  AgentSignalDataPart,
+  CreatedAgentSignal,
+} from './signals';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -87,14 +103,27 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
       ifIdle?: never;
     }
   | {
       runId?: string;
       resourceId: string;
       threadId: string;
-      ifIdle?: { streamOptions: AgentExecutionOptions<OUTPUT> };
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: AgentExecutionOptions<OUTPUT> };
     };
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SendAgentSignalResult {
+  accepted: true;
+  runId: string;
+  signal: CreatedAgentSignal;
+  /** Resolves when a `persist` behavior finishes writing the signal to memory. */
+  persisted?: Promise<void>;
+}
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;

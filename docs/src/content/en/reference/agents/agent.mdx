@@ -110,9 +110,9 @@ export const agent = new Agent({
 
 ## Thread signals
 
-Use Agent signals to send additional context into a memory thread. Signals are useful when a user adds follow-up context while an agent is already streaming, or when another process needs to add structured context to the thread.
+Use Agent signals to send real-time context into a memory thread. Signals are useful when a user adds input while an agent is already streaming, or when another process needs to add structured context to the thread.
 
-A `user-message` signal represents user input. When the target thread is running, Mastra queues the signal and drains it at a stream boundary so the agent can respond to the new input. When the thread is idle, `ifIdle.streamOptions` can start the next stream with the signal as the input.
+A `user-message` signal represents user input. When the target thread is running, Mastra delivers the signal into the active agent loop. When the thread is idle, Mastra starts a stream with the signal as the first input by default.
 
 ```typescript title="src/mastra/signals.ts"
 const subscription = await agent.subscribeToThread({
@@ -126,17 +126,14 @@ void (async () => {
   }
 })()
 
-await agent.sendSignal(
+agent.sendSignal(
   { type: 'user-message', contents: 'Use the latest customer note too.' },
   {
     resourceId: 'user-123',
     threadId: 'thread-abc',
     ifIdle: {
       streamOptions: {
-        memory: {
-          resource: 'user-123',
-          thread: 'thread-abc',
-        },
+        maxSteps: 3,
       },
     },
   },
@@ -146,7 +143,7 @@ await agent.sendSignal(
 Use a custom signal type for contextual messages that should reach the model as XML-wrapped context instead of normal user input:
 
 ```typescript
-await agent.sendSignal(
+agent.sendSignal(
   {
     type: 'system-reminder',
     contents: 'Continue from the previous tool result.',
@@ -187,16 +184,28 @@ Sends a signal to an active run or memory thread.
     description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
   },
   {
-    name: 'options.ifIdle',
-    type: '{ streamOptions: AgentExecutionOptions }',
+    name: 'options.ifActive.behavior',
+    type: "'deliver' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+  },
+  {
+    name: 'options.ifIdle.behavior',
+    type: "'wake' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+  },
+  {
+    name: 'options.ifIdle.streamOptions',
+    type: 'AgentExecutionOptions',
     isOptional: true,
     description:
-      'Starts a stream when the target thread is idle. Only available when `resourceId` and `threadId` are provided.',
+      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
   },
 ]}
 />
 
-Returns `{ accepted: true, runId: string }`.
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory.
 
 ### `subscribeToThread(options)`
 

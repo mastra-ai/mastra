@@ -6951,10 +6951,15 @@ export type PostAgentsAgentIdSignals_Body =
             type: string;
             contents: string;
           };
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          }
+        | undefined;
       runId: string;
       resourceId?: string | undefined;
       threadId?: string | undefined;
-      streamOptions?: undefined | undefined;
+      ifIdle?: undefined | undefined;
     }
   | {
       signal:
@@ -8506,144 +8511,154 @@ export type PostAgentsAgentIdSignals_Body =
             type: string;
             contents: string;
           };
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          }
+        | undefined;
       runId?: string | undefined;
       resourceId: string;
       threadId: string;
-      streamOptions?:
+      ifIdle?:
         | {
-            instructions?: (string | string[] | any | any[]) | undefined;
-            system?: (string | string[] | any | any[]) | undefined;
-            context?: any[] | undefined;
-            memory?:
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            streamOptions?:
               | {
-                  thread:
-                    | string
+                  instructions?: (string | string[] | any | any[]) | undefined;
+                  system?: (string | string[] | any | any[]) | undefined;
+                  context?: any[] | undefined;
+                  memory?:
                     | {
-                        id: string;
-                        [x: string]: unknown;
-                      };
-                  resource: string;
-                  options?:
-                    | {
-                        [key: string]: any;
-                      }
-                    | undefined;
-                  readOnly?: boolean | undefined;
-                }
-              | undefined;
-            runId?: string | undefined;
-            savePerStep?: boolean | undefined;
-            requestContext?:
-              | {
-                  [key: string]: any;
-                }
-              | undefined;
-            versions?:
-              | {
-                  agents?:
-                    | {
-                        [key: string]:
+                        thread:
+                          | string
                           | {
-                              versionId: string;
-                            }
-                          | {
-                              status: 'draft' | 'published';
+                              id: string;
+                              [x: string]: unknown;
                             };
+                        resource: string;
+                        options?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        readOnly?: boolean | undefined;
                       }
                     | undefined;
-                }
-              | undefined;
-            maxSteps?: number | undefined;
-            stopWhen?: any | undefined;
-            providerOptions?:
-              | {
-                  anthropic?:
+                  runId?: string | undefined;
+                  savePerStep?: boolean | undefined;
+                  requestContext?:
                     | {
                         [key: string]: any;
                       }
                     | undefined;
-                  google?:
+                  versions?:
+                    | {
+                        agents?:
+                          | {
+                              [key: string]:
+                                | {
+                                    versionId: string;
+                                  }
+                                | {
+                                    status: 'draft' | 'published';
+                                  };
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  maxSteps?: number | undefined;
+                  stopWhen?: any | undefined;
+                  providerOptions?:
+                    | {
+                        anthropic?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        google?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        openai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        xai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  modelSettings?: any | undefined;
+                  activeTools?: string[] | undefined;
+                  toolsets?:
                     | {
                         [key: string]: any;
                       }
                     | undefined;
-                  openai?:
+                  clientTools?:
                     | {
                         [key: string]: any;
                       }
                     | undefined;
-                  xai?:
+                  toolChoice?:
+                    | (
+                        | ('auto' | 'none' | 'required')
+                        | {
+                            type: 'tool';
+                            toolName: string;
+                          }
+                      )
+                    | undefined;
+                  requireToolApproval?: boolean | undefined;
+                  scorers?:
+                    | (
+                        | {
+                            [key: string]: any;
+                          }
+                        | {
+                            [key: string]: {
+                              scorer: string;
+                              sampling?: any | undefined;
+                            };
+                          }
+                      )
+                    | undefined;
+                  returnScorerData?: boolean | undefined;
+                  tracingOptions?:
                     | {
-                        [key: string]: any;
+                        metadata?:
+                          | {
+                              [key: string]: unknown;
+                            }
+                          | undefined;
+                        requestContextKeys?: string[] | undefined;
+                        traceId?: string | undefined;
+                        parentSpanId?: string | undefined;
+                        tags?: string[] | undefined;
+                        hideInput?: boolean | undefined;
+                        hideOutput?: boolean | undefined;
                       }
                     | undefined;
-                }
-              | undefined;
-            modelSettings?: any | undefined;
-            activeTools?: string[] | undefined;
-            toolsets?:
-              | {
-                  [key: string]: any;
-                }
-              | undefined;
-            clientTools?:
-              | {
-                  [key: string]: any;
-                }
-              | undefined;
-            toolChoice?:
-              | (
-                  | ('auto' | 'none' | 'required')
-                  | {
-                      type: 'tool';
-                      toolName: string;
-                    }
-                )
-              | undefined;
-            requireToolApproval?: boolean | undefined;
-            scorers?:
-              | (
-                  | {
-                      [key: string]: any;
-                    }
-                  | {
-                      [key: string]: {
-                        scorer: string;
-                        sampling?: any | undefined;
-                      };
-                    }
-                )
-              | undefined;
-            returnScorerData?: boolean | undefined;
-            tracingOptions?:
-              | {
-                  metadata?:
+                  output?: any | undefined;
+                  structuredOutput?:
                     | {
-                        [key: string]: unknown;
+                        schema: {
+                          [x: string]: unknown;
+                        };
+                        model?: (string | any) | undefined;
+                        instructions?: string | undefined;
+                        jsonPromptInjection?: boolean | undefined;
+                        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+                        fallbackValue?: any | undefined;
                       }
                     | undefined;
-                  requestContextKeys?: string[] | undefined;
-                  traceId?: string | undefined;
-                  parentSpanId?: string | undefined;
-                  tags?: string[] | undefined;
-                  hideInput?: boolean | undefined;
-                  hideOutput?: boolean | undefined;
+                  [x: string]: unknown;
                 }
               | undefined;
-            output?: any | undefined;
-            structuredOutput?:
-              | {
-                  schema: {
-                    [x: string]: unknown;
-                  };
-                  model?: (string | any) | undefined;
-                  instructions?: string | undefined;
-                  jsonPromptInjection?: boolean | undefined;
-                  errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-                  fallbackValue?: any | undefined;
-                }
-              | undefined;
-            [x: string]: unknown;
           }
         | undefined;
     };

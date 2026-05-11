@@ -99,7 +99,6 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { isCreatedAgentSignal } from './signals';
-import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { AgentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
@@ -119,6 +118,7 @@ import type {
   AgentThreadSubscription,
   PublicStructuredOutputOptions,
   SendAgentSignalOptions,
+  SendAgentSignalResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -5957,10 +5957,7 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal<OUTPUT = TOutput>(
-    signal: AgentSignal,
-    target: SendAgentSignalOptions<OUTPUT>,
-  ): { accepted: true; runId: string; signal: CreatedAgentSignal } {
+  sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
     return this.#getThreadStreamRuntime().sendSignal(this as Agent<any, any, any, any>, signal, target);
   }
 

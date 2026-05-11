@@ -113,20 +113,32 @@ export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' |
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
 export type SendAgentSignalParams<OUTPUT = unknown> =
   | {
       signal: AgentSignal;
       runId: string;
       resourceId?: string;
       threadId?: string;
-      streamOptions?: never;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: never;
     }
   | {
       signal: AgentSignal;
       runId?: string;
       resourceId: string;
       threadId: string;
-      streamOptions?: Omit<AgentExecutionOptions<OUTPUT>, 'messages'>;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: Omit<AgentExecutionOptions<OUTPUT>, 'messages'> };
     };
 
 /**
