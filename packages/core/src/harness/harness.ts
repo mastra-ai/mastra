@@ -103,30 +103,6 @@ function getRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function toSystemReminderContent(
-  payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
-  const attributes = getRecordValue(payload.attributes);
-  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
-  if (message === undefined) return undefined;
-
-  return {
-    type: 'system_reminder',
-    message,
-    reminderType: getStringValue(payload.reminderType) ?? getStringValue(attributes?.type),
-    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
-    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
-    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
-    gapMs:
-      typeof payload.gapMs === 'number'
-        ? payload.gapMs
-        : typeof attributes?.gapMs === 'number'
-          ? attributes.gapMs
-          : undefined,
-    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
-  };
-}
-
 function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
   if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
@@ -136,17 +112,18 @@ function signalContentsToHarnessContent(contents: unknown): HarnessMessageConten
   if (typeof content === 'string') return [{ type: 'text', text: content }];
   if (Array.isArray(content)) {
     return content.flatMap((part): HarnessMessageContent[] => {
-      if (!part || typeof part !== 'object') return [];
-      const record = part as Record<string, unknown>;
-      if (record.type === 'text' && typeof record.text === 'string')
-        return [{ type: 'text' as const, text: record.text }];
+      const record = getRecordValue(part);
+      if (!record) return [];
+      if (record.type === 'text' && typeof record.text === 'string') {
+        return [{ type: 'text', text: record.text }];
+      }
       if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
         if (record.mediaType.startsWith('image/')) {
-          return [{ type: 'image' as const, data: record.data, mimeType: record.mediaType }];
+          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
         }
         return [
           {
-            type: 'file' as const,
+            type: 'file',
             data: record.data,
             mediaType: record.mediaType,
             filename: typeof record.filename === 'string' ? record.filename : undefined,
@@ -158,6 +135,33 @@ function signalContentsToHarnessContent(contents: unknown): HarnessMessageConten
   }
 
   return [];
+}
+
+function toSystemReminderContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
+  const attributes = getRecordValue(payload.attributes);
+  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  if (message === undefined) return undefined;
+
+  return {
+    type: 'system_reminder',
+    message,
+    reminderType:
+      getStringValue(payload.reminderType) ?? getStringValue(attributes?.type) ?? getStringValue(payload.type),
+    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
+    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
+    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
+    gapMs:
+      typeof payload.gapMs === 'number'
+        ? payload.gapMs
+        : typeof attributes?.gapMs === 'number'
+          ? attributes.gapMs
+          : undefined,
+    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
+    goalMaxTurns: typeof payload.goalMaxTurns === 'number' ? payload.goalMaxTurns : undefined,
+    judgeModelId: getStringValue(payload.judgeModelId),
+  };
 }
 
 function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
@@ -1862,28 +1866,6 @@ export class Harness<TState = {}> {
         ...systemReminder,
         contents: typeof systemReminder.message === 'string' ? systemReminder.message : '',
         reminderType: systemReminder.type,
-        path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
-        precedesMessageId:
-          'precedesMessageId' in systemReminder && typeof systemReminder.precedesMessageId === 'string'
-            ? systemReminder.precedesMessageId
-            : undefined,
-        gapText:
-          'gapText' in systemReminder && typeof systemReminder.gapText === 'string'
-            ? systemReminder.gapText
-            : undefined,
-        gapMs: 'gapMs' in systemReminder && typeof systemReminder.gapMs === 'number' ? systemReminder.gapMs : undefined,
-        timestamp:
-          'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
-            ? systemReminder.timestamp
-            : undefined,
-        goalMaxTurns:
-          'goalMaxTurns' in systemReminder && typeof systemReminder.goalMaxTurns === 'number'
-            ? systemReminder.goalMaxTurns
-            : undefined,
-        judgeModelId:
-          'judgeModelId' in systemReminder && typeof systemReminder.judgeModelId === 'string'
-            ? systemReminder.judgeModelId
-            : undefined,
       });
       if (reminder) {
         content.push(reminder);
@@ -1898,6 +1880,18 @@ export class Harness<TState = {}> {
     }
 
     const signalMetadata = getRecordValue(msg.content.metadata?.signal);
+    if (signalMetadata?.type === 'user-message') {
+      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
+      if (signalContent.length > 0) {
+        return {
+          id: msg.id,
+          role: 'user',
+          content: signalContent,
+          createdAt: msg.createdAt,
+        };
+      }
+    }
+
     if (signalMetadata?.type === 'system-reminder') {
       const reminder = toSystemReminderContent({
         type: signalMetadata.type,
