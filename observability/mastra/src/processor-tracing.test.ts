@@ -1232,6 +1232,20 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpans.length).toBe(1);
       expect(modelSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
 
+      // No orphan spans: every non-root exported span's parentSpanId must
+      // resolve to another exported span. This guards against an internal
+      // ancestor being filtered without its visible descendants getting
+      // re-parented to the closest external ancestor.
+      const allSpans = testExporter.getAllSpans();
+      const exportedIds = new Set(allSpans.map(s => s.id));
+      const orphans = allSpans.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId));
+      expect(
+        orphans,
+        `Found orphan spans pointing at filtered parents: ${orphans
+          .map(s => `${s.type}/${s.name} -> ${s.parentSpanId}`)
+          .join(', ')}`,
+      ).toHaveLength(0);
+
       testExporter.finalExpectations();
     });
 
