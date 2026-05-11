@@ -46,10 +46,7 @@ const LOCKED_VALUE_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md text-neu
 const LOCKED_ICON_CLASS = `${SHARED_LABEL_OPERATOR_CLASSES} text-ui-md rounded-r-lg border-r-2 border-l-1 gap-1.5 text-neutral3`;
 const DEFAULT_LOCKED_TOOLTIP = 'This filter is set by the current context and cannot be removed here.';
 
-function lookupOptionLabel(
-  field: PropertyFilterField,
-  value: string | string[],
-): string {
+function lookupOptionLabel(field: PropertyFilterField, value: string | string[]): string {
   if (field.kind === 'pick-multi' && field.options) {
     if (Array.isArray(value)) {
       if (value.length === 0) return 'Any';
