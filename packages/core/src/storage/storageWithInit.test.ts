@@ -160,4 +160,90 @@ describe('augmentWithInit', () => {
       }
     }
   });
+
+  // Regression coverage: previously a single rejected init promise was cached
+  // forever, causing every subsequent storage call to surface the same error
+  // with no recovery short of a process restart. Now a rejection clears the
+  // cache so the next call retries.
+  describe('init rejection handling', () => {
+    it('retries init on the next call after a rejection', async () => {
+      const init = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('transient boot failure'))
+        .mockResolvedValueOnce(undefined);
+      const listMessages = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
+      const mockStorage = { init, listMessages, disableInit: false } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+
+      await expect(augmentedStorage.listMessages({ threadId: '1' })).rejects.toThrow('transient boot failure');
+      // Subsequent call retries init instead of replaying the cached rejection.
+      await augmentedStorage.listMessages({ threadId: '2' });
+
+      expect(init).toHaveBeenCalledTimes(2);
+      expect(listMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('all concurrent callers see the same rejection and the next call retries', async () => {
+      const init = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce(undefined);
+      const listMessages = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
+      const mockStorage = { init, listMessages, disableInit: false } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+
+      const results = await Promise.allSettled([
+        augmentedStorage.listMessages({ threadId: 'a' }),
+        augmentedStorage.listMessages({ threadId: 'b' }),
+        augmentedStorage.listMessages({ threadId: 'c' }),
+      ]);
+
+      expect(results.every(r => r.status === 'rejected')).toBe(true);
+      // The 3 concurrent callers should have shared a single in-flight init,
+      // not each triggered their own.
+      expect(init).toHaveBeenCalledTimes(1);
+
+      await augmentedStorage.listMessages({ threadId: 'd' });
+      expect(init).toHaveBeenCalledTimes(2);
+      expect(listMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries init on an explicit init() call after a rejection', async () => {
+      const init = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('first'))
+        .mockResolvedValueOnce(undefined);
+      const mockStorage = { init, disableInit: false } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+
+      await expect(augmentedStorage.init()).rejects.toThrow('first');
+      await augmentedStorage.init();
+
+      expect(init).toHaveBeenCalledTimes(2);
+    });
+
+    it('still caches a successful init after a retry', async () => {
+      const init = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('once'))
+        .mockResolvedValue(undefined);
+      const listMessages = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
+      const mockStorage = { init, listMessages, disableInit: false } as unknown as MastraStorage;
+
+      const augmentedStorage = augmentWithInit(mockStorage);
+
+      await expect(augmentedStorage.listMessages({ threadId: '1' })).rejects.toThrow('once');
+      await augmentedStorage.listMessages({ threadId: '2' });
+      await augmentedStorage.listMessages({ threadId: '3' });
+      await augmentedStorage.listMessages({ threadId: '4' });
+
+      // Two init invocations total: the first failed, the second succeeded
+      // and is then reused by the remaining calls.
+      expect(init).toHaveBeenCalledTimes(2);
+      expect(listMessages).toHaveBeenCalledTimes(3);
+    });
+  });
 });
