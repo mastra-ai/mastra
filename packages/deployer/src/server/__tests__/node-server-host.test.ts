@@ -123,4 +123,14 @@ describe('createNodeServer host binding', () => {
     });
     expect(logger.info).toHaveBeenCalledWith('Mastra API running', { url: 'http://0.0.0.0:4111/api' });
   });
+
+  it('starts without worker lifecycle methods for older core versions', async () => {
+    const oldCoreMastra = {
+      ...mockMastra,
+      startWorkers: undefined,
+    } as unknown as Mastra;
+
+    await expect(createNodeServer(oldCoreMastra, { tools: {} })).resolves.toBeDefined();
+    expect(serveMock).toHaveBeenCalledOnce();
+  });
 });
