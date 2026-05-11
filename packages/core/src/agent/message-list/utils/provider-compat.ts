@@ -85,6 +85,76 @@ export function ensureAnthropicCompatibleMessages(
 }
 
 /**
+ * Removes orphan tool_use / tool_result blocks. Anthropic requires every tool_result
+ * to be in the message immediately after its matching tool_use, and every tool_use
+ * to have a matching tool_result in the next message. Recall windows can slice
+ * through a parallel tool-call group and leave behind half a pair.
+ */
+export function sanitizeOrphanedToolPairs(messages: ModelMessage[]): ModelMessage[] {
+  const filteredContents = messages.map(m => (Array.isArray(m.content) ? [...m.content] : null));
+
+  for (let i = 0; i < messages.length; i++) {
+    const current = messages[i]!;
+
+    if (current.role === 'assistant' && Array.isArray(current.content)) {
+      const useIds = new Set<string>();
+      const inlineResultIds = new Set<string>();
+      for (const part of current.content) {
+        if (part.type === 'tool-call') useIds.add(part.toolCallId);
+        else if (part.type === 'tool-result') inlineResultIds.add(part.toolCallId);
+      }
+
+      const next = messages[i + 1];
+      const nextResultIds = new Set<string>();
+      if (next && next.role === 'tool' && Array.isArray(next.content)) {
+        for (const part of next.content) {
+          if (part.type === 'tool-result') nextResultIds.add(part.toolCallId);
+        }
+      }
+
+      const validPairs = new Set([...useIds].filter(id => inlineResultIds.has(id) || nextResultIds.has(id)));
+
+      filteredContents[i] = filteredContents[i]!.filter(p => {
+        if (p.type !== 'tool-call') return true;
+        const tc = p as { toolCallId: string; providerExecuted?: boolean };
+        // Provider-executed tools may be deferred (e.g. Anthropic web_search): the tool_use
+        // can appear without a matching tool_result until the provider resumes on the next call.
+        return tc.providerExecuted === true || validPairs.has(tc.toolCallId);
+      });
+
+      if (next && next.role === 'tool' && Array.isArray(next.content)) {
+        filteredContents[i + 1] = filteredContents[i + 1]!.filter(
+          p => p.type !== 'tool-result' || validPairs.has((p as { toolCallId: string }).toolCallId),
+        );
+      }
+    } else if (current.role === 'tool' && Array.isArray(current.content)) {
+      const prev = messages[i - 1];
+      if (!prev || prev.role !== 'assistant' || !Array.isArray(prev.content)) {
+        filteredContents[i] = filteredContents[i]!.filter(p => p.type !== 'tool-result');
+      }
+    }
+  }
+
+  const result: ModelMessage[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const original = messages[i]!;
+    const filtered = filteredContents[i];
+    if (filtered == null) {
+      result.push(original);
+      continue;
+    }
+    if (filtered.length === 0) continue;
+    if (Array.isArray(original.content) && filtered.length === original.content.length) {
+      result.push(original);
+      continue;
+    }
+    result.push({ ...original, content: filtered } as ModelMessage);
+  }
+
+  return result;
+}
+
+/**
  * Enriches a single message's tool-result parts with input field
  */
 function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBMessage[]): ModelMessage {
