@@ -299,7 +299,7 @@ export const mastra = new Mastra({
         serviceName: 'my-service',
         exporters: [
           new ArizeExporter({
-            endpoint: process.env.PHOENIX_ENDPOINT,
+            endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
           new DefaultExporter(), // Keep Studio access

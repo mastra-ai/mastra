@@ -43,7 +43,8 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
-import type { ToolAction } from '../tools';
+import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
+import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
@@ -444,6 +445,11 @@ export interface Config<
    */
   environment?: string;
   /**
+   * Optional central transform policy for tool payloads before they are
+   * serialized into display streams or user-visible transcripts.
+   */
+  transform?: ToolPayloadTransformPolicy;
+  /**
    * Configure which workers run in this Mastra instance.
    *
    * - `undefined` (default): Auto-creates default workers (existing behavior)
@@ -543,6 +549,7 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
+  #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
@@ -696,6 +703,10 @@ export class Mastra<
    */
   public getEnvironment(): string | undefined {
     return this.#environment;
+  }
+
+  public getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
   }
 
   /**
@@ -887,6 +898,9 @@ export class Mastra<
     // Resolve deployment environment: explicit config wins, else fall back to
     // NODE_ENV. Leave undefined if neither is set rather than guessing.
     this.#environment = config?.environment ?? process.env.NODE_ENV;
+    this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
+      config?.transform ?? (config as any)?.toolPayloadProjection,
+    );
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -2433,7 +2447,8 @@ export class Mastra<
    * This method allows dynamic registration of scorers after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a scorer with the same key already exists
+   * If a scorer with the same key already exists, this method leaves the existing
+   * scorer registered and returns.
    *
    * @example
    * ```typescript
@@ -3264,6 +3279,8 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
+    this.registerStaticWorkflowScorers(workflow);
+
     // If a schedule is declared, mark the flag and either register into the
     // running scheduler or trigger a lazy ensure.
     if (hasSchedule) {
@@ -3283,6 +3300,19 @@ export class Mastra<
         })();
       } else {
         this.#ensureScheduler();
+      }
+    }
+  }
+
+  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
+    for (const step of Object.values(workflow.steps ?? {})) {
+      const scorers = step.scorers;
+      if (!scorers || typeof scorers === 'function') {
+        continue;
+      }
+
+      for (const [, entry] of Object.entries(scorers)) {
+        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }
