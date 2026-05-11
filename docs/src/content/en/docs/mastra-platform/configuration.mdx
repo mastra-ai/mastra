@@ -60,4 +60,4 @@ MASTRA_PROJECT_ID="<staging-id>" mastra studio deploy --env-file .env.staging --
 MASTRA_PROJECT_ID="<production-id>" mastra studio deploy --env-file .env.production --yes
 ```
 
-Each project has its own Studio URL and its own observability data. When using [`CloudExporter`](/docs/observability/tracing/exporters/cloud), set `MASTRA_PROJECT_ID` and `MASTRA_CLOUD_ACCESS_TOKEN` per environment so traces route to the matching Studio project.
+Each project has its own Studio URL and its own observability data. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_CLOUD_ACCESS_TOKEN` per environment so traces route to the matching Studio project.

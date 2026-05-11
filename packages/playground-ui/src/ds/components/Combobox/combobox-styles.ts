@@ -10,7 +10,7 @@ export const comboboxStyles = {
     'inline-flex w-full min-w-32 select-none items-center justify-between gap-1.5 whitespace-nowrap',
     'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
     'outline-none transition-colors duration-normal ease-out-custom',
-    'hover:bg-surface3 hover:text-neutral6 hover:border-border2 active:bg-surface4',
+    'hover:bg-surface2 hover:text-neutral6 hover:border-border2 active:bg-surface3',
     'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
     'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
     'disabled:cursor-not-allowed disabled:opacity-50',
@@ -27,7 +27,7 @@ export const comboboxStyles = {
 
   /** Popup container — concentric with rounded-xl + p-1 (8px items inside 12px container). */
   popup: cn(
-    'min-w-(--anchor-width) w-max max-w-[500px] rounded-xl border border-border1 bg-surface3 text-neutral4',
+    'min-w-(--anchor-width) w-max max-w-(--available-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
     'shadow-dialog',
     'origin-(--transform-origin)',
     'transition-[transform,scale,opacity] duration-150 ease-out',
@@ -39,10 +39,10 @@ export const comboboxStyles = {
   positioner: 'z-50 pointer-events-auto',
 
   /** Search input container — borderless top section, hairline divider below. */
-  searchContainer: cn('flex items-center border-b border-border1 px-2.5 py-2', transitions.colors),
+  searchContainer: cn('flex items-center border-b border-border1 px-2.5 py-1.5', transitions.colors),
 
   /** Search icon */
-  searchIcon: cn('mr-2 h-4 w-4 shrink-0 text-neutral3', transitions.colors),
+  searchIcon: cn('mr-2 h-3.5 w-3.5 shrink-0 text-neutral3', transitions.colors),
 
   /** Search input */
   searchInput: cn(
@@ -53,31 +53,44 @@ export const comboboxStyles = {
   ),
 
   /** Empty state */
-  empty: 'not-empty:block hidden py-6 text-center text-ui-smd text-neutral3',
+  empty: 'not-empty:block hidden py-4 text-center text-ui-smd text-neutral3',
 
   /** Options list */
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
 
-  /** Option item base — rounded-lg (8px) sits concentrically inside rounded-xl + p-1. */
+  /** Option item base — rounded-md sits concentrically inside rounded-xl + p-1. */
   item: cn(
-    'relative flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2 py-1.5',
+    'group/item relative flex cursor-pointer select-none items-center gap-2 rounded-md',
+    'pl-2.5 pr-2 py-1.5 min-h-8',
     'text-ui-smd leading-ui-sm text-neutral4',
     'outline-none focus:outline-none focus-visible:outline-none',
     transitions.colors,
     'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
+    'data-selected:text-neutral6',
   ),
 
-  /** Option item with selected state (single select) — quiet emphasis, no accent fill. */
-  itemSelected: 'data-selected:text-neutral6',
+  /** Multi-select item — keeps the left checkbox slot, no right indicator. */
+  itemMulti: cn(
+    'relative flex cursor-pointer select-none items-center gap-2.5 rounded-md',
+    'pl-2 pr-2.5 py-1.5 min-h-8',
+    'text-ui-smd leading-ui-sm text-neutral4',
+    'outline-none focus:outline-none focus-visible:outline-none',
+    transitions.colors,
+    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
+    'data-selected:text-neutral6',
+  ),
 
-  /** Check indicator container */
-  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center',
+  /** Right-aligned slot grouping end content + selection check. */
+  itemRightSlot: 'ml-auto flex items-center gap-2 shrink-0',
+
+  /** Check indicator container — inline, fixed 16x16, shown only when item is selected. */
+  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-accent1',
 
   /** Check icon (single select) */
-  checkIcon: cn('h-4 w-4 text-neutral6', transitions.opacity),
+  checkIcon: 'h-3.5 w-3.5',
 
   /** Checkbox container (multi select) */
-  checkbox: 'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border',
+  checkbox: 'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border',
 
   /** Checkbox selected state */
   checkboxSelected: 'bg-accent1 border-accent1',
@@ -100,8 +113,8 @@ export const comboboxStyles = {
   /** Option description */
   optionDescription: 'text-ui-sm text-neutral3 truncate',
 
-  /** Option end slot */
-  optionEnd: 'ml-auto',
+  /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
+  optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** Error message */
   error: 'text-ui-sm text-accent2',
