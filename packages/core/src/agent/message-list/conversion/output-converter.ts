@@ -7,7 +7,7 @@ import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
-import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
+import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
 import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
@@ -382,7 +382,9 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  return ensureAnthropicCompatibleMessages(withFileMetadata, dbMessages);
+  const anthropicCompat = ensureAnthropicCompatibleMessages(withFileMetadata, dbMessages);
+
+  return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
 }
 
 /**
