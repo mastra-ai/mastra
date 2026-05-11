@@ -126,9 +126,7 @@ If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-sk
 Two states matter:
 
 - **auth off** — `AUTH_PROVIDER` line in `examples/agent/.env` is commented out or absent. No WorkOS, no RBAC, no FGA. This is the state for Prompts 1–6.
-- **auth on** — `AUTH_PROVIDER=workos` plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` all present in `examples/agent/.env`. WorkOS authentication + role-based access + per-resource FGA all engage. This is the state for Prompt 7.
-
-There's **no** `MASTRA_FGA_ENABLED` toggle. FGA fires when an FGA provider was constructed (which happens iff `AUTH_PROVIDER=workos`), and it scopes its checks against `WORKOS_ORGANIZATION_ID`. Disabling FGA without disabling WorkOS auth is not a supported configuration in this example.
+- **auth on** — `AUTH_PROVIDER=workos` plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` all present in `examples/agent/.env`. WorkOS authentication + role-based access + per-resource FGA all engage. This is the state for Prompt 7. FGA is wired through the WorkOS auth provider — it can't be disabled independently.
 
 ### Detection: run preflight before each section
 

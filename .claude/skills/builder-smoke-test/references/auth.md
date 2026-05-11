@@ -53,13 +53,12 @@ and checks per-resource permissions ("can user X `:read` agent Y") against
 the WorkOS organization named by `WORKOS_ORGANIZATION_ID`. FGA only fires
 when (a) the route declares an `fga` block in its metadata AND (b) the
 server has an FGA provider configured — which means `AUTH_PROVIDER=workos`.
-There is no `MASTRA_FGA_ENABLED` env var anywhere in the codebase.
 
 If FGA throws `FGADeniedError` during an auth-on run, the most likely
 causes are: `WORKOS_ORGANIZATION_ID` doesn't match the org the FGA tuples
 are stored under, or the logged-in user has no matching tuple. Report the
-denial and the org/user combo; don't try to disable FGA — disabling it
-without disabling WorkOS auth is not a supported configuration.
+denial and the org/user combo; don't try to disable FGA independently —
+it's coupled to WorkOS auth in this example.
 
 ## Steps
 
