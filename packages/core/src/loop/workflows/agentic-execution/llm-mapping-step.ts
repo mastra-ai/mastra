@@ -154,7 +154,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
           | { toModelOutput?: (output: unknown) => unknown }
           | undefined;
-
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
           const parentSpan = observabilityContext?.tracingContext?.currentSpan;
