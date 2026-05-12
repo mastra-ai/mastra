@@ -1,5 +1,44 @@
 # @mastra/core
 
+## 1.33.0-alpha.12
+
+### Minor Changes
+
+- Added Agent signals for sending contextual messages into agent thread loops and subscribing to thread activity. ([#16229](https://github.com/mastra-ai/mastra/pull/16229))
+
+  Call `agent.sendSignal()` to inject context into a running agent loop. When the thread is idle, that same signal becomes the prompt that starts the next loop by default. Use `ifActive.behavior` and `ifIdle.behavior` to deliver, persist, discard, or wake from a signal.
+
+  Use `agent.subscribeToThread()` to follow the raw stream chunks for a memory thread, observe signal echoes with stable IDs, and abort the active stream for that thread.
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+
+  void (async () => {
+    for await (const part of subscription.stream) {
+      if (part.type === 'finish') {
+        subscription.unsubscribe();
+      }
+    }
+  })();
+
+  agent.sendSignal({ type: 'user-message', contents: 'Use the latest answer' }, { resourceId, threadId });
+  ```
+
+- Added processor `sendSignal` support and routed built-in system reminders through signal messages. ([#16438](https://github.com/mastra-ai/mastra/pull/16438))
+
+### Patch Changes
+
+- A tool's `toModelOutput` result is now computed before the `tool-result` chunk is emitted, so it travels with the chunk on `providerMetadata.mastra.modelOutput`. Previously `toModelOutput` only ran later when the message list was updated, meaning live stream consumers couldn't see it without re-running the tool. ([#16457](https://github.com/mastra-ai/mastra/pull/16457))
+
+  The harness now forwards that `providerMetadata` on `tool_result` content (both streaming and replayed history) and on `tool_end` events, so UIs can render rich tool output (e.g. screenshot images) inline.
+
+  ```ts
+  harness.on('tool_end', event => {
+    const modelOutput = event.providerMetadata?.mastra?.modelOutput;
+    // e.g. { type: 'content', value: [{ type: 'image-data', mediaType: 'image/png', data: '...' }] }
+  });
+  ```
+
 ## 1.33.0-alpha.11
 
 ### Patch Changes

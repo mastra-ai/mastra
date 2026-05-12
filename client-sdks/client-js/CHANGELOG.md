@@ -1,5 +1,57 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.13
+
+### Minor Changes
+
+- Added Agent signals for sending contextual messages into agent thread loops and subscribing to thread activity. ([#16229](https://github.com/mastra-ai/mastra/pull/16229))
+
+  Call `agent.sendSignal()` to inject context into a running agent loop. When the thread is idle, that same signal becomes the prompt that starts the next loop by default. Use `ifActive.behavior` and `ifIdle.behavior` to deliver, persist, discard, or wake from a signal.
+
+  Use `agent.subscribeToThread()` to follow the raw stream chunks for a memory thread, observe signal echoes with stable IDs, and abort the active stream for that thread.
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+
+  void (async () => {
+    for await (const part of subscription.stream) {
+      if (part.type === 'finish') {
+        subscription.unsubscribe();
+      }
+    }
+  })();
+
+  agent.sendSignal({ type: 'user-message', contents: 'Use the latest answer' }, { resourceId, threadId });
+  ```
+
+- Fix client-js bugs surfaced by the SDK ↔ server contract audit. ([#16439](https://github.com/mastra-ai/mastra/pull/16439))
+  - `MastraClient.getAgentBuilderActions()` previously requested `/agent-builder/` (trailing slash) and 404'd. Now hits `/agent-builder`.
+  - `AgentBuilder.stream(params, runId)` now requires `runId`. The server route requires it; calls without it failed with a server-side validation error. The SDK now both types `runId` as required and guards at runtime.
+  - `MastraClient.createStoredSkill(...)` now requires `description` in its parameter type. The server schema has always required it; the SDK type used to mark it optional, so omitting it produced a runtime 400 instead of a compile error.
+
+  Migration:
+
+  ```ts
+  // Before
+  await agentBuilder.stream({ inputData });
+
+  // After
+  await agentBuilder.stream({ inputData }, runId);
+  ```
+
+  ```ts
+  // Before
+  await client.createStoredSkill({ name, instructions });
+
+  // After
+  await client.createStoredSkill({ name, description, instructions });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+
 ## 1.18.0-alpha.12
 
 ### Patch Changes
