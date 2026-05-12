@@ -1,6 +1,4 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
@@ -8,8 +6,6 @@ import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { MockStore } from '../storage';
 import { createTool } from '../tools';
-
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
