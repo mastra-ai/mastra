@@ -726,10 +726,6 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
-   * Create AgentChannels for an agent with the Slack adapter.
-   * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
-   */
-  /**
    * Extract the SlackAdapter fields the provider forwards to every
    * `createSlackAdapter()` call. Installation-managed credentials/identity are
    * applied separately.
@@ -748,6 +744,10 @@ export class SlackProvider implements ChannelProvider {
     return { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions };
   }
 
+  /**
+   * Create AgentChannels for an agent with the Slack adapter.
+   * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
+   */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
     const { adapterConfig } = this.#channelConfig;
     const slackEntry = adapterConfig ? { adapter, ...adapterConfig } : adapter;
