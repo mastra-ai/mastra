@@ -15,13 +15,11 @@ For setup instructions, see the [Metrics overview](/docs/observability/metrics/o
 
 Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and (for model generation spans) reads token usage data. No manual instrumentation is needed.
 
-Metrics are routed through an internal event bus to the `DefaultExporter`, which batches and flushes them to storage.
-
 ### What affects whether a metric is available
 
 Two conditions must be true for a metric to reach storage:
 
-1. `DefaultExporter` is configured as an exporter.
+1. `MastraStorageExporter` is configured as an exporter.
 1. The storage backend supports metrics (ClickHouse or DuckDB).
 
 If metrics aren't appearing, see [troubleshooting](#troubleshooting).
@@ -124,7 +122,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 ### No metrics are appearing
 
 - **Observability is configured**: Verify that your `Mastra` instance has an `observability` config with at least one exporter.
-- **`DefaultExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't persist metrics to Mastra storage. `DefaultExporter` is required for the Studio dashboard.
+- **`MastraStorageExporter` or `MastraPlatformExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't surface metrics in Mastra. `MastraStorageExporter` is required for the local Studio dashboard, and `MastraPlatformExporter` is required to view metrics in Mastra Platform.
 - **Storage supports metrics**: Metrics require an OLAP-capable store (ClickHouse or DuckDB). Row-oriented databases (PostgreSQL, LibSQL, MSSQL) and document stores (MongoDB) are not supported for metrics.
 - **Sampling isn't 0%**: If sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
 

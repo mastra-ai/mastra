@@ -66,14 +66,6 @@ createWorkflowTestSuite({
 
   // Skip only tests that actually fail - updated after BUG fixes 2026-02
   skipTests: {
-    // Validation - evented resolves instead of throwing
-    executionFlowNotDefined: true,
-    executionGraphNotCommitted: true,
-
-    // Abort - returns 'success' not 'canceled', timeout on signal wait
-    abortStatus: true,
-    abortDuringStep: true,
-
     // Suspend/resume - parallel suspend has race condition (each step publishes workflow.suspend independently)
     resumeParallelMulti: true,
     resumeMultiSuspendError: true,
@@ -86,9 +78,6 @@ createWorkflowTestSuite({
     resumeForeachPartialIndex: true, // Same issue as resumeForeachIndex
     resumeNested: true, // Nested resume works but input value from previous step lost (26 vs 27)
     resumeDountil: true,
-
-    // Time travel - different result structure
-    timeTravelConditional: true,
 
     // Streaming - legacy API timeout issue
     streamingSuspendResumeLegacy: true,
@@ -106,9 +95,6 @@ createWorkflowTestSuite({
     // Callback - state test uses stateSchema/setState (WIP in evented)
     callbackStateOnError: true,
 
-    // Time travel - conditional perStep inherits timeTravelConditional issues
-    timeTravelConditionalPerStep: true,
-
     // Resume error tests - evented engine error behavior may differ
     resumeNotSuspendedWorkflow: true,
     resumeInvalidData: true,
@@ -119,8 +105,6 @@ createWorkflowTestSuite({
     resumeIncorrectBranches: true,
     // Map-branch resume requires direct Mastra registration (server restart sim)
     resumeMapBranchCondition: true,
-    // Abort propagation to nested workflows times out in evented engine
-    abortNestedPropagation: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {

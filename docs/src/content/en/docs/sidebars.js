@@ -142,6 +142,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['experimental'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {
@@ -586,13 +594,13 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/default',
-                  label: 'Default',
+                  id: 'observability/tracing/exporters/mastra-storage',
+                  label: 'Mastra Storage',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/cloud',
-                  label: 'Cloud',
+                  id: 'observability/tracing/exporters/mastra-platform',
+                  label: 'Mastra Platform',
                 },
                 {
                   type: 'doc',

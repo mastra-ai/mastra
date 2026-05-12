@@ -3,6 +3,7 @@
  */
 
 import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { StagehandToolName } from './tools/constants';
 
 /**
  * Model configuration for Stagehand AI operations
@@ -80,6 +81,18 @@ interface StagehandConfigExtensions {
    * @default false
    */
   preserveUserDataDir?: boolean;
+
+  /**
+   * Tool names to exclude from the browser toolset.
+   * Use this to disable specific tools, e.g. `['stagehand_screenshot']`
+   * to skip the screenshot tool for models that don't support vision.
+   *
+   * @example
+   * ```ts
+   * new StagehandBrowser({ excludeTools: ['stagehand_screenshot'] })
+   * ```
+   */
+  excludeTools?: StagehandToolName[];
 }
 
 /**

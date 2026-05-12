@@ -1,5 +1,46 @@
 # @mastra/otel-exporter
 
+## 1.1.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`7ad5585`](https://github.com/mastra-ai/mastra/commit/7ad55856406f1de398dc713f6a9eaa78b2784bb6), [`210ea7a`](https://github.com/mastra-ai/mastra/commit/210ea7af559791b73a44fc9c12179908aaa3183f), [`83218c8`](https://github.com/mastra-ai/mastra/commit/83218c88b37773c9424fbe733b37be556e55e94d), [`265ec9f`](https://github.com/mastra-ai/mastra/commit/265ec9f887b5c81255c873a76ff7796f16e4f99b), [`6ce80bf`](https://github.com/mastra-ai/mastra/commit/6ce80bf4872a891e0bddf8b80561a80584efb14b), [`9268531`](https://github.com/mastra-ai/mastra/commit/9268531e7ec4be98beeba3b3ae8be0a7ea380662), [`13ead79`](https://github.com/mastra-ai/mastra/commit/13ead79149486b88144db7e11e6ff551caef5be1), [`50f5884`](https://github.com/mastra-ai/mastra/commit/50f5884b412dc05924a4c306c05eef7fb95a4aa1), [`bd36d8e`](https://github.com/mastra-ai/mastra/commit/bd36d8eb6de8c9a0310352649dbd4b06703c2299), [`8ac9141`](https://github.com/mastra-ai/mastra/commit/8ac9141439caa8fdd674944c4d84f29b3c730296)]:
+  - @mastra/core@1.33.0-alpha.10
+  - @mastra/observability@1.12.0-alpha.3
+
+## 1.1.0-alpha.3
+
+### Minor Changes
+
+- Added log export to `@mastra/otel-exporter`. Logs emitted on the Mastra observability bus are now forwarded to the configured OTLP endpoint alongside traces, using the same provider configuration. ([#13529](https://github.com/mastra-ai/mastra/pull/13529))
+
+  ```ts
+  import { OtelExporter } from '@mastra/otel-exporter';
+
+  new OtelExporter({
+    provider: {
+      custom: { endpoint: 'http://localhost:4318', protocol: 'http/json' },
+    },
+    // signals.logs defaults to true; set to false to disable.
+    signals: { traces: true, logs: true },
+  });
+  ```
+
+  Requires the matching OTLP log exporter package to be installed (e.g. `@opentelemetry/exporter-logs-otlp-http` for HTTP/JSON, or `-proto` / `-grpc` variants).
+
+  **Trace correlation:** Logs that carry `traceId` and `spanId` are attached to the OTEL log record's native trace context, so backends like Datadog, Grafana, and Honeycomb auto-correlate logs to traces.
+
+  **Other improvements:**
+  - Trace and log endpoints are always normalized to a single signal-path suffix, so `http://host:4318/`, `http://host:4318`, and `http://host:4318/v1/traces/` all produce well-formed URLs instead of malformed variants like `//v1/logs`.
+  - Calling `flush()` or `shutdown()` immediately after init no longer drops telemetry — teardown waits for setup to finish before draining providers.
+  - Debug log output no longer exposes credential fragments. Provider header values are fully redacted instead of printing prefix/suffix slices.
+  - When a dynamically-loaded OTLP exporter package is installed but does not expose the expected named export, Mastra now disables that signal with a clear error message instead of failing later with an opaque "X is not a constructor" error.
+
+### Patch Changes
+
+- Updated dependencies [[`5688881`](https://github.com/mastra-ai/mastra/commit/5688881669c7ed157f31ac77f6fc5f8d95ceea32)]:
+  - @mastra/core@1.33.0-alpha.9
+
 ## 1.0.23-alpha.2
 
 ### Patch Changes

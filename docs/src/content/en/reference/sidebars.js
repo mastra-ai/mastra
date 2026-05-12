@@ -329,7 +329,8 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
-                  label: 'Cloud',
+                  label: 'CloudExporter (deprecated)',
+                  className: 'sidebar-item-deprecated',
                 },
                 {
                   type: 'doc',
@@ -340,7 +341,8 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/default-exporter',
-                  label: 'Default',
+                  label: 'DefaultExporter (deprecated)',
+                  className: 'sidebar-item-deprecated',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/laminar', label: 'Laminar' },
                 { type: 'doc', id: 'observability/tracing/exporters/langfuse', label: 'Langfuse' },
@@ -348,6 +350,16 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/langsmith',
                   label: 'LangSmith',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-platform-exporter',
+                  label: 'MastraPlatformExporter',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-storage-exporter',
+                  label: 'MastraStorageExporter',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/otel', label: 'OpenTelemetry' },
                 { type: 'doc', id: 'observability/tracing/exporters/posthog', label: 'PostHog' },
@@ -502,6 +514,7 @@ const sidebars = {
       label: 'Tools & MCP',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
@@ -550,6 +563,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/voice.events', label: 'Events' },
         { type: 'doc', id: 'voice/google', label: 'Google' },
         { type: 'doc', id: 'voice/google-gemini-live', label: 'Google Gemini Live' },
+        { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },

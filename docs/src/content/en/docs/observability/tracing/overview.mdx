@@ -25,10 +25,11 @@ Traces are created by:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 
@@ -38,8 +39,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Studio
-          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -59,8 +60,8 @@ This configuration includes:
 - **Service Name**: `"mastra"` - identifies your service in traces
 - **Sampling**: `"always"` by default (100% of traces)
 - **Exporters**:
-  - `DefaultExporter` - Persists traces to your configured storage for Studio
-  - `CloudExporter` - Sends observability data to hosted Mastra Studio (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+  - `MastraStorageExporter` - Persists observability events to Mastra Storage
+  - `MastraPlatformExporter` - Sends observability events to Mastra Platform (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
 
 ## Exporters
@@ -71,8 +72,8 @@ Exporters determine where your trace data is sent and how it's stored. They inte
 
 Mastra provides two built-in exporters:
 
-- **[Default](/docs/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
-- **[Cloud](/docs/observability/tracing/exporters/cloud)** - Sends observability data to hosted Mastra Studio for production monitoring and collaboration
+- **[Mastra Storage](/docs/observability/tracing/exporters/mastra-storage)** - Persists observability events to Mastra Storage for viewing in Studio
+- **[Mastra Platform](/docs/observability/tracing/exporters/mastra-platform)** - Sends observability events to Mastra Platform for production monitoring and collaboration
 
 ### External Exporters
 
@@ -175,7 +176,7 @@ export const mastra = new Mastra({
           type: 'ratio',
           probability: 0.1,
         },
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -219,7 +220,7 @@ export const mastra = new Mastra({
       debug: {
         serviceName: 'debug-service',
         sampling: { type: 'always' },
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
     configSelector: (context, availableTracers) => {
@@ -256,7 +257,7 @@ export const mastra = new Mastra({
       development: {
         serviceName: 'my-service-dev',
         sampling: { type: 'always' },
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
       staging: {
         serviceName: 'my-service-staging',
@@ -266,7 +267,7 @@ export const mastra = new Mastra({
       production: {
         serviceName: 'my-service-prod',
         sampling: { type: 'ratio', probability: 0.01 },
-        exporters: [cloudExporter, langfuseExporter],
+        exporters: [mastraObserveExporter, langfuseExporter],
       },
     },
     configSelector: (context, availableTracers) => {
@@ -281,13 +282,13 @@ export const mastra = new Mastra({
 
 #### Maintaining Studio access
 
-When adding external exporters, include `DefaultExporter` and `CloudExporter` to maintain access to Studio:
+When adding external exporters, include `MastraStorageExporter` and `MastraPlatformExporter` to maintain access to Studio:
 
 ```ts title="src/mastra/index.ts"
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 import { ArizeExporter } from '@mastra/arize'
@@ -302,8 +303,8 @@ export const mastra = new Mastra({
             endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
-          new DefaultExporter(), // Keep Studio access
-          new CloudExporter(), // Keep Cloud access
+          new MastraStorageExporter(), // Keep Studio access
+          new MastraPlatformExporter(), // Keep Cloud access
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -315,8 +316,8 @@ export const mastra = new Mastra({
 This configuration sends traces to all three destinations simultaneously:
 
 - **Arize Phoenix/AX** for external observability
-- **DefaultExporter** for Studio
-- **CloudExporter** for hosted Studio dashboard
+- **MastraStorageExporter** for Studio
+- **MastraPlatformExporter** for hosted Studio dashboard
 
 :::info
 
@@ -363,7 +364,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-service',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -389,7 +390,7 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-service',
         requestContextKeys: ['userId', 'environment', 'tenantId'],
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -440,7 +441,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         requestContextKeys: ['user.id', 'session.data.experimentId'],
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -679,7 +680,7 @@ export const mastra = new Mastra({
     configs: {
       development: {
         spanOutputProcessors: [new LowercaseInputProcessor(), new SensitiveDataFilter()],
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -706,7 +707,7 @@ The following example demonstrates how to combine both options in a single confi
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { SpanType } from '@mastra/core/observability'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
@@ -714,7 +715,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-app',
-        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        exporters: [new MastraStorageExporter(), new LangfuseExporter()],
         excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
         spanFilter: span => {
           if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
@@ -894,7 +895,7 @@ export const mastra = new Mastra({
           maxArrayLength: 100, // Maximum number of items in arrays (default: 50)
           maxObjectKeys: 75, // Maximum number of keys in objects (default: 50)
         },
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -1177,8 +1178,8 @@ Mastra automatically creates spans for:
 
 ### Exporters
 
-- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
-- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter): Mastra platform integration
+- [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter): Storage persistence
+- [MastraPlatformExporter](/reference/observability/tracing/exporters/mastra-platform-exporter): Mastra platform integration
 - [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
 - [Arize](/reference/observability/tracing/exporters/arize): Arize Phoenix and Arize AX integration
 - [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
