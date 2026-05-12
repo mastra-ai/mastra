@@ -640,7 +640,7 @@ export const writeObservabilityEnv = async ({
   // built-in https://observability.mastra.ai default and per-project URLs are
   // derived from MASTRA_PROJECT_ID.
   if (endpoint) {
-    lines.push(`MASTRA_CLOUD_TRACES_ENDPOINT=${endpoint}`);
+    lines.push(`MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=${endpoint}`);
   }
   lines.push('');
   await fs.appendFile(envFilePath, lines.join('\n'));

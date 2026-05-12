@@ -41,7 +41,7 @@ describe('writeObservabilityEnv', () => {
     expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=sk_abc123');
     expect(contents).toContain('MASTRA_PROJECT_ID=proj_xyz');
     // No endpoint emitted unless explicitly passed.
-    expect(contents).not.toContain('MASTRA_CLOUD_TRACES_ENDPOINT');
+    expect(contents).not.toContain('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT');
   });
 
   test('writes the traces endpoint only when provided', async () => {
@@ -54,7 +54,9 @@ describe('writeObservabilityEnv', () => {
     });
 
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
-    expect(contents).toContain('MASTRA_CLOUD_TRACES_ENDPOINT=http://localhost:8080/projects/proj_x/ai/spans/publish');
+    expect(contents).toContain(
+      'MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=http://localhost:8080/projects/proj_x/ai/spans/publish',
+    );
   });
 
   test('creates the .env file if it does not exist', async () => {
