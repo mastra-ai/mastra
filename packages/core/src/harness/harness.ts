@@ -1679,11 +1679,6 @@ export class Harness<TState = {}> {
         return { accepted: result.accepted, runId: result.runId };
       }
 
-      let emittedAgentEnd = false;
-      const unsubscribeAgentEnd = this.subscribe(event => {
-        if (event.type === 'agent_end') emittedAgentEnd = true;
-      });
-
       this.abortController ??= new AbortController();
       const requestContext = await this.buildRequestContext(requestContextInput);
       const isYolo = (this.state as Record<string, unknown>).yolo === true;
@@ -1704,14 +1699,6 @@ export class Harness<TState = {}> {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
         ifIdle: { streamOptions: streamOptions as any },
-      });
-      void Promise.resolve().then(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-        await this.waitForCurrentThreadStreamIdle();
-        unsubscribeAgentEnd();
-        if (!emittedAgentEnd && !this.pendingSuspensionRunId) {
-          this.emit({ type: 'agent_end', reason: 'complete' });
-        }
       });
       return { accepted: result.accepted, runId: result.runId };
     });
