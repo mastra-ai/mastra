@@ -92,6 +92,23 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.chatContainer.children).toHaveLength(1);
   });
 
+  it('does not render streamed goal-judge continuation signals because the judge result is already shown', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'system_reminder',
+          reminderType: 'goal-judge',
+          message: '[Goal attempt 1/500] Continue with Fact 2.',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(0);
+    expect(state.allSystemReminderComponents).toHaveLength(0);
+    expect(state.currentRunSystemReminderKeys.size).toBe(0);
+  });
+
   it('allows the same reminder to render again in a later assistant run', () => {
     const firstMessage = createAssistantMessage([
       {
