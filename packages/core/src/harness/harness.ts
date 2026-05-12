@@ -1580,11 +1580,13 @@ export class Harness<TState = {}> {
   private async finishSubscribedStreamRun({
     suspended,
     error,
+    aborted,
   }: {
     suspended?: boolean;
     error?: boolean;
+    aborted?: boolean;
   }): Promise<void> {
-    const reason = error ? 'error' : suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
+    const reason = error ? 'error' : suspended ? 'suspended' : aborted || this.abortRequested ? 'aborted' : 'complete';
     this.emit({ type: 'agent_end', reason });
     this.currentRunId = null;
     this.currentTraceId = null;
@@ -1656,6 +1658,7 @@ export class Harness<TState = {}> {
                 (streamResult ?? this.finishStreamState(currentRun)).suspended ||
                 undefined,
               error: chunk.type === 'error',
+              aborted: chunk.type === 'abort',
             });
             lastFinishedRunId = finishedRunId;
             currentRun = undefined;
@@ -2159,11 +2162,15 @@ export class Harness<TState = {}> {
 
     let result: { message: HarnessMessage; suspended?: boolean } | undefined;
     let error = false;
+    let aborted = false;
 
     for await (const chunk of response.fullStream) {
       result = await this.processStreamChunk(state, chunk, requestContext);
       if (chunk.type === 'error') {
         error = true;
+      }
+      if (chunk.type === 'abort') {
+        aborted = true;
       }
       if (
         result ||
@@ -2181,7 +2188,13 @@ export class Harness<TState = {}> {
     result ??= this.finishStreamState(state);
     this.emit({
       type: 'agent_end',
-      reason: error ? 'error' : result.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete',
+      reason: error
+        ? 'error'
+        : result.suspended
+          ? 'suspended'
+          : aborted || this.abortRequested
+            ? 'aborted'
+            : 'complete',
     });
 
     this.currentRunId = null;
@@ -3821,6 +3834,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
+    this.cleanupAgentThreadSubscription();
     for (const scheduler of this.displayStateSchedulers) {
       scheduler.dispose();
     }

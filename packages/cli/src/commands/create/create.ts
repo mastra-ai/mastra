@@ -31,6 +31,8 @@ export const create = async (args: {
   skills?: string[];
   template?: string | boolean;
   analytics?: PosthogAnalytics;
+  observability?: boolean;
+  observabilityProject?: string;
 }) => {
   if (args.template !== undefined) {
     await createFromTemplate({
@@ -59,6 +61,7 @@ export const create = async (args: {
     llmApiKey: args?.llmApiKey,
     skills: args?.skills,
     mcpServer: args?.mcpServer,
+    observability: args?.observability,
     needsInteractive,
   });
 
@@ -89,6 +92,9 @@ export const create = async (args: {
       skills: result?.skills || args.skills,
       mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
+      observability: args.observability ?? result?.observability,
+      observabilityProject: args.observabilityProject,
+      observabilityMode: 'create',
     });
     postCreate({ projectName });
     return;
@@ -123,6 +129,9 @@ export const create = async (args: {
     skills: args.skills,
     mcpServer: args.mcpServer,
     versionTag: args.createVersionTag,
+    observability: args.observability,
+    observabilityProject: args.observabilityProject,
+    observabilityMode: 'create',
   });
 
   postCreate({ projectName });

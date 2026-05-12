@@ -4,7 +4,8 @@
  * provider boundary.
  */
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +13,8 @@ import { Agent } from '../agent';
 import { ProviderHistoryCompat } from './provider-history-compat';
 
 config();
+
+setupDummyApiKeys(getLLMTestMode(), ['anthropic', 'openrouter']);
 
 const requestBodies: any[] = [];
 const openrouter = createOpenRouter({
