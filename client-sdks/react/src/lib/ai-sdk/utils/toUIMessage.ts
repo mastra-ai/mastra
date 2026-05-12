@@ -161,7 +161,6 @@ export const mapWorkflowStreamChunkToWatchResult = (
   return prev;
 };
 
-
 function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessageMetadata): MastraUIMessage[] {
   if (typeof contents === 'string') {
     return [
