@@ -1566,8 +1566,14 @@ export class Harness<TState = {}> {
     return this.agentThreadSubscription === subscription;
   }
 
-  private async finishSubscribedStreamRun({ suspended }: { suspended?: boolean }): Promise<void> {
-    const reason = suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
+  private async finishSubscribedStreamRun({
+    suspended,
+    error,
+  }: {
+    suspended?: boolean;
+    error?: boolean;
+  }): Promise<void> {
+    const reason = error ? 'error' : suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
     this.emit({ type: 'agent_end', reason });
     this.currentRunId = null;
     this.currentTraceId = null;
@@ -1597,22 +1603,34 @@ export class Harness<TState = {}> {
     for await (const chunk of subscription.stream) {
       if (!this.isActiveAgentThreadSubscription(subscription)) break;
 
-      if (chunk.type === 'start') {
+      if (!currentRun) {
         currentRun = this.createStreamState();
         this.currentOperationId += 1;
         this.abortController ??= new AbortController();
-        this.currentRunId = subscription.activeRunId();
+        this.currentRunId = subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null);
         this.currentTraceId = null;
         this.emit({ type: 'agent_start' });
       }
 
-      if (!currentRun) continue;
+      if (chunk.type === 'start') {
+        continue;
+      }
 
       try {
         const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
-        if (streamResult || chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+        if (
+          streamResult ||
+          chunk.type === 'finish' ||
+          chunk.type === 'error' ||
+          chunk.type === 'abort' ||
+          chunk.type === 'tool-call-suspended'
+        ) {
           await this.finishSubscribedStreamRun({
-            suspended: (streamResult ?? this.finishStreamState(currentRun)).suspended || undefined,
+            suspended:
+              chunk.type === 'tool-call-suspended' ||
+              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+              undefined,
+            error: chunk.type === 'error',
           });
           currentRun = undefined;
         }
@@ -1729,6 +1747,13 @@ export class Harness<TState = {}> {
       } as AgentSignalContents;
     }
 
+    const wasActive = this.isCurrentThreadStreamActive();
+    let emittedAgentEnd = false;
+    const unsubscribeAgentEnd = wasActive
+      ? undefined
+      : this.subscribe(event => {
+          if (event.type === 'agent_end') emittedAgentEnd = true;
+        });
     const signal = this.sendSignal({
       content: messageInput,
       tracingContext,
@@ -1736,6 +1761,14 @@ export class Harness<TState = {}> {
       requestContext: requestContextInput,
     });
     await signal.accepted;
+    if (!wasActive) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await this.waitForCurrentThreadStreamIdle();
+      unsubscribeAgentEnd?.();
+      if (!emittedAgentEnd && !this.pendingSuspensionRunId) {
+        this.emit({ type: 'agent_end', reason: 'complete' });
+      }
+    }
     return;
   }
 
@@ -1927,12 +1960,14 @@ export class Harness<TState = {}> {
             const inv = part.toolInvocation;
             content.push({ type: 'tool_call', id: inv.toolCallId, name: inv.toolName, args: inv.args });
             if (inv.state === 'result' && inv.result !== undefined) {
+              const partProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
               content.push({
                 type: 'tool_result',
                 id: inv.toolCallId,
                 name: inv.toolName,
                 result: inv.result,
                 isError: inv.isError ?? false,
+                ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
               });
             }
           } else if (part.toolCallId && part.toolName) {
@@ -1946,12 +1981,14 @@ export class Harness<TState = {}> {
           break;
         case 'tool-result':
           if (part.toolCallId && part.toolName) {
+            const resultProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
             content.push({
               type: 'tool_result',
               id: part.toolCallId,
               name: part.toolName,
               result: part.result,
               isError: part.isError ?? false,
+              ...(resultProviderMetadata ? { providerMetadata: resultProviderMetadata } : {}),
             });
           }
           break;
@@ -2078,6 +2115,49 @@ export class Harness<TState = {}> {
     this.abort();
   }
 
+  private async processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContextInput?: RequestContext,
+  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+    const state = this.createStreamState();
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    this.currentOperationId += 1;
+    this.emit({ type: 'agent_start' });
+
+    let result: { message: HarnessMessage; suspended?: boolean } | undefined;
+    let error = false;
+
+    for await (const chunk of response.fullStream) {
+      result = await this.processStreamChunk(state, chunk, requestContext);
+      if (chunk.type === 'error') {
+        error = true;
+      }
+      if (
+        result ||
+        chunk.type === 'finish' ||
+        chunk.type === 'error' ||
+        chunk.type === 'abort' ||
+        chunk.type === 'tool-call-suspended' ||
+        this.abortRequested
+      ) {
+        result ??= this.finishStreamState(state);
+        break;
+      }
+    }
+
+    result ??= this.finishStreamState(state);
+    this.emit({
+      type: 'agent_end',
+      reason: error ? 'error' : result.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete',
+    });
+
+    this.currentRunId = null;
+    this.currentTraceId = null;
+    this.abortController = null;
+
+    return result;
+  }
+
   private async processStreamChunk(
     state: HarnessStreamState,
     chunk: any,
@@ -2177,6 +2257,7 @@ export class Harness<TState = {}> {
 
       case 'tool-result': {
         const toolResult = chunk.payload;
+        const providerMetadata = toolResult.providerMetadata as Record<string, unknown> | undefined;
         const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
         state.currentMessage.content.push({
           type: 'tool_result',
@@ -2184,12 +2265,14 @@ export class Harness<TState = {}> {
           name: toolResult.toolName,
           result,
           isError: toolResult.isError ?? false,
+          ...(providerMetadata ? { providerMetadata } : {}),
         });
         this.emit({
           type: 'tool_end',
           toolCallId: toolResult.toolCallId,
           result,
           isError: toolResult.isError ?? false,
+          ...(providerMetadata ? { providerMetadata } : {}),
         });
         this.emit({ type: 'message_update', message: { ...state.currentMessage } });
         break;
@@ -2638,6 +2721,12 @@ export class Harness<TState = {}> {
     );
   }
 
+  private async waitForCurrentThreadStreamIdle(): Promise<void> {
+    while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
   getCurrentTraceId(): string | null {
     return this.currentTraceId;
   }
@@ -2892,7 +2981,7 @@ export class Harness<TState = {}> {
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
-    await agent.resumeStream(resumeData, {
+    const output = await agent.resumeStream(resumeData, {
       runId: this.pendingSuspensionRunId,
       toolCallId: this.pendingSuspensionToolCallId ?? undefined,
       requireToolApproval: !isYolo,
@@ -2901,6 +2990,7 @@ export class Harness<TState = {}> {
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
+    await this.processStream(output, requestContext);
 
     this.pendingSuspensionRunId = null;
     this.pendingSuspensionToolCallId = null;

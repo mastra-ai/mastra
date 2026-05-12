@@ -1,5 +1,34 @@
 # @mastra/server
 
+## 1.33.0-alpha.12
+
+### Minor Changes
+
+- Added Agent signals for sending contextual messages into agent thread loops and subscribing to thread activity. ([#16229](https://github.com/mastra-ai/mastra/pull/16229))
+
+  Call `agent.sendSignal()` to inject context into a running agent loop. When the thread is idle, that same signal becomes the prompt that starts the next loop by default. Use `ifActive.behavior` and `ifIdle.behavior` to deliver, persist, discard, or wake from a signal.
+
+  Use `agent.subscribeToThread()` to follow the raw stream chunks for a memory thread, observe signal echoes with stable IDs, and abort the active stream for that thread.
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+
+  void (async () => {
+    for await (const part of subscription.stream) {
+      if (part.type === 'finish') {
+        subscription.unsubscribe();
+      }
+    }
+  })();
+
+  agent.sendSignal({ type: 'user-message', contents: 'Use the latest answer' }, { resourceId, threadId });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+
 ## 1.33.0-alpha.11
 
 ### Patch Changes
