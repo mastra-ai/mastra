@@ -11,7 +11,7 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import { getToken } from '../auth/credentials.js';
+import { getToken, loadCredentials } from '../auth/credentials.js';
 import {
   cursorGlobalMCPConfigPath,
   windsurfGlobalMCPConfigPath,
@@ -45,7 +45,12 @@ export async function promptForObservability(): Promise<ObservabilityPromptResul
   if (p.isCancel(choice)) return {};
   if (choice !== 'yes') return { enabled: false };
 
+  // Only surface the logged-in user when creds already existed before getToken().
+  // If they didn't, getToken() ran the browser login() flow which prints its own
+  // "Logged in as <email>" message — printing again here would duplicate it.
+  const preExisting = await loadCredentials();
   const token = await getToken();
+  if (preExisting) p.log.info(`Logged in as ${preExisting.user.email}`);
   return { enabled: true, token };
 }
 
