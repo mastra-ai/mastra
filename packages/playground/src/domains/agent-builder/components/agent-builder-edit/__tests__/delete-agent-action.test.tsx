@@ -34,6 +34,35 @@ const { toast } = await import('@mastra/playground-ui');
 
 const BASE_URL = 'http://localhost:4111';
 
+interface StubAgentOptions {
+  id?: string;
+  name?: string;
+  isStarred?: boolean;
+  starCount?: number;
+}
+
+const stubAgentDetails = ({
+  id = 'agent-123',
+  name = 'My Agent',
+  isStarred = false,
+  starCount = 0,
+}: StubAgentOptions = {}) =>
+  server.use(
+    http.get(`${BASE_URL}/api/stored/agents/${id}`, () =>
+      HttpResponse.json({ id, name, isStarred, starCount, status: 'draft' }),
+    ),
+  );
+
+const stubAgentDependents = (
+  dependents: Array<{ id: string; name: string }> = [],
+  { id = 'agent-123', hiddenCount }: { id?: string; hiddenCount?: number } = {},
+) =>
+  server.use(
+    http.get(`${BASE_URL}/api/stored/agents/${id}/dependents`, () =>
+      HttpResponse.json(hiddenCount !== undefined ? { dependents, hiddenCount } : { dependents }),
+    ),
+  );
+
 const installRadixDomShims = () => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
   if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
@@ -70,6 +99,11 @@ describe('DeleteAgentPanelButton', () => {
     navigate.mockReset();
     (toast.success as ReturnType<typeof vi.fn>).mockReset();
     (toast.error as ReturnType<typeof vi.fn>).mockReset();
+    // Default to "not starred / no dependents" so the existing tests don't have
+    // to think about warning content. Tests that need other states override
+    // these with `server.use(...)`.
+    stubAgentDetails();
+    stubAgentDependents();
   });
 
   afterEach(() => {
@@ -132,6 +166,11 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+    // Wait for the dependents lookup to finish so the confirm button is
+    // enabled. Without this the click below would be a no-op.
+    await waitFor(() => {
+      expect((screen.getByTestId('agent-builder-delete-agent-confirm') as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent-confirm'));
 
     await waitFor(() => {
@@ -141,6 +180,164 @@ describe('DeleteAgentPanelButton', () => {
       expect(toast.success).toHaveBeenCalledWith('Agent deleted');
     });
     expect(navigate).toHaveBeenCalledWith('/agent-builder/agents', { viewTransition: true });
+  });
+
+  it('does not show any warnings when the agent has no stars or dependents', async () => {
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    // Wait for the dependents query to settle so any warning block would have
+    // had a chance to render.
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-builder-delete-agent-dialog')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('agent-builder-agent-impact-warnings')).toBeNull();
+  });
+
+  it('shows the star warning when the agent has been starred by other users', async () => {
+    stubAgentDetails({ isStarred: false, starCount: 3 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const starred = await screen.findByTestId('agent-builder-agent-impact-starred-warning');
+    expect(starred.textContent).toContain('3 users');
+    expect(screen.queryByTestId('agent-builder-agent-impact-dependents-warning')).toBeNull();
+  });
+
+  it('singularizes the star warning when only one user has starred the agent', async () => {
+    stubAgentDetails({ isStarred: true, starCount: 1 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const starred = await screen.findByTestId('agent-builder-agent-impact-starred-warning');
+    expect(starred.textContent).toContain('1 user');
+  });
+
+  it('lists dependent agents when other agents use this one as a sub-agent', async () => {
+    stubAgentDependents([
+      { id: 'parent-1', name: 'Concierge' },
+      { id: 'parent-2', name: 'Researcher' },
+    ]);
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const warning = await screen.findByTestId('agent-builder-agent-impact-dependents-warning');
+    expect(warning.textContent).toContain('2 agents use this agent as a sub-agent');
+    expect(warning.textContent).toContain('Concierge');
+    expect(warning.textContent).toContain('Researcher');
+    expect(screen.queryByTestId('agent-builder-agent-impact-dependents-more')).toBeNull();
+  });
+
+  it('truncates the dependents list and shows an overflow count when there are many', async () => {
+    stubAgentDependents([
+      { id: 'p1', name: 'Agent 1' },
+      { id: 'p2', name: 'Agent 2' },
+      { id: 'p3', name: 'Agent 3' },
+      { id: 'p4', name: 'Agent 4' },
+      { id: 'p5', name: 'Agent 5' },
+      { id: 'p6', name: 'Agent 6' },
+      { id: 'p7', name: 'Agent 7' },
+    ]);
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const more = await screen.findByTestId('agent-builder-agent-impact-dependents-more');
+    expect(more.textContent).toContain('and 2 more');
+    expect(screen.getAllByTestId('agent-builder-agent-impact-dependent')).toHaveLength(5);
+  });
+
+  it('surfaces hiddenCount for cross-workspace private dependents', async () => {
+    stubAgentDependents([], { hiddenCount: 3 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const hidden = await screen.findByTestId('agent-builder-agent-impact-hidden-warning');
+    expect(hidden.textContent).toContain('3 private agents in other workspaces');
+    expect(screen.queryByTestId('agent-builder-agent-impact-dependents-warning')).toBeNull();
+  });
+
+  it('singularizes the hiddenCount warning when only one private dependent is hidden', async () => {
+    stubAgentDependents([], { hiddenCount: 1 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const hidden = await screen.findByTestId('agent-builder-agent-impact-hidden-warning');
+    expect(hidden.textContent).toContain('1 private agent in another workspace');
+  });
+
+  it('still allows confirming the delete when the dependents lookup fails', async () => {
+    let deleteCalled = false;
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/agent-123/dependents`, () =>
+        HttpResponse.json({ error: 'boom' }, { status: 500 }),
+      ),
+      http.delete(`${BASE_URL}/api/stored/agents/agent-123`, () => {
+        deleteCalled = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    await waitFor(() => {
+      expect((screen.getByTestId('agent-builder-delete-agent-confirm') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent-confirm'));
+
+    await waitFor(() => {
+      expect(deleteCalled).toBe(true);
+    });
+    // No warning block is rendered when the lookup fails — the dialog falls
+    // back to the original confirmation copy.
+    expect(screen.queryByTestId('agent-builder-agent-impact-warnings')).toBeNull();
   });
 
   it('toasts an error and keeps the dialog open when the DELETE fails', async () => {
@@ -157,6 +354,9 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+    await waitFor(() => {
+      expect((screen.getByTestId('agent-builder-delete-agent-confirm') as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent-confirm'));
 
     await waitFor(() => {
@@ -176,6 +376,8 @@ describe('DeleteAgentMenuItem', () => {
     navigate.mockReset();
     (toast.success as ReturnType<typeof vi.fn>).mockReset();
     (toast.error as ReturnType<typeof vi.fn>).mockReset();
+    stubAgentDetails();
+    stubAgentDependents();
   });
 
   afterEach(() => {

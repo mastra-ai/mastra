@@ -1298,6 +1298,28 @@ export interface DeleteStoredAgentResponse {
   message: string;
 }
 
+/**
+ * A stored agent that references the target agent as a sub-agent.
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+  visibility?: 'private' | 'public';
+}
+
+/**
+ * Response for GET /stored/agents/:storedAgentId/dependents
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  /**
+   * Count of dependents the caller cannot read (e.g. private agents in other
+   * users' workspaces that reference this public agent). Only non-zero when
+   * the target is public; identities are intentionally not leaked.
+   */
+  hiddenCount: number;
+}
+
 // ============================================================================
 // Stored Scorer Definition Types
 // ============================================================================

@@ -240,6 +240,7 @@ describe('AgentBuilderAgentView MSW integration', () => {
     let deleteCalled = false;
     server.use(
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
+      http.get(`${BASE_URL}/api/stored/agents/agent-123/dependents`, () => HttpResponse.json({ dependents: [] })),
       http.get(`${BASE_URL}/api/memory/threads/user-1-agent-123/messages`, () => HttpResponse.json({ messages: [] })),
       http.delete(`${BASE_URL}/api/stored/agents/agent-123`, () => {
         deleteCalled = true;
@@ -250,7 +251,11 @@ describe('AgentBuilderAgentView MSW integration', () => {
     renderPage();
 
     fireEvent.click(await screen.findByTestId('agent-builder-delete-agent'));
-    fireEvent.click(await screen.findByTestId('agent-builder-delete-agent-confirm'));
+    const confirmButton = await screen.findByTestId('agent-builder-delete-agent-confirm');
+    await waitFor(() => {
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(deleteCalled).toBe(true);

@@ -24346,6 +24346,42 @@ export interface PostStoredAgentsPreviewInstructions_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /stored/agents/:storedAgentId/dependents
+// ============================================================================
+export type GetStoredAgentsStoredAgentIdDependents_PathParams = {
+  /** Unique identifier for the stored agent */
+  storedAgentId: string;
+};
+
+export type GetStoredAgentsStoredAgentIdDependents_Response = {
+  /** Stored agents that reference the target agent as a sub-agent and the caller can read */
+  dependents: {
+    id: string;
+    name: string;
+    visibility?: ('private' | 'public') | undefined;
+  }[];
+  /** Count of additional dependents the caller cannot read (e.g. private agents in other workspaces). Only populated for public targets. */
+  hiddenCount: number;
+};
+
+export type GetStoredAgentsStoredAgentIdDependents_Request = Simplify<
+  (GetStoredAgentsStoredAgentIdDependents_PathParams extends never
+    ? {}
+    : { params: GetStoredAgentsStoredAgentIdDependents_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetStoredAgentsStoredAgentIdDependents_RouteContract {
+  pathParams: GetStoredAgentsStoredAgentIdDependents_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetStoredAgentsStoredAgentIdDependents_Request;
+  response: GetStoredAgentsStoredAgentIdDependents_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /stored/agents/:storedAgentId
 // ============================================================================
 export type GetStoredAgentsStoredAgentId_PathParams = {
@@ -77274,6 +77310,7 @@ export interface RouteTypes {
   'POST /mcp/:serverId/messages': PostMcpServerIdMessages_RouteContract;
   'GET /stored/agents': GetStoredAgents_RouteContract;
   'POST /stored/agents/preview-instructions': PostStoredAgentsPreviewInstructions_RouteContract;
+  'GET /stored/agents/:storedAgentId/dependents': GetStoredAgentsStoredAgentIdDependents_RouteContract;
   'GET /stored/agents/:storedAgentId': GetStoredAgentsStoredAgentId_RouteContract;
   'POST /stored/agents': PostStoredAgents_RouteContract;
   'PATCH /stored/agents/:storedAgentId': PatchStoredAgentsStoredAgentId_RouteContract;
@@ -77975,6 +78012,9 @@ export interface Client {
     DELETE: DeleteStoredAgentsStoredAgentId_RouteContract;
     GET: GetStoredAgentsStoredAgentId_RouteContract;
     PATCH: PatchStoredAgentsStoredAgentId_RouteContract;
+  };
+  '/stored/agents/:storedAgentId/dependents': {
+    GET: GetStoredAgentsStoredAgentIdDependents_RouteContract;
   };
   '/stored/agents/:storedAgentId/star': {
     DELETE: DeleteStoredAgentsStoredAgentIdStar_RouteContract;

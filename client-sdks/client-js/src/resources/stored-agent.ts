@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type {
   ClientOptions,
   StoredAgentResponse,
+  StoredAgentDependentsResponse,
   UpdateStoredAgentParams,
   DeleteStoredAgentResponse,
   AgentVersionResponse,
@@ -75,6 +76,18 @@ export class StoredAgent extends BaseResource {
       {
         method: 'DELETE',
       },
+    );
+  }
+
+  /**
+   * Lists stored agents that reference this agent as a sub-agent.
+   * Used to warn the caller before deleting an agent that other agents depend on.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing dependent agents the caller can read
+   */
+  dependents(requestContext?: RequestContext | Record<string, any>): Promise<StoredAgentDependentsResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/dependents${requestContextQueryString(requestContext)}`,
     );
   }
 

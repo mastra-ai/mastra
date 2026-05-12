@@ -14,6 +14,7 @@ import {
   createStoredAgentResponseSchema,
   updateStoredAgentResponseSchema,
   deleteStoredAgentResponseSchema,
+  getStoredAgentDependentsResponseSchema,
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
@@ -668,6 +669,112 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
       return handleError(error, 'Error deleting stored agent');
+    }
+  },
+});
+
+/**
+ * GET /stored/agents/:storedAgentId/dependents - List agents that reference this agent as a sub-agent
+ *
+ * Performs a reverse lookup across the agents store: returns the set of stored
+ * agents whose resolved `agents` map contains the target id. Used by the
+ * playground delete dialog to warn before deleting an agent that other agents
+ * depend on. Filtered by caller-visible access so unauthorised agents are not
+ * leaked through the dependents list.
+ */
+export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/stored/agents/:storedAgentId/dependents',
+  responseType: 'json',
+  pathParamSchema: storedAgentIdPathParams,
+  responseSchema: getStoredAgentDependentsResponseSchema,
+  summary: 'List dependents of a stored agent',
+  description:
+    'Returns agents that reference the target agent as a sub-agent. Used to warn the caller before deleting an agent that other agents depend on. Only dependents the caller has read access to are returned.',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, storedAgentId }) => {
+    try {
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage is not configured' });
+      }
+
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+      }
+
+      // Throws 404 if the caller cannot read the target agent — keeps the
+      // dependents endpoint from being usable as a sub-agent reference oracle
+      // for agents the caller can't see.
+      const target = await agentsStore.getById(storedAgentId);
+      if (!target) {
+        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+      }
+      assertReadAccess({ requestContext, resource: 'agents', resourceId: storedAgentId, record: target });
+
+      // Resolve every agent so the `agents` snapshot field is populated. We
+      // use `perPage: false` to disable pagination — the count of stored
+      // agents per workspace is small enough that a full scan is fine for an
+      // on-demand delete-confirmation call.
+      //
+      // We deliberately scan *all* agents (no `authorId` filter) so that a
+      // public target can detect cross-workspace private dependents. Records
+      // the caller can't read are aggregated into `hiddenCount` instead of
+      // being named in `dependents`, so we never leak ids/names of private
+      // agents owned by other users. For a private target, no other workspace
+      // can legitimately reference it, so `hiddenCount` stays 0.
+      const filter = resolveAuthorFilter({ requestContext, resource: 'agents' });
+      const all = await agentsStore.listResolved({
+        perPage: false,
+        status: 'published',
+      });
+
+      // The resolved `agents` snapshot field can be either a static
+      // Record<string, toolConfig> or an array of conditional variants
+      // ({ value, rules? }). Treat the target id as referenced if any variant's
+      // value (or the static object) contains a matching key.
+      const referencesTarget = (subAgents: unknown): boolean => {
+        if (!subAgents) return false;
+        if (Array.isArray(subAgents)) {
+          return subAgents.some(variant => {
+            const value = (variant as { value?: unknown })?.value;
+            return Boolean(value && typeof value === 'object' && storedAgentId in (value as Record<string, unknown>));
+          });
+        }
+        if (typeof subAgents === 'object') {
+          return storedAgentId in (subAgents as Record<string, unknown>);
+        }
+        return false;
+      };
+
+      const targetIsPublic = (target as { visibility?: string }).visibility === 'public';
+
+      const dependents: Array<{ id: string; name: string; visibility?: 'private' | 'public' }> = [];
+      let hiddenCount = 0;
+
+      for (const record of all.agents) {
+        if (record.id === storedAgentId) continue;
+        if (!referencesTarget((record as { agents?: unknown }).agents)) continue;
+
+        if (matchesAuthorFilter(record, filter)) {
+          dependents.push({
+            id: record.id,
+            name: (record as { name?: string }).name ?? record.id,
+            ...(record.visibility !== undefined ? { visibility: record.visibility } : {}),
+          });
+        } else if (targetIsPublic) {
+          hiddenCount += 1;
+        }
+        // For a private target: hidden cross-workspace refs shouldn't exist
+        // (the referencing agent couldn't have resolved it), so we drop them
+        // silently to avoid surfacing data that shouldn't be there.
+      }
+
+      return { dependents, hiddenCount };
+    } catch (error) {
+      return handleError(error, 'Error listing stored agent dependents');
     }
   },
 });

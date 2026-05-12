@@ -470,6 +470,38 @@ export const deleteStoredAgentResponseSchema = z.object({
   message: z.string(),
 });
 
+/**
+ * Response for GET /stored/agents/:storedAgentId/dependents
+ *
+ * Returns the set of stored agents that reference the target agent as a
+ * sub-agent. Used by the playground delete dialog to warn before destructive
+ * actions.
+ *
+ * `dependents` contains the records the caller has read access to (named, so
+ * the UI can list them). `hiddenCount` is a non-negative count of additional
+ * dependents the caller cannot read — typically private agents in other
+ * workspaces — and is only populated when the target itself is public, so a
+ * private target never reveals the existence of cross-workspace references.
+ */
+export const getStoredAgentDependentsResponseSchema = z.object({
+  dependents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        visibility: z.enum(['private', 'public']).optional(),
+      }),
+    )
+    .describe('Stored agents that reference the target agent as a sub-agent and the caller can read'),
+  hiddenCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .describe(
+      'Count of additional dependents the caller cannot read (e.g. private agents in other workspaces). Only populated for public targets.',
+    ),
+});
+
 // ============================================================================
 // Preview Instructions Schemas
 // ============================================================================
