@@ -393,14 +393,44 @@ describe('Mastra — workflow scheduler integration', () => {
       await second.shutdown();
     });
 
-    it('does not delete schedule rows belonging to non-registered workflows', async () => {
+    it('deletes declarative `wf_`-prefixed rows for workflows no longer registered in code', async () => {
       const storage = new MockStore();
       const mastra = await boot(storage, buildMultiScheduledWorkflow([{ id: 'a', cron: '0 9 * * *' }]));
       const schedulesStore = (await storage.getStore('schedules'))!;
 
-      // Manually insert a row for an unrelated workflow.
+      // Simulate a previous deploy that declared a schedule for a workflow
+      // that has since been removed from code entirely.
       await schedulesStore.createSchedule({
-        id: 'wf_unrelated__job',
+        id: 'wf_removed-wf__job',
+        target: { type: 'workflow', workflowId: 'removed-wf' },
+        cron: '0 0 * * *',
+        status: 'active',
+        nextFireAt: Date.now() + 60_000,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      await mastra.shutdown();
+
+      // Reboot without `removed-wf`. Its declarative row must be cleaned up
+      // so the scheduler doesn't keep firing events the processor can't
+      // resolve (which would otherwise cause infinite event redelivery).
+      const second = await boot(storage, buildMultiScheduledWorkflow([{ id: 'a', cron: '0 9 * * *' }]));
+      const ids = (await schedulesStore.listSchedules()).map(r => r.id).sort();
+      expect(ids).not.toContain('wf_removed-wf__job');
+      expect(ids).toEqual(['wf_multi-wf__a']);
+      await second.shutdown();
+    });
+
+    it('does not delete user-created (non-`wf_`-prefixed) schedule rows', async () => {
+      const storage = new MockStore();
+      const mastra = await boot(storage, buildMultiScheduledWorkflow([{ id: 'a', cron: '0 9 * * *' }]));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      // A schedule created via the schedules API (not via declarative config)
+      // does not use the `wf_` prefix and must be left alone on reboot even
+      // when its target workflow isn't currently registered.
+      await schedulesStore.createSchedule({
+        id: 'user-created-schedule',
         target: { type: 'workflow', workflowId: 'unrelated' },
         cron: '0 0 * * *',
         status: 'active',
@@ -408,12 +438,11 @@ describe('Mastra — workflow scheduler integration', () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
-      // Reboot with the same registered workflow set; orphan deletion must
-      // not touch rows owned by workflows we don't have registered.
       await mastra.shutdown();
+
       const second = await boot(storage, buildMultiScheduledWorkflow([{ id: 'a', cron: '0 9 * * *' }]));
       const ids = (await schedulesStore.listSchedules()).map(r => r.id).sort();
-      expect(ids).toContain('wf_unrelated__job');
+      expect(ids).toContain('user-created-schedule');
       await second.shutdown();
     });
   });

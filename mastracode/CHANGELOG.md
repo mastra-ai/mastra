@@ -1,5 +1,13 @@
 # mastracode
 
+## 0.18.0-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7), [`bd977e6`](https://github.com/mastra-ai/mastra/commit/bd977e6056fe9bdfb0925f6796b2141f65db3e36)]:
+  - @mastra/core@1.33.0-alpha.16
+  - @mastra/pg@1.10.1-alpha.2
+
 ## 0.18.0-alpha.17
 
 ### Patch Changes
