@@ -55,10 +55,6 @@ import {
   getEnvironmentsResponseSchema,
   getTagsArgsSchema,
   getTagsResponseSchema,
-  getRootSpanJsonKeysArgsSchema,
-  getRootSpanJsonKeysResponseSchema,
-  getLogJsonKeysArgsSchema,
-  getLogJsonKeysResponseSchema,
   paginationArgsSchema,
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
@@ -414,40 +410,6 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   },
 });
 
-export const GET_ROOT_SPAN_JSON_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_ROOT_SPAN_JSON_KEYS, {
-  queryParamSchema: wrapSchemaForQueryParams(getRootSpanJsonKeysArgsSchema.partial()),
-  responseSchema: getRootSpanJsonKeysResponseSchema,
-  handler: async ({ mastra, ...params }) => {
-    const args = getRootSpanJsonKeysArgsSchema.parse(pickParams(getRootSpanJsonKeysArgsSchema, params));
-    const observabilityStore = await getObservabilityStore(mastra);
-    try {
-      return await observabilityStore.listRootSpanJsonKeys(args);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('does not support listing traces')) {
-        return { keys: [] };
-      }
-      throw error;
-    }
-  },
-});
-
-export const GET_LOG_JSON_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_LOG_JSON_KEYS, {
-  queryParamSchema: wrapSchemaForQueryParams(getLogJsonKeysArgsSchema.partial()),
-  responseSchema: getLogJsonKeysResponseSchema,
-  handler: async ({ mastra, ...params }) => {
-    const args = getLogJsonKeysArgsSchema.parse(pickParams(getLogJsonKeysArgsSchema, params));
-    const observabilityStore = await getObservabilityStore(mastra);
-    try {
-      return await observabilityStore.listLogJsonKeys(args);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('does not support listing logs')) {
-        return { keys: [] };
-      }
-      throw error;
-    }
-  },
-});
-
 export const NEW_ROUTES = {
   LIST_LOGS,
   LIST_SCORES,
@@ -475,6 +437,4 @@ export const NEW_ROUTES = {
   GET_SERVICE_NAMES,
   GET_ENVIRONMENTS,
   GET_TAGS,
-  GET_ROOT_SPAN_JSON_KEYS,
-  GET_LOG_JSON_KEYS,
 };

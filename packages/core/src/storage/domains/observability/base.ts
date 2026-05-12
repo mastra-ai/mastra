@@ -17,10 +17,6 @@ import type {
   GetMetricLabelKeysResponse,
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
-  GetRootSpanJsonKeysArgs,
-  GetRootSpanJsonKeysResponse,
-  GetLogJsonKeysArgs,
-  GetLogJsonKeysResponse,
 } from './discovery';
 import type {
   BatchCreateFeedbackArgs,
@@ -333,60 +329,6 @@ export class ObservabilityStorage extends StorageDomain {
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing trace branches',
     });
-  }
-
-  /**
-   * Returns the distinct set of top-level keys found on root-span `metadata` or `attributes`.
-   *
-   * Default implementation scans a single page of recent root spans and aggregates keys
-   * in-memory. Portable but O(N); native SQL distinct-keys extraction is recommended in
-   * concrete backends.
-   */
-  async listRootSpanJsonKeys(args: GetRootSpanJsonKeysArgs): Promise<GetRootSpanJsonKeysResponse> {
-    const limit = args.limit ?? 500;
-    const keys = new Set<string>();
-
-    const resp = await this.listTraces({ pagination: { page: 0, perPage: 250 } });
-    for (const span of resp.spans) {
-      const obj = (args.field === 'metadata' ? span.metadata : span.attributes) as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      if (obj && typeof obj === 'object') {
-        for (const k of Object.keys(obj)) {
-          keys.add(k);
-          if (keys.size >= limit) break;
-        }
-      }
-      if (keys.size >= limit) break;
-    }
-
-    return { keys: [...keys].sort().slice(0, limit) };
-  }
-
-  /**
-   * Returns the distinct set of top-level keys found on log `metadata` or `data`.
-   *
-   * Default implementation scans a single page of recent logs and aggregates keys in-memory.
-   * Portable but O(N); native SQL distinct-keys extraction is recommended in concrete backends.
-   */
-  async listLogJsonKeys(args: GetLogJsonKeysArgs): Promise<GetLogJsonKeysResponse> {
-    const limit = args.limit ?? 500;
-    const keys = new Set<string>();
-
-    const resp = await this.listLogs({ pagination: { page: 0, perPage: 250 } });
-    for (const log of resp.logs) {
-      const obj = (args.field === 'metadata' ? log.metadata : log.data) as Record<string, unknown> | null | undefined;
-      if (obj && typeof obj === 'object') {
-        for (const k of Object.keys(obj)) {
-          keys.add(k);
-          if (keys.size >= limit) break;
-        }
-      }
-      if (keys.size >= limit) break;
-    }
-
-    return { keys: [...keys].sort().slice(0, limit) };
   }
 
   /**

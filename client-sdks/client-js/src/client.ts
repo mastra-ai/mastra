@@ -64,10 +64,6 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-  GetRootSpanJsonKeysArgs,
-  GetRootSpanJsonKeysResponse,
-  GetLogJsonKeysArgs,
-  GetLogJsonKeysResponse,
 } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
@@ -551,7 +547,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of action IDs to action details
    */
   public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
-    return this.request('/agent-builder/');
+    return this.request('/agent-builder');
   }
 
   /**
@@ -1180,16 +1176,6 @@ export class MastraClient extends BaseResource {
   /** Returns distinct tags with optional entity type filtering. */
   getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
     return this.observability.getTags(params);
-  }
-
-  /** Returns distinct top-level keys from root-span `metadata` or `attributes`. */
-  getRootSpanJsonKeys(params: GetRootSpanJsonKeysArgs): Promise<GetRootSpanJsonKeysResponse> {
-    return this.observability.getRootSpanJsonKeys(params);
-  }
-
-  /** Returns distinct top-level keys from log `metadata` or `data`. */
-  getLogJsonKeys(params: GetLogJsonKeysArgs): Promise<GetLogJsonKeysResponse> {
-    return this.observability.getLogJsonKeys(params);
   }
 
   // ============================================================================

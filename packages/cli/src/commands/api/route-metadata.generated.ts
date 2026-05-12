@@ -168,6 +168,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/signals": {
+    "method": "POST",
+    "path": "/agents/:agentId/signals",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -2264,38 +2278,6 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "tags"
-    }
-  },
-  "GET /observability/discovery/root-span-keys": {
-    "method": "GET",
-    "path": "/observability/discovery/root-span-keys",
-    "pathParams": [],
-    "queryParams": [
-      "field",
-      "limit"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "object-property",
-      "listProperty": "keys"
-    }
-  },
-  "GET /observability/discovery/log-keys": {
-    "method": "GET",
-    "path": "/observability/discovery/log-keys",
-    "pathParams": [],
-    "queryParams": [
-      "field",
-      "limit"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "object-property",
-      "listProperty": "keys"
     }
   },
   "GET /logs/transports": {
