@@ -318,24 +318,24 @@ This table lists the surfaces an agent will hit and where to look for the
 authoritative request/response shape. Don't copy curl blocks from here —
 run the per-section commands in `references/<section>.md`.
 
-| Surface           | Endpoint                                                                      |
-| ----------------- | ----------------------------------------------------------------------------- |
-| Builder settings  | `GET /editor/builder/settings`                                                |
-| Builder infra     | `GET /editor/builder/infrastructure`                                          |
-| Registries (list) | `GET /editor/builder/registries`                                              |
-| Registry search   | `GET /editor/builder/registries/:registryId/search?q=…`                       |
-| Registry popular  | `GET /editor/builder/registries/:registryId/popular`                          |
-| Registry preview  | `GET /editor/builder/registries/:registryId/preview?owner=…&repo=…&path=…`    |
-| Registry install  | `POST /editor/builder/registries/:registryId/install`                         |
-| Workspace CRUD    | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                              |
-| Agent CRUD        | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                                  |
-| Agent star        | `PUT / DELETE /stored/agents/:id/star`                                        |
-| Agent avatar      | `POST /stored/agents/:id/avatar` (owner-only)                                 |
-| Skill CRUD        | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                                  |
-| Skill publish     | `POST /stored/skills/:id/publish`                                             |
-| Skill star        | `PUT / DELETE /stored/skills/:id/star`                                        |
-| Auth me           | `GET /api/auth/me` (returns logged-in user + roles + permissions)             |
-| Auth refresh      | `POST /auth/refresh`                                                          |
+| Surface           | Endpoint                                                                   |
+| ----------------- | -------------------------------------------------------------------------- |
+| Builder settings  | `GET /editor/builder/settings`                                             |
+| Builder infra     | `GET /editor/builder/infrastructure`                                       |
+| Registries (list) | `GET /editor/builder/registries`                                           |
+| Registry search   | `GET /editor/builder/registries/:registryId/search?q=…`                    |
+| Registry popular  | `GET /editor/builder/registries/:registryId/popular`                       |
+| Registry preview  | `GET /editor/builder/registries/:registryId/preview?owner=…&repo=…&path=…` |
+| Registry install  | `POST /editor/builder/registries/:registryId/install`                      |
+| Workspace CRUD    | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                           |
+| Agent CRUD        | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                               |
+| Agent star        | `PUT / DELETE /stored/agents/:id/star`                                     |
+| Agent avatar      | `POST /stored/agents/:id/avatar` (owner-only)                              |
+| Skill CRUD        | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                               |
+| Skill publish     | `POST /stored/skills/:id/publish`                                          |
+| Skill star        | `PUT / DELETE /stored/skills/:id/star`                                     |
+| Auth me           | `GET /api/auth/me` (returns logged-in user + roles + permissions)          |
+| Auth refresh      | `POST /auth/refresh`                                                       |
 
 ## Builder Studio routes
 
