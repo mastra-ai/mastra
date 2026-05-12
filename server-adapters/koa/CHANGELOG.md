@@ -1,5 +1,35 @@
 # @mastra/koa
 
+## 1.5.2-alpha.13
+
+### Patch Changes
+
+- Fixed `TypeError: Cannot read properties of undefined (reading 'length')` thrown during `MastraServer.init()` when a subclass forwards a non-Koa app-like object (for example a `koa-router` instance, a mounted sub-app, or a custom wrapper) to `super.registerRoute(app, route, opts)`. The dispatcher-reuse optimization introduced in 1.5.0 now requires the target to expose an `app.middleware` array; otherwise it falls back to registering a fresh dispatcher per route via `app.use`, matching the pre-1.5.0 per-route behavior. ([#16484](https://github.com/mastra-ai/mastra/pull/16484))
+
+  **Example (subclass that previously crashed):**
+
+  ```ts
+  import { MastraServer } from '@mastra/koa';
+  import Router from 'koa-router';
+
+  class CustomKoaMastraServer extends MastraServer {
+    private router = new Router();
+
+    async registerCustomApiRoutes() {
+      const routes = this.mastra.getServer()?.apiRoutes ?? [];
+      for (const route of routes) {
+        // The router has no `middleware` array — this used to throw at init.
+        await super.registerRoute(this.router as any, route, { prefix: this.prefix });
+      }
+      this.app.use(this.router.routes());
+    }
+  }
+  ```
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+  - @mastra/server@1.33.0-alpha.13
+
 ## 1.5.2-alpha.12
 
 ### Patch Changes
