@@ -1038,5 +1038,203 @@ export function pgTests() {
         expect(versions.length).toBe(0);
       });
     });
+
+    // PG-specific: jsonb scalar string resilience across the other versioned
+    // domains. Same bug class as #16224 (which originally fixed only the agents
+    // domain) — each of mcpClients, mcpServers, promptBlocks, scorerDefinitions,
+    // skills and workspaces used to ship its own private parseJson + fail-fast
+    // .map(parseRow) that crashed when a single jsonb column contained a scalar
+    // string (the pg driver auto-deserialises it to a bare JS string, which
+    // JSON.parse then rejects).
+    //
+    // Each domain now uses the shared `parseJsonResilient` helper from
+    // `domains/utils.ts` plus a `flatMap` + try/catch in its list methods, so
+    // listings no longer fail fast on one malformed row. These tests assert that
+    // resilient behaviour per domain.
+    //
+    // See: https://github.com/mastra-ai/mastra/issues/16224
+    describe('Other PG domains: jsonb scalar string resilience (#16224 follow-up)', () => {
+      let domainsTestStore: PostgresStore;
+
+      beforeAll(async () => {
+        domainsTestStore = new PostgresStore({ ...TEST_CONFIG, id: 'domains-jsonb-scalar-test' });
+        await domainsTestStore.init();
+      });
+
+      afterAll(async () => {
+        try {
+          await domainsTestStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        // Wipe each versioned domain's tables — versions first because of FK direction
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_client_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_clients`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_server_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_servers`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_prompt_block_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_prompt_blocks`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_scorer_definition_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_scorer_definitions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_skill_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_skills`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_workspace_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_workspaces`);
+      });
+
+      it('MCPClientsPG.listVersions returns a jsonb scalar string `servers` column as the deserialised scalar', async () => {
+        const mcpClientsStore: any = await domainsTestStore.getStore('mcpClients');
+        const parentId = `mcp-client-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_clients (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        // jsonb scalar string in the required `servers` column. Pre-fix this crashed
+        // listVersions; post-fix the row survives and `servers` arrives as a string.
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_client_versions (
+             id, "mcpClientId", "versionNumber", name, servers, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-client', '"servers-as-scalar-string"'],
+        );
+
+        const result = await mcpClientsStore.listVersions({ mcpClientId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].servers).toBe('servers-as-scalar-string');
+      });
+
+      it('MCPServersPG.listVersions returns a jsonb scalar string `tools` column as the deserialised scalar', async () => {
+        const mcpServersStore: any = await domainsTestStore.getStore('mcpServers');
+        const parentId = `mcp-server-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_servers (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_server_versions (
+             id, "mcpServerId", "versionNumber", name, version, tools, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-server', '1.0.0', '"tools-as-scalar-string"'],
+        );
+
+        const result = await mcpServersStore.listVersions({ mcpServerId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].tools).toBe('tools-as-scalar-string');
+      });
+
+      it('PromptBlocksPG.listVersions returns a jsonb scalar string `rules` column as the deserialised scalar', async () => {
+        const promptBlocksStore: any = await domainsTestStore.getStore('promptBlocks');
+        const parentId = `prompt-block-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_prompt_blocks (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_prompt_block_versions (
+             id, "blockId", "versionNumber", name, content, rules, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-block', 'some content', '"rules-as-scalar-string"'],
+        );
+
+        const result = await promptBlocksStore.listVersions({ blockId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].rules).toBe('rules-as-scalar-string');
+      });
+
+      it('ScorerDefinitionsPG.listVersions returns a jsonb scalar string `model` column as the deserialised scalar', async () => {
+        const scorerDefinitionsStore: any = await domainsTestStore.getStore('scorerDefinitions');
+        const parentId = `scorer-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_scorer_definitions (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        // Same shape as the bug in #16224 — model stored as a jsonb scalar string.
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_scorer_definition_versions (
+             id, "scorerDefinitionId", "versionNumber", name, type, model, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-scorer', 'llm-judge', '"google/gemini-3-flash"'],
+        );
+
+        const result = await scorerDefinitionsStore.listVersions({ scorerDefinitionId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].model).toBe('google/gemini-3-flash');
+      });
+
+      it('SkillsPG.listVersions returns a jsonb scalar string `source` column as the deserialised scalar', async () => {
+        const skillsStore: any = await domainsTestStore.getStore('skills');
+        const parentId = `skill-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_skills (id, status, "authorId", "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_skill_versions (
+             id, "skillId", "versionNumber", name, description, instructions, source, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-skill', 'desc', 'instructions', '"source-as-scalar-string"'],
+        );
+
+        const result = await skillsStore.listVersions({ skillId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].source).toBe('source-as-scalar-string');
+      });
+
+      it('WorkspacesPG.listVersions returns a jsonb scalar string `filesystem` column as the deserialised scalar', async () => {
+        const workspacesStore: any = await domainsTestStore.getStore('workspaces');
+        const parentId = `workspace-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_workspaces (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_workspace_versions (
+             id, "workspaceId", "versionNumber", name, filesystem, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-workspace', '"filesystem-as-scalar-string"'],
+        );
+
+        const result = await workspacesStore.listVersions({ workspaceId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].filesystem).toBe('filesystem-as-scalar-string');
+      });
+    });
   });
 }
