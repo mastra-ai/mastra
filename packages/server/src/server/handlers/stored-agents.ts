@@ -751,7 +751,7 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
 
       const targetIsPublic = (target as { visibility?: string }).visibility === 'public';
 
-      const dependents: Array<{ id: string; name: string; visibility?: 'private' | 'public' }> = [];
+      const dependents: Array<{ id: string; name: string }> = [];
       let hiddenCount = 0;
 
       for (const record of all.agents) {
@@ -762,7 +762,6 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
           dependents.push({
             id: record.id,
             name: (record as { name?: string }).name ?? record.id,
-            ...(record.visibility !== undefined ? { visibility: record.visibility } : {}),
           });
         } else if (targetIsPublic) {
           hiddenCount += 1;

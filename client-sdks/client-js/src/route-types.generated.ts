@@ -24358,7 +24358,6 @@ export type GetStoredAgentsStoredAgentIdDependents_Response = {
   dependents: {
     id: string;
     name: string;
-    visibility?: ('private' | 'public') | undefined;
   }[];
   /** Count of additional dependents the caller cannot read (e.g. private agents in other workspaces). Only populated for public targets. */
   hiddenCount: number;

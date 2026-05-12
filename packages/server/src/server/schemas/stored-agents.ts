@@ -489,7 +489,6 @@ export const getStoredAgentDependentsResponseSchema = z.object({
       z.object({
         id: z.string(),
         name: z.string(),
-        visibility: z.enum(['private', 'public']).optional(),
       }),
     )
     .describe('Stored agents that reference the target agent as a sub-agent and the caller can read'),

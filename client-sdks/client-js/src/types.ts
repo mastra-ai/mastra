@@ -1304,7 +1304,6 @@ export interface DeleteStoredAgentResponse {
 export interface StoredAgentDependent {
   id: string;
   name: string;
-  visibility?: 'private' | 'public';
 }
 
 /**
