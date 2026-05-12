@@ -167,10 +167,7 @@ describe('augmentWithInit', () => {
   // cache so the next call retries.
   describe('init rejection handling', () => {
     it('retries init on the next call after a rejection', async () => {
-      const init = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('transient boot failure'))
-        .mockResolvedValueOnce(undefined);
+      const init = vi.fn().mockRejectedValueOnce(new Error('transient boot failure')).mockResolvedValueOnce(undefined);
       const listMessages = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
       const mockStorage = { init, listMessages, disableInit: false } as unknown as MastraStorage;
 
@@ -185,10 +182,7 @@ describe('augmentWithInit', () => {
     });
 
     it('all concurrent callers see the same rejection and the next call retries', async () => {
-      const init = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('boom'))
-        .mockResolvedValueOnce(undefined);
+      const init = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(undefined);
       const listMessages = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
       const mockStorage = { init, listMessages, disableInit: false } as unknown as MastraStorage;
 
@@ -211,10 +205,7 @@ describe('augmentWithInit', () => {
     });
 
     it('retries init on an explicit init() call after a rejection', async () => {
-      const init = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('first'))
-        .mockResolvedValueOnce(undefined);
+      const init = vi.fn().mockRejectedValueOnce(new Error('first')).mockResolvedValueOnce(undefined);
       const mockStorage = { init, disableInit: false } as unknown as MastraStorage;
 
       const augmentedStorage = augmentWithInit(mockStorage);
@@ -242,10 +233,7 @@ describe('augmentWithInit', () => {
     });
 
     it('still caches a successful init after a retry', async () => {
-      const init = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('once'))
-        .mockResolvedValue(undefined);
+      const init = vi.fn().mockRejectedValueOnce(new Error('once')).mockResolvedValue(undefined);
       const listMessages = vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false });
       const mockStorage = { init, listMessages, disableInit: false } as unknown as MastraStorage;
 
