@@ -7,7 +7,7 @@ packages:
 
 # Coinbase Agentic Wallet MCP
 
-The [Coinbase Agentic Wallet MCP server](https://docs.cdp.coinbase.com/agentic-wallet/mcp/welcome) lets agents discover and pay for HTTP APIs autonomously via the x402 protocol, using a Coinbase-managed embedded wallet -- no API keys, no manual onramp, no seed phrases.
+The [Coinbase Agentic Wallet MCP server](https://docs.cdp.coinbase.com/agentic-wallet/mcp/welcome) lets agents discover and pay for HTTP APIs autonomously via the x402 protocol, using a Coinbase-managed embedded wallet. Funding happens through the built-in Coinbase Onramp when needed, with no API keys or seed phrases to manage.
 
 ## Configure `MCPClient`
 
@@ -52,7 +52,7 @@ export const paymentsAgent = new Agent({
     You can search the x402 bazaar, inspect payment requirements,
     and pay for HTTP APIs in USDC.
   `,
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   tools: await coinbaseMcp.listTools(),
 })
 ```
