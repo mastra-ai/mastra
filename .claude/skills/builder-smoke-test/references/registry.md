@@ -44,10 +44,10 @@ curl -s "$BASE/editor/builder/registries/skills-sh/popular" | jq '.skills | leng
 
 ### 4. Preview
 
-Pick a skill from search/popular. Use `topSource` to derive `repository` + `skillName`:
+Pick a skill from search/popular. Preview takes the GitHub coordinates as query params (`owner`, `repo`, `path` — where `path` is the skill name within the repo). Source: `packages/server/src/server/schemas/builder-registry.ts` `builderRegistryPreviewQuerySchema`.
 
 ```bash
-curl -s "$BASE/editor/builder/registries/skills-sh/preview?repository=owner/repo&skillName=name" | jq .
+curl -s "$BASE/editor/builder/registries/skills-sh/preview?owner=OWNER&repo=REPO&path=SKILLNAME" | jq .
 ```
 
 - [ ] Returns `name`, `description`, `instructions` (frontmatter stripped), `files` tree
@@ -55,18 +55,20 @@ curl -s "$BASE/editor/builder/registries/skills-sh/preview?repository=owner/repo
 
 ### 5. Install
 
+Install body is `{ owner, repo, skillName, visibility? }`. Source: `packages/server/src/server/schemas/builder-registry.ts` `builderRegistryInstallBodySchema`.
+
 ```bash
 curl -s -X POST "$BASE/editor/builder/registries/skills-sh/install" \
   -H 'Content-Type: application/json' \
-  -d '{ "repository": "owner/repo", "skillName": "name" }' | jq .
+  -d '{ "owner": "OWNER", "repo": "REPO", "skillName": "SKILLNAME" }' | jq .
 ```
 
-- [ ] Returns 200/201 with the new stored skill
-- [ ] `metadata.origin.type` is `"skills-sh"`
-- [ ] `metadata.origin.repository`, `skillName`, `installedAt` present
+- [ ] Returns 200/201 with `{ storedSkillId, name, filesWritten }`
+- [ ] Subsequent `GET /stored/skills/<storedSkillId>` shows `metadata.origin.type = "skills-sh"`
+- [ ] `metadata.origin.owner`, `repo`, `skillName`, `installedAt` present
 - [ ] `instructions` does NOT start with `---`
 
-Record `INSTALLED_SKILL_ID`.
+Record `INSTALLED_SKILL_ID = storedSkillId`.
 
 ### 6. Collision
 
@@ -76,7 +78,7 @@ Re-run the same install:
 curl -s -o /tmp/install-err.json -w '%{http_code}\n' \
   -X POST "$BASE/editor/builder/registries/skills-sh/install" \
   -H 'Content-Type: application/json' \
-  -d '{ "repository": "owner/repo", "skillName": "name" }'
+  -d '{ "owner": "OWNER", "repo": "REPO", "skillName": "SKILLNAME" }'
 cat /tmp/install-err.json | jq .
 ```
 

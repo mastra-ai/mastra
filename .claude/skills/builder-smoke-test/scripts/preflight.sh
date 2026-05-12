@@ -44,7 +44,7 @@ done
 # the caller doesn't have to repeat values that are already in the shell.
 has_flag() {
   local needle="$1"
-  for a in "${SCAFFOLD_ARGS[@]:-}"; do
+  for a in ${SCAFFOLD_ARGS[@]+"${SCAFFOLD_ARGS[@]}"}; do
     case "$a" in "${needle}"|"${needle}="*) return 0 ;; esac
   done
   return 1
@@ -67,7 +67,7 @@ ok()  { echo "✓ $*"; }
 
 # 1. Run scaffold. Capture its output so we can extract PROJECT_DIR + AUTH_MODE.
 echo "→ scaffolding builder-smoke test project"
-scaffold_out=$(bash "${SCRIPT_DIR}/scaffold.sh" "${SCAFFOLD_ARGS[@]:-}" 2>&1)
+scaffold_out=$(bash "${SCRIPT_DIR}/scaffold.sh" ${SCAFFOLD_ARGS[@]+"${SCAFFOLD_ARGS[@]}"} 2>&1)
 scaffold_rc=$?
 echo "${scaffold_out}"
 if [ "${scaffold_rc}" -ne 0 ]; then

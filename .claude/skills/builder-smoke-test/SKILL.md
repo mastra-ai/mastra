@@ -396,6 +396,12 @@ After testing, provide:
 
 **Product issues**: (list any — server/UI behaved unexpectedly. For each: HTTP method + path or UI route, expected vs actual, one-sentence guess at the cause. Do not pre-decide "known bug" — log what the server actually did. Say "none" if empty.)
 **Skill issues**: (list any — the skill itself was wrong, unclear, stale, or unreachable. For each: which file + step (e.g. `references/skills.md` step F2), and what was wrong. Doc drift, not product bugs. Say "none" if empty.)
+
+**Verify before filing.** Before adding anything to either list, re-confirm against the live response in this run, not memory of an earlier call:
+
+- For any **shape mismatch / missing field / wrong key name** claim, paste the actual JSON fragment (or the relevant keys) directly under the bullet so the claim is reproducible. If the skill says `features.agent.skills` and the response has `features.agent.skills`, that is not a skill issue — names that look similar in passing (`featSkills`, `agent.features.skill`, etc.) are easy to misread.
+- For any **endpoint inconsistency** claim (e.g. "endpoint A returns X but B returns Y"), re-curl both endpoints fresh in the same run rather than reusing a stale response from earlier in the section.
+- If a claim can't be reproduced on a fresh request, drop it.
 **Regressions**: (list any behavioral changes from a previous run)
 **Warnings**: (e.g., dev-server crash on `/auth/refresh` polling, OPENAI_API_KEY required at startup)
 **Skipped sections**: (list with reason)
