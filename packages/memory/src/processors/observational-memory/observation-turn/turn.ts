@@ -1,6 +1,6 @@
 import type { MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
@@ -51,8 +51,11 @@ export class ObservationTurn {
   /** Optional stream writer for emitting markers. */
   writer?: ProcessorStreamWriter;
 
-  /** Optional request context for observation calls. */
-  requestContext?: RequestContext;
+  /** Agent context for observation calls. */
+  agent: ProcessorAgent;
+
+  /** Request context for observation calls. */
+  requestContext: RequestContext;
 
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
@@ -68,6 +71,8 @@ export class ObservationTurn {
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent: ProcessorAgent;
+    requestContext: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
@@ -75,6 +80,8 @@ export class ObservationTurn {
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
+    this.agent = opts.agent;
+    this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks ?? {};
   }

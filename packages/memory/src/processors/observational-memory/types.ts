@@ -228,9 +228,10 @@ export interface ObservationConfig {
    *         schema: z.string(),
    *         injectionBehaviour: 'carry-forward',
    *         onExtracted: ({ extracted, threadId }) => {
-   *           if (extracted && extracted !== 'ok') {
-   *             console.warn(`Policy issue in ${threadId}: ${extracted}`);
+   *           if (extracted.current !== 'ok') {
+   *             console.warn(`Policy issue in ${threadId}: ${extracted.current}`);
    *           }
+   *           return extracted.current;
    *         },
    *       }),
    *     ],
@@ -333,9 +334,9 @@ export interface ReflectionConfig {
    * Declarative list of extractors that drive what the Reflector outputs.
    *
    * Each `Extractor` is emitted as its own XML-tagged section in the
-   * reflector's structured output, parsed, schema-validated, persisted to
-   * thread metadata, and surfaced to a thread-scoped lifecycle hook
-   * (`onExtracted`) after the reflection is persisted.
+   * reflector's structured output, parsed, schema-validated, surfaced to a
+   * thread-scoped lifecycle hook (`onExtracted`) for optional normalization,
+   * and then persisted to thread metadata.
    *
    * Extractor sections are stripped from reflected observations before the
    * reflection is stored so extracted values do not leak into memory text.
@@ -470,6 +471,32 @@ export interface DataOmObservationEndPart {
  * Failed marker inserted when observation fails.
  * Allows for retry logic and debugging.
  */
+export interface DataOmExtractedPart {
+  type: 'data-om-extracted';
+  data: {
+    /** Unique ID for this observation/reflection cycle */
+    cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When extracted values were persisted */
+    completedAt: string;
+
+    /** The OM record ID */
+    recordId?: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** Resource ID for the thread */
+    resourceId?: string;
+
+    /** Values extracted and persisted for this cycle */
+    extractedValues: Record<string, unknown>;
+  };
+}
+
 export interface DataOmObservationFailedPart {
   type: 'data-om-observation-failed';
   data: {
@@ -770,6 +797,7 @@ export interface DataOmThreadUpdatePart {
 export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
+  | DataOmExtractedPart
   | DataOmObservationFailedPart
   | DataOmStatusPart
   | DataOmThreadUpdatePart;

@@ -1,11 +1,14 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { getThreadOMMetadata } from '@mastra/core/memory';
 import type { MessageHistory } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import { omDebug, omError } from '../debug';
 import type { Extractor } from '../extractor';
 import { invokeExtractorHooks } from '../extractor';
+import { createExtractedMarker } from '../markers';
 import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
@@ -115,8 +118,8 @@ export abstract class ObservationStrategy {
       await this.emitStartMarkers(cycleId);
       const output = await this.observe(existingObservations, messages);
       const processed = await this.process(output, existingObservations);
+      await this.applyExtractorHooks(processed);
       await this.persist(processed);
-      await this.runExtractorHooks(processed);
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
@@ -127,6 +130,7 @@ export abstract class ObservationStrategy {
           writer,
           abortSignal,
           reflectionHooks,
+          agent: this.opts.agent,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
@@ -167,49 +171,89 @@ export abstract class ObservationStrategy {
   }
 
   /**
-   * Fire `onExtracted` lifecycle hooks for every extractor in the resolved
-   * list. Hooks are scoped to the thread that produced the extracted value.
+   * Fire `onExtracted` lifecycle hooks before persistence so returned values
+   * can become the final extracted values saved to thread metadata and
+   * streamed in `data-om-extracted` markers.
    *
    * Hook errors are swallowed (logged via `omError`) so a buggy user hook
    * never breaks the observation cycle.
    */
-  protected async runExtractorHooks(processed: ProcessedObservation): Promise<void> {
+  protected async applyExtractorHooks(processed: ProcessedObservation): Promise<void> {
     if (this.deps.extractors.length === 0) return;
 
     const updates = processed.threadMetadataUpdates;
-    const hookTargets = updates?.length
-      ? updates.map(update => ({
-          output: {
-            currentTask: update.currentTask,
-            suggestedContinuation: update.suggestedResponse,
-            threadTitle: update.threadTitle,
-            extractedValues: update.extractedValues,
-          },
-          threadId: update.threadId,
-        }))
-      : [
-          {
-            output: {
-              currentTask: processed.currentTask,
-              suggestedContinuation: processed.suggestedContinuation,
-              threadTitle: processed.threadTitle,
-              extractedValues: processed.extractedValues,
+    if (updates?.length) {
+      await Promise.all(
+        updates.map(async update => {
+          const thread = await this.storage.getThreadById({ threadId: update.threadId });
+          const priorMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
+          const normalizedValues = await invokeExtractorHooks(
+            this.deps.extractors,
+            {
+              currentTask: update.currentTask,
+              suggestedContinuation: update.suggestedResponse,
+              threadTitle: update.threadTitle,
+              extractedValues: update.extractedValues,
             },
-            threadId: this.opts.threadId,
-          },
-        ];
+            {
+              source: 'observer',
+              observations: {
+                observedMessages: update.observedMessages ?? [],
+                activeObservations: update.activeObservations ?? '',
+                newObservations: update.newObservations ?? '',
+              },
+              threadId: update.threadId,
+              resourceId: this.opts.resourceId,
+              mainAgent: this.opts.agent!,
+              requestContext: this.opts.requestContext ?? new RequestContext(),
+              previousValues: {
+                currentTask: priorMeta?.currentTask,
+                suggestedContinuation: priorMeta?.suggestedResponse,
+                threadTitle: priorMeta?.threadTitle,
+                extractedValues: priorMeta?.extracted,
+              },
+            },
+            (extractor, error) =>
+              omError(`[OM] extractor.onExtracted (${extractor.slug}) threw for thread ${update.threadId}`, error),
+          );
+          update.extractedValues = Object.keys(normalizedValues).length > 0 ? normalizedValues : undefined;
+        }),
+      );
+      return;
+    }
 
-    await Promise.all(
-      hookTargets.map(target =>
-        invokeExtractorHooks(
-          this.deps.extractors,
-          target.output,
-          { threadId: target.threadId, resourceId: this.opts.resourceId },
-          (extractor, error) =>
-            omError(`[OM] extractor.onExtracted (${extractor.slug}) threw for thread ${target.threadId}`, error),
-        ),
-      ),
+    const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
+    const priorMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
+    const normalizedValues = await invokeExtractorHooks(
+      this.deps.extractors,
+      {
+        currentTask: processed.currentTask,
+        suggestedContinuation: processed.suggestedContinuation,
+        threadTitle: processed.threadTitle,
+        extractedValues: processed.extractedValues,
+      },
+      {
+        source: 'observer',
+        observations: {
+          observedMessages: processed.observedMessages ?? [],
+          activeObservations: processed.activeObservations ?? '',
+          newObservations: processed.newObservations ?? '',
+        },
+        threadId: this.opts.threadId,
+        resourceId: this.opts.resourceId,
+        mainAgent: this.opts.agent!,
+        requestContext: this.opts.requestContext ?? new RequestContext(),
+        previousValues: {
+          currentTask: priorMeta?.currentTask,
+          suggestedContinuation: priorMeta?.suggestedResponse,
+          threadTitle: priorMeta?.threadTitle,
+          extractedValues: priorMeta?.extracted,
+        },
+      },
+      (extractor, error) =>
+        omError(`[OM] extractor.onExtracted (${extractor.slug}) threw for thread ${this.opts.threadId}`, error),
     );
+    processed.extractedValues = Object.keys(normalizedValues).length > 0 ? normalizedValues : undefined;
   }
 
   protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
@@ -466,6 +510,30 @@ export abstract class ObservationStrategy {
   abstract get needsReflection(): boolean;
   abstract get rethrowOnFailure(): boolean;
   abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
+  protected async emitExtractedMarker(params: {
+    cycleId: string;
+    operationType: 'observation' | 'reflection';
+    threadId: string;
+    resourceId?: string;
+    recordId?: string;
+    extractedValues?: Record<string, unknown>;
+  }) {
+    if (!params.extractedValues || Object.keys(params.extractedValues).length === 0) {
+      return;
+    }
+
+    await this.streamMarker(
+      createExtractedMarker({
+        cycleId: params.cycleId,
+        operationType: params.operationType,
+        threadId: params.threadId,
+        resourceId: params.resourceId,
+        recordId: params.recordId,
+        extractedValues: params.extractedValues,
+      }),
+    );
+  }
+
   abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;
   abstract persist(processed: ProcessedObservation): Promise<void>;

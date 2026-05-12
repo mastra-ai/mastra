@@ -9,7 +9,7 @@ import { wrapLanguageModel as wrapLanguageModelV5 } from '@internal/ai-sdk-v5';
 import type { LanguageModelV3, LanguageModelMiddleware as LanguageModelV3Middleware } from '@internal/ai-v6';
 import { wrapLanguageModel as wrapLanguageModelV6 } from '@internal/ai-v6';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
+import type { Agent, MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/processors';
@@ -466,6 +466,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       memoryConfig: memory.config,
     });
   }
+  const processorAgent = { id: 'ai-sdk-middleware', name: 'AI SDK Middleware' } as unknown as Agent<any, any, any, any>;
 
   return {
     middlewareVersion: 'v2',
@@ -500,6 +501,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               messages: messageList.get.input.db(),
               systemMessages: messageList.getAllSystemMessages(),
               messageList,
+              agent: processorAgent,
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -616,6 +618,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 steps: [],
               },
               retryCount: 0,
+              agent: processorAgent,
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -697,6 +700,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                     part: mastraChunk,
                     streamParts: state.streamParts,
                     state: state.customState,
+                    agent: processorAgent,
                     requestContext,
                     abort: (reason?: string): never => {
                       throw new TripWire(reason || 'Aborted by processor');
@@ -797,6 +801,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                   state: procState?.customState ?? {},
                   result: outputResult,
                   retryCount: 0,
+                  agent: processorAgent,
                   requestContext,
                   abort: (reason?: string): never => {
                     throw new TripWire(reason || 'Aborted by processor');

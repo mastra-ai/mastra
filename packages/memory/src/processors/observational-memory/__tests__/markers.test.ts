@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createObservationStartMarker,
   createObservationEndMarker,
+  createExtractedMarker,
   createObservationFailedMarker,
   createBufferingStartMarker,
   createBufferingEndMarker,
@@ -127,6 +128,38 @@ describe('markers', () => {
       expect(marker.data.currentTask).toBeUndefined();
       expect(marker.data.suggestedResponse).toBeUndefined();
       expect(marker.data.durationMs).toBe(0);
+    });
+  });
+
+  describe('createExtractedMarker', () => {
+    it('returns a data-om-extracted part with persisted values', () => {
+      const marker = createExtractedMarker({
+        cycleId: 'cycle-1',
+        operationType: 'reflection',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        recordId: 'rec-1',
+        extractedValues: {
+          activeTopic: { topic: 'billing', confidence: 0.9 },
+          status: 'open',
+        },
+      });
+
+      expect(marker).toEqual({
+        type: 'data-om-extracted',
+        data: {
+          cycleId: 'cycle-1',
+          operationType: 'reflection',
+          completedAt: '2025-06-15T12:00:00.000Z',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          recordId: 'rec-1',
+          extractedValues: {
+            activeTopic: { topic: 'billing', confidence: 0.9 },
+            status: 'open',
+          },
+        },
+      });
     });
   });
 

@@ -81,7 +81,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   // Handle OM observation markers - render as ObservationMarkerBadge
   if (toolName === 'mastra-memory-om-observation') {
-    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+    return <ObservationMarkerBadge toolName={toolName} args={args} result={result} metadata={metadata} />;
   }
 
   // We need to handle the stream data even if the workflow is not resolved yet

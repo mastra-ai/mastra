@@ -351,6 +351,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         threadTitle: result.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(threadMessages),
         extractedValues: filterExtractedValuesForStorage(result.extractedValues, this.deps.additionalExtractors),
+        observedMessages: threadMessages,
+        activeObservations: existingObservations,
+        newObservations: result.observations,
       });
 
       const isFirstThread = this.observationResults.indexOf(obsResult) === 0;
@@ -460,6 +463,18 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
     for (const obsResult of this.observationResults) {
       const { threadId, threadMessages, result } = obsResult;
+      const extractedValues = processed.threadMetadataUpdates?.find(
+        update => update.threadId === threadId,
+      )?.extractedValues;
+      await this.emitExtractedMarker({
+        cycleId,
+        operationType: 'observation',
+        threadId,
+        resourceId: this.opts.resourceId,
+        recordId: this.opts.record.id,
+        extractedValues,
+      });
+
       const lastMessage = threadMessages[threadMessages.length - 1];
       if (lastMessage?.id) {
         const tokensObserved =

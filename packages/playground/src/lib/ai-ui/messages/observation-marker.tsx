@@ -36,6 +36,19 @@ export interface DataOmObservationEndPart {
   };
 }
 
+export interface DataOmExtractedPart {
+  type: 'data-om-extracted';
+  data: {
+    completedAt: string;
+    cycleId: string;
+    recordId?: string;
+    threadId: string;
+    resourceId?: string;
+    operationType: 'observation' | 'reflection';
+    extractedValues: Record<string, unknown>;
+  };
+}
+
 export interface DataOmObservationFailedPart {
   type: 'data-om-observation-failed';
   data: {
@@ -92,22 +105,9 @@ export type DataOmBufferingPart = DataOmBufferingStartPart | DataOmBufferingEndP
 export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
+  | DataOmExtractedPart
   | DataOmObservationFailedPart
   | DataOmBufferingPart;
-
-/**
- * Check if a part is an OM observation marker.
- */
-export function isObservationMarker(part: { type: string }): part is DataOmObservationPart {
-  return (
-    part.type === 'data-om-observation-start' ||
-    part.type === 'data-om-observation-end' ||
-    part.type === 'data-om-observation-failed' ||
-    part.type === 'data-om-buffering-start' ||
-    part.type === 'data-om-buffering-end' ||
-    part.type === 'data-om-buffering-failed'
-  );
-}
 
 interface ObservationMarkerProps {
   part: DataOmObservationPart;
@@ -142,6 +142,10 @@ export const ObservationMarker = ({ part, onObservationComplete, onObservationFa
 
   if (part.type === 'data-om-observation-failed') {
     return <ObservationFailedMarker data={part.data} />;
+  }
+
+  if (part.type === 'data-om-extracted') {
+    return <ExtractedMarker data={part.data} />;
   }
 
   // Buffering markers
@@ -210,6 +214,36 @@ const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data']
 /**
  * Shows observation failed.
  */
+const formatExtractedValue = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null) return 'null';
+  const serialized = JSON.stringify(value);
+  return serialized.length > 120 ? `${serialized.slice(0, 117)}...` : serialized;
+};
+
+const ExtractedMarker = ({ data }: { data: DataOmExtractedPart['data'] }) => {
+  const entries = Object.entries(data.extractedValues);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div
+      className={cn(
+        'inline-flex max-w-full items-center gap-1.5 px-2 py-1 my-1 rounded-md',
+        'bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400',
+        'text-ui-xs leading-ui-xs',
+      )}
+      data-testid="om-extracted-values"
+    >
+      <CheckCircle2 className="h-3 w-3 shrink-0" />
+      <span className="truncate">
+        Extracted {entries.map(([key, value]) => `${key}: ${formatExtractedValue(value)}`).join(', ')}
+      </span>
+    </div>
+  );
+};
+
 const ObservationFailedMarker = ({ data }: { data: DataOmObservationFailedPart['data'] }) => {
   const tokensK = (data.tokensAttempted / 1000).toFixed(1);
 
@@ -314,7 +348,7 @@ export const ObservationIndicator = ({ part }: { part: DataOmObservationPart }) 
     );
   }
 
-  if (part.type === 'data-om-observation-end') {
+  if (part.type === 'data-om-observation-end' || part.type === 'data-om-extracted') {
     return (
       <span className="inline-flex items-center text-green-500" title="Observation complete">
         <Brain className="h-3 w-3" />

@@ -41,6 +41,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         ? new ProcessorRunner({
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
+            agent: rest.agent!,
             agentName: agentId || 'unknown',
           })
         : undefined;

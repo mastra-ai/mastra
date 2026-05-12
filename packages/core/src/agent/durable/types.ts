@@ -19,6 +19,7 @@ import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
+import type { Agent } from '../agent';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
@@ -394,6 +395,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Agent instance for this run */
+  agent: Agent<any, any, any, any>;
   /** Resolved tools with execute functions */
   tools: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */

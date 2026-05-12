@@ -90,6 +90,7 @@ type OmCycleParts = {
   bufferingEnd?: any;
   bufferingFailed?: any;
   activation?: any;
+  extracted?: any;
 };
 
 /**
@@ -109,6 +110,7 @@ const indexOmPartsByCycleId = (parts: any[], target: Map<string, OmCycleParts>) 
       'data-om-buffering-end': 'bufferingEnd',
       'data-om-buffering-failed': 'bufferingFailed',
       'data-om-activation': 'activation',
+      'data-om-extracted': 'extracted',
     };
 
     const key = typeToKey[part.type];
@@ -204,6 +206,7 @@ const convertOmPartsInMastraMessage = (
       const startData = cycle.start?.data || {};
       const endData = cycle.end?.data || {};
       const failedData = cycle.failed?.data || {};
+      const extractedData = cycle.extracted?.data || {};
 
       const isFailed = !!cycle.failed;
       const isComplete = !!cycle.end;
@@ -214,6 +217,7 @@ const convertOmPartsInMastraMessage = (
         ...startData,
         ...(isComplete ? endData : {}),
         ...(isFailed ? failedData : {}),
+        ...extractedData,
         _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
       };
 
@@ -238,6 +242,7 @@ const convertOmPartsInMastraMessage = (
       const endData = cycle.bufferingEnd?.data || {};
       const failedData = cycle.bufferingFailed?.data || {};
       const activationData = cycle.activation?.data || {};
+      const extractedData = cycle.extracted?.data || {};
 
       const isFailed = !!cycle.bufferingFailed;
       const isActivated = !!cycle.activation;
@@ -250,6 +255,7 @@ const convertOmPartsInMastraMessage = (
         ...(isComplete ? endData : {}),
         ...(isFailed ? failedData : {}),
         ...(isActivated ? activationData : {}),
+        ...extractedData,
         _state: isFailed
           ? 'buffering-failed'
           : isActivated
@@ -464,8 +470,7 @@ export function MastraRuntimeProvider({
   // The config value can be `true`, `false`, `undefined`, or an object with/without `.enabled`.
   const { data: memoryConfigData } = useMemoryConfig(agentId);
   const omConfig = memoryConfigData?.config?.observationalMemory;
-  const isOMEnabled =
-    omConfig === true || (typeof omConfig === 'object' && omConfig !== null && omConfig.enabled !== false);
+  const isOMEnabled = typeof omConfig === 'object' && omConfig !== null && omConfig.enabled !== false;
   const {
     setIsObservingFromStream,
     setIsReflectingFromStream,

@@ -125,6 +125,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const {
       messageList,
+      agent,
       requestContext,
       stepNumber,
       state: _state,
@@ -232,6 +233,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
           messageList,
+          agent,
+          requestContext,
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
@@ -239,7 +242,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           },
         });
         this.turn.writer = writer;
-        this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, writer });

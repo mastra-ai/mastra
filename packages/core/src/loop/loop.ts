@@ -156,6 +156,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       returnScorerData,
       ...observabilityContext,
       requestContext: rest.requestContext,
+      agent: rest.agent,
       processorStates,
       transportRef: internalToUse.transportRef,
     },

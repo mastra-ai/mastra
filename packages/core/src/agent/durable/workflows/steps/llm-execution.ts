@@ -239,6 +239,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 outputProcessors: registryEntry.outputProcessors ?? [],
                 errorProcessors: registryEntry.errorProcessors ?? [],
                 logger: logger as any,
+                agent: registryEntry.agent,
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry.processorStates,
               });
@@ -353,6 +354,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 runId,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
+                agent: registryEntry!.agent,
               },
             });
 
@@ -594,6 +596,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   outputProcessors: registryEntry.outputProcessors ?? [],
                   errorProcessors: registryEntry.errorProcessors,
                   logger: logger as any,
+                  agent: registryEntry.agent,
                   agentName: typedInput.agentName ?? typedInput.agentId,
                   processorStates: registryEntry.processorStates,
                 });

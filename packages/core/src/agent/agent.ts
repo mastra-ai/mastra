@@ -804,6 +804,7 @@ export class Agent<
       outputProcessors,
       errorProcessors,
       logger: this.logger,
+      agent: this,
       agentName: this.name,
       processorStates,
     });
@@ -2459,6 +2460,7 @@ export class Agent<
         requestContext,
         ...observabilityContext,
         messageList,
+        agent: this,
         agentId: this.id,
         agentName: this.name,
       });
