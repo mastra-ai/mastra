@@ -66,6 +66,7 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
+      customRouteAbortSignal: AbortSignal;
       registeredTools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
@@ -128,17 +129,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
+      res.locals.abortSignal = controller.signal;
+
+      const customRouteController = new AbortController();
       // Use res.on('close') instead of req.on('close') because the request's 'close' event
       // fires when the request body is fully consumed (e.g., after express.json() parses it),
       // NOT when the client disconnects. The response's 'close' event fires when the underlying
-      // connection is actually closed, which is the correct signal for client disconnection.
+      // connection is actually closed, which is the correct signal for custom route stream cleanup.
       res.on('close', () => {
         // Only abort if the response wasn't successfully completed
         if (!res.writableFinished) {
-          controller.abort();
+          customRouteController.abort();
         }
       });
-      res.locals.abortSignal = controller.signal;
+      res.locals.customRouteAbortSignal = customRouteController.signal;
       next();
     };
   }
@@ -674,10 +678,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         req.headers as Record<string, string | string[] | undefined>,
         req.body,
         res.locals.requestContext,
-        res.locals.abortSignal,
+        res.locals.customRouteAbortSignal,
       );
       if (!response) return next();
-      await this.writeCustomRouteResponse(response, res, res.locals.abortSignal);
+      await this.writeCustomRouteResponse(response, res, res.locals.customRouteAbortSignal);
     });
   }
 

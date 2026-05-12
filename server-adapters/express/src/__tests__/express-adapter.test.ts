@@ -656,6 +656,57 @@ describe('Express Server Adapter', () => {
       expect(receivedAbortSignal).toBeDefined();
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
+
+    it('keeps registered route abort signals independent from response close', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const signalAbort = vi.fn();
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/stream-close',
+        responseType: 'stream',
+        handler: async (params: any) => {
+          params.abortSignal?.addEventListener('abort', signalAbort);
+          return {
+            fullStream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'text-delta', textDelta: 'one' });
+                await sleep(10);
+                controller.enqueue({ type: 'text-delta', textDelta: 'two' });
+                controller.close();
+              },
+            }),
+          };
+        },
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream-close`);
+      const reader = response.body!.getReader();
+      await reader.read();
+      await reader.cancel();
+      await sleep(30);
+
+      expect(signalAbort).not.toHaveBeenCalled();
+    });
   });
 
   // Multipart FormData tests
