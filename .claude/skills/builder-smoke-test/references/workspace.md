@@ -32,8 +32,8 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 **Verify:**
 
 - [ ] Returns the workspace object (not 404)
-- [ ] Has `id`, `name`, `status`, `metadata`, `filesystem` fields
-- [ ] `metadata.source` is `"builder"` for config-sourced workspaces
+- [ ] Has `id`, `name`, `status`, `filesystem` fields
+- [ ] `metadata.source` is `"builder"` for config-sourced workspaces (`metadata` may be absent on user-created workspaces — `select(.metadata.source == "builder")` jq pattern handles both)
 
 ### 3. Create a Test Workspace
 

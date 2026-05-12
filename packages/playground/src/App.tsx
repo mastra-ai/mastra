@@ -22,7 +22,14 @@ declare global {
 
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
-import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Outlet,
+  useNavigate,
+  redirect,
+  type LoaderFunctionArgs,
+} from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
@@ -238,6 +245,10 @@ const routes = [
         element: <AgentBuilderEditionLayout />,
         children: [
           { path: 'create', element: <AgentBuilderCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/agents/${params.id}/view`),
+          },
           { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
           { path: ':id/view', element: <AgentBuilderAgentView /> },
         ],
@@ -257,6 +268,10 @@ const routes = [
         element: <AgentBuilderEditionLayout />,
         children: [
           { path: 'create', element: <AgentBuilderSkillsCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/skills/${params.id}/edit`),
+          },
           { path: ':id/edit', element: <AgentBuilderSkillsEdit /> },
           { path: ':id/view', element: <AgentBuilderSkillsView /> },
         ],
