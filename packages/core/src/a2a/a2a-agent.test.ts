@@ -9,6 +9,8 @@ import { A2AAgent } from './a2a-agent';
 
 type StreamEventWithOptionalId = {
   type: string;
+  runId?: string;
+  from?: string;
   payload?: {
     id?: string;
   };
@@ -485,6 +487,8 @@ describe('A2AAgent', () => {
     }
 
     expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
+    expect(events.every(event => event.runId === 'stream-run-1')).toBe(true);
+    expect(events.every(event => event.from === 'AGENT')).toBe(true);
     expect(events[0]?.payload?.id).toBe('message-1');
     expect(events[1]?.payload?.id).toBe('message-1');
     expect(events[2]?.payload?.id).toBe('message-1');
@@ -534,6 +538,8 @@ describe('A2AAgent', () => {
     }
 
     expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
+    expect(events.every(event => event.runId === 'stream-run-2')).toBe(true);
+    expect(events.every(event => event.from === 'AGENT')).toBe(true);
     expect(events[0]?.payload?.id).toBe('response:text');
     expect(events[1]?.payload?.id).toBe('response:text');
     expect(events[2]?.payload?.id).toBe('response:text');

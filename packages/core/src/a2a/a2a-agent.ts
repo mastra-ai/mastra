@@ -70,7 +70,7 @@ type StreamConsumptionResult = {
 };
 
 type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
-type A2AAgentFullStreamChunk =
+type A2AAgentFullStreamChunkBase =
   | { type: 'text-start'; payload: { id: string } }
   | { type: 'text-delta'; payload: { id: string; text: string } }
   | { type: 'text-end'; payload: { id: string } }
@@ -91,6 +91,10 @@ type A2AAgentFullStreamChunk =
         usage: typeof EMPTY_USAGE;
       };
     };
+type A2AAgentFullStreamChunk = A2AAgentFullStreamChunkBase & {
+  runId: string;
+  from: 'AGENT';
+};
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -103,6 +107,14 @@ const EMPTY_USAGE = {
   outputTokens: undefined,
   totalTokens: undefined,
 };
+
+function toAgentStreamChunk(runId: string, chunk: A2AAgentFullStreamChunkBase): A2AAgentFullStreamChunk {
+  return {
+    ...chunk,
+    runId,
+    from: 'AGENT',
+  };
+}
 
 function isTask(result: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent): result is Task {
   return typeof result === 'object' && result !== null && 'status' in result && 'id' in result && 'kind' in result;
@@ -1148,10 +1160,10 @@ export class A2AAgent implements SubAgent {
               textId ??= resolveStreamTextId([event.messageId, task?.id]);
               if (textId) {
                 if (!textStarted) {
-                  yield { type: 'text-start', payload: { id: textId } };
+                  yield toAgentStreamChunk(runId, { type: 'text-start', payload: { id: textId } });
                   textStarted = true;
                 }
-                yield { type: 'text-delta', payload: { id: textId, text } };
+                yield toAgentStreamChunk(runId, { type: 'text-delta', payload: { id: textId, text } });
               }
             }
           } else if (event.kind === 'artifact-update') {
@@ -1164,10 +1176,10 @@ export class A2AAgent implements SubAgent {
               textId ??= resolveStreamTextId([event.artifact.artifactId, task?.id]);
               if (textId) {
                 if (!textStarted) {
-                  yield { type: 'text-start', payload: { id: textId } };
+                  yield toAgentStreamChunk(runId, { type: 'text-start', payload: { id: textId } });
                   textStarted = true;
                 }
-                yield { type: 'text-delta', payload: { id: textId, text } };
+                yield toAgentStreamChunk(runId, { type: 'text-delta', payload: { id: textId, text } });
               }
             }
           } else if (event.kind === 'status-update') {
@@ -1196,7 +1208,7 @@ export class A2AAgent implements SubAgent {
 
       if (done || receivedDone) {
         if (textId && textStarted) {
-          yield { type: 'text-end', payload: { id: textId } };
+          yield toAgentStreamChunk(runId, { type: 'text-end', payload: { id: textId } });
         }
 
         if (!suspended && task && !isTerminalTaskState(task.status.state)) {
@@ -1211,7 +1223,7 @@ export class A2AAgent implements SubAgent {
         }
 
         if (suspended) {
-          yield {
+          yield toAgentStreamChunk(runId, {
             type: 'tool-call-suspended',
             payload: {
               toolCallId: runId,
@@ -1220,15 +1232,15 @@ export class A2AAgent implements SubAgent {
               suspendPayload: suspended,
               resumeSchema: createResumeSchema(),
             },
-          };
+          });
         } else {
-          yield {
+          yield toAgentStreamChunk(runId, {
             type: 'finish',
             payload: {
               finishReason: 'stop',
               usage: EMPTY_USAGE,
             },
-          };
+          });
         }
         return;
       }
@@ -1390,13 +1402,13 @@ export class A2AAgent implements SubAgent {
 
     const fullStream = (async function* (): AsyncIterable<A2AAgentFullStreamChunk> {
       if (result.text) {
-        yield { type: 'text-start', payload: { id: textId } };
-        yield { type: 'text-delta', payload: { id: textId, text: result.text } };
-        yield { type: 'text-end', payload: { id: textId } };
+        yield toAgentStreamChunk(runId, { type: 'text-start', payload: { id: textId } });
+        yield toAgentStreamChunk(runId, { type: 'text-delta', payload: { id: textId, text: result.text } });
+        yield toAgentStreamChunk(runId, { type: 'text-end', payload: { id: textId } });
       }
 
       if (result.resumePayload) {
-        yield {
+        yield toAgentStreamChunk(runId, {
           type: 'tool-call-suspended',
           payload: {
             toolCallId: runId,
@@ -1405,17 +1417,17 @@ export class A2AAgent implements SubAgent {
             suspendPayload: result.resumePayload,
             resumeSchema: result.resumeSchema ?? createResumeSchema(),
           },
-        };
+        });
         return;
       }
 
-      yield {
+      yield toAgentStreamChunk(runId, {
         type: 'finish',
         payload: {
           finishReason: 'stop',
           usage: EMPTY_USAGE,
         },
-      };
+      });
     })();
 
     const streamResult = {
