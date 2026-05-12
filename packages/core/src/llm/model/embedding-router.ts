@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -7,6 +9,55 @@ type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
+
+// Create require function for ESM compatibility
+const esmRequire = createRequire(import.meta.url);
+
+/**
+ * Creates a VoyageAI embedding model wrapper that implements EmbeddingModelV2.
+ * Uses the official VoyageAI SDK internally.
+ */
+function createVoyageEmbeddingModel(modelId: string, apiKey: string): EmbeddingModelV2<string> {
+  let VoyageAIClient: any;
+  try {
+    VoyageAIClient = esmRequire('@mastra/voyageai').VoyageAIClient;
+  } catch {
+    try {
+      VoyageAIClient = esmRequire('voyageai').VoyageAIClient;
+    } catch {
+      throw new Error(
+        'VoyageAI SDK not found. Please install one of the following packages:\n' +
+          '  - npm install @mastra/voyageai (recommended, includes Mastra integrations)\n' +
+          '  - npm install voyageai (official VoyageAI SDK)\n' +
+          'Note: With pnpm or other strict package managers, ensure the package is explicitly listed in your dependencies.',
+      );
+    }
+  }
+
+  const client = new VoyageAIClient({ apiKey });
+
+  return {
+    specificationVersion: 'v2',
+    provider: 'voyage',
+    modelId,
+    maxEmbeddingsPerCall: 1000,
+    supportsParallelCalls: true,
+
+    async doEmbed({ values }: { values: string[] }): Promise<{ embeddings: number[][] }> {
+      const response = await client.embed({
+        input: values,
+        model: modelId,
+      });
+
+      const embeddings =
+        response.data
+          ?.sort((a: { index?: number }, b: { index?: number }) => (a.index ?? 0) - (b.index ?? 0))
+          .map((item: { embedding?: number[] }) => item.embedding ?? []) ?? [];
+
+      return { embeddings };
+    },
+  };
+}
 
 /**
  * Information about a known embedding model
@@ -54,6 +105,71 @@ export const EMBEDDING_MODELS: EmbeddingModelInfo[] = [
     maxInputTokens: 2048,
     description: 'Google gemini-embedding-001 model',
   },
+  // VoyageAI - voyage-4 series
+  {
+    id: 'voyage-4-large',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 120000,
+    description: 'VoyageAI voyage-4-large - best quality, 120k batch tokens',
+  },
+  {
+    id: 'voyage-4',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 320000,
+    description: 'VoyageAI voyage-4 - balanced quality and speed, 320k batch tokens',
+  },
+  {
+    id: 'voyage-4-lite',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 1000000,
+    description: 'VoyageAI voyage-4-lite - optimized for throughput, 1M batch tokens',
+  },
+  // VoyageAI - voyage-3 series
+  {
+    id: 'voyage-3-large',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 120000,
+    description: 'VoyageAI voyage-3-large - best quality general-purpose and multilingual',
+  },
+  {
+    id: 'voyage-3.5',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 320000,
+    description: 'VoyageAI voyage-3.5 - balanced quality and speed',
+  },
+  {
+    id: 'voyage-3.5-lite',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 1000000,
+    description: 'VoyageAI voyage-3.5-lite - optimized for latency and cost',
+  },
+  {
+    id: 'voyage-code-3',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 32000,
+    description: 'VoyageAI voyage-code-3 - optimized for code retrieval',
+  },
+  {
+    id: 'voyage-finance-2',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 32000,
+    description: 'VoyageAI voyage-finance-2 - optimized for financial domain',
+  },
+  {
+    id: 'voyage-law-2',
+    provider: 'voyage',
+    dimensions: 1024,
+    maxInputTokens: 32000,
+    description: 'VoyageAI voyage-law-2 - optimized for legal domain',
+  },
 ];
 
 /**
@@ -63,7 +179,16 @@ export type EmbeddingModelId =
   | 'openai/text-embedding-3-small'
   | 'openai/text-embedding-3-large'
   | 'openai/text-embedding-ada-002'
-  | 'google/gemini-embedding-001';
+  | 'google/gemini-embedding-001'
+  | 'voyage/voyage-4-large'
+  | 'voyage/voyage-4'
+  | 'voyage/voyage-4-lite'
+  | 'voyage/voyage-3-large'
+  | 'voyage/voyage-3.5'
+  | 'voyage/voyage-3.5-lite'
+  | 'voyage/voyage-code-3'
+  | 'voyage/voyage-finance-2'
+  | 'voyage/voyage-law-2';
 
 /**
  * Check if a model ID is a known embedding model
@@ -193,6 +318,8 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
         this.providerModel = createGoogleGenerativeAI({ apiKey }).textEmbedding(
           normalizedConfig.modelId,
         ) as EmbeddingModelV2<VALUE>;
+      } else if (normalizedConfig.providerId === 'voyage') {
+        this.providerModel = createVoyageEmbeddingModel(normalizedConfig.modelId, apiKey) as EmbeddingModelV2<VALUE>;
       } else {
         // Use OpenAI-compatible provider for other providers
         if (!providerConfig.url) {
