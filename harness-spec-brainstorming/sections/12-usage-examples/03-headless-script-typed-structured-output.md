@@ -20,9 +20,7 @@ const SummarySchema = z.object({
   sentiment: z.enum(['positive', 'neutral', 'negative']),
 });
 
-// `output` requires `sync: true` — skips the signal pathway and calls
-// agent.generate() on a fresh runId. This is the only message form that can
-// throw HarnessBusyError; for a fresh session we know it won't.
+// `output` with `sync: true` uses the clean turn-boundary path in §3/§4.2.
 const summary = await session.message({
   content: `Summarize this support ticket:\n\n${ticket.body}`,
   output: SummarySchema,

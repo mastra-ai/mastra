@@ -11,8 +11,8 @@ export const incrementCounter = createTool({
   inputSchema: z.object({ name: z.string() }),
   outputSchema: z.object({ value: z.number() }),
 
-  execute: async ({ context: input, requestContext }) => {
-    const harness = requestContext.get('harness') as HarnessRequestContext<{
+  execute: async (input, context) => {
+    const harness = context.requestContext.get('harness') as HarnessRequestContext<{
       counters: Record<string, number>;
     }>;
 
@@ -23,11 +23,9 @@ export const incrementCounter = createTool({
       return { ...prev, counters: { ...prev.counters, [input.name]: next } };
     });
 
-    harness.emitEvent({
+    harness.emitCustomEvent({
       type: 'myorg.counter.bumped',
-      sessionId: harness.sessionId,
-      name: input.name,
-      value: next,
+      payload: { name: input.name, value: next },
     });
 
     return { value: next };
@@ -35,6 +33,6 @@ export const incrementCounter = createTool({
 });
 ```
 
-The functional `setState` form is the right tool here: two parallel `increment_counter` calls under `experimental_parallelToolCalls` would race with the object form, but the functional form linearises through the harness.
+The functional `setState` form is the right tool here because the next value depends on current state; §6.2 and §5.8 own the concurrency and atomicity rules.
 
 ---

@@ -28,8 +28,8 @@ const unsubscribe = session.subscribe((event) => {
   }
 });
 
-// User types something. `message` is always accepted — drains into the live
-// run via signals if the agent is busy, or starts a new run if idle.
+// User types something. `message` is busy-independent once admitted; it either
+// starts a run or drains into the live run under the §3 rules.
 session.message({ content: 'Refactor the auth middleware' });
 
 // User types again while the agent is still working. With agent signals this

@@ -1,4 +1,4 @@
-### 12.9 Sandbox command registry
+### 12.9 Sandbox command policy
 
 ```ts
 import { LocalSandbox } from '@mastra/core/workspace';
@@ -6,19 +6,13 @@ import { LocalSandbox } from '@mastra/core/workspace';
 const sandbox = new LocalSandbox({
   commandPolicy: 'restricted',
   commands: {
-    npm: null, // bare allow — no env, no custom executor
-    gh: { env: { GH_TOKEN: process.env.GH_TOKEN } },
-    git: { description: 'Git CLI, available read-only', env: { GIT_TERMINAL_PROMPT: '0' } },
+    npm: { description: 'npm CLI' },
+    gh: { description: 'GitHub CLI' },
+    git: { description: 'Git CLI, available read-only' },
   },
 });
 
-// Programmatic: register at runtime.
-sandbox.defineCommand('deploy', {
-  execute: async (args, opts) => {
-    // Custom executor — could call an internal API, mock for tests, etc.
-    const result = await deployService.run(args);
-    return { stdout: result.log, stderr: '', exitCode: result.code };
-  },
-  description: 'Trigger an internal deploy. Args: <env> <service>',
-});
+// The portable v1 policy is a static command-start allowlist. Provider-specific
+// programmable registries, custom executors, and per-command env injection are
+// outside the v1 sandbox policy surface.
 ```
