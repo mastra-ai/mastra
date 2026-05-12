@@ -48,9 +48,14 @@ export async function promptForObservability(): Promise<ObservabilityPromptResul
   // Only surface the logged-in user when creds already existed before getToken().
   // If they didn't, getToken() ran the browser login() flow which prints its own
   // "Logged in as <email>" message — printing again here would duplicate it.
-  const preExisting = await loadCredentials();
+  // Re-read creds after getToken() so the email reflects the actual logged-in
+  // account, even when stale creds forced a browser re-login as a different user.
+  const hadCachedCreds = (await loadCredentials()) !== null;
   const token = await getToken();
-  if (preExisting) p.log.info(`Logged in as ${preExisting.user.email}`);
+  if (hadCachedCreds) {
+    const creds = await loadCredentials();
+    if (creds) p.log.info(`Logged in as ${creds.user.email}`);
+  }
   return { enabled: true, token };
 }
 

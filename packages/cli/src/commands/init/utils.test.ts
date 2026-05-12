@@ -53,11 +53,13 @@ describe('promptForObservability', () => {
 
   test('prints logged-in user when creds existed before getToken()', async () => {
     selectMock.mockResolvedValueOnce('yes' as never);
-    loadCredentialsMock.mockResolvedValueOnce({
+    const creds = {
       token: 'tok',
       user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
       organizationId: 'org-1',
-    } as never);
+    } as never;
+    loadCredentialsMock.mockResolvedValueOnce(creds);
+    loadCredentialsMock.mockResolvedValueOnce(creds);
 
     await promptForObservability();
 
@@ -71,6 +73,26 @@ describe('promptForObservability', () => {
     await promptForObservability();
 
     expect(vi.mocked(prompts.log.info)).not.toHaveBeenCalled();
+  });
+
+  test('prints the post-auth user when stale creds force a fresh login as a different account', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    // Pre-auth: stale creds for an old user
+    loadCredentialsMock.mockResolvedValueOnce({
+      token: 'stale',
+      user: { id: 'u1', email: 'old@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    } as never);
+    // Post-auth: new creds written by login() for a different user
+    loadCredentialsMock.mockResolvedValueOnce({
+      token: 'new',
+      user: { id: 'u2', email: 'new@test.com', firstName: 'C', lastName: 'D' },
+      organizationId: 'org-2',
+    } as never);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).toHaveBeenCalledWith('Logged in as new@test.com');
   });
 });
 
