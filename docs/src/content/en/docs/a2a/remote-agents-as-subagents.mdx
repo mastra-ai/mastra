@@ -1,6 +1,6 @@
 ---
 title: "Subagents | A2A"
-description: "Use remote A2A agents as subagents inside larger Mastra agent systems."
+description: "Use a remote A2A agent as a subagent inside a larger Mastra agent system."
 packages:
   - "@mastra/core"
   - "@mastra/client-js"
@@ -8,7 +8,94 @@ packages:
 
 # Subagents
 
-This page will document how to use remote Agent-to-Agent (A2A) agents as subagents in Mastra.
+Use `A2AAgent` when a Mastra agent needs to delegate work to a remote Agent-to-Agent (A2A) agent. The remote agent is registered as a subagent on the parent agent, and Mastra calls it through the same subagent flow used for local subagents.
+
+## When to use subagents
+
+Use a remote A2A subagent when the parent agent should reason about when to delegate, but the delegated work should run in another agent service.
+
+This is useful for specialized agents owned by another service or team, especially when the remote agent should keep its tools, prompts, and memory private while still contributing to a larger parent-agent response.
+
+## Quickstart
+
+Create an `A2AAgent` with a remote agent card URL or with the remote agent domain. Then register it in the parent agent's `agents` map.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com',
+})
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer user questions and delegate weather questions when needed.',
+  model: 'openai/gpt-5.4',
+  agents: {
+    remoteWeatherAgent,
+  },
+})
+```
+
+If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-known/agent-card.json`. If `url` already ends with `/agent-card.json`, Mastra uses that URL directly.
+
+## How it works
+
+`A2AAgent` implements Mastra's subagent interface. The parent agent can call it like any other subagent, while `A2AAgent` handles the A2A protocol details.
+
+During execution, `A2AAgent`:
+
+- Fetches and caches the remote agent card.
+- Reads the execution URL and capabilities from the card.
+- Calls `message/send` for non-streaming runs or `message/stream` when streaming is supported.
+- Converts remote messages, tasks, artifacts, and status updates into Mastra subagent results.
+- Supports `resumeGenerate()` and `resumeStream()` when the remote task requires follow-up input or resubscription.
+
+If the remote card doesn't advertise streaming support, `A2AAgent.stream()` falls back to the non-streaming generate path and returns a buffered stream result.
+
+## Verify agent cards
+
+Use `verifyAgentCard` when the parent agent should validate a remote agent before delegating work to it. The verification hook receives the fetched agent card and context about where and when it was fetched.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com/.well-known/agent-card.json',
+  verifyAgentCard: {
+    verify: async (card, context) => {
+      if (card.provider?.organization !== 'Weather Inc') {
+        throw new Error(`Unexpected provider for ${context.cardUrl}`)
+      }
+    },
+  },
+})
+```
+
+Use this hook to validate provider metadata, expected endpoints, signed cards, certificate-bound identities, or other trust requirements used by your deployment.
+
+## Configure remote calls
+
+`A2AAgent` accepts request options for authenticated or constrained environments:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com',
+  headers: {
+    Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
+  },
+  retries: 2,
+  backoffMs: 250,
+  maxBackoffMs: 1000,
+  timeoutMs: 30_000,
+})
+```
+
+You can also pass `credentials`, `fetch`, and `abortSignal` when the runtime needs custom fetch behavior or request cancellation.
 
 ## Related
 
