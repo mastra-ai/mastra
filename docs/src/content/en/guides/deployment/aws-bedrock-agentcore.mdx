@@ -54,13 +54,14 @@ Navigate to the `app/MastraAgent` directory and initialize a new Node.js project
 
 ```bash
 cd app/MastraAgent
-npm init --init-type=module -y
+npm init -y
+npm pkg set type=module
 ```
 
-Install the required dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html):
+Install the required dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html). The `@ai-sdk/amazon-bedrock` and `@aws-sdk/credential-providers` packages let the Mastra agent call Bedrock through the AgentCore Runtime execution role:
 
 ```bash npm2yarn
-npm install bedrock-agentcore @opentelemetry/auto-instrumentations-node --legacy-peer-deps
+npm install bedrock-agentcore @opentelemetry/auto-instrumentations-node @ai-sdk/amazon-bedrock @aws-sdk/credential-providers --legacy-peer-deps
 ```
 
 Also install TypeScript and related dev dependencies:
@@ -69,10 +70,55 @@ Also install TypeScript and related dev dependencies:
 npm install --save-dev typescript @types/node tsx
 ```
 
-Run [`mastra init`](/reference/cli/mastra#mastra-init) to set up a new Mastra project. When prompted, choose a provider (e.g. OpenAI) and enter your key:
+Run [`mastra init`](/reference/cli/mastra#mastra-init) to set up a new Mastra project. The provider you choose at the prompt is overwritten in the next step, so any value works:
 
 ```bash npm2yarn
 npx mastra@latest init
+```
+
+Replace the generated `src/mastra/agents/weather-agent.ts` to use Amazon Bedrock. The original `memory: new Memory()` is removed because the storage layer is removed in the next step:
+
+```ts title="app/MastraAgent/src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
+import { weatherTool } from '../tools/weather-tool.js';
+
+const bedrock = createAmazonBedrock({
+  credentialProvider: fromNodeProviderChain(),
+});
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: 'You are a helpful weather assistant. Use the weatherTool to fetch current weather data.',
+  model: bedrock('us.anthropic.claude-sonnet-4-6'),
+  tools: { weatherTool },
+});
+```
+
+:::note
+
+`fromNodeProviderChain()` lets the agent pick up AWS credentials through the standard SDK resolution chain (environment variables, shared config files, SSO, and container or EC2 roles) instead of environment variables only.
+
+:::
+
+Replace the generated `src/mastra/index.ts` to remove the default file-based storage and observability config. AgentCore Runtime containers run as a non-root user with a read-only application directory, so the default `LibSQLStore` cannot open `./mastra.db` and the runtime fails at startup:
+
+```ts title="app/MastraAgent/src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { weatherWorkflow } from './workflows/weather-workflow.js';
+import { weatherAgent } from './agents/weather-agent.js';
+
+export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
+  agents: { weatherAgent },
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+});
 ```
 
 Create a `tsconfig.json` file with the following content:
@@ -109,20 +155,10 @@ import { weatherWorkflow } from './workflows/weather-workflow.js'
 
 :::
 
-Update your `package.json` file to edit the `main` entry and add scripts:
+Update your `package.json` to set the entry point and build scripts. Using `npm pkg set` preserves the dependencies that `mastra init` added:
 
-```json title="app/MastraAgent/package.json"
-{
-  "name": "mastraagent",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "dist/agent.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/agent.js",
-    "dev": "npx tsx --watch agent.ts"
-  }
-}
+```bash
+npm pkg set main=dist/agent.js scripts.build=tsc scripts.start="node dist/agent.js" scripts.dev="npx tsx --watch agent.ts"
 ```
 
 ## Initialize the agent
@@ -143,7 +179,7 @@ const app = new BedrockAgentCoreApp({
         runId: context.sessionId,
       })
 
-      return { text: response.text }
+      return response.text
     },
   },
 })
@@ -168,16 +204,23 @@ RUN npm run build
 
 FROM node:22-slim
 WORKDIR /app
+ENV AWS_REGION=us-east-1
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 
-RUN useradd -m -u 1000 bedrock_agentcore
+RUN useradd -m bedrock_agentcore
 USER bedrock_agentcore
 
 EXPOSE 8080 8000 9000
 CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "dist/agent.js"]
 ```
+
+:::note
+
+Pick an `AWS_REGION` that pairs with your Bedrock model ID prefix (`us.`, `jp.`, `eu.`, or `global.`).
+
+:::
 
 Also create a `.dockerignore` file to exclude unnecessary files from the Docker build context:
 
