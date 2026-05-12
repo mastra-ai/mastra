@@ -632,13 +632,16 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       const source = new LocalSkillSource();
       const { publishSkillFromSource } = await import('@mastra/core/workspace');
 
-      const { snapshot, tree } = await publishSkillFromSource(source, resolvedPath, blobStore);
+      const { snapshot, tree, files } = await publishSkillFromSource(source, resolvedPath, blobStore);
 
-      // Update the skill with new version data + tree
+      // Update the skill with new version data + tree + UI-facing file tree.
+      // `files` is the nested folder/file structure shown in the editor; without
+      // it the column would stay null and the UI would render an empty tree.
       await skillStore.update({
         id: storedSkillId,
         ...snapshot,
         tree,
+        files,
         status: 'published',
       });
 

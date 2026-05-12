@@ -108,7 +108,7 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 | `--fixtures-reset` | Stop the dev server, wipe `$PROJECT_DIR/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                        | `false`        |
 | `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                                                                                                                                                                                                            | `false`        |
 | `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                                                                                                                                                                                                                    | `false`        |
-| `--dir`            | Project directory the skill scaffolds into. Forwarded to `scripts/scaffold.sh`.                                                                                                                                                                                                                       | `~/mastra-builder-smoke-tests/builder-smoke` |
+| `--dir`            | Project directory the skill scaffolds into. Forwarded to `scripts/scaffold.sh`. Also reads `$BUILDER_SMOKE_TEST_DIR` from the environment when the flag is omitted.                                                                                                                                  | `~/mastra-builder-smoke-tests/builder-smoke` |
 | `--reuse`          | If the project already exists at `$PROJECT_DIR` and has `node_modules/@mastra/core`, skip `pnpm install`. Forwarded to `scripts/scaffold.sh`.                                                                                                                                                         | `false`        |
 | `--openai-key`     | OPENAI_API_KEY value to write into the scaffolded `.env`. If omitted, the scaffold script falls back to `$OPENAI_API_KEY` in the shell, then to an interactive prompt.                                                                                                                                | (shell or prompt) |
 | `--workos-api-key`<br>`--workos-client-id`<br>`--workos-organization-id` | All three are required together to scaffold an auth-on project. Writes `AUTH_PROVIDER=workos` plus the three keys plus `WORKOS_REDIRECT_URI=http://localhost:4111/api/auth/callback` into `.env`.                                                                                                       | (auth off)     |
@@ -183,7 +183,7 @@ in a state the user didn't ask for.
 ### Project layout (scaffolded for you)
 
 ```
-~/mastra-builder-smoke-tests/builder-smoke/      ← $PROJECT_DIR
+$PROJECT_DIR/                                    ← see "Project dir resolution" below
 ├── package.json                                 ← pnpm overrides → link:<worktree>/packages/*
 ├── tsconfig.json
 ├── .env                                         ← OPENAI_API_KEY (+ AUTH_PROVIDER + WORKOS_* on auth-on)
@@ -196,6 +196,16 @@ in a state the user didn't ask for.
 ```
 
 The `.env` is the **only** thing that flips auth on/off — the same `src/mastra/index.ts` runs in both modes. Re-run `scripts/scaffold.sh` with or without `--workos-*` to switch.
+
+### Project dir resolution
+
+`$PROJECT_DIR` is determined by every script (scaffold, preflight, auth-detect, fixtures-reset) using this order:
+
+1. `--dir <path>` flag
+2. `BUILDER_SMOKE_TEST_DIR` env var (e.g. `export BUILDER_SMOKE_TEST_DIR=~/code/builder-smoke`)
+3. `~/mastra-builder-smoke-tests/builder-smoke` (default)
+
+For a long-lived setup, exporting `BUILDER_SMOKE_TEST_DIR` once in your shell rc is the lowest-friction option — every script picks it up automatically.
 
 ### Running scripts (cwd matters)
 

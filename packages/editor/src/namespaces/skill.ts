@@ -68,13 +68,15 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
       throw new Error('No blob store is configured. Register one via new MastraEditor({ blobStores: [...] })');
 
     // Collect and store blobs
-    const { snapshot, tree } = await publishSkillFromSource(source, skillPath, blobStore);
+    const { snapshot, tree, files } = await publishSkillFromSource(source, skillPath, blobStore);
 
-    // Update the skill with new version data + tree (creates a new version)
+    // Update the skill with new version data + tree + UI-facing file tree
+    // (creates a new version)
     await skillStore.update({
       id: skillId,
       ...snapshot,
       tree,
+      files,
       status: 'published',
     });
 

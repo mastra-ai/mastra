@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Scaffold a clean, hermetic builder-smoke-test project at $PROJECT_DIR
-# (default: ~/mastra-builder-smoke-tests/builder-smoke), linked against the
-# current mastra worktree so it exercises in-tree code.
+# Scaffold a clean, hermetic builder-smoke-test project at $PROJECT_DIR,
+# linked against the current mastra worktree so it exercises in-tree code.
+#
+# Project dir resolution (first wins):
+#   1. --dir <path> flag
+#   2. $BUILDER_SMOKE_TEST_DIR env var
+#   3. ~/mastra-builder-smoke-tests/builder-smoke  (default)
 #
 # What this does:
 #   1. Resolve the mastra worktree root from this script's location.
@@ -19,6 +23,7 @@
 #   bash scaffold.sh                                  # auth off, prompt for openai key
 #   bash scaffold.sh --reuse                          # skip install if project already healthy
 #   bash scaffold.sh --dir /custom/path               # use a custom project dir
+#   BUILDER_SMOKE_TEST_DIR=/custom/path bash scaffold.sh  # via env var
 #   bash scaffold.sh --openai-key sk-...              # supply key inline
 #   bash scaffold.sh \
 #     --workos-api-key sk_test_... \
@@ -66,7 +71,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-PROJECT_DIR="${PROJECT_DIR:-$DEFAULT_PROJECT_DIR}"
+# Resolve project dir: --dir flag > BUILDER_SMOKE_TEST_DIR env > default.
+PROJECT_DIR="${PROJECT_DIR:-${BUILDER_SMOKE_TEST_DIR:-$DEFAULT_PROJECT_DIR}}"
 
 # 1. Verify worktree root looks like a mastra worktree.
 if [ ! -f "${WORKTREE_ROOT}/pnpm-workspace.yaml" ] || [ ! -d "${WORKTREE_ROOT}/packages/core" ]; then

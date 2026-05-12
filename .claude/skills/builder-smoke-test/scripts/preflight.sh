@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Preflight for the builder-smoke-test skill.
 #
-# Calls scripts/scaffold.sh to ensure a hermetic project exists at
-# ~/mastra-builder-smoke-tests/builder-smoke (or --dir override), then
+# Calls scripts/scaffold.sh to ensure a hermetic project exists, then
 # validates the resulting .env matches --expect off|on.
+#
+# Project dir resolution (first wins):
+#   1. --dir <path> flag (forwarded to scaffold)
+#   2. $BUILDER_SMOKE_TEST_DIR env var
+#   3. ~/mastra-builder-smoke-tests/builder-smoke  (default)
 #
 # Run from anywhere; resolves paths relative to this script's location.
 #
@@ -16,6 +20,7 @@
 #     --workos-client-id client_... \
 #     --workos-organization-id org_...        # scaffold auth-on
 #   bash preflight.sh --dir /custom/path      # custom project dir
+#   BUILDER_SMOKE_TEST_DIR=/custom/path bash preflight.sh
 #
 # All --openai-key, --workos-*, --dir, --reuse flags are forwarded to scaffold.sh.
 #

@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Print the auth mode the scaffolded builder-smoke project will boot in.
 #
-# Reads ONLY the project's .env (default ~/mastra-builder-smoke-tests/builder-smoke/.env)
-# — because `mastra dev` overwrites process.env from .env at boot, shell-
-# exported AUTH_PROVIDER does not enable WorkOS auth in the server.
+# Reads ONLY the project's .env — because `mastra dev` overwrites process.env
+# from .env at boot, shell-exported AUTH_PROVIDER does not enable WorkOS auth
+# in the server.
+#
+# Project dir resolution (first wins):
+#   1. --dir <path> flag
+#   2. $BUILDER_SMOKE_TEST_DIR env var
+#   3. ~/mastra-builder-smoke-tests/builder-smoke  (default)
 #
 # Output:
 #   mode=off                            — AUTH_PROVIDER absent in project .env
@@ -13,6 +18,7 @@
 # Usage:
 #   bash auth-detect.sh                              # default project dir
 #   bash auth-detect.sh --dir /custom/path           # custom project dir
+#   BUILDER_SMOKE_TEST_DIR=/custom/path bash auth-detect.sh
 #
 # Exit codes:
 #   0 — mode resolved (off or on:*)
@@ -32,7 +38,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-PROJECT_DIR="${PROJECT_DIR:-$DEFAULT_PROJECT_DIR}"
+PROJECT_DIR="${PROJECT_DIR:-${BUILDER_SMOKE_TEST_DIR:-$DEFAULT_PROJECT_DIR}}"
 ENV_FILE="${PROJECT_DIR}/.env"
 
 if [ ! -f "${ENV_FILE}" ]; then
