@@ -215,7 +215,12 @@ function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessa
       return [
         {
           type: 'file',
-          mediaType: typeof typedPart.mimeType === 'string' ? typedPart.mimeType : 'image/*',
+          mediaType:
+            typeof typedPart.mediaType === 'string'
+              ? typedPart.mediaType
+              : typeof typedPart.mimeType === 'string'
+                ? typedPart.mimeType
+                : 'image/*',
           url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
         },
       ];
@@ -226,7 +231,12 @@ function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessa
       return [
         {
           type: 'file',
-          mediaType: typeof typedPart.mimeType === 'string' ? typedPart.mimeType : 'application/octet-stream',
+          mediaType:
+            typeof typedPart.mediaType === 'string'
+              ? typedPart.mediaType
+              : typeof typedPart.mimeType === 'string'
+                ? typedPart.mimeType
+                : 'application/octet-stream',
           url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
           ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
         },

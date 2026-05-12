@@ -598,7 +598,13 @@ describe('toUIMessage', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'describe this' },
-              { type: 'image', image: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+              { type: 'image', image: 'data:image/png;base64,abc123', mediaType: 'image/png' },
+              {
+                type: 'file',
+                data: 'data:application/pdf;base64,abc123',
+                mediaType: 'application/pdf',
+                filename: 'report.pdf',
+              },
             ],
           },
         },
@@ -615,6 +621,12 @@ describe('toUIMessage', () => {
           parts: [
             { type: 'text', text: 'describe this' },
             { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,abc123' },
+            {
+              type: 'file',
+              mediaType: 'application/pdf',
+              url: 'data:application/pdf;base64,abc123',
+              filename: 'report.pdf',
+            },
           ],
           metadata: baseMetadata,
         },

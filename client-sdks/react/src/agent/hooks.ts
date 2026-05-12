@@ -240,7 +240,10 @@ export const useChat = ({
     [agentId, baseClient, markThreadSignalsUnsupported, processStreamChunk],
   );
 
-  useEffect(() => closeThreadSubscription, [agentId, resourceId, threadId, closeThreadSubscription]);
+  useEffect(() => {
+    _threadSignalsUnsupportedRef.current = false;
+    return closeThreadSubscription;
+  }, [agentId, resourceId, threadId, closeThreadSubscription]);
 
   useEffect(() => {
     if (!threadId) return;
