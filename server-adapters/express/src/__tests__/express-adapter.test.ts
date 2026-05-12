@@ -657,7 +657,7 @@ describe('Express Server Adapter', () => {
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
 
-    it('keeps registered route abort signals independent from response close', async () => {
+    it('aborts registered route signals when the response closes early', async () => {
       const app = express();
       app.use(express.json());
 
@@ -703,9 +703,9 @@ describe('Express Server Adapter', () => {
       const reader = response.body!.getReader();
       await reader.read();
       await reader.cancel();
-      await sleep(30);
+      await waitFor(() => signalAbort.mock.calls.length > 0);
 
-      expect(signalAbort).not.toHaveBeenCalled();
+      expect(signalAbort).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -66,7 +66,6 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      customRouteAbortSignal: AbortSignal;
       registeredTools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
@@ -129,20 +128,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
-      res.locals.abortSignal = controller.signal;
-
-      const customRouteController = new AbortController();
       // Use res.on('close') instead of req.on('close') because the request's 'close' event
       // fires when the request body is fully consumed (e.g., after express.json() parses it),
       // NOT when the client disconnects. The response's 'close' event fires when the underlying
-      // connection is actually closed, which is the correct signal for custom route stream cleanup.
+      // connection is actually closed, which is the correct signal for stream cleanup.
       res.on('close', () => {
         // Only abort if the response wasn't successfully completed
         if (!res.writableFinished) {
-          customRouteController.abort();
+          controller.abort();
         }
       });
-      res.locals.customRouteAbortSignal = customRouteController.signal;
+      res.locals.abortSignal = controller.signal;
       next();
     };
   }
@@ -678,10 +674,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         req.headers as Record<string, string | string[] | undefined>,
         req.body,
         res.locals.requestContext,
-        res.locals.customRouteAbortSignal,
+        res.locals.abortSignal,
       );
       if (!response) return next();
-      await this.writeCustomRouteResponse(response, res, res.locals.customRouteAbortSignal);
+      await this.writeCustomRouteResponse(response, res, res.locals.abortSignal);
     });
   }
 
