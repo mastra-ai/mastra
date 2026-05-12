@@ -10,6 +10,7 @@ import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from './project-config.js';
 
@@ -296,6 +297,7 @@ export async function deployAction(
     yes?: boolean;
     config?: string;
     skipBuild?: boolean;
+    skipPreflight?: boolean;
     debug?: boolean;
     envFile?: string;
   },
@@ -306,6 +308,7 @@ export async function deployAction(
     throw new Error('MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set');
   }
   const autoAccept = opts.yes ?? isHeadless;
+  const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
 
   p.intro('mastra studio deploy');
 
@@ -431,14 +434,6 @@ export async function deployAction(
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  t = performance.now();
-  s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
-  const zipStat = await stat(zipPath);
-  const sizeKB = zipStat.size / 1024;
-  const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
-  s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
-
   const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
@@ -446,6 +441,28 @@ export async function deployAction(
   } else {
     p.log.step('No env vars found in selected env file');
   }
+
+  // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
+  if (!skipPreflight) {
+    const issues = await preflightBuildOutput(targetDir, envVars);
+    const outcome = await printPreflightIssues(issues, { autoAccept });
+    if (outcome === 'blocked') {
+      p.cancel('Deploy blocked by preflight errors.');
+      process.exit(1);
+    }
+    if (outcome === 'cancelled') {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+  }
+
+  t = performance.now();
+  s.start('Zipping build artifact...');
+  const zipPath = await zipOutput(targetDir);
+  const zipStat = await stat(zipPath);
+  const sizeKB = zipStat.size / 1024;
+  const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
+  s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
   t = performance.now();
   s.start('Uploading...');

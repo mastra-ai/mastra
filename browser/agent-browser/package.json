@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-browser",
-  "version": "0.2.1",
+  "version": "0.2.2-alpha.0",
   "description": "Browser automation for Mastra agents using agent-browser",
   "type": "module",
   "files": [

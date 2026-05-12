@@ -1,17 +1,6 @@
-import { randomUUID } from 'node:crypto';
-
 import { APICallError } from '@internal/ai-sdk-v5';
 
-import type { DataChunkType } from '../stream/types';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
-
-type SystemReminderChunk = DataChunkType & {
-  type: 'data-system-reminder';
-  data: {
-    message: string;
-    reminderType: string;
-  };
-};
 
 const PREFILL_ERROR_PATTERNS = [
   /does not support assistant message prefill/i,
@@ -66,56 +55,22 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
   readonly id = 'prefill-error-handler' as const;
   readonly name = 'Prefill Error Handler';
 
-  async processAPIError({
-    error,
-    messageList,
-    retryCount,
-    writer,
-    rotateResponseMessageId,
-  }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+  async processAPIError({ error, retryCount, sendSignal }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     // Only handle on first attempt — if it fails again after our fix, don't loop
     if (retryCount > 0) return;
 
     if (!isPrefillError(error)) return;
 
-    // Emit an ephemeral stream chunk so live UIs can show the retry is happening
-    if (writer) {
-      const chunk: SystemReminderChunk = {
-        type: 'data-system-reminder',
-        data: {
-          message: 'Continuing after prefill error',
-          reminderType: 'anthropic-prefill-processor-retry',
-        },
-        transient: true,
-      };
-      await writer.custom(chunk);
-    }
-
-    // Append a user message to break the trailing assistant pattern
-    messageList.add(
-      {
-        id: randomUUID(),
-        role: 'user' as const,
-        content: {
-          format: 2 as const,
-          parts: [
-            {
-              type: 'text' as const,
-              text: '<system-reminder>continue</system-reminder>',
-            },
-          ],
-          metadata: {
-            systemReminder: {
-              type: 'anthropic-prefill-processor-retry',
-            },
-          },
-        },
-        createdAt: new Date(),
+    await sendSignal?.({
+      type: 'system-reminder',
+      contents: 'continue',
+      attributes: {
+        type: 'anthropic-prefill-processor-retry',
       },
-      'input',
-    );
-
-    rotateResponseMessageId?.();
+      metadata: {
+        message: 'Continuing after prefill error',
+      },
+    });
 
     return { retry: true };
   }

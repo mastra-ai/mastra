@@ -29,6 +29,30 @@ describe('system reminder filtering', () => {
         parts: [{ type: 'text' as const, text: '<system-reminder>continue</system-reminder>' }],
       },
     } as unknown as MastraDBMessage;
+    const signalReminderMessage = {
+      id: 'signal-reminder',
+      role: 'signal',
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: 'continue' }],
+        metadata: { signal: { type: 'system-reminder' } },
+      },
+    } as unknown as MastraDBMessage;
+    const userSignalMessage = {
+      id: 'user-signal',
+      role: 'signal',
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: 'hello' }],
+        metadata: { signal: { type: 'user-message' } },
+      },
+    } as unknown as MastraDBMessage;
     const embeddedMarkupMessage = {
       id: 'embedded-markup',
       role: 'user',
@@ -43,9 +67,17 @@ describe('system reminder filtering', () => {
 
     expect(isSystemReminderMessage(metadataReminderMessage)).toBe(true);
     expect(isSystemReminderMessage(textReminderMessage)).toBe(true);
+    expect(isSystemReminderMessage(signalReminderMessage)).toBe(true);
+    expect(isSystemReminderMessage(userSignalMessage)).toBe(false);
     expect(isSystemReminderMessage(embeddedMarkupMessage)).toBe(false);
-    expect(filterSystemReminderMessages([metadataReminderMessage, textReminderMessage, embeddedMarkupMessage])).toEqual(
-      [embeddedMarkupMessage],
-    );
+    expect(
+      filterSystemReminderMessages([
+        metadataReminderMessage,
+        textReminderMessage,
+        signalReminderMessage,
+        userSignalMessage,
+        embeddedMarkupMessage,
+      ]),
+    ).toEqual([userSignalMessage, embeddedMarkupMessage]);
   });
 });

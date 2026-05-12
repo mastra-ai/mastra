@@ -29,6 +29,7 @@ import type {
   TabsInput,
   DragInput,
   EvaluateInput,
+  ScreenshotInput,
 } from './schemas';
 import { AgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
@@ -53,9 +54,11 @@ export class AgentBrowser extends MastraBrowser {
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
+  private browserConfig: BrowserConfig;
 
   constructor(config: BrowserConfig = {}) {
     super(config);
+    this.browserConfig = config;
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
@@ -289,10 +292,17 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Get the browser tools for this provider.
-   * Returns 17 flat tools for browser automation.
+   * Returns 16 flat tools for browser automation.
    */
   getTools(): Record<string, Tool<any, any>> {
-    return createAgentBrowserTools(this);
+    const tools = createAgentBrowserTools(this);
+    const exclude = this.browserConfig.excludeTools;
+    if (exclude?.length) {
+      for (const name of exclude) {
+        delete tools[name];
+      }
+    }
+    return tools;
   }
 
   // ---------------------------------------------------------------------------
@@ -693,6 +703,32 @@ export class AgentBrowser extends MastraBrowser {
       };
     } catch (error) {
       return this.createErrorFromException(error, 'Snapshot');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // browser_screenshot - Capture a screenshot of the current page
+  // ---------------------------------------------------------------------------
+
+  async screenshot(
+    input: ScreenshotInput,
+    threadId?: string,
+  ): Promise<{ base64: string; url: string; title: string } | BrowserToolError> {
+    try {
+      const page = await this.getPage(threadId);
+      const buffer = await page.screenshot({
+        fullPage: input.fullPage ?? false,
+        type: 'png',
+      });
+      const base64 = Buffer.from(buffer).toString('base64');
+
+      return {
+        base64,
+        url: page.url(),
+        title: await page.title(),
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Screenshot');
     }
   }
 
