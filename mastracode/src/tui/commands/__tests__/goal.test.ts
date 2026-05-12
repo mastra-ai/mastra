@@ -122,7 +122,7 @@ describe('handleGoalCommand', () => {
     const createThread = vi.fn(async () => {
       currentThreadId = 'new-thread';
     });
-    const sendMessage = vi.fn();
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
     const ctx = {
       state: {
         pendingNewThread: true,
@@ -130,7 +130,7 @@ describe('handleGoalCommand', () => {
         harness: {
           createThread,
           getCurrentThreadId: vi.fn(() => currentThreadId),
-          sendMessage,
+          sendSignal,
         },
       },
       addUserMessage: vi.fn(),
@@ -144,8 +144,11 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(createThread.mock.invocationCallOrder[0]).toBeLessThan(goalManager.saveToThread.mock.invocationCallOrder[0]);
     expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
-    expect(sendMessage).toHaveBeenCalledWith({
-      content: '<system-reminder type="goal">finish the task</system-reminder>',
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: 'finish the task',
+      attributes: { type: 'goal' },
+      metadata: { goalMaxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
     });
   });
 
@@ -170,14 +173,14 @@ describe('handleGoalCommand', () => {
       saveToThread: vi.fn(),
       isActive: vi.fn(() => true),
     };
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
     const ctx = {
       state: {
         pendingNewThread: false,
         goalManager,
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
-          sendMessage,
+          sendSignal,
         },
       },
       addUserMessage: vi.fn(),
@@ -190,20 +193,16 @@ describe('handleGoalCommand', () => {
     // judge runs after the agent's first response.
     expect(goalManager.setGoal).toHaveBeenCalledWith(objective, 'openai/gpt-5.5', 50);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendMessage.mock.invocationCallOrder[0]);
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
 
-    // The trigger is exactly one canonical goal reminder — no preamble, no
-    // concatenated reminders. The trailing $ in the assertion mirrors the
-    // legacy whole-message reminder regex used at render time.
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith({
-      content: '<system-reminder type="goal"># Ship it\n\n1. Build\n2. Test</system-reminder>',
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: '# Ship it\n\n1. Build\n2. Test',
+      attributes: { type: 'goal' },
+      metadata: { goalMaxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
     });
-    const sentContent = sendMessage.mock.calls[0][0].content as string;
-    expect(sentContent).toMatch(/^<system-reminder type="goal">[\s\S]*<\/system-reminder>$/);
-    expect(sentContent).not.toMatch(/begin executing/);
-    expect(sentContent.match(/<system-reminder/g)).toHaveLength(1);
   });
 
   it('enters real goal mode (active + persisted) before sending the trigger so the judge runs on agent_end', async () => {
@@ -228,8 +227,9 @@ describe('handleGoalCommand', () => {
       isActiveAtSetThreadSetting = goalManager.isActive();
       persistedGoalAtSetThreadSetting = value;
     });
-    const sendMessage = vi.fn(async () => {
+    const sendSignal = vi.fn(() => {
       isActiveAtSendMessage = goalManager.isActive();
+      return { accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) };
     });
 
     const ctx = {
@@ -239,7 +239,7 @@ describe('handleGoalCommand', () => {
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
           setThreadSetting,
-          sendMessage,
+          sendSignal,
         },
       },
       addUserMessage: vi.fn(),
