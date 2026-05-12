@@ -24,10 +24,11 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_METRIC_EVENTS, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
+import { TABLE_METRIC_EVENTS, TABLE_METRIC_EVENTS_DELTA, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
 import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
+import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
 
 // ============================================================================
 // Helpers
@@ -259,10 +260,60 @@ export async function batchCreateMetrics(client: ClickHouseClient, args: BatchCr
 
 export async function listMetrics(client: ClickHouseClient, args: ListMetricsArgs): Promise<ListMetricsResponse> {
   const parsed = listMetricsArgsSchema.parse(args);
+  const liveCursorEnabled = deltaPollingFeatureEnabled();
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getMetricsLiveCursor(client, whereClause, filter.params);
+    if (parsed.after === undefined) {
+      return {
+        metrics: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const rows = await queryJson<Record<string, any> & { cursorId?: string }>(
+      client,
+      `
+        SELECT
+          m.* EXCEPT(name, timestamp, metricId),
+          m.name AS name,
+          m.timestamp AS timestamp,
+          m.metricId AS metricId,
+          toString(d.cursorId) AS cursorId
+        FROM ${TABLE_METRIC_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_METRIC_EVENTS} m
+          ON m.name = d.name
+         AND m.timestamp = d.timestamp
+         AND m.metricId = d.metricId
+        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ORDER BY d.cursorId ASC, m.metricId ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      {
+        ...filter.params,
+        afterCursor: decodeLiveCursor(parsed.after),
+        fetchLimit: parsed.limit + 1,
+      },
+    );
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      metrics: visibleRows.map(rowToMetricRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
 
   const countResult = await queryJson<{ total?: number }>(
     client,
@@ -286,7 +337,30 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     metrics: rows.map(rowToMetricRecord),
+    ...(liveCursorEnabled ? { liveCursor: await getMetricsLiveCursor(client, whereClause, filter.params) } : {}),
   };
+}
+
+async function getMetricsLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string | null> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  return encodeLiveCursor(rows[0]?.cursorId ?? null);
 }
 
 // ============================================================================

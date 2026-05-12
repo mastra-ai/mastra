@@ -19,10 +19,11 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_SCORE_EVENTS } from './ddl';
+import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
+import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
 
 // ============================================================================
 // Helpers
@@ -178,10 +179,60 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
 
 export async function listScores(client: ClickHouseClient, args: ListScoresArgs): Promise<ListScoresResponse> {
   const parsed = listScoresArgsSchema.parse(args);
+  const liveCursorEnabled = deltaPollingFeatureEnabled();
   const filter = buildScoresFilterConditions(parsed.filters, 's');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getScoresLiveCursor(client, whereClause, filter.params);
+    if (parsed.after === undefined) {
+      return {
+        scores: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const rows = await queryJson<Record<string, any> & { cursorId?: string }>(
+      client,
+      `
+        SELECT
+          s.* EXCEPT(traceId, timestamp, scoreId),
+          s.traceId AS traceId,
+          s.timestamp AS timestamp,
+          s.scoreId AS scoreId,
+          toString(d.cursorId) AS cursorId
+        FROM ${TABLE_SCORE_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_SCORE_EVENTS} s
+          ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
+         AND s.timestamp = d.timestamp
+         AND s.scoreId = d.scoreId
+        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ORDER BY d.cursorId ASC, s.scoreId ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      {
+        ...filter.params,
+        afterCursor: decodeLiveCursor(parsed.after),
+        fetchLimit: parsed.limit + 1,
+      },
+    );
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      scores: visibleRows.map(rowToScoreRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
 
   const countResult = await queryJson<{ total?: number }>(
     client,
@@ -205,7 +256,30 @@ export async function listScores(client: ClickHouseClient, args: ListScoresArgs)
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     scores: rows.map(rowToScoreRecord),
+    ...(liveCursorEnabled ? { liveCursor: await getScoresLiveCursor(client, whereClause, filter.params) } : {}),
   };
+}
+
+async function getScoresLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string | null> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_SCORE_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_SCORE_EVENTS} s
+        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
+       AND s.timestamp = d.timestamp
+       AND s.scoreId = d.scoreId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  return encodeLiveCursor(rows[0]?.cursorId ?? null);
 }
 
 export async function getScoreById(client: ClickHouseClient, scoreId: string): Promise<ScoreRecord | null> {

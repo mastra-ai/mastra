@@ -2,9 +2,10 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { listLogsArgsSchema } from '@mastra/core/storage';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
 
-import { TABLE_LOG_EVENTS } from './ddl';
+import { TABLE_LOG_EVENTS, TABLE_LOG_EVENTS_DELTA } from './ddl';
 import { buildLogsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, logRecordToRow, rowToLogRecord } from './helpers';
+import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
 
 export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
@@ -19,10 +20,61 @@ export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreat
 
 export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Promise<ListLogsResponse> {
   const parsed = listLogsArgsSchema.parse(args);
+  const liveCursorEnabled = deltaPollingFeatureEnabled();
   const filter = buildLogsFilterConditions(parsed.filters, 'l');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'l');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getLogsLiveCursor(client, whereClause, filter.params);
+    if (parsed.after === undefined) {
+      return {
+        logs: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const rows = (await (
+      await client.query({
+        query: `
+          SELECT
+            l.* EXCEPT(timestamp, logId),
+            l.timestamp AS timestamp,
+            l.logId AS logId,
+            toString(d.cursorId) AS cursorId
+          FROM ${TABLE_LOG_EVENTS_DELTA} d
+          INNER JOIN ${TABLE_LOG_EVENTS} l
+            ON l.timestamp = d.timestamp
+           AND l.logId = d.logId
+          ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+          ORDER BY d.cursorId ASC, l.logId ASC
+          LIMIT {fetchLimit:UInt32}
+        `,
+        query_params: {
+          ...filter.params,
+          afterCursor: decodeLiveCursor(parsed.after),
+          fetchLimit: parsed.limit + 1,
+        },
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<Record<string, any> & { cursorId?: string }>;
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      logs: visibleRows.map(rowToLogRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
 
   const countResult = (await (
     await client.query({
@@ -62,5 +114,30 @@ export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Pr
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     logs: rows.map(rowToLogRecord),
+    ...(liveCursorEnabled ? { liveCursor: await getLogsLiveCursor(client, whereClause, filter.params) } : {}),
   };
+}
+
+async function getLogsLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string | null> {
+  const rows = (await (
+    await client.query({
+      query: `
+        SELECT toString(max(d.cursorId)) AS cursorId
+        FROM ${TABLE_LOG_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_LOG_EVENTS} l
+          ON l.timestamp = d.timestamp
+         AND l.logId = d.logId
+        ${whereClause}
+      `,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as Array<{ cursorId?: string | null }>;
+
+  return encodeLiveCursor(rows[0]?.cursorId ?? null);
 }

@@ -111,6 +111,7 @@ import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
 import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { deltaPollingFeatureEnabled } from './polling';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -381,6 +382,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       preferred: 'insert-only',
       supported: ['insert-only'],
     };
+  }
+
+  override getListCapabilities() {
+    if (!deltaPollingFeatureEnabled()) {
+      return undefined;
+    }
+
+    return {
+      delta: {
+        traces: true,
+        branches: true,
+        logs: true,
+        metrics: true,
+        scores: true,
+        feedback: true,
+      },
+    } as const;
   }
 
   // -------------------------------------------------------------------------

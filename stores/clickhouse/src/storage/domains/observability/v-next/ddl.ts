@@ -27,10 +27,16 @@
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
 export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
 export const TABLE_TRACE_BRANCHES = 'mastra_trace_branches';
+export const TABLE_TRACE_ROOTS_DELTA = 'mastra_trace_roots_delta';
+export const TABLE_TRACE_BRANCHES_DELTA = 'mastra_trace_branches_delta';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
+export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
+export const TABLE_LOG_EVENTS_DELTA = 'mastra_log_events_delta';
+export const TABLE_SCORE_EVENTS_DELTA = 'mastra_score_events_delta';
+export const TABLE_FEEDBACK_EVENTS_DELTA = 'mastra_feedback_events_delta';
 export const TABLE_DISCOVERY_VALUES = 'mastra_discovery_values';
 export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 
@@ -40,6 +46,12 @@ export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 
 export const MV_TRACE_ROOTS = 'mastra_mv_trace_roots';
 export const MV_TRACE_BRANCHES = 'mastra_mv_trace_branches';
+export const MV_TRACE_ROOTS_DELTA = 'mastra_mv_trace_roots_delta';
+export const MV_TRACE_BRANCHES_DELTA = 'mastra_mv_trace_branches_delta';
+export const MV_METRIC_EVENTS_DELTA = 'mastra_mv_metric_events_delta';
+export const MV_LOG_EVENTS_DELTA = 'mastra_mv_log_events_delta';
+export const MV_SCORE_EVENTS_DELTA = 'mastra_mv_score_events_delta';
+export const MV_FEEDBACK_EVENTS_DELTA = 'mastra_mv_feedback_events_delta';
 export const MV_DISCOVERY_VALUES = 'mastra_mv_discovery_values';
 export const MV_DISCOVERY_PAIRS = 'mastra_mv_discovery_pairs';
 
@@ -310,6 +322,60 @@ WHERE spanType IN (${BRANCH_SPAN_TYPE_VALUES.map(v => `'${v}'`).join(', ')})
 `;
 
 // ---------------------------------------------------------------------------
+// trace_roots_delta — append-only cursor index for incremental trace polling
+// ---------------------------------------------------------------------------
+
+export const TRACE_ROOTS_DELTA_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS_DELTA} (
+  cursorId           UInt64 DEFAULT generateSnowflakeID(),
+  ingestedAt         DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC'),
+  startedAt          DateTime64(3, 'UTC'),
+  traceId            String,
+  dedupeKey          String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId, startedAt, traceId, dedupeKey)
+TTL ingestedAt + toIntervalDay(2)
+`;
+
+export const TRACE_ROOTS_DELTA_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_TRACE_ROOTS_DELTA}
+TO ${TABLE_TRACE_ROOTS_DELTA}
+AS
+SELECT startedAt, traceId, dedupeKey
+FROM ${TABLE_TRACE_ROOTS}
+`;
+
+// ---------------------------------------------------------------------------
+// trace_branches_delta — append-only cursor index for incremental branch polling
+// ---------------------------------------------------------------------------
+
+export const TRACE_BRANCHES_DELTA_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES_DELTA} (
+  cursorId           UInt64 DEFAULT generateSnowflakeID(),
+  ingestedAt         DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC'),
+  spanType           LowCardinality(String),
+  startedAt          DateTime64(3, 'UTC'),
+  traceId            String,
+  spanId             String,
+  dedupeKey          String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId, spanType, startedAt, traceId, spanId, dedupeKey)
+TTL ingestedAt + toIntervalDay(2)
+`;
+
+export const TRACE_BRANCHES_DELTA_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_TRACE_BRANCHES_DELTA}
+TO ${TABLE_TRACE_BRANCHES_DELTA}
+AS
+SELECT spanType, startedAt, traceId, spanId, dedupeKey
+FROM ${TABLE_TRACE_BRANCHES}
+`;
+
+// ---------------------------------------------------------------------------
 // metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
 
@@ -445,6 +511,27 @@ PARTITION BY toDate(timestamp)
 ORDER BY (timestamp, logId)
 `;
 
+export const LOG_EVENTS_DELTA_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS_DELTA} (
+  cursorId           UInt64 DEFAULT generateSnowflakeID(),
+  ingestedAt         DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC'),
+  timestamp          DateTime64(3, 'UTC'),
+  logId              String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId, timestamp, logId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+
+export const LOG_EVENTS_DELTA_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_LOG_EVENTS_DELTA}
+TO ${TABLE_LOG_EVENTS_DELTA}
+AS
+SELECT timestamp, logId
+FROM ${TABLE_LOG_EVENTS}
+`;
+
 // ---------------------------------------------------------------------------
 // score_events — ReplacingMergeTree with scoreId dedup
 // ---------------------------------------------------------------------------
@@ -509,6 +596,29 @@ ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const SCORE_EVENTS_DELTA_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
+  cursorId           UInt64 DEFAULT generateSnowflakeID(),
+  ingestedAt         DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC'),
+  traceId            Nullable(String),
+  timestamp          DateTime64(3, 'UTC'),
+  scoreId            String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId, traceId, timestamp, scoreId)
+TTL ingestedAt + toIntervalDay(2)
+SETTINGS allow_nullable_key = 1
+`;
+
+export const SCORE_EVENTS_DELTA_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
+TO ${TABLE_SCORE_EVENTS_DELTA}
+AS
+SELECT traceId, timestamp, scoreId
+FROM ${TABLE_SCORE_EVENTS}
 `;
 
 // ---------------------------------------------------------------------------
@@ -578,6 +688,55 @@ ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const FEEDBACK_EVENTS_DELTA_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS_DELTA} (
+  cursorId           UInt64 DEFAULT generateSnowflakeID(),
+  ingestedAt         DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC'),
+  traceId            Nullable(String),
+  timestamp          DateTime64(3, 'UTC'),
+  feedbackId         String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId, traceId, timestamp, feedbackId)
+TTL ingestedAt + toIntervalDay(2)
+SETTINGS allow_nullable_key = 1
+`;
+
+export const FEEDBACK_EVENTS_DELTA_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_FEEDBACK_EVENTS_DELTA}
+TO ${TABLE_FEEDBACK_EVENTS_DELTA}
+AS
+SELECT traceId, timestamp, feedbackId
+FROM ${TABLE_FEEDBACK_EVENTS}
+`;
+
+// ---------------------------------------------------------------------------
+// metric_events_delta — append-only cursor index for incremental metric polling
+// ---------------------------------------------------------------------------
+
+export const METRIC_EVENTS_DELTA_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS_DELTA} (
+  cursorId           UInt64 DEFAULT generateSnowflakeID(),
+  ingestedAt         DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC'),
+  name               LowCardinality(String),
+  timestamp          DateTime64(3, 'UTC'),
+  metricId           String
+)
+ENGINE = MergeTree
+PARTITION BY toDate(ingestedAt)
+ORDER BY (cursorId, name, timestamp, metricId)
+TTL ingestedAt + toIntervalDay(2)
+`;
+
+export const METRIC_EVENTS_DELTA_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_METRIC_EVENTS_DELTA}
+TO ${TABLE_METRIC_EVENTS_DELTA}
+AS
+SELECT name, timestamp, metricId
+FROM ${TABLE_METRIC_EVENTS}
 `;
 
 // ---------------------------------------------------------------------------
@@ -691,15 +850,30 @@ export const ALL_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
   TRACE_BRANCHES_DDL,
+  TRACE_ROOTS_DELTA_DDL,
+  TRACE_BRANCHES_DELTA_DDL,
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
   FEEDBACK_EVENTS_DDL,
+  METRIC_EVENTS_DELTA_DDL,
+  LOG_EVENTS_DELTA_DDL,
+  SCORE_EVENTS_DELTA_DDL,
+  FEEDBACK_EVENTS_DELTA_DDL,
   DISCOVERY_VALUES_DDL,
   DISCOVERY_PAIRS_DDL,
 ];
 
-export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL];
+export const ALL_MV_DDL = [
+  TRACE_ROOTS_MV_DDL,
+  TRACE_BRANCHES_MV_DDL,
+  TRACE_ROOTS_DELTA_MV_DDL,
+  TRACE_BRANCHES_DELTA_MV_DDL,
+  METRIC_EVENTS_DELTA_MV_DDL,
+  LOG_EVENTS_DELTA_MV_DDL,
+  SCORE_EVENTS_DELTA_MV_DDL,
+  FEEDBACK_EVENTS_DELTA_MV_DDL,
+];
 
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
@@ -795,10 +969,16 @@ export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_ROOTS_DELTA,
+  TABLE_TRACE_BRANCHES_DELTA,
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_METRIC_EVENTS_DELTA,
+  TABLE_LOG_EVENTS_DELTA,
+  TABLE_SCORE_EVENTS_DELTA,
+  TABLE_FEEDBACK_EVENTS_DELTA,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
 ];

@@ -29,8 +29,9 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_BRANCHES_DELTA, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
+import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
 
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 
@@ -253,7 +254,7 @@ export async function dangerouslyClearSpanEvents(client: ClickHouseClient): Prom
  * which is the whole point of this surface.
  */
 export async function listBranches(client: ClickHouseClient, args: ListBranchesArgs): Promise<ListBranchesResponse> {
-  const { filters, pagination, orderBy } = listBranchesArgsSchema.parse(args);
+  const { mode, filters, pagination, orderBy, after, limit } = listBranchesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
   const perPage = pagination?.perPage ?? 10;
 
@@ -261,33 +262,33 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
   const params: Record<string, unknown> = {};
 
   if (filters?.spanType) {
-    conditions.push(`spanType = {spanType:String}`);
+    conditions.push(`b.spanType = {spanType:String}`);
     params.spanType = filters.spanType;
   } else {
     // Defense in depth: the MV WHERE clause already restricts the table to
     // these span types, but pinning the predicate at query time also prunes
     // any row that may have leaked in via direct insertion.
-    conditions.push(`spanType IN (${BRANCH_SPAN_TYPE_SQL_LIST})`);
+    conditions.push(`b.spanType IN (${BRANCH_SPAN_TYPE_SQL_LIST})`);
   }
 
   if (filters?.startedAt?.start) {
     const op = filters.startedAt.startExclusive ? '>' : '>=';
-    conditions.push(`startedAt ${op} {startedAtStart:DateTime64(3)}`);
+    conditions.push(`b.startedAt ${op} {startedAtStart:DateTime64(3)}`);
     params.startedAtStart = filters.startedAt.start.getTime();
   }
   if (filters?.startedAt?.end) {
     const op = filters.startedAt.endExclusive ? '<' : '<=';
-    conditions.push(`startedAt ${op} {startedAtEnd:DateTime64(3)}`);
+    conditions.push(`b.startedAt ${op} {startedAtEnd:DateTime64(3)}`);
     params.startedAtEnd = filters.startedAt.end.getTime();
   }
   if (filters?.endedAt?.start) {
     const op = filters.endedAt.startExclusive ? '>' : '>=';
-    conditions.push(`endedAt ${op} {endedAtStart:DateTime64(3)}`);
+    conditions.push(`b.endedAt ${op} {endedAtStart:DateTime64(3)}`);
     params.endedAtStart = filters.endedAt.start.getTime();
   }
   if (filters?.endedAt?.end) {
     const op = filters.endedAt.endExclusive ? '<' : '<=';
-    conditions.push(`endedAt ${op} {endedAtEnd:DateTime64(3)}`);
+    conditions.push(`b.endedAt ${op} {endedAtEnd:DateTime64(3)}`);
     params.endedAtEnd = filters.endedAt.end.getTime();
   }
 
@@ -321,7 +322,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
   ];
   for (const { col, value, param } of eq) {
     if (value == null) continue;
-    conditions.push(`${col} = {${param}:String}`);
+    conditions.push(`b.${col} = {${param}:String}`);
     params[param] = value;
   }
 
@@ -330,7 +331,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       const tag = filters.tags[i];
       if (typeof tag !== 'string' || tag.trim() === '') continue;
       const param = `tag_${i}`;
-      conditions.push(`has(tags, {${param}:String})`);
+      conditions.push(`has(b.tags, {${param}:String})`);
       params[param] = tag;
     }
   }
@@ -341,7 +342,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       if (typeof value !== 'string') continue;
       const keyParam = `meta_k_${i}`;
       const valParam = `meta_v_${i}`;
-      conditions.push(`metadataSearch[{${keyParam}:String}] = {${valParam}:String}`);
+      conditions.push(`b.metadataSearch[{${keyParam}:String}] = {${valParam}:String}`);
       params[keyParam] = key;
       params[valParam] = value;
       i++;
@@ -361,7 +362,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       if (normalized == null) continue;
       const keyParam = `scope_k_${i}`;
       const valParam = `scope_v_${i}`;
-      conditions.push(`JSONExtractString(scope, {${keyParam}:String}) = {${valParam}:String}`);
+      conditions.push(`JSONExtractString(b.scope, {${keyParam}:String}) = {${valParam}:String}`);
       params[keyParam] = key;
       params[valParam] = normalized;
       i++;
@@ -369,15 +370,73 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
   }
 
   if (filters?.status === TraceStatus.ERROR) {
-    conditions.push(`error IS NOT NULL`);
+    conditions.push(`b.error IS NOT NULL`);
   } else if (filters?.status === TraceStatus.SUCCESS) {
-    conditions.push(`error IS NULL`);
+    conditions.push(`b.error IS NULL`);
   } else if (filters?.status === TraceStatus.RUNNING) {
     // listBranches reads completed-span data; running spans are not surfaced.
     conditions.push('1 = 0');
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const liveCursorEnabled = deltaPollingFeatureEnabled();
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getBranchLiveCursor(client, whereClause, params);
+    if (after === undefined) {
+      return {
+        branches: [],
+        delta: { limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const rows = (await (
+      await client.query({
+        query: `
+          SELECT
+            b.* EXCEPT(spanType, startedAt, traceId, spanId, dedupeKey),
+            b.spanType AS spanType,
+            b.startedAt AS startedAt,
+            b.traceId AS traceId,
+            b.spanId AS spanId,
+            b.dedupeKey AS dedupeKey,
+            toString(d.cursorId) AS cursorId
+          FROM ${TABLE_TRACE_BRANCHES_DELTA} d
+          INNER JOIN ${TABLE_TRACE_BRANCHES} b
+            ON b.spanType = d.spanType
+           AND b.startedAt = d.startedAt
+           AND b.traceId = d.traceId
+           AND b.spanId = d.spanId
+           AND b.dedupeKey = d.dedupeKey
+          ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+          ORDER BY d.cursorId ASC, b.dedupeKey ASC
+          LIMIT {fetchLimit:UInt32}
+        `,
+        query_params: {
+          ...params,
+          afterCursor: decodeLiveCursor(after),
+          fetchLimit: limit + 1,
+        },
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<Record<string, any> & { cursorId?: string }>;
+
+    const visibleRows = rows.slice(0, limit);
+
+    return {
+      branches: toTraceSpans(visibleRows.map(rowToSpanRecord)),
+      delta: { limit, hasMore: rows.length > limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
+
   const sortField = orderBy?.field === 'endedAt' ? 'endedAt' : 'startedAt';
   const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
 
@@ -386,10 +445,10 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
     query: `
       SELECT count() as cnt FROM (
         SELECT dedupeKey
-        FROM ${TABLE_TRACE_BRANCHES}
+        FROM ${TABLE_TRACE_BRANCHES} b
         ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
+        ORDER BY b.dedupeKey
+        LIMIT 1 BY b.dedupeKey
       )
     `,
     query_params: params,
@@ -403,6 +462,7 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
+      ...(liveCursorEnabled ? { liveCursor: null } : {}),
     };
   }
 
@@ -410,10 +470,10 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
     query: `
       SELECT * FROM (
         SELECT *
-        FROM ${TABLE_TRACE_BRANCHES}
+        FROM ${TABLE_TRACE_BRANCHES} b
         ${whereClause}
-        ORDER BY dedupeKey
-        LIMIT 1 BY dedupeKey
+        ORDER BY b.dedupeKey
+        LIMIT 1 BY b.dedupeKey
       )
       ORDER BY ${sortField} ${sortDirection}, dedupeKey ASC
       LIMIT {limit:UInt32}
@@ -438,5 +498,33 @@ export async function listBranches(client: ClickHouseClient, args: ListBranchesA
       hasMore: (page + 1) * perPage < total,
     },
     branches: toTraceSpans(spans),
+    ...(liveCursorEnabled ? { liveCursor: await getBranchLiveCursor(client, whereClause, params) } : {}),
   };
+}
+
+async function getBranchLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string | null> {
+  const rows = (await (
+    await client.query({
+      query: `
+        SELECT toString(max(d.cursorId)) AS cursorId
+        FROM ${TABLE_TRACE_BRANCHES_DELTA} d
+        INNER JOIN ${TABLE_TRACE_BRANCHES} b
+          ON b.spanType = d.spanType
+         AND b.startedAt = d.startedAt
+         AND b.traceId = d.traceId
+         AND b.spanId = d.spanId
+         AND b.dedupeKey = d.dedupeKey
+        ${whereClause}
+      `,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as Array<{ cursorId?: string | null }>;
+
+  return encodeLiveCursor(rows[0]?.cursorId ?? null);
 }

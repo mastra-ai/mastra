@@ -9,9 +9,10 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
 import type { GetRootSpanArgs, GetRootSpanResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToSpanRecord } from './helpers';
+import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -59,7 +60,7 @@ export async function getRootSpan(
  */
 export async function listTraces(client: ClickHouseClient, args: ListTracesArgs): Promise<ListTracesResponse> {
   // Parse args through schema to apply defaults
-  const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+  const { mode, filters, pagination, orderBy, after, limit } = listTracesArgsSchema.parse(args);
   const page = pagination?.page ?? 0;
   const perPage = pagination?.perPage ?? 10;
 
@@ -86,6 +87,60 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const liveCursorEnabled = deltaPollingFeatureEnabled();
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getTraceLiveCursor(client, whereClause, params);
+    if (after === undefined) {
+      return {
+        spans: [],
+        delta: { limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const rows = (await (
+      await client.query({
+        query: `
+          SELECT
+            r.* EXCEPT(startedAt, traceId, dedupeKey),
+            r.startedAt AS startedAt,
+            r.traceId AS traceId,
+            r.dedupeKey AS dedupeKey,
+            toString(d.cursorId) AS cursorId
+          FROM ${TABLE_TRACE_ROOTS_DELTA} d
+          INNER JOIN ${TABLE_TRACE_ROOTS} r
+            ON r.startedAt = d.startedAt
+           AND r.traceId = d.traceId
+           AND r.dedupeKey = d.dedupeKey
+          ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+          ORDER BY d.cursorId ASC, r.dedupeKey ASC
+          LIMIT {fetchLimit:UInt32}
+        `,
+        query_params: {
+          ...params,
+          afterCursor: decodeLiveCursor(after),
+          fetchLimit: limit + 1,
+        },
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_SETTINGS,
+      })
+    ).json()) as Array<Record<string, any> & { cursorId?: string }>;
+
+    const visibleRows = rows.slice(0, limit);
+
+    return {
+      spans: toTraceSpans(visibleRows.map(rowToSpanRecord)),
+      delta: { limit, hasMore: rows.length > limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
+
   // Outer ORDER BY must not use table alias — the outer SELECT wraps an anonymous subquery
   const orderClause = buildTraceOrderByClause(orderBy);
 
@@ -112,6 +167,7 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       spans: [],
+      ...(liveCursorEnabled ? { liveCursor: null } : {}),
     };
   }
 
@@ -149,5 +205,31 @@ export async function listTraces(client: ClickHouseClient, args: ListTracesArgs)
       hasMore: (page + 1) * perPage < total,
     },
     spans: toTraceSpans(spans),
+    ...(liveCursorEnabled ? { liveCursor: await getTraceLiveCursor(client, whereClause, params) } : {}),
   };
+}
+
+async function getTraceLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string | null> {
+  const rows = (await (
+    await client.query({
+      query: `
+        SELECT toString(max(d.cursorId)) AS cursorId
+        FROM ${TABLE_TRACE_ROOTS_DELTA} d
+        INNER JOIN ${TABLE_TRACE_ROOTS} r
+          ON r.startedAt = d.startedAt
+         AND r.traceId = d.traceId
+         AND r.dedupeKey = d.dedupeKey
+        ${whereClause}
+      `,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_SETTINGS,
+    })
+  ).json()) as Array<{ cursorId?: string | null }>;
+
+  return encodeLiveCursor(rows[0]?.cursorId ?? null);
 }

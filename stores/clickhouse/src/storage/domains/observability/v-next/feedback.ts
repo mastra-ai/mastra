@@ -18,10 +18,11 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_FEEDBACK_EVENTS } from './ddl';
+import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
+import { assertDeltaPollingEnabled, decodeLiveCursor, deltaPollingFeatureEnabled, encodeLiveCursor } from './polling';
 
 // ============================================================================
 // Helpers
@@ -182,10 +183,60 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 
 export async function listFeedback(client: ClickHouseClient, args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
   const parsed = listFeedbackArgsSchema.parse(args);
+  const liveCursorEnabled = deltaPollingFeatureEnabled();
   const filter = buildFeedbackFilterConditions(parsed.filters, 'f');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'f');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
+
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getFeedbackLiveCursor(client, whereClause, filter.params);
+    if (parsed.after === undefined) {
+      return {
+        feedback: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const rows = await queryJson<Record<string, any> & { cursorId?: string }>(
+      client,
+      `
+        SELECT
+          f.* EXCEPT(traceId, timestamp, feedbackId),
+          f.traceId AS traceId,
+          f.timestamp AS timestamp,
+          f.feedbackId AS feedbackId,
+          toString(d.cursorId) AS cursorId
+        FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
+        INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+          ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
+         AND f.timestamp = d.timestamp
+         AND f.feedbackId = d.feedbackId
+        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ORDER BY d.cursorId ASC, f.feedbackId ASC
+        LIMIT {fetchLimit:UInt32}
+      `,
+      {
+        ...filter.params,
+        afterCursor: decodeLiveCursor(parsed.after),
+        fetchLimit: parsed.limit + 1,
+      },
+    );
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      feedback: visibleRows.map(rowToFeedbackRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
 
   const countResult = await queryJson<{ total?: number }>(
     client,
@@ -209,7 +260,30 @@ export async function listFeedback(client: ClickHouseClient, args: ListFeedbackA
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     feedback: rows.map(rowToFeedbackRecord),
+    ...(liveCursorEnabled ? { liveCursor: await getFeedbackLiveCursor(client, whereClause, filter.params) } : {}),
   };
+}
+
+async function getFeedbackLiveCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string | null> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
+       AND f.timestamp = d.timestamp
+       AND f.feedbackId = d.feedbackId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  return encodeLiveCursor(rows[0]?.cursorId ?? null);
 }
 
 // ============================================================================
