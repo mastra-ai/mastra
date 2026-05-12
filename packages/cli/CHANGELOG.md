@@ -1,5 +1,15 @@
 # mastra
 
+## 1.9.0-alpha.16
+
+### Patch Changes
+
+- Start the Mastra Platform auth flow immediately after users opt in to observability during `create mastra` and `mastra init`, then reuse that token when provisioning the observability project. ([#16502](https://github.com/mastra-ai/mastra/pull/16502))
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+  - @mastra/deployer@1.33.0-alpha.15
+
 ## 1.9.0-alpha.15
 
 ### Minor Changes

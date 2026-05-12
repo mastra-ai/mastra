@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 1.33.0-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+
 ## 1.33.0-alpha.14
 
 ### Minor Changes
