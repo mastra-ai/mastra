@@ -1,9 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import {
-  Button,
   ButtonWithTooltip,
   DateTimeRangePicker,
-  DropdownMenu,
   NoTracesInfo,
   PageHeader,
   PageLayout,
@@ -12,6 +10,7 @@ import {
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
+  TracesListModeToggle,
   TracesListView,
   TracesToolbar,
   buildTraceListFilters,
@@ -30,7 +29,7 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
-import { BookIcon, ChevronDownIcon, EyeIcon, ListIcon, ListTreeIcon } from 'lucide-react';
+import { BookIcon, EyeIcon, ListIcon, ListTreeIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
@@ -243,23 +242,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const toolbarControls = (
     <>
-      <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button size="md" variant="default" disabled={isTracesLoading}>
-            {url.listMode === 'branches' ? 'All traces, nested too' : 'Top-level traces only'}
-            <ChevronDownIcon />
-          </Button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start">
-          <DropdownMenu.RadioGroup
-            value={url.listMode}
-            onValueChange={value => url.handleListModeChange(value as 'traces' | 'branches')}
-          >
-            <DropdownMenu.RadioItem value="traces">Top-level traces only</DropdownMenu.RadioItem>
-            <DropdownMenu.RadioItem value="branches">All traces, nested too</DropdownMenu.RadioItem>
-          </DropdownMenu.RadioGroup>
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      <TracesListModeToggle value={url.listMode} onChange={url.handleListModeChange} disabled={isTracesLoading} />
       <DateTimeRangePicker
         preset={url.datePreset}
         onPresetChange={url.handleDatePresetChange}
