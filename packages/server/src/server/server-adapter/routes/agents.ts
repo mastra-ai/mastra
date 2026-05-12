@@ -8,6 +8,8 @@ import {
   STREAM_GENERATE_ROUTE,
   STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
   OBSERVE_AGENT_STREAM_ROUTE,
+  SEND_AGENT_SIGNAL_ROUTE,
+  SUBSCRIBE_AGENT_THREAD_ROUTE,
   GET_PROVIDERS_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
@@ -27,6 +29,7 @@ import {
   DECLINE_NETWORK_TOOL_CALL_ROUTE,
   GET_AGENT_SKILL_ROUTE,
   STREAM_UNTIL_IDLE_GENERATE_ROUTE,
+  RESUME_STREAM_UNTIL_IDLE_ROUTE,
 } from '../../handlers/agents';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
@@ -68,6 +71,8 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   // Resumable Stream Routes
   // ============================================================================
   OBSERVE_AGENT_STREAM_ROUTE,
+  SEND_AGENT_SIGNAL_ROUTE,
+  SUBSCRIBE_AGENT_THREAD_ROUTE,
 
   // ============================================================================
   // Tool Routes
@@ -80,6 +85,7 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   DECLINE_TOOL_CALL_GENERATE_ROUTE,
   APPROVE_NETWORK_TOOL_CALL_ROUTE,
   DECLINE_NETWORK_TOOL_CALL_ROUTE,
+  RESUME_STREAM_UNTIL_IDLE_ROUTE,
 
   // ============================================================================
   // Network Routes
@@ -142,10 +148,13 @@ export type AgentRoutes = readonly [
   typeof STREAM_GENERATE_ROUTE,
   typeof STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   typeof STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
+  typeof SEND_AGENT_SIGNAL_ROUTE,
+  typeof SUBSCRIBE_AGENT_THREAD_ROUTE,
   typeof EXECUTE_AGENT_TOOL_ROUTE,
   typeof APPROVE_TOOL_CALL_ROUTE,
   typeof DECLINE_TOOL_CALL_ROUTE,
   typeof RESUME_STREAM_ROUTE,
+  typeof RESUME_STREAM_UNTIL_IDLE_ROUTE,
   typeof APPROVE_TOOL_CALL_GENERATE_ROUTE,
   typeof DECLINE_TOOL_CALL_GENERATE_ROUTE,
   typeof APPROVE_NETWORK_TOOL_CALL_ROUTE,
