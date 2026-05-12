@@ -35,10 +35,11 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 
 ### Execution flow
 
-1. **Read the reference file** for each section you're about to run.
-2. **Execute the steps** — use `curl` for API checks, whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.) for UI checks.
-3. **Record results** in the summary table.
-4. **Mark the section complete** with `task_write` before moving to the next.
+1. **Confirm the project directory.** Before scaffolding, ask the user where they want `$PROJECT_DIR` to live. Offer the default (`~/mastra-builder-smoke-tests/builder-smoke`) as a suggestion. Skip the question if they already passed `--dir` or have `$BUILDER_SMOKE_TEST_DIR` exported. See `references/setup.md` step 0.
+2. **Read the reference file** for each section you're about to run.
+3. **Execute the steps** — use `curl` for API checks, whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.) for UI checks.
+4. **Record results** in the summary table.
+5. **Mark the section complete** with `task_write` before moving to the next.
 
 ### Partial testing (`--test`)
 
@@ -99,19 +100,19 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 ## Parameters
 
-| Parameter          | Description                                                                                                                                                                                                                                                                                           | Default        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `--test`           | Comma-separated section names (see table above).                                                                                                                                                                                                                                                      | (all sections) |
-| `--scope`          | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.                                                                                                                                                                                               | (none)         |
-| `--auth`           | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set.                                                                                                                                                                                            | `auto`         |
-| `--role`           | Expected role of the logged-in user under `--auth on`: `owner`, `admin`, `member`, or `viewer`. Setup asserts the live `/api/auth/me` roles match; on mismatch the run stops and the user is told to either change their WorkOS role or re-run with the correct `--role`. Ignored under `--auth off`. | `admin`        |
-| `--fixtures-reset` | Stop the dev server, wipe `$PROJECT_DIR/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                        | `false`        |
-| `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                                                                                                                                                                                                            | `false`        |
-| `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                                                                                                                                                                                                                    | `false`        |
-| `--dir`            | Project directory the skill scaffolds into. Forwarded to `scripts/scaffold.sh`. Also reads `$BUILDER_SMOKE_TEST_DIR` from the environment when the flag is omitted.                                                                                                                                  | `~/mastra-builder-smoke-tests/builder-smoke` |
-| `--reuse`          | If the project already exists at `$PROJECT_DIR` and has `node_modules/@mastra/core`, skip `pnpm install`. Forwarded to `scripts/scaffold.sh`.                                                                                                                                                         | `false`        |
-| `--openai-key`     | OPENAI_API_KEY value to write into the scaffolded `.env`. If omitted, the scaffold script falls back to `$OPENAI_API_KEY` in the shell, then to an interactive prompt.                                                                                                                                | (shell or prompt) |
-| `--workos-api-key`<br>`--workos-client-id`<br>`--workos-organization-id` | All three are required together to scaffold an auth-on project. Writes `AUTH_PROVIDER=workos` plus the three keys plus `WORKOS_REDIRECT_URI=http://localhost:4111/api/auth/callback` into `.env`.                                                                                                       | (auth off)     |
+| Parameter                                                                | Description                                                                                                                                                                                                                                                                                           | Default                                      |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `--test`                                                                 | Comma-separated section names (see table above).                                                                                                                                                                                                                                                      | (all sections)                               |
+| `--scope`                                                                | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.                                                                                                                                                                                               | (none)                                       |
+| `--auth`                                                                 | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set.                                                                                                                                                                                            | `auto`                                       |
+| `--role`                                                                 | Expected role of the logged-in user under `--auth on`: `owner`, `admin`, `member`, or `viewer`. Setup asserts the live `/api/auth/me` roles match; on mismatch the run stops and the user is told to either change their WorkOS role or re-run with the correct `--role`. Ignored under `--auth off`. | `admin`                                      |
+| `--fixtures-reset`                                                       | Stop the dev server, wipe `$PROJECT_DIR/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                        | `false`                                      |
+| `--clean`                                                                | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                                                                                                                                                                                                            | `false`                                      |
+| `--skip-browser`                                                         | Run only API/`curl` checks. UI section is skipped.                                                                                                                                                                                                                                                    | `false`                                      |
+| `--dir`                                                                  | Project directory the skill scaffolds into. Forwarded to `scripts/scaffold.sh`. Also reads `$BUILDER_SMOKE_TEST_DIR` from the environment when the flag is omitted.                                                                                                                                   | `~/mastra-builder-smoke-tests/builder-smoke` |
+| `--reuse`                                                                | If the project already exists at `$PROJECT_DIR` and has `node_modules/@mastra/core`, skip `pnpm install`. Forwarded to `scripts/scaffold.sh`.                                                                                                                                                         | `false`                                      |
+| `--openai-key`                                                           | OPENAI_API_KEY value to write into the scaffolded `.env`. If omitted, the scaffold script falls back to `$OPENAI_API_KEY` in the shell, then to an interactive prompt.                                                                                                                                | (shell or prompt)                            |
+| `--workos-api-key`<br>`--workos-client-id`<br>`--workos-organization-id` | All three are required together to scaffold an auth-on project. Writes `AUTH_PROVIDER=workos` plus the three keys plus `WORKOS_REDIRECT_URI=http://localhost:4111/api/auth/callback` into `.env`.                                                                                                     | (auth off)                                   |
 
 If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-skipped and reported as `⏭️ Skipped (no WORKOS_* env vars)`.
 
@@ -211,13 +212,13 @@ For a long-lived setup, exporting `BUILDER_SMOKE_TEST_DIR` once in your shell rc
 
 All four scripts under `.claude/skills/builder-smoke-test/scripts/` resolve the worktree root from their own location. They can be invoked from anywhere, but conventionally the repo root.
 
-| Script               | Run from              | Notes                                                                                |
-| -------------------- | --------------------- | ------------------------------------------------------------------------------------ |
-| `scaffold.sh`        | anywhere              | Creates / refreshes `$PROJECT_DIR`. Forwards `--openai-key`, `--workos-*`, `--reuse`, `--dir`. |
-| `preflight.sh`       | anywhere              | Calls `scaffold.sh` then asserts the resulting `.env` matches `--expect off\|on`.    |
-| `auth-detect.sh`     | anywhere              | Reads `$PROJECT_DIR/.env` only.                                                      |
-| `wait-for-server.sh` | anywhere              | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                         |
-| `fixtures-reset.sh`  | anywhere              | Wipes `$PROJECT_DIR/mastra.db` + reseeds. Requires the dev server stopped.           |
+| Script               | Run from | Notes                                                                                          |
+| -------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `scaffold.sh`        | anywhere | Creates / refreshes `$PROJECT_DIR`. Forwards `--openai-key`, `--workos-*`, `--reuse`, `--dir`. |
+| `preflight.sh`       | anywhere | Calls `scaffold.sh` then asserts the resulting `.env` matches `--expect off\|on`.              |
+| `auth-detect.sh`     | anywhere | Reads `$PROJECT_DIR/.env` only.                                                                |
+| `wait-for-server.sh` | anywhere | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                                   |
+| `fixtures-reset.sh`  | anywhere | Wipes `$PROJECT_DIR/mastra.db` + reseeds. Requires the dev server stopped.                     |
 
 Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh`. Don't `cd` into `scripts/` first — relative path resolution will break.
 
@@ -279,15 +280,15 @@ If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS
 
 6. Never write the secret value back into any rc file, never `export` it into the user's interactive shell, and never echo it back in chat in full. Refer to it as `<your-openai-key>` once you've used it.
 
-| Error code               | What it means                                                                                       | What the agent should do                                                                                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `not-in-mastra-repo`     | The script can't resolve a worktree from its own location (no `pnpm-workspace.yaml` upwards).       | Reinstall the skill into a Mastra worktree, or copy `.claude/skills/builder-smoke-test` somewhere under your worktree.                              |
-| `scaffold-failed`        | `scripts/scaffold.sh` returned non-zero.                                                            | Re-run scaffold with `--no-reuse` to force a fresh install. Inspect the printed `pnpm install` output for the real error.                           |
-| `project-not-installed`  | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                    | Re-run the scaffold without `--reuse`. If that still fails, delete `$PROJECT_DIR` and re-run.                                                       |
-| `openai-key-missing`     | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                 | Follow the "Resolving missing env vars" section above. Re-run preflight with `--openai-key <value>` once you have it.                               |
-| `workos-keys-missing`    | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Follow the "Resolving missing env vars" section above. Re-run preflight with all three `--workos-*` flags.                                          |
-| `mode-mismatch`          | `--expect` disagrees with what `auth-detect.sh` reports for `$PROJECT_DIR/.env`.                    | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change.            |
-| `bad-expect-value`       | `--expect` got something other than `off` or `on`.                                                  | Fix the invocation.                                                                                                                                  |
+| Error code              | What it means                                                                                                                   | What the agent should do                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `not-in-mastra-repo`    | The script can't resolve a worktree from its own location (no `pnpm-workspace.yaml` upwards).                                   | Reinstall the skill into a Mastra worktree, or copy `.claude/skills/builder-smoke-test` somewhere under your worktree.                   |
+| `scaffold-failed`       | `scripts/scaffold.sh` returned non-zero.                                                                                        | Re-run scaffold with `--no-reuse` to force a fresh install. Inspect the printed `pnpm install` output for the real error.                |
+| `project-not-installed` | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                                                | Re-run the scaffold without `--reuse`. If that still fails, delete `$PROJECT_DIR` and re-run.                                            |
+| `openai-key-missing`    | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                                             | Follow the "Resolving missing env vars" section above. Re-run preflight with `--openai-key <value>` once you have it.                    |
+| `workos-keys-missing`   | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Follow the "Resolving missing env vars" section above. Re-run preflight with all three `--workos-*` flags.                               |
+| `mode-mismatch`         | `--expect` disagrees with what `auth-detect.sh` reports for `$PROJECT_DIR/.env`.                                                | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change. |
+| `bad-expect-value`      | `--expect` got something other than `off` or `on`.                                                                              | Fix the invocation.                                                                                                                      |
 
 **`.env` policy:** the scaffold **owns** `$PROJECT_DIR/.env`. Re-running scaffold overwrites it. Do not hand-edit the scaffolded `.env`; instead, re-run scaffold with different flags. (The skill never edits `.env` files outside `$PROJECT_DIR`.)
 
@@ -412,9 +413,9 @@ After testing, provide:
 - For any **shape mismatch / missing field / wrong key name** claim, paste the actual JSON fragment (or the relevant keys) directly under the bullet so the claim is reproducible. If the skill says `features.agent.skills` and the response has `features.agent.skills`, that is not a skill issue — names that look similar in passing (`featSkills`, `agent.features.skill`, etc.) are easy to misread.
 - For any **endpoint inconsistency** claim (e.g. "endpoint A returns X but B returns Y"), re-curl both endpoints fresh in the same run rather than reusing a stale response from earlier in the section.
 - If a claim can't be reproduced on a fresh request, drop it.
-**Regressions**: (list any behavioral changes from a previous run)
-**Warnings**: (e.g., dev-server crash on `/auth/refresh` polling, OPENAI_API_KEY required at startup)
-**Skipped sections**: (list with reason)
+  **Regressions**: (list any behavioral changes from a previous run)
+  **Warnings**: (e.g., dev-server crash on `/auth/refresh` polling, OPENAI_API_KEY required at startup)
+  **Skipped sections**: (list with reason)
 ```
 
 ## Known rough edges

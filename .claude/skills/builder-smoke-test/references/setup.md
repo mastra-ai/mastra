@@ -4,7 +4,26 @@ Scaffold the hermetic project, start its dev server, and verify the Builder conf
 
 ## Steps
 
-### 0. Preflight — scaffold + env vars + mode
+### 0. Choose the project directory
+
+Before scaffolding, decide where `$PROJECT_DIR` should live. Resolution order:
+
+1. `--dir <path>` flag (highest priority)
+2. `$BUILDER_SMOKE_TEST_DIR` env var
+3. Default: `~/mastra-builder-smoke-tests/builder-smoke`
+
+Ask the user where they want the scaffolded project to live, offering the
+default as the suggestion. Example:
+
+> I'll scaffold a hermetic project for the smoke test. Default location is
+> `~/mastra-builder-smoke-tests/builder-smoke` — want to use that, or give
+> me a different path?
+
+If the user supplied `--dir` on the command, skip the question. If they
+already have `$BUILDER_SMOKE_TEST_DIR` exported, mention it and ask if
+they want to use it or override. Don't ask if the choice was already made.
+
+### 1. Preflight — scaffold + env vars + mode
 
 Before starting the server, run preflight with the auth mode this prompt
 expects (`off` for auth-off runs, `on` for the auth-on runs). Preflight
@@ -41,7 +60,7 @@ The scaffold owns `$PROJECT_DIR/.env`. To change anything in it, re-run
 `scripts/scaffold.sh` (or `scripts/preflight.sh`, which wraps it) with the
 flags you want.
 
-### 1. Zombie port check
+### 2. Zombie port check
 
 `mastra dev` auto-increments past `:4111` if it's busy (`:4112`, `:4113`…).
 If you don't catch this, every subsequent `curl` hits the wrong server.
@@ -52,7 +71,7 @@ lsof -i :4111
 kill $(lsof -ti :4111) 2>/dev/null || true
 ```
 
-### 2. Start the dev server
+### 3. Start the dev server
 
 ```bash
 cd ~/mastra-builder-smoke-tests/builder-smoke   # or whichever --dir you used
@@ -63,7 +82,7 @@ The scaffolded `package.json` defines `mastra:dev` (server only) and
 `dev:ui` (server + playground). For smoke tests, prefer `mastra:dev` and
 use whichever browser tool the harness has wired up for the UI section.
 
-### 3. Wait for readiness
+### 4. Wait for readiness
 
 The SPA shell at `/` can 200 before the API is mounted. Probe `/api/agents`
 instead — `wait-for-server.sh` handles this and also detects the
@@ -77,7 +96,7 @@ If it reports the server is on `:4112`+ instead of `:4111`, stop, free the
 port, and restart — running on a non-default port will silently break the
 rest of the smoke (every curl in every reference assumes `:4111`).
 
-### 4. Builder settings
+### 5. Builder settings
 
 ```bash
 curl -s $BASE/editor/builder/settings | jq .
@@ -91,7 +110,7 @@ curl -s $BASE/editor/builder/settings | jq .
 
 Record the `workspaceId` — this is the **builder workspace ID** used in all subsequent tests.
 
-### 5. Baseline state
+### 6. Baseline state
 
 Record what already exists:
 
@@ -112,7 +131,7 @@ curl -s $BASE/stored/skills | jq '{ page: (.skills | length), total: .total }'
 
 Note these counts — they help distinguish pre-existing entities from test-created ones.
 
-### 6. Builder workspace exists
+### 7. Builder workspace exists
 
 Resolve the builder workspace ID first (it's whatever is registered via the editor builder config — typically the only workspace with `metadata.source = "builder"`):
 
