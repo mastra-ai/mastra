@@ -71,12 +71,14 @@ export function buildVisibleColumnDefs<T>(args: BuildVisibleColumnDefsArgs<T>): 
     }
     const custom = customByName.get(name);
     if (custom) {
-      defs.push({
-        name,
-        label: humanizeKey(custom.key),
-        gridSize: customGridSize,
-        renderCell: item => renderCustomCell(item, custom.source, custom.key),
-      });
+      defs.push(
+        withWidth({
+          name,
+          label: humanizeKey(custom.key),
+          gridSize: customGridSize,
+          renderCell: item => renderCustomCell(item, custom.source, custom.key),
+        }),
+      );
       continue;
     }
     // Fallback for a persisted custom name without a matching config:
@@ -86,12 +88,14 @@ export function buildVisibleColumnDefs<T>(args: BuildVisibleColumnDefsArgs<T>): 
       const source = name.slice(0, sepIdx);
       const key = name.slice(sepIdx + 1);
       if (customSources.includes(source)) {
-        defs.push({
-          name,
-          label: humanizeKey(key),
-          gridSize: customGridSize,
-          renderCell: item => renderCustomCell(item, source, key),
-        });
+        defs.push(
+          withWidth({
+            name,
+            label: humanizeKey(key),
+            gridSize: customGridSize,
+            renderCell: item => renderCustomCell(item, source, key),
+          }),
+        );
       }
     }
   }

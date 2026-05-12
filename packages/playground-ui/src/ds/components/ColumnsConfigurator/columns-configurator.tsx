@@ -239,6 +239,10 @@ export function ColumnsConfigurator({
   const required = useMemo(() => new Set(requiredColumns ?? []), [requiredColumns]);
   const fallbackDefault = useMemo(() => columns.map(c => c.name), [columns]);
   const resetTarget = defaultVisibleColumns ?? fallbackDefault;
+  const builtInNames = useMemo(
+    () => new Set([...columns.map(c => c.name), ...(optionalColumns ?? []).map(c => c.name)]),
+    [columns, optionalColumns],
+  );
 
   // Whether the visible-column set differs from the default — used to surface
   // an indicator dot on the trigger so users can tell at a glance that
@@ -308,19 +312,28 @@ export function ColumnsConfigurator({
   };
 
   const handleApply = () => {
-    const propCustomByName = new Map((customColumns ?? []).map(c => [c.name, c] as const));
-    const draftByName = new Map(draftCustom.map(c => [c.name, c] as const));
-    // Removals first, then additions (reduces the chance of stale references in callers).
-    for (const c of customColumns ?? []) {
-      if (!draftByName.has(c.name)) onRemoveCustomColumn?.(c.name);
-    }
-    for (const c of draftCustom) {
-      if (!propCustomByName.has(c.name)) {
-        const { name: _name, ...rest } = c;
-        onAddCustomColumn?.(rest);
+    // Custom-column lifecycle is opt-in: both handlers must be wired for the
+    // configurator to commit add/remove deltas. When they aren't, strip any
+    // custom names out of the visible list so we never commit names whose
+    // definitions the parent doesn't know about.
+    const customsWired = !!onAddCustomColumn && !!onRemoveCustomColumn;
+    if (customsWired) {
+      const propCustomByName = new Map((customColumns ?? []).map(c => [c.name, c] as const));
+      const draftByName = new Map(draftCustom.map(c => [c.name, c] as const));
+      // Removals first, then additions (reduces the chance of stale references in callers).
+      for (const c of customColumns ?? []) {
+        if (!draftByName.has(c.name)) onRemoveCustomColumn(c.name);
       }
+      for (const c of draftCustom) {
+        if (!propCustomByName.has(c.name)) {
+          const { name: _name, ...rest } = c;
+          onAddCustomColumn(rest);
+        }
+      }
+      onVisibleColumnsChange(draftVisible);
+    } else {
+      onVisibleColumnsChange(draftVisible.filter(name => builtInNames.has(name)));
     }
-    onVisibleColumnsChange(draftVisible);
     setOpen(false);
   };
 
@@ -392,10 +405,6 @@ export function ColumnsConfigurator({
   };
 
   const canAddCustom = !!onAddCustomColumn && !!customColumnSources && customColumnSources.length > 0;
-  const builtInNames = useMemo(
-    () => new Set([...columns.map(c => c.name), ...(optionalColumns ?? []).map(c => c.name)]),
-    [columns, optionalColumns],
-  );
 
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>

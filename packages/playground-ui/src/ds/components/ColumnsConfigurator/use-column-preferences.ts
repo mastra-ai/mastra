@@ -26,7 +26,12 @@ export function useColumnPreferences(
   useLayoutEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
+      if (!raw) {
+        // No stored value for this key — reset to the initial default so a
+        // changing `storageKey` doesn't leak the previous key's selection.
+        setVisibleColumnsState(defaultRef.current);
+        return;
+      }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
       const next = parsed.filter((n): n is string => typeof n === 'string');
