@@ -20,7 +20,13 @@ vi.mock('@/domains/auth/hooks/use-auth-capabilities', () => ({
 describe('StarButton', () => {
   beforeEach(() => {
     authCapabilitiesMock.mockReturnValue({
-      data: { enabled: true, login: { sso: false, credentials: false }, user: { id: 'u1' }, capabilities: {}, access: null },
+      data: {
+        enabled: true,
+        login: { sso: false, credentials: false },
+        user: { id: 'u1' },
+        capabilities: {},
+        access: null,
+      },
     });
   });
 
