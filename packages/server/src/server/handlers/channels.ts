@@ -29,7 +29,7 @@ function assertChannelsAvailable(): void {
 }
 
 function getChannelOrThrow(mastra: Mastra, platform: string): ChannelProvider {
-  const channels = Object.values(mastra.channels ?? {}) as ChannelProvider[];
+  const channels = Object.values(mastra.channels ?? {});
   const channel = channels.find(c => c.id === platform);
   if (!channel) {
     const available = channels.map(c => c.id).join(', ');
