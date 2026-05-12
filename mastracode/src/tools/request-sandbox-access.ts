@@ -5,7 +5,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { HarnessQuestionAnswer, HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
@@ -57,7 +57,7 @@ export const requestSandboxAccessTool = createTool({
       const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
 
       // Create a promise that resolves when the user answers in the TUI
-      const answer = await new Promise<string>(resolve => {
+      const answer = await new Promise<HarnessQuestionAnswer>(resolve => {
         // Register the resolver so respondToQuestion() can resolve it
         harnessCtx.registerQuestion!({
           questionId,
@@ -75,7 +75,8 @@ export const requestSandboxAccessTool = createTool({
         });
       });
 
-      const approved = answer.toLowerCase().startsWith('y') || answer.toLowerCase() === 'approve';
+      const answerText = Array.isArray(answer) ? answer.join(', ') : answer;
+      const approved = answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
       if (approved) {
         // Add to allowed paths in harness state (persists across turns)
         const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];

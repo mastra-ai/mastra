@@ -13,6 +13,8 @@ packages:
 
 The `Harness` class is in alpha stage and subject to change. It won't follow semantic versioning guarantees until it graduates from experimental status. Use with caution and expect breaking changes in minor versions.
 
+[Mastra Code](https://code.mastra.ai/) is the flagship implementation of the `Harness` class, showcasing how it can be used to build a powerful terminal-based coding agent with multi-model support, persistent conversations, and built-in tools.
+
 :::
 
 The `Harness` class orchestrates multiple agent modes, shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive to manage threads, switch models and modes, send messages, handle tool approvals, and track events.
@@ -250,7 +252,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'disableBuiltinTools',
     type: 'BuiltinToolId[]',
     description:
-      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_update`, `task_complete`, `task_check`, and `subagent`.',
     isOptional: true,
   },
   {
@@ -345,6 +347,25 @@ Return a read-only snapshot of the current harness state.
 
 ```typescript
 const state = harness.getState()
+```
+
+#### `getDisplayState()`
+
+Return the current `HarnessDisplayState` snapshot for UI rendering.
+
+```typescript
+const displayState = harness.getDisplayState()
+```
+
+#### `restoreDisplayTasks(tasks)`
+
+Restore the task portion of `HarnessDisplayState` after a UI replays persisted task tool history. This emits `display_state_changed` without emitting a live `task_updated` event.
+
+If later task tools should read the replayed tasks, persist the same task list with `setState({ tasks })` before calling `restoreDisplayTasks(tasks)`.
+
+```typescript
+await harness.setState({ tasks: replayedTasks })
+harness.restoreDisplayTasks(replayedTasks)
 ```
 
 #### `setState(updates)`
@@ -917,9 +938,34 @@ Forked mode trades isolation for context inheritance. If the subagent should run
 
 ### Events
 
+#### `subscribeDisplayState(listener, options?)`
+
+Register a listener for coalesced display state snapshots. Use this method for UI, Server-Sent Events (SSE), terminal UI (TUI), and bridge rendering paths that only need the latest `HarnessDisplayState`. Use [`subscribe`](#subscribelistener) when you need the raw event log.
+
+```typescript
+const unsubscribe = harness.subscribeDisplayState(displayState => {
+  render(displayState)
+})
+
+// Optional tuning:
+harness.subscribeDisplayState(render, {
+  windowMs: 250,
+  maxWaitMs: 500,
+})
+
+// Later:
+unsubscribe()
+```
+
+Returns: `() => void`
+
+`subscribeDisplayState()` does not call the listener immediately. Call [`getDisplayState`](#getdisplaystate) first if the UI needs an initial render before the next harness event.
+
 #### `subscribe(listener)`
 
 Register an event listener. Returns an unsubscribe function.
+
+Use this method for audit logs, debugging, analytics, deterministic replay, or consumers that need every raw event. For display rendering, prefer [`subscribeDisplayState`](#subscribedisplaystatelistener-options) so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the latest display state snapshot.
 
 ```typescript
 const unsubscribe = harness.subscribe(event => {
@@ -995,8 +1041,10 @@ The harness provides built-in tools to agents in every mode:
 | - | - |
 | `ask_user` | Ask the user a question and wait for their response. Supports free text, single-select choices, and multi-select choices. |
 | `submit_plan` | Submit a plan for user review and approval. |
-| `task_write` | Create or update a structured task list for tracking progress. |
-| `task_check` | Check the completion status of the current task list. |
+| `task_write` | Create or replace a structured task list for tracking progress. Assigns task IDs when omitted and returns the structured task list snapshot. |
+| `task_update` | Update one tracked task by ID and return the structured task list snapshot. |
+| `task_complete` | Mark one tracked task completed by ID and return the structured task list snapshot. |
+| `task_check` | Check the completion status of the current task list and return `tasks`, `summary`, `incompleteTasks`, and `isError` fields. |
 | `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). Pass `forked: true` to inherit the parent conversation — see [Forked subagents](#forked-subagents). |
 
 ### `ask_user` selections

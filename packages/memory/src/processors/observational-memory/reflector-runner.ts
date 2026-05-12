@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -27,6 +28,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
+import { withRetry } from './retry';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -143,6 +145,7 @@ export class ReflectorRunner {
     resourceId?: string,
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
+  private mastra?: Mastra;
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -165,6 +168,7 @@ export class ReflectorRunner {
     ) => Promise<void>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
+    mastra?: Mastra;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -177,15 +181,24 @@ export class ReflectorRunner {
     this.persistMarkerToStorage = opts.persistMarkerToStorage;
     this.persistMarkerToMessage = opts.persistMarkerToMessage;
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
+    this.mastra = opts.mastra;
+  }
+
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
   }
 
   private createAgent(model: ConcreteReflectionModel): Agent {
-    return new Agent({
+    const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
       model,
     });
+    if (this.mastra) {
+      agent.__registerMastra(this.mastra);
+    }
+    return agent;
   }
 
   private getObservationMarkerConfig(record?: ObservationalMemoryRecord): ObservationMarkerConfig {
@@ -266,65 +279,74 @@ export class ReflectorRunner {
       );
 
       let chunkCount = 0;
-      const result = await withOmTracingSpan({
-        phase: 'reflector',
-        model: resolvedModel.model,
-        inputTokens: originalTokens,
-        requestContext,
-        observabilityContext,
-        metadata: {
-          omCompressionLevel: currentLevel,
-          omCompressionAttempt: attemptNumber,
-          omTargetThreshold: targetThreshold,
-          omSkipContinuationHints: skipContinuationHints ?? false,
-          ...(resolvedModel.selectedThreshold !== undefined
-            ? { omSelectedThreshold: resolvedModel.selectedThreshold }
-            : {}),
-          ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
-          ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
-        },
-        callback: childObservabilityContext =>
-          withAbortCheck(async () => {
-            const streamResult = await agent.stream(prompt, {
-              modelSettings: {
-                ...this.reflectionConfig.modelSettings,
-              },
-              providerOptions: this.reflectionConfig.providerOptions as any,
-              ...(abortSignal ? { abortSignal } : {}),
-              ...(requestContext ? { requestContext } : {}),
-              ...childObservabilityContext,
-              ...(attemptNumber === 1
-                ? {
-                    onChunk(chunk: any) {
-                      chunkCount++;
-                      if (chunkCount === 1 || chunkCount % 50 === 0) {
-                        const preview =
-                          chunk.type === 'text-delta'
-                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                            : chunk.type === 'tool-call'
-                              ? ` tool=${chunk.toolName}`
-                              : '';
-                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                      }
-                    },
-                    onFinish(event: any) {
-                      omDebug(
-                        `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                      );
-                    },
-                    onAbort(event: any) {
-                      omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                    },
-                    onError({ error }: { error: unknown }) {
-                      omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                    },
-                  }
+      const result = await withRetry(
+        () =>
+          withOmTracingSpan({
+            phase: 'reflector',
+            model: resolvedModel.model,
+            inputTokens: originalTokens,
+            requestContext,
+            observabilityContext,
+            metadata: {
+              omCompressionLevel: currentLevel,
+              omCompressionAttempt: attemptNumber,
+              omTargetThreshold: targetThreshold,
+              omSkipContinuationHints: skipContinuationHints ?? false,
+              ...(resolvedModel.selectedThreshold !== undefined
+                ? { omSelectedThreshold: resolvedModel.selectedThreshold }
                 : {}),
-            });
+              ...(resolvedModel.routingStrategy ? { omRoutingStrategy: resolvedModel.routingStrategy } : {}),
+              ...(resolvedModel.routingThresholds ? { omRoutingThresholds: resolvedModel.routingThresholds } : {}),
+            },
+            callback: childObservabilityContext =>
+              withAbortCheck(async () => {
+                // Reset chunk counter per attempt so retry-after-transient-error
+                // doesn't get tagged with the previous attempt's chunk count.
+                chunkCount = 0;
+                const streamResult = await agent.stream(prompt, {
+                  modelSettings: {
+                    ...this.reflectionConfig.modelSettings,
+                  },
+                  providerOptions: this.reflectionConfig.providerOptions as any,
+                  ...(abortSignal ? { abortSignal } : {}),
+                  ...(requestContext ? { requestContext } : {}),
+                  ...childObservabilityContext,
+                  ...(attemptNumber === 1
+                    ? {
+                        onChunk(chunk: any) {
+                          chunkCount++;
+                          if (chunkCount === 1 || chunkCount % 50 === 0) {
+                            const preview =
+                              chunk.type === 'text-delta'
+                                ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                                : chunk.type === 'tool-call'
+                                  ? ` tool=${chunk.toolName}`
+                                  : '';
+                            omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                          }
+                        },
+                        onFinish(event: any) {
+                          omDebug(
+                            `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                          );
+                        },
+                        onAbort(event: any) {
+                          omDebug(
+                            `[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`,
+                          );
+                        },
+                        onError({ error }: { error: unknown }) {
+                          omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                        },
+                      }
+                    : {}),
+                });
 
-            return streamResult.getFullOutput();
-          }, abortSignal),
-      });
+                return streamResult.getFullOutput();
+              }, abortSignal),
+          }),
+        { label: 'reflector', abortSignal },
+      );
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -601,14 +623,23 @@ export class ReflectorRunner {
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
-      try {
-        await Promise.race([
-          asyncOp,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-        ]);
-      } catch {
-        // Timeout or error - proceed with what we have
+      // TTL and provider-change triggers should not block on in-progress
+      // reflection buffering. The async op will finish in the background
+      // and the buffered result will be available for activation on the next turn.
+      if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: async op in progress, not blocking for ${activationMetadata.triggeredBy} trigger`,
+        );
+      } else {
+        omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
+        try {
+          await Promise.race([
+            asyncOp,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
+          ]);
+        } catch {
+          // Timeout or error - proceed with what we have
+        }
       }
     }
 
@@ -870,6 +901,13 @@ export class ReflectorRunner {
           `[OM:reflect] blockAfter exceeded (${observationTokens} >= ${this.reflectionConfig.blockAfter}), falling through to sync reflection`,
         );
       } else {
+        const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
+        if (observationTokens < activationPoint) {
+          omDebug(
+            `[OM:reflect] skipping async reflection — observationTokens (${observationTokens}) below activation point (${activationPoint}), triggered by ${activationTriggeredBy}`,
+          );
+          return;
+        }
         omDebug(
           `[OM:reflect] async activation failed, no blockAfter or below it (obsTokens=${observationTokens}, blockAfter=${this.reflectionConfig.blockAfter}) — starting background reflection`,
         );

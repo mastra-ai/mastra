@@ -13,7 +13,7 @@
 import { createClient } from '@clickhouse/client';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildRetentionDDL } from './ddl';
+import { ALL_MIGRATIONS, buildRetentionDDL, buildRetentionEntries, parseTtlExpression } from './ddl';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -254,6 +254,457 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         intervalMs: 100,
       });
       expect(disappeared).toBe(true);
+    });
+  });
+
+  // ==========================================================================
+  // Trace branches
+  // ==========================================================================
+
+  describe('branches', () => {
+    /**
+     * Wait until the materialized view has populated `mastra_trace_branches` with
+     * the expected number of rows. The MV is incremental but ClickHouse is
+     * eventually-consistent w.r.t. parts merging; in practice rows appear
+     * within a single insert flush, but the retry loop guards against CI flakes.
+     */
+    async function waitForBranches(expected: number, timeoutMs = 5000): Promise<number> {
+      const deadline = Date.now() + timeoutMs;
+      let last = -1;
+      while (Date.now() < deadline) {
+        const result = await storage.listBranches({ pagination: { perPage: 100 } });
+        last = result.branches.length;
+        if (last >= expected) return last;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      return last;
+    }
+
+    it('surfaces nested branches that listTraces would miss', async () => {
+      // orderWorkflow → Observer (nested AGENT_RUN, twice) and a tool call.
+      // Plus a model_step which must NOT appear (sub-operation).
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'orderWorkflow',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-1',
+            entityName: 'orderWorkflow',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:00Z'),
+            endedAt: new Date('2026-04-01T12:00:10Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'observer-1',
+            parentSpanId: 'root',
+            name: 'Observer',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-observer',
+            entityName: 'Observer',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:01Z'),
+            endedAt: new Date('2026-04-01T12:00:03Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'observer-2',
+            parentSpanId: 'root',
+            name: 'Observer',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-observer',
+            entityName: 'Observer',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:05Z'),
+            endedAt: new Date('2026-04-01T12:00:07Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'search-1',
+            parentSpanId: 'observer-1',
+            name: 'web_search',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            entityType: EntityType.TOOL,
+            entityId: 'tool-web-search',
+            entityName: 'web_search',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:02Z'),
+            endedAt: new Date('2026-04-01T12:00:02.500Z'),
+          },
+          {
+            traceId: 'inv-trace-1',
+            spanId: 'model-step-1',
+            parentSpanId: 'observer-1',
+            name: 'gpt-4-call',
+            spanType: SpanType.MODEL_STEP, // sub-operation: must NOT appear
+            isEvent: false,
+            entityType: null,
+            entityId: null,
+            entityName: 'gpt-4',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: [],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-04-01T12:00:02.250Z'),
+            endedAt: new Date('2026-04-01T12:00:02.400Z'),
+          },
+        ],
+      });
+
+      // Should populate: 1 workflow_run + 2 agent_run + 1 tool_call = 4.
+      // The model_step is excluded by the MV WHERE clause.
+      const populated = await waitForBranches(4);
+      expect(populated).toBe(4);
+
+      // listTraces({ entityName: 'Observer' }) returns nothing since Observer
+      // is never the root span -- this is the gap listBranches closes.
+      const traces = await storage.listTraces({ filters: { entityName: 'Observer' } });
+      expect(traces.spans).toHaveLength(0);
+
+      const observerBranches = await storage.listBranches({
+        filters: { entityName: 'Observer' },
+      });
+      expect(observerBranches.branches).toHaveLength(2);
+      expect(observerBranches.branches.every(i => i.entityName === 'Observer')).toBe(true);
+    });
+
+    it('narrows by spanType and respects pagination', async () => {
+      const baseStartedAt = new Date('2026-04-02T10:00:00Z');
+      const records = Array.from({ length: 5 }, (_, i) => ({
+        traceId: `pag-trace-${i}`,
+        spanId: `tool-${i}`,
+        parentSpanId: null,
+        name: `tool-${i}`,
+        spanType: SpanType.TOOL_CALL,
+        isEvent: false,
+        entityType: EntityType.TOOL,
+        entityId: 'web_search',
+        entityName: 'web_search',
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: [],
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        startedAt: new Date(baseStartedAt.getTime() + i * 1000),
+        endedAt: new Date(baseStartedAt.getTime() + i * 1000 + 500),
+      }));
+      await storage.batchCreateSpans({ records });
+
+      await waitForBranches(5);
+
+      const onlyTools = await storage.listBranches({
+        filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
+        pagination: { page: 0, perPage: 2 },
+      });
+      expect(onlyTools.branches).toHaveLength(2);
+      expect(onlyTools.pagination.total).toBe(5);
+      expect(onlyTools.pagination.hasMore).toBe(true);
+
+      const page2 = await storage.listBranches({
+        filters: { spanType: SpanType.TOOL_CALL, entityName: 'web_search' },
+        pagination: { page: 2, perPage: 2 },
+      });
+      expect(page2.branches).toHaveLength(1);
+      expect(page2.pagination.hasMore).toBe(false);
+    });
+  });
+
+  // ==========================================================================
+  // getSpans (batch by spanId)
+  // ==========================================================================
+
+  describe('getSpans', () => {
+    it('fetches a subset of spans within a trace by spanId', async () => {
+      const baseSpan = {
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: [],
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+      } as const;
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'gs-1',
+            spanId: 'a',
+            parentSpanId: null,
+            name: 'a',
+            spanType: SpanType.AGENT_RUN,
+            input: { prompt: 'hi' }, // verify heavy fields round-trip
+            startedAt: new Date('2026-04-04T00:00:00Z'),
+            endedAt: new Date('2026-04-04T00:00:01Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'gs-1',
+            spanId: 'b',
+            parentSpanId: 'a',
+            name: 'b',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-04T00:00:02Z'),
+            endedAt: new Date('2026-04-04T00:00:03Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'gs-1',
+            spanId: 'c',
+            parentSpanId: 'a',
+            name: 'c',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-04T00:00:04Z'),
+            endedAt: new Date('2026-04-04T00:00:05Z'),
+          },
+        ],
+      });
+
+      const result = await storage.getSpans({ traceId: 'gs-1', spanIds: ['a', 'c'] });
+      expect(result.traceId).toBe('gs-1');
+      const ids = result.spans.map(s => s.spanId).sort();
+      expect(ids).toEqual(['a', 'c']);
+
+      // Heavy fields are populated (this is the difference from getStructure).
+      const a = result.spans.find(s => s.spanId === 'a')!;
+      expect(a.input).toEqual({ prompt: 'hi' });
+    });
+
+    it('returns empty spans array when no spanIds match', async () => {
+      const result = await storage.getSpans({ traceId: 'no-such-trace', spanIds: ['x'] });
+      expect(result.spans).toEqual([]);
+    });
+  });
+
+  // ==========================================================================
+  // getBranch
+  //
+  // ClickHouse v-next implements both getStructure (via getTraceLight alias)
+  // and getSpans, so getBranch goes through the optimized two-step path in
+  // base.ts: structure walk → batch span fetch (no full-trace pull).
+  // ==========================================================================
+
+  describe('getBranch', () => {
+    beforeEach(async () => {
+      const baseSpan = {
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        metadata: null,
+        tags: [],
+        links: null,
+        input: null,
+        output: null,
+        error: null,
+        isEvent: false,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+      } as const;
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.WORKFLOW_RUN,
+            startedAt: new Date('2026-04-03T00:00:00Z'),
+            endedAt: new Date('2026-04-03T00:00:10Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'A',
+            parentSpanId: 'root',
+            name: 'A',
+            spanType: SpanType.AGENT_RUN,
+            startedAt: new Date('2026-04-03T00:00:01Z'),
+            endedAt: new Date('2026-04-03T00:00:05Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'A1',
+            parentSpanId: 'A',
+            name: 'A1',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-03T00:00:02Z'),
+            endedAt: new Date('2026-04-03T00:00:03Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'A1a',
+            parentSpanId: 'A1',
+            name: 'A1a',
+            spanType: SpanType.MODEL_STEP,
+            startedAt: new Date('2026-04-03T00:00:02.500Z'),
+            endedAt: new Date('2026-04-03T00:00:02.800Z'),
+          },
+          {
+            ...baseSpan,
+            traceId: 'br-1',
+            spanId: 'B',
+            parentSpanId: 'root',
+            name: 'B',
+            spanType: SpanType.AGENT_RUN,
+            startedAt: new Date('2026-04-03T00:00:06Z'),
+            endedAt: new Date('2026-04-03T00:00:09Z'),
+          },
+        ],
+      });
+    });
+
+    it('returns the full subtree by default', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A' });
+      expect(branch).not.toBeNull();
+      expect(branch!.spans.map(s => s.spanId).sort()).toEqual(['A', 'A1', 'A1a']);
+    });
+
+    it('depth=1 returns only the anchor and its immediate children', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A', depth: 1 });
+      expect(branch!.spans.map(s => s.spanId).sort()).toEqual(['A', 'A1']);
+    });
+
+    it('depth=0 returns just the anchor', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'A', depth: 0 });
+      expect(branch!.spans.map(s => s.spanId)).toEqual(['A']);
+    });
+
+    it('returns null when the anchor span is not in the trace', async () => {
+      const branch = await storage.getBranch({ traceId: 'br-1', spanId: 'missing' });
+      expect(branch).toBeNull();
     });
   });
 
@@ -766,6 +1217,46 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(result.scores[0]!.traceId).toBe('ord-3');
       expect(result.scores[1]!.traceId).toBe('ord-2');
       expect(result.scores[2]!.traceId).toBe('ord-1');
+    });
+
+    it('gets a score by id', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'score-lookup-1',
+          timestamp: new Date('2026-01-01T00:00:01Z'),
+          traceId: 'lookup-trace-1',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.8,
+          reason: 'Good answer',
+          experimentId: null,
+          metadata: { entityType: 'agent' },
+        },
+      });
+      await storage.createScore({
+        score: {
+          scoreId: 'score-lookup-2',
+          timestamp: new Date('2026-01-01T00:00:02Z'),
+          traceId: 'lookup-trace-2',
+          spanId: 'lookup-span-2',
+          scorerId: 'factuality',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          metadata: null,
+        },
+      });
+
+      const score = await storage.getScoreById('score-lookup-1');
+      expect(score).toEqual(
+        expect.objectContaining({
+          scoreId: 'score-lookup-1',
+          traceId: 'lookup-trace-1',
+          scorerId: 'quality',
+          score: 0.8,
+        }),
+      );
+      expect(await storage.getScoreById('missing-score')).toBeNull();
     });
 
     it('listFeedback defaults to timestamp DESC', async () => {
@@ -3533,11 +4024,12 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(buildRetentionDDL({})).toEqual([]);
     });
 
-    it('buildRetentionDDL generates tracing TTL for both span_events and trace_roots', () => {
+    it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
-      expect(stmts).toHaveLength(2);
+      expect(stmts).toHaveLength(3);
       expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
+      expect(stmts[2]).toBe('ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY');
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
@@ -3567,6 +4059,47 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(stmts[0]).toBe('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
     });
 
+    // --- Unit tests for buildRetentionEntries ---
+
+    it('buildRetentionEntries returns structured entries whose sql matches buildRetentionDDL', () => {
+      const config = { tracing: 30, logs: 7, metrics: 14 };
+      const entries = buildRetentionEntries(config);
+      const ddl = buildRetentionDDL(config);
+      expect(entries).toHaveLength(ddl.length);
+      expect(entries.map(e => e.sql)).toEqual(ddl);
+      for (const entry of entries) {
+        expect(entry.sql).toContain(`ALTER TABLE ${entry.table}`);
+        expect(entry.sql).toContain(`${entry.column} + INTERVAL ${entry.days} DAY`);
+      }
+    });
+
+    // --- Unit tests for parseTtlExpression ---
+
+    it('parseTtlExpression parses normalized toIntervalDay form', () => {
+      expect(parseTtlExpression('TTL endedAt + toIntervalDay(30)')).toEqual({ column: 'endedAt', days: 30 });
+    });
+
+    it('parseTtlExpression parses INTERVAL N DAY form', () => {
+      expect(parseTtlExpression('TTL timestamp + INTERVAL 7 DAY')).toEqual({ column: 'timestamp', days: 7 });
+    });
+
+    it('parseTtlExpression extracts TTL from a full CREATE TABLE statement', () => {
+      const createTable = `CREATE TABLE mastra_span_events (...) ENGINE = ReplacingMergeTree PARTITION BY toDate(endedAt) ORDER BY (traceId) TTL endedAt + toIntervalDay(30) SETTINGS index_granularity = 8192`;
+      expect(parseTtlExpression(createTable)).toEqual({ column: 'endedAt', days: 30 });
+    });
+
+    it('parseTtlExpression handles backtick-quoted column identifiers', () => {
+      // ClickHouse's `system.tables.create_table_query` often wraps identifiers
+      // in backticks, e.g. `TTL `endedAt` + toIntervalDay(30)`.
+      expect(parseTtlExpression('TTL `endedAt` + toIntervalDay(30)')).toEqual({ column: 'endedAt', days: 30 });
+      expect(parseTtlExpression('TTL `timestamp` + INTERVAL 7 DAY')).toEqual({ column: 'timestamp', days: 7 });
+    });
+
+    it('parseTtlExpression returns null when no TTL clause is present', () => {
+      expect(parseTtlExpression('ORDER BY (traceId, endedAt)')).toBeNull();
+      expect(parseTtlExpression('')).toBeNull();
+    });
+
     // --- Integration test: retention is applied during init ---
 
     it('init applies retention TTL to tables', async () => {
@@ -3579,6 +4112,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const signalTables = [
         'mastra_span_events',
         'mastra_trace_roots',
+        'mastra_trace_branches',
         'mastra_log_events',
         'mastra_metric_events',
         'mastra_score_events',
@@ -3597,6 +4131,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         const expectedTTLs: Record<string, string> = {
           mastra_span_events: 'endedAt + toIntervalDay(30)',
           mastra_trace_roots: 'endedAt + toIntervalDay(30)',
+          mastra_trace_branches: 'endedAt + toIntervalDay(30)',
           mastra_log_events: 'timestamp + toIntervalDay(7)',
           mastra_metric_events: 'timestamp + toIntervalDay(14)',
           mastra_score_events: 'timestamp + toIntervalDay(90)',
@@ -3619,6 +4154,181 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         for (const table of signalTables) {
           await client.command({ query: `ALTER TABLE ${table} REMOVE TTL` });
         }
+        await client.close();
+      }
+    });
+  });
+
+  // ==========================================================================
+  // init() idempotence
+  //
+  // Regression coverage for the metadata-version churn that hung agent streams
+  // when ClickHouse observability was configured. On Replicated/Shared
+  // MergeTree, every ALTER bumps the table's metadata version even when the
+  // change is a no-op, so init() must skip ALTERs whose target is already in
+  // place to avoid replica catch-up races on every process boot.
+  // ==========================================================================
+
+  describe('init idempotence', () => {
+    // --- Unit tests for ALL_MIGRATIONS shape ---
+
+    it('ALL_MIGRATIONS entries carry table + name consistent with their SQL', () => {
+      expect(ALL_MIGRATIONS.length).toBeGreaterThan(0);
+      for (const entry of ALL_MIGRATIONS) {
+        expect(entry.sql).toContain(`ALTER TABLE ${entry.table}`);
+        expect(entry.sql).toContain(entry.name);
+        if (entry.kind === 'column') {
+          expect(entry.sql).toContain('ADD COLUMN IF NOT EXISTS');
+        } else {
+          expect(entry.sql).toContain('ADD INDEX IF NOT EXISTS');
+        }
+      }
+    });
+
+    it('ALL_MIGRATIONS entry names are unique within (table, kind)', () => {
+      const seen = new Set<string>();
+      for (const entry of ALL_MIGRATIONS) {
+        const key = `${entry.kind}:${entry.table}:${entry.name}`;
+        expect(seen.has(key), `duplicate migration entry ${key}`).toBe(false);
+        seen.add(key);
+      }
+    });
+
+    // --- Integration tests: init() must not re-issue applied ALTERs ---
+
+    it('re-running init against a current schema emits zero ALTER statements', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      try {
+        // First init brings the DB to the current schema.
+        const first = new ObservabilityStorageClickhouseVNext({ client });
+        await first.init();
+
+        // Wrap client.command so we can observe the second init's DDL traffic.
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+
+        try {
+          const second = new ObservabilityStorageClickhouseVNext({ client });
+          await second.init();
+
+          const alters = commands.filter(q => /^\s*ALTER\s+TABLE/i.test(q));
+          expect(alters, `expected no ALTERs, got:\n${alters.join('\n')}`).toEqual([]);
+        } finally {
+          spy.mockRestore();
+        }
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('changing retention only emits MODIFY TTL for tables whose value actually differs', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      const signalTables = [
+        'mastra_span_events',
+        'mastra_trace_roots',
+        'mastra_trace_branches',
+        'mastra_log_events',
+        'mastra_metric_events',
+        'mastra_score_events',
+        'mastra_feedback_events',
+      ];
+
+      try {
+        // Establish baseline retention.
+        const first = new ObservabilityStorageClickhouseVNext({
+          client,
+          retention: { tracing: 30, logs: 7, metrics: 14 },
+        });
+        await first.init();
+
+        // Spy on the second init's DDL traffic.
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+
+        try {
+          // Change only `logs`; leave tracing and metrics unchanged.
+          const second = new ObservabilityStorageClickhouseVNext({
+            client,
+            retention: { tracing: 30, logs: 21, metrics: 14 },
+          });
+          await second.init();
+
+          const ttlAlters = commands.filter(q => /MODIFY TTL/i.test(q));
+          expect(ttlAlters).toHaveLength(1);
+          expect(ttlAlters[0]).toContain('mastra_log_events');
+          expect(ttlAlters[0]).toContain('21 DAY');
+        } finally {
+          spy.mockRestore();
+        }
+      } finally {
+        // Clean up TTLs so other tests start from a clean state.
+        for (const table of signalTables) {
+          await client.command({ query: `ALTER TABLE ${table} REMOVE TTL` }).catch(() => {});
+        }
+        await client.close();
+      }
+    });
+
+    it('init still applies an ALTER for a column that was manually dropped', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      // Pick a migration we know is additive and safe to drop/re-add.
+      const target = ALL_MIGRATIONS.find(
+        m => m.kind === 'column' && m.table === 'mastra_log_events' && m.name === 'entityVersionId',
+      );
+      expect(target).toBeDefined();
+
+      try {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.command({
+          query: `ALTER TABLE ${target!.table} DROP COLUMN IF EXISTS ${target!.name}`,
+        });
+
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+
+        try {
+          await new ObservabilityStorageClickhouseVNext({ client }).init();
+          const matched = commands.filter(q => q.includes(`ALTER TABLE ${target!.table}`) && q.includes(target!.name));
+          expect(matched).toHaveLength(1);
+        } finally {
+          spy.mockRestore();
+        }
+
+        // Verify column is back so subsequent tests see the expected schema.
+        const colResult = await client.query({
+          query: `SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String} AND name = {name:String}`,
+          query_params: { table: target!.table, name: target!.name },
+          format: 'JSONEachRow',
+        });
+        expect(((await colResult.json()) as unknown[]).length).toBe(1);
+      } finally {
         await client.close();
       }
     });

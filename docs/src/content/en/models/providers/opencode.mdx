@@ -154,6 +154,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "opencode/deepseek-v4-flash-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "opencode/gemini-3-flash",
     "imageInput": true,
     "audioInput": true,
@@ -234,8 +246,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.05,
+    "outputCost": 0.4
   },
   {
     "model": "opencode/gpt-5.1",
@@ -406,18 +418,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 180
   },
   {
-    "model": "opencode/hy3-preview-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode/kimi-k2.5",
     "imageInput": true,
     "audioInput": false,
@@ -440,18 +440,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.95,
     "outputCost": 4
-  },
-  {
-    "model": "opencode/ling-2.6-flash-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262100,
-    "maxOutput": 32800,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "opencode/minimax-m2.5",
@@ -524,6 +512,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 3
+  },
+  {
+    "model": "opencode/ring-2.6-1t-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 66000,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -556,7 +556,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "opencode/qwen3.6-plus"
+      ? "opencode/ring-2.6-1t-free"
       : "opencode/big-pickle";
   }
 });

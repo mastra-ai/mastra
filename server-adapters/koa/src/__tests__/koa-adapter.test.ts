@@ -150,6 +150,207 @@ describe('Koa Server Adapter', () => {
     },
   });
 
+  describe('Route dispatcher', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('registers a single dispatcher middleware for built-in routes', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      await adapter.init();
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+    });
+
+    it('preserves route registration order with static and parameterized paths', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/special',
+          responseType: 'json',
+          handler: async () => ({ route: 'static' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/:id',
+          responseType: 'json',
+          handler: async ({ id }) => ({ route: 'param', id }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(1);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const staticResponse = await fetch(`http://localhost:${port}/items/special`);
+      expect(staticResponse.status).toBe(200);
+      await expect(staticResponse.json()).resolves.toEqual({ route: 'static' });
+
+      const paramResponse = await fetch(`http://localhost:${port}/items/42`);
+      expect(paramResponse.status).toBe(200);
+      await expect(paramResponse.json()).resolves.toEqual({ route: 'param', id: '42' });
+    });
+
+    it('preserves middleware ordering when routes are registered around app.use calls', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/before',
+          responseType: 'json',
+          handler: async () => ({ route: 'before' }),
+        },
+        { prefix: '' },
+      );
+
+      app.use(async (ctx, next) => {
+        ctx.set('x-interleaved', 'true');
+        await next();
+      });
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/after',
+          responseType: 'json',
+          handler: async () => ({ route: 'after' }),
+        },
+        { prefix: '' },
+      );
+
+      const routeDispatchers = app.middleware.filter(middleware => middleware.name === 'mastraRouteDispatcher');
+      expect(routeDispatchers).toHaveLength(2);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const beforeResponse = await fetch(`http://localhost:${port}/before`);
+      expect(beforeResponse.status).toBe(200);
+      expect(beforeResponse.headers.get('x-interleaved')).toBeNull();
+      await expect(beforeResponse.json()).resolves.toEqual({ route: 'before' });
+
+      const afterResponse = await fetch(`http://localhost:${port}/after`);
+      expect(afterResponse.status).toBe(200);
+      expect(afterResponse.headers.get('x-interleaved')).toBe('true');
+      await expect(afterResponse.json()).resolves.toEqual({ route: 'after' });
+    });
+
+    it('reuses a dispatcher group when app.use wraps middleware functions', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const originalUse = app.use.bind(app);
+      app.use = ((middleware: Koa.Middleware) => {
+        const wrapped = async function wrappedMiddleware(ctx: Koa.Context, next: Koa.Next) {
+          return middleware(ctx, next);
+        };
+        return originalUse(wrapped);
+      }) as typeof app.use;
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/first',
+          responseType: 'json',
+          handler: async () => ({ route: 'first' }),
+        },
+        { prefix: '' },
+      );
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/second',
+          responseType: 'json',
+          handler: async () => ({ route: 'second' }),
+        },
+        { prefix: '' },
+      );
+
+      expect(app.middleware).toHaveLength(3);
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const firstResponse = await fetch(`http://localhost:${port}/first`);
+      expect(firstResponse.status).toBe(200);
+      await expect(firstResponse.json()).resolves.toEqual({ route: 'first' });
+
+      const secondResponse = await fetch(`http://localhost:${port}/second`);
+      expect(secondResponse.status).toBe(200);
+      await expect(secondResponse.json()).resolves.toEqual({ route: 'second' });
+    });
+  });
+
   describe('Stream Data Redaction', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;

@@ -176,6 +176,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   async applyStoredOverrides(
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
+    requestContext?: RequestContext,
   ): Promise<Agent> {
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
@@ -229,7 +230,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
       const hasConditionalIntegrationTools =
         storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
-      const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+      const isDynamicTools =
+        hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasStoredIntegrationTools;
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
@@ -252,7 +254,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 ctx,
               )
             : (storedConfig!.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
           const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
             ? this.accumulateObjectVariants(
@@ -262,7 +264,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 ctx,
               )
             : (storedConfig!.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-          const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+          const integrationTools = await this.resolveStoredIntegrationTools(
+            resolvedIntegrationToolsConfig,
+            requestContext,
+          );
 
           return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
         };
@@ -275,6 +280,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         );
         const mcpTools = await this.resolveStoredMCPTools(
           storedConfig.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+          requestContext,
         );
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -379,7 +385,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // Tools: registry tools, MCP client tools, and integration tools can each be conditional.
     // If any is conditional, the combined result must be a dynamic function.
-    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+    const hasIntegrationTools = storedAgent.integrationTools != null;
+    const isDynamicTools =
+      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
@@ -410,7 +418,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig, requestContext);
 
         // Resolve integration tools (tool providers)
         const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
@@ -419,12 +427,15 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+        const integrationTools = await this.resolveStoredIntegrationTools(
+          resolvedIntegrationToolsConfig,
+          requestContext,
+        );
 
         return { ...registryTools, ...mcpTools, ...integrationTools };
       };
     } else {
-      // All are static — resolve once at agent creation time
+      // All are static — resolve once at agent creation time (no requestContext available)
       const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -754,11 +765,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredMCPTools(
     mcpClients?: Record<string, StorageMCPClientToolsConfig>,
+    requestContext?: RequestContext,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!mcpClients || Object.keys(mcpClients).length === 0) return {};
     if (!this.mastra) return {};
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    // Build auth headers from request context when available.
+    // This allows stored MCP clients to connect to auth-protected MCP servers
+    // (e.g., the Mastra server's own MCP endpoints).
+    const authToken = requestContext?.get('mastra__authToken') as string | undefined;
+    const authRequestInit = authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined;
 
     // Lazily loaded — only needed when stored MCP clients are found
     let MCPClient: any;
@@ -785,7 +803,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               continue;
             }
           }
-          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient);
+          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient, authRequestInit);
           const client = new MCPClient(clientOptions);
           tools = await client.listTools();
           this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from stored MCP client "${clientId}"`);
@@ -826,12 +844,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           }
 
           // Agent-level filter: `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+          // The UI may store tools under their bare name (e.g., "searchKnowledgeBase") while
+          // MCPClient returns them namespaced (e.g., "support_searchKnowledgeBase"), so check both.
           const hasAgentFilter = agentAllowedTools && Object.keys(agentAllowedTools).length > 0;
-          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools)) continue;
+          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools) && !(bareToolName in agentAllowedTools))
+            continue;
 
-          // Description override: agent-level (namespaced key) takes precedence over client-level (bare key)
+          // Description override: agent-level (namespaced or bare key) takes precedence over client-level (bare key)
           const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;
-          const description = agentAllowedTools?.[namespacedToolName]?.description ?? serverToolConfig?.description;
+          const description =
+            agentAllowedTools?.[namespacedToolName]?.description ??
+            agentAllowedTools?.[bareToolName]?.description ??
+            serverToolConfig?.description;
 
           if (description) {
             allTools[namespacedToolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description };
@@ -859,11 +883,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredIntegrationTools(
     integrationTools?: Record<string, StorageMCPClientToolsConfig>,
-    requestContext?: Record<string, unknown>,
+    requestContext?: RequestContext,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
 
     const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    const providerOptions = { requestContext: requestContext?.toJSON() };
 
     for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
       try {
@@ -891,7 +917,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
 
         // Fetch tools from the provider — pass slugs, configs, and request context
-        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, { requestContext });
+        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, providerOptions);
 
         for (const [toolId, tool] of Object.entries(providerTools)) {
           // Apply description override if configured at the agent level

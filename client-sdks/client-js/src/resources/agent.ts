@@ -38,6 +38,8 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -275,6 +277,59 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.request(`/agents/${this.agentId}/signals`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    })) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    if (!streamResponse.body) {
+      throw new Error('No response body');
+    }
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+        signal: this.options.abortSignal,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Clones this agent to a new stored agent in the database
    * @param params - Clone parameters including optional newId, newName, metadata, authorId, and requestContext
    * @returns Promise containing the created stored agent
@@ -303,8 +358,14 @@ export class Agent extends BaseResource {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
     if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
-    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);
@@ -1295,7 +1356,7 @@ export class Agent extends BaseResource {
             step += 1;
 
             // reset the current text and reasoning parts
-            currentTextPart = chunk.payload.stepResult.isContinued ? currentTextPart : undefined;
+            currentTextPart = chunk.payload?.stepResult?.isContinued ? currentTextPart : undefined;
             currentReasoningPart = undefined;
             currentReasoningTextDetail = undefined;
 
@@ -1304,8 +1365,8 @@ export class Agent extends BaseResource {
           }
 
           case 'finish': {
-            finishReason = chunk.payload.stepResult.reason;
-            if (chunk.payload.usage != null) {
+            finishReason = chunk.payload?.stepResult?.reason ?? finishReason;
+            if (chunk.payload?.usage != null) {
               // usage = calculateLanguageModelUsage(value.usage);
               usage = chunk.payload.usage;
             }
@@ -2013,6 +2074,72 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Observe (reconnect to) an existing agent stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param params.runId - The run ID to observe
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @returns Promise containing a streaming Response
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to a stream from a specific position
+   * const response = await client.agents('my-agent').observe({
+   *   runId: 'run-123',
+   *   offset: 42, // Resume from event 42
+   * });
+   *
+   * await response.processDataStream({
+   *   onChunk: (chunk) => console.log('Received:', chunk),
+   * });
+   * ```
+   */
+  async observe(params: { runId: string; offset?: number }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/agents/${this.agentId}/observe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Resumes a suspended agent stream with custom resume data.
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */
@@ -2049,6 +2176,72 @@ export class Agent extends BaseResource {
     });
 
     const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream');
+
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Resumes a suspended agent stream until idle with custom resume data.
+   * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
+   */
+  async resumeStreamUntilIdle<OUTPUT extends {}>(
+    resumeData: JSONValue,
+    options: ResumeStreamParams<OUTPUT> & {
+      maxIdleMs?: number;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...options,
+      resumeData,
+      requestContext: parseClientRequestContext(options.requestContext),
+      clientTools: processClientTools(options.clientTools),
+      structuredOutput: options.structuredOutput
+        ? {
+            ...options.structuredOutput,
+            schema: standardSchemaToJSONSchema(toStandardSchema(options.structuredOutput.schema)),
+          }
+        : undefined,
+    };
+
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream-until-idle');
 
     const streamResponse = new Response(readable, {
       status: response.status,

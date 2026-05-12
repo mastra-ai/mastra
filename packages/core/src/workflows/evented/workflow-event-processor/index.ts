@@ -5,6 +5,7 @@ import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context/';
+import type { StepExecutionStrategy } from '../../../worker/types';
 import type {
   StepFlowEntry,
   StepResult,
@@ -59,19 +60,30 @@ export type ParentWorkflow = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
   stepId: string;
+  stepGraph: StepFlowEntry[];
+  activeSteps: Record<string, boolean>;
+  resumeSteps: string[];
+  resumeData: any;
+  input: any;
+  parentContext?: {
+    workflowId: string;
+    input: any;
+  };
 };
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
+  private stepExecutionStrategy?: StepExecutionStrategy;
   // Map of runId -> AbortController for active workflow runs
   private abortControllers: Map<string, AbortController> = new Map();
   // Map of child runId -> parent runId for tracking nested workflows
   private parentChildRelationships: Map<string, string> = new Map();
   private runFormats: Map<string, 'legacy' | 'vnext' | undefined> = new Map();
 
-  constructor({ mastra }: { mastra: Mastra }) {
+  constructor({ mastra, stepExecutionStrategy }: { mastra: Mastra; stepExecutionStrategy?: StepExecutionStrategy }) {
     super({ mastra });
     this.stepExecutor = new StepExecutor({ mastra });
+    this.stepExecutionStrategy = stepExecutionStrategy;
   }
 
   /**
@@ -156,7 +168,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
-  protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
+  protected async processWorkflowCancel({ workflowId, runId, prevResult, ...args }: ProcessorArgs) {
     // Cancel this workflow and all nested child workflows
     this.cancelRunAndChildren(runId);
 
@@ -170,19 +182,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.mastra.getLogger()?.warn('Canceling workflow without loaded state', { workflowId, runId });
     }
 
+    //call end workflow with status of canceled to indicate the workflow was canceled
     await this.endWorkflow(
       {
-        workflow: undefined as any,
         workflowId,
         runId,
-        stepResults: (currentState?.context ?? {}) as any,
-        prevResult: { status: 'canceled' } as any,
-        requestContext: (currentState?.requestContext ?? {}) as any,
-        executionPath: [],
-        activeSteps: {},
-        resumeSteps: [],
-        resumeData: undefined,
-        parentWorkflow: undefined,
+        prevResult,
+        ...args,
       },
       'canceled',
     );
@@ -361,27 +367,55 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      await this.mastra.pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId: parentWorkflow.runId, // Use parent's runId for event routing
-        data: {
-          workflowId: parentWorkflow.workflowId,
-          runId: parentWorkflow.runId,
-          executionPath: parentWorkflow.executionPath,
-          resumeSteps,
-          stepResults: parentWorkflow.stepResults,
-          prevResult,
-          resumeData,
-          activeSteps,
-          parentWorkflow: parentWorkflow.parentWorkflow,
-          parentContext: parentWorkflow,
-          requestContext,
-          timeTravel,
-          perStep,
-          state: finalState,
-          nestedRunId: runId, // Pass nested workflow's runId for step retrieval
-        },
-      });
+      // get the step from the parent workflow and process it if it's a loop
+      const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+      if (step?.type === 'loop') {
+        // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
+        await processWorkflowLoop(
+          {
+            workflow: parentWorkflow as unknown as Workflow,
+            workflowId: parentWorkflow.workflowId,
+            prevResult,
+            runId: parentWorkflow.runId,
+            executionPath: parentWorkflow.executionPath,
+            stepResults: parentWorkflow.stepResults,
+            activeSteps: parentWorkflow.activeSteps,
+            resumeSteps: parentWorkflow.resumeSteps,
+            resumeData: parentWorkflow.resumeData,
+            parentWorkflow: parentWorkflow.parentWorkflow,
+            requestContext,
+            retryCount: 0,
+          },
+          {
+            pubsub: this.mastra.pubsub,
+            stepExecutor: this.stepExecutor,
+            step,
+            stepResult: prevResult,
+          },
+        );
+      } else {
+        await this.mastra.pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          runId: parentWorkflow.runId, // Use parent's runId for event routing
+          data: {
+            workflowId: parentWorkflow.workflowId,
+            runId: parentWorkflow.runId,
+            executionPath: parentWorkflow.executionPath,
+            resumeSteps,
+            stepResults: parentWorkflow.stepResults,
+            prevResult,
+            resumeData,
+            activeSteps,
+            parentWorkflow: parentWorkflow.parentWorkflow,
+            parentContext: parentWorkflow,
+            requestContext,
+            timeTravel,
+            perStep,
+            state: finalState,
+            nestedRunId: runId, // Pass nested workflow's runId for step retrieval
+          },
+        });
+      }
     }
 
     await this.mastra.pubsub.publish('workflows-finish', {
@@ -846,11 +880,14 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: step.step.id,
               workflowId,
               runId,
+              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
+              activeSteps,
+              resumeData,
             },
             executionPath: nestedExecutionPath as any,
             runId: nestedRunId,
@@ -909,11 +946,14 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: step.step.id,
               workflowId,
               runId,
+              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
+              activeSteps,
+              resumeData,
             },
             executionPath: snapshot?.suspendedPaths?.[nestedSteps[0]!] as any,
             runId: nestedRunId,
@@ -961,12 +1001,15 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: step.step.id,
               workflowId,
               runId,
+              stepGraph,
               executionPath,
               resumeSteps,
               stepResults,
               timeTravel,
               input: prevResult,
               parentWorkflow,
+              activeSteps,
+              resumeData,
             },
             executionPath: timeTravelParams.executionPath,
             runId: randomUUID(),
@@ -990,12 +1033,15 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow: {
               stepId: step.step.id,
               workflowId,
+              stepGraph,
               runId,
               executionPath,
               resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
+              activeSteps,
+              resumeData,
             },
             executionPath: [0],
             runId: randomUUID(),
@@ -1064,23 +1110,74 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Get the abort controller for this workflow run
     const abortController = this.getOrCreateAbortController(runId);
 
-    const stepResult = await this.stepExecutor.execute({
-      workflowId,
-      step: step.step,
-      runId,
-      stepResults,
-      state: currentState,
-      requestContext: rc,
-      input: (prevResult as any)?.output,
-      resumeData: resumeDataToUse,
-      retryCount,
-      foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
-      validateInputs: workflow.options.validateInputs,
-      abortController,
-      format: streamFormat,
-      perStep,
-    });
+    let stepResult: StepResult<any, any, any, any>;
+
+    if (this.stepExecutionStrategy) {
+      stepResult = await this.stepExecutionStrategy.executeStep({
+        workflowId,
+        runId,
+        stepId: step.step.id,
+        executionPath,
+        stepResults,
+        state: currentState,
+        requestContext: Object.fromEntries(rc.entries()),
+        input: (prevResult as any)?.output,
+        resumeData: resumeDataToUse,
+        retryCount,
+        foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+        format: streamFormat,
+        perStep,
+        validateInputs: workflow.options.validateInputs,
+        abortSignal: abortController.signal,
+      });
+    } else {
+      stepResult = await this.stepExecutor.execute({
+        workflowId,
+        step: step.step,
+        runId,
+        stepResults,
+        state: currentState,
+        requestContext: rc,
+        input: (prevResult as any)?.output,
+        resumeData: resumeDataToUse,
+        retryCount,
+        foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
+        validateInputs: workflow.options.validateInputs,
+        abortController,
+        format: streamFormat,
+        perStep,
+      });
+    }
     requestContext = Object.fromEntries(rc.entries());
+
+    if (abortController?.signal?.aborted) {
+      // Extract updated state from step result
+      const updatedState = (stepResult as any).__state ?? currentState;
+      //cancel the workflow
+      return this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          timeTravel,
+          stepResults: {
+            ...stepResults,
+            [step.step.id]: stepResult,
+            __state: updatedState,
+          },
+          prevResult: { ...stepResult, status: 'canceled' }, //set the status to canceled to indicate the workflow was canceled
+          activeSteps,
+          requestContext,
+          perStep,
+          state: updatedState,
+          outputOptions,
+        },
+      });
+    }
 
     // @ts-expect-error - bailed status not in type
     if (stepResult.status === 'bailed') {
@@ -1360,7 +1457,23 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
-      stepResults = newStepResults;
+      // Persist (and thread forward) any state changes made inside the foreach body.
+      // Each iteration is a separate event in the evented engine, so unless we write
+      // the updated state back here, the next iteration / the step after the foreach
+      // would re-read the stale `__state` from storage instead of `state` (see
+      // resolveCurrentState's priority order). This is what makes setState() inside a
+      // foreach body propagate across iterations.
+      if (currentState) {
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: '__state',
+          result: currentState as any,
+          requestContext,
+        });
+      }
+
+      stepResults = { ...newStepResults, __state: currentState };
 
       // For foreach iterations, check if all iterations are complete before emitting events
       // This prevents emitting workflow.suspend when only some concurrent iterations have finished
@@ -1875,7 +1988,46 @@ export class WorkflowEventProcessor extends EventProcessor {
     return snapshot;
   }
 
+  /**
+   * Result of handling a single workflow event.
+   *
+   * - `ok: true` — event was processed; the transport should ack.
+   * - `ok: false, retry: true` — transient failure, the transport should
+   *   nack/redeliver (or, for HTTP push, return 5xx so the broker retries).
+   * - `ok: false, retry: false` — terminal/poison failure, the transport
+   *   should drop the event (or return 4xx for HTTP push).
+   */
+  async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    try {
+      await this.#dispatch(event);
+      return { ok: true };
+    } catch (err) {
+      this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
+        type: event.type,
+        runId: event.runId,
+        error: err,
+      });
+      return { ok: false, retry: true };
+    }
+  }
+
+  /**
+   * @deprecated prefer {@link WorkflowEventProcessor.handle}, which returns a
+   * structured result instead of relying on an ack callback. Kept as a thin
+   * wrapper so existing pull-mode call sites continue to work.
+   */
   async process(event: Event, ack?: () => Promise<void>) {
+    const result = await this.handle(event);
+    if (result.ok) {
+      try {
+        await ack?.();
+      } catch (e) {
+        this.mastra.getLogger()?.error('Error acking event', e);
+      }
+    }
+  }
+
+  async #dispatch(event: Event) {
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
@@ -1990,12 +2142,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         break;
       default:
         break;
-    }
-
-    try {
-      await ack?.();
-    } catch (e) {
-      this.mastra.getLogger()?.error('Error acking event', e);
     }
   }
 }

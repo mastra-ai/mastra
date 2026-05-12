@@ -1,10 +1,10 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
+import type { ApiRoute, MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
-import { MASTRA_RESOURCE_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -56,6 +56,39 @@ export const isProtectedCustomRoute = (
   }
 
   return false; // Not in config = not a protected custom route
+};
+
+/**
+ * Find a matching custom API route for the given path and method.
+ * Returns the matched route and any extracted path parameters.
+ */
+export const findMatchingCustomRoute = (
+  path: string,
+  method: string,
+  apiRoutes?: ApiRoute[],
+): { route: ApiRoute; params: Record<string, string> } | undefined => {
+  if (!apiRoutes) return undefined;
+
+  for (const route of apiRoutes) {
+    if (route.method !== method && route.method !== 'ALL') continue;
+
+    const { keys, pattern: regex } = parse(route.path);
+    const match = regex.exec(path);
+    if (!match) continue;
+
+    const params: Record<string, string> = {};
+    if (keys && keys.length > 0) {
+      for (let i = 0; i < keys.length; i++) {
+        if (match[i + 1] !== undefined) {
+          params[keys[i]!] = match[i + 1]!;
+        }
+      }
+    }
+
+    return { route, params };
+  }
+
+  return undefined;
 };
 
 /**
@@ -370,6 +403,23 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set('user', user);
+
+    // Store the raw auth token so downstream code (e.g., editor MCP client
+    // resolution) can forward it when connecting to auth-protected MCP servers.
+    // The token may arrive via Authorization header, apiKey query param, or
+    // cookie (SimpleAuth sets `mastra-token`). Check all sources so the
+    // forwarded value is available regardless of how the user authenticated.
+    let effectiveToken = token;
+    if (!effectiveToken && rawRequest instanceof Request) {
+      const cookieHeader = rawRequest.headers.get('cookie');
+      if (cookieHeader) {
+        const match = cookieHeader.match(/mastra-token=([^;]+)/);
+        if (match?.[1]) effectiveToken = match[1];
+      }
+    }
+    if (effectiveToken) {
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, effectiveToken);
+    }
 
     if (typeof authConfig.mapUserToResourceId === 'function') {
       try {

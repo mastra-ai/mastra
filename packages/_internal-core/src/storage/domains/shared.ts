@@ -93,7 +93,7 @@ export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direct
 
 /** Aggregation type schema shared across OLAP-style observability queries. */
 export const aggregationTypeSchema = z
-  .enum(['sum', 'avg', 'min', 'max', 'count', 'last'])
+  .enum(['sum', 'avg', 'min', 'max', 'count', 'count_distinct', 'last'])
   .describe('Aggregation function');
 export type AggregationType = z.infer<typeof aggregationTypeSchema>;
 

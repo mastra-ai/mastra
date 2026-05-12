@@ -8,6 +8,7 @@ import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -39,16 +40,19 @@ import type {
 } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type { MastraModelOutput } from '../stream/base/output';
+import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions, SubAgent } from './agent.types';
 import type { MessageList } from './message-list/index';
+import type { CreatedAgentSignal } from './signals';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -58,6 +62,7 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { SubAgent } from './agent.types';
 export type { MastraBrowser } from '../browser/browser';
 // Screencast types now on MastraBrowser directly
 export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
@@ -74,6 +79,80 @@ export type ToolsInput = Record<
 >;
 
 export type AgentInstructions = SystemMessage;
+
+export type {
+  AgentSignalInput as AgentSignal,
+  AgentSignalType,
+  AgentSignalDataPart,
+  CreatedAgentSignal,
+} from './signals';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalOptions<OUTPUT = unknown> =
+  | {
+      runId: string;
+      resourceId?: string;
+      threadId?: string;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: never;
+    }
+  | {
+      runId?: string;
+      resourceId: string;
+      threadId: string;
+      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: AgentExecutionOptions<OUTPUT> };
+    };
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SendAgentSignalResult {
+  accepted: true;
+  runId: string;
+  signal: CreatedAgentSignal;
+  /** Resolves when a `persist` behavior finishes writing the signal to memory. */
+  persisted?: Promise<void>;
+}
+
+export interface AgentThreadRun<OUTPUT = unknown> {
+  output: MastraModelOutput<OUTPUT>;
+  readonly fullStream: ReadableStream<any>;
+  runId: string;
+  threadId: string;
+  resourceId?: string;
+  cleanup: () => void;
+}
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface AgentSubscribeToThreadOptions {
+  resourceId?: string;
+  threadId: string;
+}
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface AgentThreadSubscription<OUTPUT = unknown> {
+  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+  activeRunId: () => string | null;
+  abort: () => boolean;
+  unsubscribe: () => void;
+}
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -318,7 +397,7 @@ export interface AgentConfig<
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
-  agents?: DynamicArgument<Record<string, Agent>, TRequestContext>;
+  agents?: DynamicArgument<Record<string, SubAgent>, TRequestContext>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
@@ -418,6 +497,11 @@ export interface AgentConfig<
    * Controls which tools can run in the background and their behavior.
    */
   backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Optional agent-level transform policy for tool payloads before they are
+   * serialized into display streams or user-visible transcripts.
+   */
+  transform?: ToolPayloadTransformPolicy;
 }
 
 export type AgentMemoryOption = {
@@ -624,3 +708,71 @@ export type AgentExecuteOnFinishOptions = {
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+
+// =============================================================================
+// Durable Agent Types
+// =============================================================================
+
+/**
+ * Interface for durable agent wrappers (e.g., InngestAgent).
+ *
+ * Durable agents wrap a regular Agent with execution engine-specific
+ * capabilities (like Inngest's durable execution). They expose the
+ * underlying agent and any workflows that need to be registered with Mastra.
+ *
+ * The `stream()` method must return a MastraModelOutput (same as Agent.stream())
+ * to maintain compatibility with the server handlers.
+ */
+export interface DurableAgentLike {
+  /** Agent ID */
+  readonly id: string;
+  /** Agent name */
+  readonly name: string;
+  /** The underlying Mastra Agent */
+  readonly agent: Agent<any, any, any>;
+  /**
+   * Stream a response using durable execution.
+   * Must return MastraModelOutput to be compatible with Agent.stream().
+   */
+  stream(messages: any, options?: any): Promise<any>;
+  /**
+   * The PubSub instance used by this durable agent for streaming events.
+   * Used by server handlers to subscribe to the correct event bus when
+   * observing/reconnecting to agent streams.
+   */
+  readonly pubsub?: PubSub;
+  /**
+   * Get workflows that need to be registered with Mastra.
+   * Called during agent registration to auto-register durable execution workflows.
+   */
+  getDurableWorkflows?(): Workflow<any, any, any, any, any, any, any>[];
+  /**
+   * Set the Mastra instance for observability and other services.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  __setMastra?(mastra: any): void;
+
+  /**
+   * Implementations may proxy all Agent methods to the underlying agent.
+   * For example, InngestAgent uses a Proxy that forwards generate(), listTools(),
+   * getMemory(), etc. to the wrapped Agent instance.
+   */
+  [key: string]: any;
+}
+
+/**
+ * Type guard to check if an object is a DurableAgentLike wrapper.
+ */
+export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
+  if (!obj) return false;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    'agent' in obj &&
+    obj.agent !== null &&
+    typeof obj.agent === 'object' &&
+    typeof obj.agent.id === 'string' &&
+    typeof obj.stream === 'function'
+  );
+}

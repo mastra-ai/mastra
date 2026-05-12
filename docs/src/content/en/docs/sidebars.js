@@ -119,6 +119,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/response-caching',
+          label: 'Response caching',
+        },
+        {
+          type: 'doc',
           id: 'agents/agent-approval',
           label: 'Agent Approval',
         },
@@ -133,6 +138,14 @@ const sidebars = {
           label: 'Channels',
           customProps: {
             tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['experimental'],
           },
         },
         {
@@ -239,6 +252,11 @@ const sidebars = {
           id: 'workflows/error-handling',
           label: 'Error Handling',
         },
+        {
+          type: 'doc',
+          id: 'workflows/scheduled-workflows',
+          label: 'Scheduled Workflows',
+        },
       ],
     },
     {
@@ -311,8 +329,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
+          id: 'mcp/mcp-apps',
+          label: 'MCP Apps',
         },
       ],
     },
@@ -461,6 +479,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
             },
@@ -555,6 +578,11 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/bridges/otel',
                   label: 'OpenTelemetry',
                 },
@@ -566,13 +594,13 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/default',
-                  label: 'Default',
+                  id: 'observability/tracing/exporters/mastra-storage',
+                  label: 'Mastra Storage',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/cloud',
-                  label: 'Cloud',
+                  id: 'observability/tracing/exporters/mastra-platform',
+                  label: 'Mastra Platform',
                 },
                 {
                   type: 'doc',

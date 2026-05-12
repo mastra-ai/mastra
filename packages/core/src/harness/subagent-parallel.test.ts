@@ -8,7 +8,7 @@ import { Harness } from './harness';
 import type { HarnessSubagent } from './types';
 
 describe('Harness subagent parallel execution', () => {
-  it('runs multiple built-in subagent calls concurrently in approval mode', async () => {
+  it('runs multiple built-in subagent calls concurrently with Harness approval enabled', async () => {
     const starts: number[] = [];
     const finishes: number[] = [];
 

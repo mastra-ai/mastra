@@ -14,6 +14,7 @@ import type {
   TimeTravelWorkflowOptions,
   StreamWorkflowResult,
   StreamEvent,
+  WorkflowRegistry,
 } from '@internal/workflow-test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -32,6 +33,24 @@ import { createStep, createWorkflow } from '.';
 
 // Shared storage instance
 const sharedStorage = new MockStore();
+
+// Long-lived Mastra instance with every test workflow registered + workers running.
+// Most tests use their own per-run Mastra (created in the helpers below), but a few
+// shared tests call `workflow.createRun()` directly and therefore need the workflow to
+// be bound to a Mastra whose event workers are running. After each test we re-bind all
+// registry workflows back to this instance (the per-test Mastras re-bind them to
+// short-lived, stopped instances).
+let registeredMastra: Mastra | undefined;
+let registeredRegistry: WorkflowRegistry | undefined;
+
+const rebindRegistryWorkflows = () => {
+  if (!registeredMastra || !registeredRegistry) {
+    return;
+  }
+  for (const entry of Object.values(registeredRegistry)) {
+    (entry.workflow as any).__registerMastra?.(registeredMastra);
+  }
+};
 
 // @ts-expect-error - TS2589: EventedWorkflow types cause excessively deep type instantiation
 createWorkflowTestSuite({
@@ -52,9 +71,30 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
+  // Register every test workflow with a single long-lived Mastra (with its event
+  // workers running) so tests that call `workflow.createRun()` directly work.
+  registerWorkflows: async registry => {
+    registeredRegistry = registry;
+    const workflows: Record<string, any> = {};
+    for (const [id, entry] of Object.entries(registry)) {
+      workflows[id] = entry.workflow;
+    }
+    registeredMastra = new Mastra({
+      logger: false,
+      storage: sharedStorage,
+      workflows,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await registeredMastra.startWorkers();
+  },
+
   beforeAll: async () => {
     vi.unmock('crypto');
     vi.unmock('node:crypto');
+  },
+
+  afterAll: async () => {
+    await registeredMastra?.stopWorkers();
   },
 
   beforeEach: async () => {
@@ -64,20 +104,15 @@ createWorkflowTestSuite({
     await workflowsStore?.dangerouslyClearAll();
   },
 
+  afterEach: async () => {
+    // Per-test helpers create their own Mastra (which re-binds the workflow it runs to
+    // that short-lived, now-stopped instance). Re-bind everything to the long-lived
+    // Mastra so the next test still has a running engine if it uses createRun() directly.
+    rebindRegistryWorkflows();
+  },
+
   // Skip only tests that actually fail - updated after BUG fixes 2026-02
   skipTests: {
-    // Validation - evented resolves instead of throwing
-    executionFlowNotDefined: true,
-    executionGraphNotCommitted: true,
-
-    // Foreach - timing flaky, empty array timeout
-    foreachPartialConcurrencyTiming: true,
-    emptyForeach: true,
-
-    // Abort - returns 'success' not 'canceled', timeout on signal wait
-    abortStatus: true,
-    abortDuringStep: true,
-
     // Suspend/resume - parallel suspend has race condition (each step publishes workflow.suspend independently)
     resumeParallelMulti: true,
     resumeMultiSuspendError: true,
@@ -91,28 +126,6 @@ createWorkflowTestSuite({
     resumeNested: true, // Nested resume works but input value from previous step lost (26 vs 27)
     resumeDountil: true,
 
-    // Time travel - different result structure
-    timeTravelConditional: true,
-
-    // Streaming - legacy API timeout issue
-    streamingSuspendResumeLegacy: true,
-
-    // Branching - nested conditions with multiple nested workflows
-    branchingNestedConditions: true, // Complex nested branching not yet supported in evented
-
-    // Foreach state tests - stateSchema with bail/setState
-    foreachStateBatch: true, // State batch propagation in evented foreach not yet supported
-    foreachBail: true, // bail() in evented foreach not yet supported
-
-    // Error handling - logger test creates its own Mastra instance (default engine only)
-    errorLogger: true,
-
-    // Callback - state test uses stateSchema/setState (WIP in evented)
-    callbackStateOnError: true,
-
-    // Time travel - conditional perStep inherits timeTravelConditional issues
-    timeTravelConditionalPerStep: true,
-
     // Resume error tests - evented engine error behavior may differ
     resumeNotSuspendedWorkflow: true,
     resumeInvalidData: true,
@@ -123,8 +136,6 @@ createWorkflowTestSuite({
     resumeIncorrectBranches: true,
     // Map-branch resume requires direct Mastra registration (server restart sim)
     resumeMapBranchCondition: true,
-    // Abort propagation to nested workflows times out in evented engine
-    abortNestedPropagation: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -138,7 +149,7 @@ createWorkflowTestSuite({
 
     try {
       // Start the event engine
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       // Create the run and execute using streaming API
       const run = await workflow.createRun({ runId: options.runId, resourceId: options.resourceId });
@@ -160,7 +171,7 @@ createWorkflowTestSuite({
       return result as WorkflowResult;
     } finally {
       // Always stop the event engine
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     }
   },
 
@@ -175,7 +186,7 @@ createWorkflowTestSuite({
 
     try {
       // Start the event engine
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       // Get the workflow run by ID
       const run = await workflow.createRun({ runId: options.runId });
@@ -190,7 +201,7 @@ createWorkflowTestSuite({
       return result as WorkflowResult;
     } finally {
       // Always stop the event engine
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     }
   },
 
@@ -204,7 +215,7 @@ createWorkflowTestSuite({
 
     try {
       // Start the event engine
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       // Create a run and use timeTravel API
       const run = await workflow.createRun({ runId: options.runId });
@@ -221,7 +232,7 @@ createWorkflowTestSuite({
       return result as WorkflowResult;
     } finally {
       // Always stop the event engine
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     }
   },
 
@@ -233,7 +244,7 @@ createWorkflowTestSuite({
     });
 
     try {
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       const run = await workflow.createRun({
         runId: options.runId,
@@ -273,7 +284,7 @@ createWorkflowTestSuite({
         return { events, result: result as WorkflowResult };
       }
     } finally {
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     }
   },
 
@@ -285,7 +296,7 @@ createWorkflowTestSuite({
     });
 
     try {
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       const run = await workflow.createRun({ runId: options.runId });
 
@@ -303,7 +314,7 @@ createWorkflowTestSuite({
       const result = await streamResult.result;
       return { events, result: result as WorkflowResult };
     } finally {
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     }
   },
 });
@@ -383,7 +394,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       storage: testStorage,
       pubsub: new EventEmitterPubSub(),
     });
-    await mastra.startEventEngine();
+    await mastra.startWorkers();
 
     try {
       const run = await parentProcessorWorkflow.createRun();
@@ -406,7 +417,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       expect(result.status).toBe('success');
       expect((processorStates.get('tracking-processor') as any)?.customState).toEqual({ messageCount: 1 });
     } finally {
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     }
   });
 
@@ -451,7 +462,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -491,7 +502,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
 
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     });
 
     // Note: "should handle basic suspend and resume flow" moved to shared suite
@@ -528,7 +539,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -564,7 +575,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       // Result verification covered by shared suite
       expect(executionResult.status).toBe('success');
 
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     });
 
     it.skip('should continue streaming current run on subsequent stream calls - evented runtime pubsub differs from default', async () => {
@@ -643,7 +654,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         workflows: { 'test-workflow': promptEvalWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       const run = await promptEvalWorkflow.createRun();
 
@@ -655,7 +666,7 @@ describe('Workflow (Evented Engine Specific)', () => {
 
       expect(result.status).toBe('suspended');
 
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     });
 
     // Note: "should handle custom event emission using writer" moved to shared suite
@@ -710,7 +721,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         workflows: { 'test-resume-writer': testWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       // Create run and start workflow
       const run = await testWorkflow.createRun();
@@ -752,7 +763,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       const resumeResult = await streamResult.result;
       expect(resumeResult.status).toBe('success');
 
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     });
 
     it('should handle errors from agent.stream() with full error details', async () => {
@@ -811,7 +822,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
-      await mastra.startEventEngine();
+      await mastra.startWorkers();
 
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
@@ -830,7 +841,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect((result.error as any).isRetryable).toBe(true);
       }
 
-      await mastra.stopEventEngine();
+      await mastra.stopWorkers();
     });
 
     // Note: "should preserve error details in streaming workflow" moved to shared suite

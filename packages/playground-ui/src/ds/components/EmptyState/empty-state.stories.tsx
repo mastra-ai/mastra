@@ -9,7 +9,6 @@ const meta: Meta<typeof EmptyState> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

@@ -25,6 +25,30 @@ export function generateSignalId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * Compute the names of tools the model can call on a single inference step,
+ * applying `activeTools` filtering when present. Used to populate the
+ * `availableTools` attribute on MODEL_INFERENCE spans so observers see the
+ * post-processor tool set, which can differ per-step from the AGENT_RUN view.
+ *
+ * `activeTools` is treated by presence, not truthiness: an explicit empty
+ * array means "no tools enabled for this step" and is honored as such.
+ * Returns `[]` (not `undefined`) when `tools` is provided but empty, so a
+ * tool-less agent still reports a definitive empty list to observers.
+ */
+export function getStepAvailableToolNames(
+  tools?: Record<string, unknown> | undefined,
+  activeTools?: readonly string[] | undefined,
+): string[] | undefined {
+  if (activeTools !== undefined) {
+    return [...activeTools];
+  }
+  if (tools) {
+    return Object.keys(tools);
+  }
+  return undefined;
+}
+
 // --- Lazy resolvers for executeWithContext / executeWithContextSync ---
 // The real implementations live in context-storage.ts (which imports AsyncLocalStorage).
 // context-storage.ts registers them at import time so that consumer code can call these
@@ -78,26 +102,22 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
- * 2. Children of the ambient span installed by executeWithContext()
- * 3. New root spans (when no current span exists)
+ * 2. New root spans (when no current span exists)
  *
  * @param options - Configuration object for span creation
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
-  const currentSpan =
-    tracingContext?.currentSpan ??
-    (tracingOptions?.traceId || tracingOptions?.parentSpanId ? undefined : resolveCurrentSpan());
 
   const metadata = {
     ...(rest.metadata ?? {}),
     ...(tracingOptions?.metadata ?? {}),
   };
 
-  // If we have a current span, create a child span.
-  if (currentSpan) {
-    return currentSpan.createChildSpan({
+  // If we have a current span, create a child span
+  if (tracingContext?.currentSpan) {
+    return tracingContext.currentSpan.createChildSpan({
       type,
       attributes,
       ...rest,

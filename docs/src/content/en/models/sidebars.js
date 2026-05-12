@@ -208,6 +208,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/databricks',
+          label: 'Databricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
         },
@@ -233,18 +238,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
+        },
+        {
+          type: 'doc',
           id: 'providers/fireworks-ai',
           label: 'Fireworks AI',
         },
         {
           type: 'doc',
-          id: 'providers/firmware',
-          label: 'Firmware',
+          id: 'providers/friendli',
+          label: 'Friendli',
         },
         {
           type: 'doc',
-          id: 'providers/friendli',
-          label: 'Friendli',
+          id: 'providers/frogbot',
+          label: 'FrogBot',
         },
         {
           type: 'doc',
@@ -398,6 +408,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neuralwatt',
+          label: 'Neuralwatt',
+        },
+        {
+          type: 'doc',
           id: 'providers/nova',
           label: 'Nova',
         },
@@ -475,6 +490,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
         },
         {
           type: 'doc',

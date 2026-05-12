@@ -2,8 +2,13 @@ export { TripWire } from './trip-wire';
 export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDetector } from './message-list';
 export type { OutputFormat } from './message-list';
 export * from './types';
+export * from './signals';
 export * from './agent';
 export * from './utils';
+
+// Note: DurableAgent is NOT re-exported here to avoid circular dependencies.
+// Import from '@mastra/core/agent/durable' instead:
+//   import { DurableAgent } from '@mastra/core/agent/durable';
 
 export type {
   AgentExecutionOptions,
@@ -19,6 +24,7 @@ export type {
   OnDelegationCompleteHandler,
   DelegationConfig,
   MessageFilterContext,
+  SubAgent,
   /** @deprecated Use MessageFilterContext instead */
   MessageFilterContext as ContextFilterContext,
   // Iteration hook types

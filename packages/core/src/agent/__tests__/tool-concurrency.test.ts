@@ -556,7 +556,7 @@ describe('Tool Concurrency', () => {
     );
   });
 
-  it('should let safe tools run while approval-gated tools still request approval', async () => {
+  it('should run safe tools before approval-gated tools request approval when the mixed call set is serialized', async () => {
     const safeToolStarts: number[] = [];
     const safeToolFinishes: number[] = [];
     let approvalToolExecuted = false;

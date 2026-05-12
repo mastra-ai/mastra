@@ -2783,6 +2783,7 @@ export interface operations {
           envVars?: {
             [key: string]: string;
           };
+          disablePlatformObservability?: boolean;
         };
       };
     };
@@ -3736,6 +3737,7 @@ export interface operations {
           envVars?: {
             [key: string]: string;
           };
+          disablePlatformObservability?: boolean;
         };
       };
     };
