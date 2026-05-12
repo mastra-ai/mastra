@@ -133,7 +133,8 @@ export function slugifyExtractorName(name: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
 }
 
 export function isBuiltInExtractorSlug(slug: string): slug is BuiltInExtractorSlug {
