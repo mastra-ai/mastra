@@ -70,7 +70,7 @@ describe('WorkflowEventProcessor #dispatch', () => {
     });
 
     const failEvents: Event[] = [];
-    void pubsub.subscribe('workflows', async event => {
+    await pubsub.subscribe('workflows', async event => {
       if (event.type === 'workflow.fail') failEvents.push(event);
     });
 
