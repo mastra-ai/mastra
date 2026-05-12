@@ -634,12 +634,22 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
 
       const { snapshot, tree, files } = await publishSkillFromSource(source, resolvedPath, blobStore);
 
+      // Strip undefined keys from the snapshot before passing to update(). The
+      // storage layer treats "field present" as "field changed"; forwarding
+      // undefined would overwrite populated columns with undefined and trip
+      // NOT NULL / "undefined cannot be passed as argument" errors in
+      // adapters that bind args raw (libsql, pg).
+      const snapshotUpdate: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(snapshot)) {
+        if (value !== undefined) snapshotUpdate[key] = value;
+      }
+
       // Update the skill with new version data + tree + UI-facing file tree.
       // `files` is the nested folder/file structure shown in the editor; without
       // it the column would stay null and the UI would render an empty tree.
       await skillStore.update({
         id: storedSkillId,
-        ...snapshot,
+        ...snapshotUpdate,
         tree,
         files,
         status: 'published',

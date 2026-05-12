@@ -70,11 +70,19 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
     // Collect and store blobs
     const { snapshot, tree, files } = await publishSkillFromSource(source, skillPath, blobStore);
 
+    // Strip undefined keys before passing to update(); see the matching
+    // comment in the HTTP publish handler. Adapters that bind args raw
+    // (libsql, pg) reject undefined as an argument.
+    const snapshotUpdate: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (value !== undefined) snapshotUpdate[key] = value;
+    }
+
     // Update the skill with new version data + tree + UI-facing file tree
     // (creates a new version)
     await skillStore.update({
       id: skillId,
-      ...snapshot,
+      ...snapshotUpdate,
       tree,
       files,
       status: 'published',
