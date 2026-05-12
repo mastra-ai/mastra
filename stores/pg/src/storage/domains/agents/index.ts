@@ -648,18 +648,6 @@ export class AgentsPG extends AgentsStorage {
 
   async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
     try {
-      if (typeof input.model === 'string') {
-        // Reject string `model` at the write path so we never store a jsonb scalar
-        // string that the read path would later mishandle. See #16224.
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'CREATE_VERSION', 'INVALID_MODEL'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: 'createVersion: `model` must be an object, received a string. Pass `{ slug: "<value>" }` instead.',
-          details: { model: String(input.model) },
-        });
-      }
-
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();

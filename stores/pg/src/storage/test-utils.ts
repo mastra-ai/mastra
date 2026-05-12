@@ -1012,31 +1012,6 @@ export function pgTests() {
         expect(version).toBeDefined();
         expect(version.model).toBe('openai/gpt-4o-mini');
       });
-
-      it('createVersion rejects a string `model` with an INVALID_MODEL error', async () => {
-        const agentId = `agent-${Date.now()}-reject`;
-        await agentsTestStore.db.none(
-          `INSERT INTO mastra_agents (id, status, "authorId", metadata, "createdAt", "updatedAt")
-           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
-          [agentId],
-        );
-
-        await expect(
-          agentsStore.createVersion({
-            id: `${agentId}-v1`,
-            agentId,
-            versionNumber: 1,
-            name: 'scalar-input-agent',
-            instructions: 'be helpful',
-            // exercising the runtime guard against string-typed `model`
-            model: 'anthropic/claude-haiku-4.5' as any,
-          }),
-        ).rejects.toThrow(/must be an object, received a string/);
-
-        // No version row should have been written
-        const { versions } = await agentsStore.listVersions({ agentId, perPage: false });
-        expect(versions.length).toBe(0);
-      });
     });
 
     // PG-specific: jsonb scalar string resilience across the other versioned
