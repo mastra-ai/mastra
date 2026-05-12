@@ -19,6 +19,7 @@ function createState(childrenCount: number): TUIState {
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
     allShellComponents: [],
+    pendingSignalMessageComponentsById: new Map(),
   } as unknown as TUIState;
 }
 
