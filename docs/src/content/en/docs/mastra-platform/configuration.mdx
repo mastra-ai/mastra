@@ -54,10 +54,10 @@ The following environment variables configure the Observability product on the M
 | - | - |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | Org-scoped access token. The CLI writes this during observability provisioning and uses it for platform authentication. |
 | `MASTRA_PROJECT_ID` | UUID of the platform project. `MastraPlatformExporter` uses it to link observability data to the platform project. Studio and Server deploys read the project ID from `.mastra-project.json`. |
-| `MASTRA_PLATFORM_TRACES_ENDPOINT` | Optional traces endpoint override. This is only set automatically for local platform development. Defaults to `https://observability.mastra.ai`. |
+| `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` | Optional observability endpoint override. This is only set automatically for local platform development. Defaults to `https://observability.mastra.ai`. |
 | `MASTRA_ORG_ID` | Overrides the active organization for CLI commands. You can also set it with the `--org` flag on supported commands. |
 
-`MastraPlatformExporter` currently reads `MASTRA_CLOUD_ACCESS_TOKEN` to activate platform export. The CLI provisioning flow writes this alongside `MASTRA_PLATFORM_ACCESS_TOKEN`.
+`MastraPlatformExporter` reads `MASTRA_PLATFORM_ACCESS_TOKEN` to authenticate platform export.
 
 ## Multiple environments
 
@@ -76,4 +76,4 @@ cp .mastra-project.production.json .mastra-project.json
 mastra studio deploy --env-file .env.production --yes
 ```
 
-Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_CLOUD_ACCESS_TOKEN` per environment so traces route to the matching platform project.
+Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` per environment so traces route to the matching platform project.

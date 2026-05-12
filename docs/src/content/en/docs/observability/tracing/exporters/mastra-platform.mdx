@@ -28,8 +28,8 @@ If you host your Mastra application on your own infrastructure (not on Mastra pl
 ## Version compatibility
 
 - `MastraPlatformExporter` is available starting in `@mastra/observability@1.12.0`. In `1.8.0` through `1.11.x` the same exporter ships only as `CloudExporter`; the constructor signature and environment variables are identical.
-- In `@mastra/observability@1.8.0` through `1.9.1`, set `MASTRA_CLOUD_TRACES_ENDPOINT=https://observability.mastra.ai` in addition to `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
-- Starting in `@mastra/observability@1.9.2`, the exporter defaults to `https://observability.mastra.ai`, so `MASTRA_CLOUD_TRACES_ENDPOINT` is only required when you want to send telemetry to a different collector.
+- In `@mastra/observability@1.8.0` through `1.9.1`, set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=https://observability.mastra.ai` in addition to `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
+- Starting in `@mastra/observability@1.9.2`, the exporter defaults to `https://observability.mastra.ai`, so `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` is only required when you want to send telemetry to a different collector.
 
 ## Quickstart
 
@@ -43,7 +43,7 @@ Run the following command:
 mastra auth tokens create exporter-token
 ```
 
-This command prints a token secret that you can use as `MASTRA_CLOUD_ACCESS_TOKEN`.
+This command prints a token secret that you can use as `MASTRA_PLATFORM_ACCESS_TOKEN`.
 
 If you already have an access token, copy the **Observability** value from the Mastra platform instead. You can find it in either of these places:
 
@@ -53,7 +53,7 @@ If you already have an access token, copy the **Observability** value from the M
 Set the token as an environment variable:
 
 ```bash title=".env"
-MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
+MASTRA_PLATFORM_ACCESS_TOKEN=<your-platform-access-token>
 ```
 
 ### 2. Find your `projectId`
@@ -89,20 +89,20 @@ MASTRA_PROJECT_ID=<your-project-id>
 Set both values in your environment so `MastraPlatformExporter` can authenticate and route telemetry to the correct project:
 
 ```bash title=".env"
-MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
+MASTRA_PLATFORM_ACCESS_TOKEN=<your-platform-access-token>
 MASTRA_PROJECT_ID=<your-project-id>
 ```
 
 If you use `@mastra/observability@1.8.0` through `1.9.1`, also set the Mastra platform collector explicitly:
 
 ```bash title=".env"
-MASTRA_CLOUD_TRACES_ENDPOINT=https://observability.mastra.ai
+MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=https://observability.mastra.ai
 ```
 
-If you want to send telemetry somewhere other than Mastra platform, set `MASTRA_CLOUD_TRACES_ENDPOINT` as well. Pass either a base origin or a full traces publish URL ending in `/spans/publish`.
+If you want to send telemetry somewhere other than Mastra platform, set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` as well. Pass either a base origin or a full traces publish URL ending in `/spans/publish`.
 
 ```bash title=".env"
-MASTRA_CLOUD_TRACES_ENDPOINT=https://collector.example.com
+MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=https://collector.example.com
 ```
 
 When you pass a base origin, `MastraPlatformExporter` derives the matching publish URLs for traces, logs, metrics, scores, and feedback automatically.
@@ -139,7 +139,7 @@ If you prefer, rely entirely on environment variables:
 new MastraPlatformExporter()
 ```
 
-With `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `MastraPlatformExporter` sends data to the Mastra platform project you configured. If you also set `MASTRA_CLOUD_TRACES_ENDPOINT`, it sends data to that collector instead.
+With `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `MastraPlatformExporter` sends data to the Mastra platform project you configured. If you also set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`, it sends data to that collector instead.
 
 :::note
 
@@ -175,10 +175,10 @@ export const mastra = new Mastra({
 
 ## Complete configuration
 
-`MastraPlatformExporter` defaults to Mastra platform. If you want to send telemetry to a different collector, set `MASTRA_CLOUD_TRACES_ENDPOINT` in your environment or pass `endpoint` in code.
+`MastraPlatformExporter` defaults to Mastra platform. If you want to send telemetry to a different collector, set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` in your environment or pass `endpoint` in code.
 
 ```bash title=".env"
-MASTRA_CLOUD_TRACES_ENDPOINT=https://collector.example.com
+MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=https://collector.example.com
 ```
 
 The following example demonstrates how to override the collector endpoint and batching behavior in code:

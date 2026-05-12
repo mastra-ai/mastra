@@ -84,9 +84,9 @@ Extends `BaseExporterConfig`, which includes:
 
 The exporter reads these environment variables if not provided in config:
 
-- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token for `MastraPlatformExporter` requests
+- `MASTRA_PLATFORM_ACCESS_TOKEN` - Authentication token for `MastraPlatformExporter` requests
 - `MASTRA_PROJECT_ID` - Project ID to use when deriving project-scoped collector routes such as `/projects/:projectId/ai/spans/publish`
-- `MASTRA_CLOUD_TRACES_ENDPOINT` - Traces endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://observability.mastra.ai` in `@mastra/observability@1.9.2` and later
+- `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` - Observability endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://observability.mastra.ai` in `@mastra/observability@1.9.2` and later
 
 ## Properties
 
