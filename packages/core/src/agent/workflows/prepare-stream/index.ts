@@ -13,6 +13,7 @@ import { createWorkflow } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -53,6 +54,9 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  /** Signal inputs already stored in the initial message list that still need stream data-part echoes. */
+  initialSignalEchoes?: CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -80,6 +84,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentBackgroundConfig,
   toolPayloadTransform,
   skipBgTaskWait,
+  drainPendingSignals,
+  initialSignalEchoes,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -129,6 +135,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentBackgroundConfig,
     toolPayloadTransform,
     skipBgTaskWait,
+    drainPendingSignals,
+    initialSignalEchoes,
   });
 
   const mapResultsStep = createMapResultsStep({
