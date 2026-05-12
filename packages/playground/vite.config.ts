@@ -215,7 +215,7 @@ export default defineConfig(({ mode }) => {
     plugins: [stubNodeBuiltinsPlugin, tailwindcss(), react(), routesManifestPlugin()],
     base: './',
     resolve: {
-      dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-resizable-panels'],
+      dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-resizable-panels', '@tanstack/react-query'],
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@internal-temp': path.resolve(__dirname, './src/vendor/@mastra'),
