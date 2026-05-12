@@ -283,6 +283,8 @@ export class Agent<
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
+  /** Set to true when getAdaptiveModelRouterProcessor() creates a router. */
+  #adaptiveModelRouterActive = false;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -726,6 +728,7 @@ export class Agent<
       router.__registerMastra(this.#mastra);
     }
 
+    this.#adaptiveModelRouterActive = true;
     return [router];
   }
 
@@ -1920,7 +1923,11 @@ export class Agent<
           // to the LLM layer. The router fully owns fallback switching via
           // processAPIError → retry → processInputStep, replacing the old
           // executeStreamWithFallbackModels retry loop.
-          const routerHandlesFallbacks = !model && Array.isArray(enabledSelection) && enabledSelection.length >= 2;
+          const routerHandlesFallbacks =
+            this.#adaptiveModelRouterActive &&
+            !model &&
+            Array.isArray(enabledSelection) &&
+            enabledSelection.length >= 2;
           const modelsForLLM = routerHandlesFallbacks
             ? ([enabledSelection[0]] as typeof enabledSelection)
             : enabledSelection;
