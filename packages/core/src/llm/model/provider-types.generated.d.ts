@@ -3811,6 +3811,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b-fast',
     'zai-org/GLM-5.1-FP8',
   ];
+  readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly togetherai: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'MiniMaxAI/MiniMax-M2.7',
