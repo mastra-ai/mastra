@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.9.0-alpha.14
+
+### Patch Changes
+
+- Fixed a Studio crash that surfaced as `No QueryClient set, use QueryClientProvider to set one` (most visibly on the Metrics page) when the workspace ended up with more than one React version installed. Multiple React copies caused `@tanstack/react-query` to be duplicated in the playground bundle, which split the QueryClient context between provider and consumers. The Vite build now dedupes `@tanstack/react-query`, so a single QueryClient context is shared across the bundle regardless of how many React copies pnpm produces. ([#16469](https://github.com/mastra-ai/mastra/pull/16469))
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`edccda6`](https://github.com/mastra-ai/mastra/commit/edccda6d9d5d647a75149b342bf3ae7569ba2856), [`5b6887b`](https://github.com/mastra-ai/mastra/commit/5b6887b80fc168b48716cb6a9262df8b32867390), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+  - @mastra/playground-ui@27.0.0-alpha.14
+  - @mastra/client-js@1.18.0-alpha.14
+  - @mastra/react@0.2.36-alpha.14
+
 ## 1.9.0-alpha.13
 
 ### Patch Changes
