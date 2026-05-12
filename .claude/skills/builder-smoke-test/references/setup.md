@@ -1,26 +1,35 @@
 # Setup
 
-Verify the `examples/agent` dev server is running and the builder is configured correctly.
+Scaffold the hermetic project, start its dev server, and verify the Builder configuration is correct.
 
 ## Steps
 
-### 0. Preflight — env vars + mode
+### 0. Preflight — scaffold + env vars + mode
 
 Before starting the server, run preflight with the auth mode this prompt
-expects (`off` for Prompts 1–6, `on` for Prompt 7). Preflight is
-detect-only and exits non-zero on missing vars, mode mismatch, or a
-shell/`.env` collision on `AUTH_PROVIDER`.
+expects (`off` for auth-off runs, `on` for the auth-on runs). Preflight
+calls `scripts/scaffold.sh` first (creating or refreshing `$PROJECT_DIR`),
+then validates the resulting `.env` against `--expect off|on`.
 
 ```bash
-# Most prompts (auth-off):
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
+# Auth-off (the common case):
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off \
+  --openai-key "$OPENAI_API_KEY"
 
-# Prompt 7 only (auth-on, WorkOS):
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on
+# Auth-on (WorkOS):
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on \
+  --openai-key "$OPENAI_API_KEY" \
+  --workos-api-key "$WORKOS_API_KEY" \
+  --workos-client-id "$WORKOS_CLIENT_ID" \
+  --workos-organization-id "$WORKOS_ORGANIZATION_ID"
 ```
 
+The default `$PROJECT_DIR` is `~/mastra-builder-smoke-tests/builder-smoke`.
+Pass `--dir <path>` to override. Pass `--reuse` to skip `pnpm install` when
+`node_modules/@mastra/core` already exists.
+
 Why `.env` matters more than your shell: `mastra dev` reads
-`examples/agent/.env` via dotenv and **overwrites `process.env`** with the
+`$PROJECT_DIR/.env` via dotenv and **overwrites `process.env`** with the
 loaded values (see `packages/cli/src/commands/dev/dev.ts` around line 384).
 That means:
 
@@ -28,24 +37,9 @@ That means:
 - Shell-only vars survive only if `.env` has no entry for the same key.
 - The auth mode the server actually runs in is determined by `.env` alone.
 
-Required for every prompt:
-
-- `OPENAI_API_KEY` — `examples/agent` instantiates `OpenAIVoice` at module
-  load. Without a key the server crashes during bundle init, before HTTP
-  ever opens, with: `Error: No API key provided for speech model` from
-  `voice/openai/dist/index.js`. Prefer setting it in `examples/agent/.env`
-  so it definitely reaches the server.
-
-Required for Prompt 7 (auth-on) only:
-
-- `AUTH_PROVIDER=workos` in `examples/agent/.env`.
-- `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` in `.env`.
-
-If preflight reports any failure on an existing `.env`, **do not edit it
-without explicit user say-so**. Surface the diagnosis, ask whether they'll
-edit `.env` themselves or want you to do it. Restart `mastra dev` after
-any `.env` change. If `examples/agent/.env` doesn't exist at all, you may
-create it; still ask the user to dictate values rather than guessing.
+The scaffold owns `$PROJECT_DIR/.env`. To change anything in it, re-run
+`scripts/scaffold.sh` (or `scripts/preflight.sh`, which wraps it) with the
+flags you want.
 
 ### 1. Zombie port check
 
@@ -60,14 +54,14 @@ kill $(lsof -ti :4111) 2>/dev/null || true
 
 ### 2. Start the dev server
 
-`examples/agent/package.json` has **no `dev` script**. Use `mastra:dev`
-(server only) or `dev:ui` (server + playground). For smoke tests, prefer
-`mastra:dev` and use whichever browser tool the harness has wired up.
-
 ```bash
-cd examples/agent
+cd ~/mastra-builder-smoke-tests/builder-smoke   # or whichever --dir you used
 pnpm mastra:dev
 ```
+
+The scaffolded `package.json` defines `mastra:dev` (server only) and
+`dev:ui` (server + playground). For smoke tests, prefer `mastra:dev` and
+use whichever browser tool the harness has wired up for the UI section.
 
 ### 3. Wait for readiness
 
@@ -139,13 +133,13 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
   # → true
   ```
 
-If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't run — check that the `Workspace` instance is registered in the Mastra constructor in `examples/agent/src/mastra/index.ts`.
+If the workspace doesn't exist yet, it means `ensureBuilderWorkspaces()` hasn't run — check that the `Workspace` instance is registered in the Mastra constructor in `$PROJECT_DIR/src/mastra/index.ts`.
 
 ## Checklist
 
 - [ ] Preflight passes for the expected mode (`--expect off` or `--expect on`)
 - [ ] Port `:4111` is free, or the zombie has been killed
-- [ ] Server started with `pnpm mastra:dev` after the most recent `.env` edit
+- [ ] Server started with `pnpm mastra:dev` from `$PROJECT_DIR` after the most recent scaffold
 - [ ] `wait-for-server.sh` reports ready on `:4111` (not `:4112`+)
 - [ ] Builder settings endpoint returns valid config (`features.agent.skills: true`, both `configuration.agent.models` and `modelPolicy` present)
 - [ ] Builder workspace exists in DB with correct metadata (and `runtimeRegistered: true` on the list response)

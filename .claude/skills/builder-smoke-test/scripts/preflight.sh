@@ -1,37 +1,42 @@
 #!/usr/bin/env bash
 # Preflight for the builder-smoke-test skill.
 #
-# Three checks:
-#   1. We're in a mastra worktree (has pnpm-workspace.yaml + examples/agent/).
-#   2. examples/agent/node_modules exists.
-#   3. examples/agent/.env has OPENAI_API_KEY (or it's exported in the shell).
-#
-# For auth-mode detection, call scripts/auth-detect.sh — preflight does NOT
-# duplicate that logic. Pass --expect off|on to additionally fail when
-# auth-detect reports a different mode.
+# Calls scripts/scaffold.sh to ensure a hermetic project exists at
+# ~/mastra-builder-smoke-tests/builder-smoke (or --dir override), then
+# validates the resulting .env matches --expect off|on.
 #
 # Run from anywhere; resolves paths relative to this script's location.
 #
-# Exit codes:
-#   0 — all checks pass (and mode matches --expect if given)
-#   1 — at least one check failed
+# Usage:
+#   bash preflight.sh                         # scaffold auth-off (prompts for openai if missing)
+#   bash preflight.sh --reuse                 # reuse existing project if healthy
+#   bash preflight.sh --expect off            # extra check: .env must say auth off
+#   bash preflight.sh --expect on \
+#     --workos-api-key sk_test_... \
+#     --workos-client-id client_... \
+#     --workos-organization-id org_...        # scaffold auth-on
+#   bash preflight.sh --dir /custom/path      # custom project dir
 #
-# On failure, see SKILL.md "Detection: run preflight before each section"
-# for the agent-facing remediation for each error code emitted below.
+# All --openai-key, --workos-*, --dir, --reuse flags are forwarded to scaffold.sh.
+#
+# Exit codes:
+#   0 — scaffold + checks passed (mode matches --expect if given)
+#   1 — at least one check failed
+#   2 — bad CLI usage
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../../.." && pwd)"
-EXAMPLE_DIR="${REPO_ROOT}/examples/agent"
 
 EXPECT_MODE=""
+SCAFFOLD_ARGS=()
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --expect) EXPECT_MODE="${2:-}"; shift 2 ;;
     --expect=*) EXPECT_MODE="${1#--expect=}"; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
-    *) echo "preflight: unknown arg '$1'" >&2; exit 2 ;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) SCAFFOLD_ARGS+=("$1"); shift ;;
   esac
 done
 
@@ -39,56 +44,63 @@ errors=0
 err() { echo "✗ $*" >&2; errors=$((errors + 1)); }
 ok()  { echo "✓ $*"; }
 
-# 1. Repo shape
-if [ ! -f "${REPO_ROOT}/pnpm-workspace.yaml" ] || [ ! -d "${EXAMPLE_DIR}" ]; then
-  err "error: not-in-mastra-repo (no pnpm-workspace.yaml + examples/agent/ at ${REPO_ROOT})"
-else
-  ok "repo: mastra worktree at ${REPO_ROOT}"
+# 1. Run scaffold. Capture its output so we can extract PROJECT_DIR + AUTH_MODE.
+echo "→ scaffolding builder-smoke test project"
+scaffold_out=$(bash "${SCRIPT_DIR}/scaffold.sh" "${SCAFFOLD_ARGS[@]:-}" 2>&1)
+scaffold_rc=$?
+echo "${scaffold_out}"
+if [ "${scaffold_rc}" -ne 0 ]; then
+  err "error: scaffold-failed (rc=${scaffold_rc})"
+  echo
+  echo "✗ Preflight failed."
+  exit 1
 fi
 
-# 2. examples/agent installed
-if [ ! -d "${EXAMPLE_DIR}/node_modules" ]; then
-  err "error: examples-agent-not-installed (run: cd examples/agent && pnpm i --ignore-workspace)"
-else
-  ok "deps: examples/agent/node_modules present"
+PROJECT_DIR=$(echo "${scaffold_out}" | grep -E '^PROJECT_DIR=' | tail -n1 | cut -d= -f2-)
+AUTH_MODE=$(echo "${scaffold_out}" | grep -E '^AUTH_MODE=' | tail -n1 | cut -d= -f2-)
+
+if [ -z "${PROJECT_DIR}" ] || [ ! -d "${PROJECT_DIR}" ]; then
+  err "error: project-dir-missing (${PROJECT_DIR:-<unset>})"
 fi
 
-# 3. OPENAI_API_KEY reachable
-env_has_openai=no
-if [ -f "${EXAMPLE_DIR}/.env" ] && grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${EXAMPLE_DIR}/.env"; then
-  env_has_openai=yes
-fi
-if [ "${env_has_openai}" = "yes" ]; then
-  ok "env: OPENAI_API_KEY in examples/agent/.env"
-elif [ -n "${OPENAI_API_KEY:-}" ]; then
-  ok "env: OPENAI_API_KEY in shell (mastra dev will pass through since .env has no entry)"
+# 2. Confirm project deps are installed (linked @mastra/core resolvable).
+if [ ! -d "${PROJECT_DIR}/node_modules/@mastra/core" ]; then
+  err "error: project-deps-missing (re-run without --reuse to install)"
 else
-  err "error: openai-key-missing"
-  echo "    Options (ask the user which one applies — don't guess):" >&2
-  echo "      a) Paste the key — user pastes it; you add OPENAI_API_KEY=… to examples/agent/.env (with consent)." >&2
-  echo "      b) Source rc — if the user says the key is in their shell rc, run:" >&2
-  echo "           zsh -c 'source ~/.zshrc && echo \"OPENAI_API_KEY=\${OPENAI_API_KEY}\"'" >&2
-  echo "         then copy that value into examples/agent/.env (with consent)." >&2
-  echo "      c) Manual — user edits .env themselves and re-runs preflight." >&2
+  ok "deps: ${PROJECT_DIR}/node_modules/@mastra/core present"
 fi
 
-# 4. Mode expectation (delegated to auth-detect.sh)
+# 3. Confirm .env has OPENAI_API_KEY.
+if grep -qE '^[[:space:]]*OPENAI_API_KEY=.+' "${PROJECT_DIR}/.env" 2>/dev/null; then
+  ok "env: OPENAI_API_KEY present in ${PROJECT_DIR}/.env"
+else
+  err "error: openai-key-missing-in-project-env"
+fi
+
+# 4. Auth mode expectation.
 if [ -n "${EXPECT_MODE}" ]; then
-  detected=$(bash "${SCRIPT_DIR}/auth-detect.sh" 2>/dev/null || echo "mode=unknown")
-  detected_mode="${detected#mode=}"
   case "${EXPECT_MODE}" in
     off)
-      if [ "${detected_mode}" = "off" ]; then
+      if [ "${AUTH_MODE}" = "off" ]; then
         ok "mode: off (as expected)"
       else
-        err "error: mode-mismatch (expected off, detected ${detected_mode})"
+        err "error: mode-mismatch (expected off, scaffold produced ${AUTH_MODE})"
       fi
       ;;
     on)
-      if [[ "${detected_mode}" == on:* ]]; then
-        ok "mode: ${detected_mode} (as expected)"
+      if [ "${AUTH_MODE}" = "on" ]; then
+        # Also confirm all WorkOS vars landed in .env
+        missing=""
+        for k in AUTH_PROVIDER WORKOS_API_KEY WORKOS_CLIENT_ID WORKOS_ORGANIZATION_ID; do
+          grep -qE "^[[:space:]]*${k}=.+" "${PROJECT_DIR}/.env" 2>/dev/null || missing="${missing} ${k}"
+        done
+        if [ -n "${missing}" ]; then
+          err "error: workos-keys-missing-in-project-env (missing:${missing})"
+        else
+          ok "mode: on (as expected; AUTH_PROVIDER + WORKOS_* in .env)"
+        fi
       else
-        err "error: mode-mismatch (expected on, detected ${detected_mode})"
+        err "error: mode-mismatch (expected on, scaffold produced ${AUTH_MODE}; pass --workos-* flags)"
       fi
       ;;
     *)
@@ -98,6 +110,10 @@ if [ -n "${EXPECT_MODE}" ]; then
 fi
 
 echo
+echo "PROJECT_DIR=${PROJECT_DIR}"
+echo "AUTH_MODE=${AUTH_MODE}"
+echo
+
 if [ "${errors}" -gt 0 ]; then
   echo "✗ Preflight failed: ${errors} error(s)."
   echo "  See SKILL.md → 'Detection: run preflight before each section'"

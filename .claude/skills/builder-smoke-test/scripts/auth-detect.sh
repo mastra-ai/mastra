@@ -1,56 +1,60 @@
 #!/usr/bin/env bash
-# Print the auth mode the running `mastra dev` server will see.
+# Print the auth mode the scaffolded builder-smoke project will boot in.
 #
-# Because `mastra dev` overwrites process.env from examples/agent/.env at
-# boot, ONLY .env determines the server's mode. Shell-exported AUTH_PROVIDER
-# does not enable WorkOS auth in the server.
+# Reads ONLY the project's .env (default ~/mastra-builder-smoke-tests/builder-smoke/.env)
+# — because `mastra dev` overwrites process.env from .env at boot, shell-
+# exported AUTH_PROVIDER does not enable WorkOS auth in the server.
 #
 # Output:
-#   mode=off                            — AUTH_PROVIDER absent/commented in .env
-#   mode=on:workos                      — AUTH_PROVIDER=workos in .env
-#   mode=on:<other>                     — AUTH_PROVIDER=<other-provider> in .env
-#   mode=ambiguous                      — AUTH_PROVIDER set in shell only,
-#                                          not in .env (server runs auth-off
-#                                          but shell value will leak elsewhere)
+#   mode=off                            — AUTH_PROVIDER absent in project .env
+#   mode=on:workos                      — AUTH_PROVIDER=workos in project .env
+#   mode=on:<other>                     — AUTH_PROVIDER=<other-provider> in project .env
+#
+# Usage:
+#   bash auth-detect.sh                              # default project dir
+#   bash auth-detect.sh --dir /custom/path           # custom project dir
 #
 # Exit codes:
-#   0 — clear mode (off, on:*)
-#   1 — ambiguous
+#   0 — mode resolved (off or on:*)
+#   1 — .env missing (run scripts/scaffold.sh first)
 
 set -uo pipefail
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-EXAMPLE_ENV="${REPO_ROOT}/examples/agent/.env"
+DEFAULT_PROJECT_DIR="${HOME}/mastra-builder-smoke-tests/builder-smoke"
+PROJECT_DIR=""
 
-env_value() {
-  local name="$1"
-  [ -f "${EXAMPLE_ENV}" ] || return 1
-  local line
-  line=$(grep -E "^[[:space:]]*${name}=" "${EXAMPLE_ENV}" | head -n1 || true)
-  [ -n "${line}" ] || return 1
-  local val="${line#*=}"
-  val="${val%\"}"; val="${val#\"}"
-  val="${val%\'}"; val="${val#\'}"
-  [ -n "${val}" ] || return 1
-  printf '%s' "${val}"
-}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dir) PROJECT_DIR="${2:-}"; shift 2 ;;
+    --dir=*) PROJECT_DIR="${1#--dir=}"; shift ;;
+    -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "auth-detect: unknown arg '$1'" >&2; exit 2 ;;
+  esac
+done
 
-env_provider=""
-if val=$(env_value AUTH_PROVIDER); then
-  env_provider="${val}"
-fi
+PROJECT_DIR="${PROJECT_DIR:-$DEFAULT_PROJECT_DIR}"
+ENV_FILE="${PROJECT_DIR}/.env"
 
-shell_provider="${AUTH_PROVIDER:-}"
-
-if [ -n "${env_provider}" ]; then
-  echo "mode=on:${env_provider}"
-  exit 0
-fi
-
-if [ -n "${shell_provider}" ]; then
-  echo "mode=ambiguous"
+if [ ! -f "${ENV_FILE}" ]; then
+  echo "mode=unknown" >&2
+  echo "auth-detect: .env not found at ${ENV_FILE} (run scripts/scaffold.sh first)" >&2
   exit 1
 fi
 
-echo "mode=off"
+provider_line=$(grep -E '^[[:space:]]*AUTH_PROVIDER=' "${ENV_FILE}" | head -n1 || true)
+if [ -z "${provider_line}" ]; then
+  echo "mode=off"
+  exit 0
+fi
+
+val="${provider_line#*=}"
+val="${val%\"}"; val="${val#\"}"
+val="${val%\'}"; val="${val#\'}"
+
+if [ -z "${val}" ]; then
+  echo "mode=off"
+  exit 0
+fi
+
+echo "mode=on:${val}"
 exit 0

@@ -1,13 +1,13 @@
 ---
 name: builder-smoke-test
-description: Smoke test the Agent Builder feature branch end-to-end against examples/agent on localhost:4111. Covers workspace reconciliation, stored agents/skills CRUD, ownership, visibility, stars, registry/library Copy flow, picker allowlists, model policy, RBAC role gating, role impersonation UI, builder defaults, infrastructure diagnostics, channels, and Studio + Agent Builder UI. Trigger when validating the agent-builder feature branch, PRs that touch packages/server, packages/playground, packages/playground-ui agent-builder routes, or builder EE code paths.
+description: Smoke test the Agent Builder feature branch end-to-end against a hermetic project scaffolded by the skill (linked to the current worktree). Covers workspace reconciliation, stored agents/skills CRUD, ownership, visibility, stars, registry/library Copy flow, picker allowlists, model policy, RBAC role gating, role impersonation UI, builder defaults, infrastructure diagnostics, channels, and Studio + Agent Builder UI. Trigger when validating the agent-builder feature branch, PRs that touch packages/server, packages/playground, packages/playground-ui agent-builder routes, or builder EE code paths.
 ---
 
 # Builder Smoke Test
 
-End-to-end smoke testing of the Agent Builder feature set against `examples/agent` running on `localhost:4111`.
+End-to-end smoke testing of the Agent Builder feature set against a hermetic project the skill scaffolds at `~/mastra-builder-smoke-tests/builder-smoke` (configurable). The project links to the current worktree via `pnpm` `link:` overrides, so changes to packages under `packages/`, `stores/`, `auth/`, `channels/`, `observability/`, `browser/`, and `client-sdks/` take effect on the next `mastra dev` restart.
 
-This skill is for **branch QA** — it complements the release-time `mastra-smoke-test`. It exercises the Builder EE surface (stored entities, RBAC, registry, infra, channels) rather than a freshly scaffolded project.
+This skill is for **branch QA** — it complements the release-time `mastra-smoke-test`. It exercises the Builder EE surface (stored entities, RBAC, registry, infra, channels) using a minimal, predictable project rather than the kitchen-sink `examples/agent`.
 
 ## ⚠️ Mandatory Test Checklist
 
@@ -82,7 +82,7 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 /builder-smoke-test --scope skills
 /builder-smoke-test --scope quick
 
-# Reset fixtures and re-seed (deletes examples/agent/mastra.db)
+# Reset fixtures and re-seed (deletes $PROJECT_DIR/mastra.db)
 /builder-smoke-test --fixtures-reset --scope quick
 
 # Force auth on / off (otherwise auto-detected from WORKOS_* env vars)
@@ -105,9 +105,13 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 | `--scope`          | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.                                                                                                                                                                                               | (none)         |
 | `--auth`           | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set.                                                                                                                                                                                            | `auto`         |
 | `--role`           | Expected role of the logged-in user under `--auth on`: `owner`, `admin`, `member`, or `viewer`. Setup asserts the live `/api/auth/me` roles match; on mismatch the run stops and the user is told to either change their WorkOS role or re-run with the correct `--role`. Ignored under `--auth off`. | `admin`        |
-| `--fixtures-reset` | Stop the dev server, wipe `examples/agent/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                      | `false`        |
+| `--fixtures-reset` | Stop the dev server, wipe `$PROJECT_DIR/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                        | `false`        |
 | `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                                                                                                                                                                                                            | `false`        |
 | `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                                                                                                                                                                                                                    | `false`        |
+| `--dir`            | Project directory the skill scaffolds into. Forwarded to `scripts/scaffold.sh`.                                                                                                                                                                                                                       | `~/mastra-builder-smoke-tests/builder-smoke` |
+| `--reuse`          | If the project already exists at `$PROJECT_DIR` and has `node_modules/@mastra/core`, skip `pnpm install`. Forwarded to `scripts/scaffold.sh`.                                                                                                                                                         | `false`        |
+| `--openai-key`     | OPENAI_API_KEY value to write into the scaffolded `.env`. If omitted, the scaffold script falls back to `$OPENAI_API_KEY` in the shell, then to an interactive prompt.                                                                                                                                | (shell or prompt) |
+| `--workos-api-key`<br>`--workos-client-id`<br>`--workos-organization-id` | All three are required together to scaffold an auth-on project. Writes `AUTH_PROVIDER=workos` plus the three keys plus `WORKOS_REDIRECT_URI=http://localhost:4111/api/auth/callback` into `.env`.                                                                                                       | (auth off)     |
 
 If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-skipped and reported as `⏭️ Skipped (no WORKOS_* env vars)`.
 
@@ -170,99 +174,107 @@ in a state the user didn't ask for.
 
 ## Prerequisites
 
-- Working tree on the agent-builder feature branch.
-- `examples/agent` installed standalone: `cd examples/agent && pnpm i --ignore-workspace`.
-- `OPENAI_API_KEY` set in `examples/agent/.env` (preferred) OR exported in the shell. `examples/agent` instantiates `OpenAIVoice` at module load — without a key the server crashes inside `OpenAIVoice` (`voice/openai/dist/index.js`: `Error: No API key provided for speech model`) before HTTP ever opens.
-- Whichever browser MCP/tool the harness has access to. If neither is available, run with `--skip-browser` and report UI as `⏭️ Skipped (no browser tool)`.
+- Working tree on the agent-builder feature branch (or any branch you want to QA).
+- `pnpm` (10.x) and `node` on `$PATH`. The scaffold uses `pnpm install --ignore-workspace` inside the project dir so the repo-level workspace doesn't interfere.
+- An `OPENAI_API_KEY`. Supply via `--openai-key`, export `OPENAI_API_KEY` in the shell, or let the scaffold prompt for it.
+- (Optional) WorkOS credentials for `--auth on` runs: `--workos-api-key`, `--workos-client-id`, `--workos-organization-id`.
+- Whichever browser MCP/tool the harness has access to. If none is available, run with `--skip-browser` and report UI as `⏭️ Skipped (no browser tool)`.
+
+### Project layout (scaffolded for you)
+
+```
+~/mastra-builder-smoke-tests/builder-smoke/      ← $PROJECT_DIR
+├── package.json                                 ← pnpm overrides → link:<worktree>/packages/*
+├── tsconfig.json
+├── .env                                         ← OPENAI_API_KEY (+ AUTH_PROVIDER + WORKOS_* on auth-on)
+└── src/mastra/
+    ├── index.ts                                 ← single Mastra instance, reads exported bindings from auth.ts
+    ├── auth.ts                                  ← top-level switch(process.env.AUTH_PROVIDER); no-op when unset
+    ├── agents/index.ts                          ← weather-agent (gpt-4o-mini)
+    ├── tools/index.ts                           ← weather-info tool
+    └── workflows/index.ts                       ← greet-workflow
+```
+
+The `.env` is the **only** thing that flips auth on/off — the same `src/mastra/index.ts` runs in both modes. Re-run `scripts/scaffold.sh` with or without `--workos-*` to switch.
 
 ### Running scripts (cwd matters)
 
-All four scripts under `.claude/skills/builder-smoke-test/scripts/` are designed to be invoked **from the repo root** (the directory with `pnpm-workspace.yaml`). They resolve `examples/agent/` and `examples/agent/.env` relative to that root.
+All four scripts under `.claude/skills/builder-smoke-test/scripts/` resolve the worktree root from their own location. They can be invoked from anywhere, but conventionally the repo root.
 
-| Script               | Run from              | Notes                                                                             |
-| -------------------- | --------------------- | --------------------------------------------------------------------------------- |
-| `preflight.sh`       | repo root             | Will exit `not-in-mastra-repo` if `pnpm-workspace.yaml` isn't in the current cwd. |
-| `auth-detect.sh`     | repo root             | Reads `examples/agent/.env` only.                                                 |
-| `wait-for-server.sh` | repo root or anywhere | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                      |
-| `fixtures-reset.sh`  | repo root             | Touches `examples/agent/mastra.db` + reseeds. Requires the dev server stopped.    |
+| Script               | Run from              | Notes                                                                                |
+| -------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `scaffold.sh`        | anywhere              | Creates / refreshes `$PROJECT_DIR`. Forwards `--openai-key`, `--workos-*`, `--reuse`, `--dir`. |
+| `preflight.sh`       | anywhere              | Calls `scaffold.sh` then asserts the resulting `.env` matches `--expect off\|on`.    |
+| `auth-detect.sh`     | anywhere              | Reads `$PROJECT_DIR/.env` only.                                                      |
+| `wait-for-server.sh` | anywhere              | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                         |
+| `fixtures-reset.sh`  | anywhere              | Wipes `$PROJECT_DIR/mastra.db` + reseeds. Requires the dev server stopped.           |
 
-Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh` from the repo root. Don't `cd` into `scripts/` first — relative path resolution will break.
+Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh`. Don't `cd` into `scripts/` first — relative path resolution will break.
 
-`pnpm mastra:dev` must be run from `examples/agent/` (where its `package.json` is).
+`pnpm mastra:dev` must be run from `$PROJECT_DIR` (where the scaffolded `package.json` is).
 
 ### How `mastra dev` reads env (important)
 
-`mastra dev` loads `examples/agent/.env` via dotenv and **unconditionally overwrites `process.env`** with whatever's there (`packages/cli/src/commands/dev/dev.ts` ~line 384). Practical consequences:
+`mastra dev` loads `$PROJECT_DIR/.env` via dotenv and **unconditionally overwrites `process.env`** with whatever's there (`packages/cli/src/commands/dev/dev.ts` ~line 384). Practical consequences:
 
 - **`.env` is the source of truth for the running server.** Inline overrides like `AUTH_PROVIDER= pnpm mastra:dev` are silently clobbered.
-- **Shell-only vars survive only if `.env` has no entry for the same key.** A blank line like `OPENAI_API_KEY=` in `.env` will overwrite a shell-exported key with empty.
+- **Shell-only vars survive only if `.env` has no entry for the same key.** Re-running `scripts/scaffold.sh` always overwrites `.env`, so to toggle modes, re-scaffold.
 - **The auth mode the server actually runs in is determined by `.env` alone.** A globally exported `AUTH_PROVIDER=workos` in your shell does NOT enable WorkOS auth in the server if `.env` doesn't have it — but it WILL leak into anything else this process runs, which is its own kind of confusing. Preflight flags this case.
 
 ### Auth modes
 
 Two states matter:
 
-- **auth off** — `AUTH_PROVIDER` line in `examples/agent/.env` is commented out or absent. No WorkOS, no RBAC, no FGA. This is the state for Prompts 1–6.
-- **auth on** — `AUTH_PROVIDER=workos` plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` all present in `examples/agent/.env`. WorkOS authentication + role-based access + per-resource FGA all engage. This is the state for Prompt 7. FGA is wired through the WorkOS auth provider — it can't be disabled independently.
+- **auth off** — `AUTH_PROVIDER` is absent (or blank) in `$PROJECT_DIR/.env`. No WorkOS, no RBAC, no FGA. This is the state for the auth-off run.
+- **auth on** — `AUTH_PROVIDER=workos` plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_ORGANIZATION_ID` all present in `$PROJECT_DIR/.env`. WorkOS authentication + role-based access + per-resource FGA all engage. This is the state for the auth-on runs. FGA is wired through the WorkOS auth provider — it can't be disabled independently.
+
+To switch modes, re-run the scaffold with or without the `--workos-*` flags; that's faster and safer than hand-editing `.env`.
 
 ### Detection: run preflight before each section
 
 ```bash
-# Detect current state and required vars. No mode expectation:
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+# Scaffold (or refresh) the project and assert the auth-off baseline:
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off \
+  --openai-key "$OPENAI_API_KEY"
 
-# Expect a specific mode (exits non-zero on mismatch):
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on
+# Scaffold an auth-on project (re-runs scaffold with WorkOS keys, asserts auth on):
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on \
+  --openai-key "$OPENAI_API_KEY" \
+  --workos-api-key "$WORKOS_API_KEY" \
+  --workos-client-id "$WORKOS_CLIENT_ID" \
+  --workos-organization-id "$WORKOS_ORGANIZATION_ID"
 ```
 
-Preflight is **detect-only**. It checks three things (repo shape, `examples/agent/node_modules`, `OPENAI_API_KEY` reachability) and optionally compares the auth mode (delegated to `scripts/auth-detect.sh`) against `--expect off|on`. It never edits `.env`, never sources rc files, never copies values around. Each failure prints a stable error code; this table tells the agent what to do.
+Preflight chains `scaffold.sh` followed by validation checks (project exists with `node_modules/@mastra/core`, `$PROJECT_DIR/.env` has `OPENAI_API_KEY`, optional WorkOS keys present when `--expect on`, and auth mode matches `--expect`). Each failure prints a stable error code; this table tells the agent what to do.
 
-| Error code                     | What it means                                                                                        | What the agent should do                                                                                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `not-in-mastra-repo`           | Wrong cwd — no `pnpm-workspace.yaml` + `examples/agent/` at the repo root resolved from this script  | `cd` into the user's mastra worktree (the dir with `pnpm-workspace.yaml`) and re-run.                                                                                    |
-| `examples-agent-not-installed` | `examples/agent/node_modules` missing                                                                | Run `cd examples/agent && pnpm i --ignore-workspace`. Don't `pnpm i` from the repo root for this example — it uses `link:` overrides.                                    |
-| `openai-key-missing`           | Neither shell nor `.env` has `OPENAI_API_KEY`; server will crash inside `OpenAIVoice` at module load | Try the rc-sourcing fallback below first. If that doesn't surface a key, ask the user to add it to `examples/agent/.env` or dictate the value.                           |
-| `mode-mismatch`                | `--expect` value disagrees with what `auth-detect.sh` reports for `examples/agent/.env`              | Show the user the detected vs expected mode. Ask them to toggle `AUTH_PROVIDER` in `.env` (or do it for them if they say so). Restart `mastra dev` and re-run preflight. |
-| `bad-expect-value`             | `--expect` got something other than `off` or `on`                                                    | Fix the invocation.                                                                                                                                                      |
+| Error code               | What it means                                                                                       | What the agent should do                                                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not-in-mastra-repo`     | The script can't resolve a worktree from its own location (no `pnpm-workspace.yaml` upwards).       | Reinstall the skill into a Mastra worktree, or copy `.claude/skills/builder-smoke-test` somewhere under your worktree.                              |
+| `scaffold-failed`        | `scripts/scaffold.sh` returned non-zero.                                                            | Re-run scaffold with `--no-reuse` to force a fresh install. Inspect the printed `pnpm install` output for the real error.                           |
+| `project-not-installed`  | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                    | Re-run the scaffold without `--reuse`. If that still fails, delete `$PROJECT_DIR` and re-run.                                                       |
+| `openai-key-missing`     | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                 | Re-run preflight with `--openai-key <value>` or export `OPENAI_API_KEY` in the shell first.                                                         |
+| `workos-keys-missing`    | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Re-run preflight with all three `--workos-*` flags. If they're stored in the shell, pass `--workos-api-key "$WORKOS_API_KEY"` etc.                  |
+| `mode-mismatch`          | `--expect` disagrees with what `auth-detect.sh` reports for `$PROJECT_DIR/.env`.                    | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change.            |
+| `bad-expect-value`       | `--expect` got something other than `off` or `on`.                                                  | Fix the invocation.                                                                                                                                  |
 
-**Default behavior:**
-
-- **Existing `.env`** — never edit without the user's say-so. Targeted edits are allowed only when the user explicitly says "go ahead, comment that line out" or "yes, set those four vars to these values." Never write secrets into an existing `.env` without the user dictating them.
-- **Missing `.env`** — if `examples/agent/.env` doesn't exist at all, you may create it with the minimum required vars (`OPENAI_API_KEY`, plus auth vars for `--expect on`). Still ask the user to dictate the actual values; don't invent or guess them.
-
-### Sourcing the user's rc file
-
-If `OPENAI_API_KEY` is missing from `.env` but might be in the user's shell rc (very common — keys live in `~/.zshrc` for many developers), you have **standing permission** to try sourcing it once per session, no prompt needed. Two important details:
-
-1. **Use the right shell.** `execute_command` runs `bash` by default, but most macOS developers use `zsh` and their rc files have zsh-only syntax (`autoload`, `compdef`, etc.). Sourcing `~/.zshrc` from bash will spit out dozens of syntax errors and fail. Always wrap in `zsh -c`:
-
-   ```bash
-   zsh -c 'source ~/.zshrc 2>/dev/null && echo "OPENAI_API_KEY=${OPENAI_API_KEY:-(unset)}"'
-   ```
-
-2. **This only helps `OPENAI_API_KEY`.** `mastra dev` overwrites `process.env` from `.env` for any key present there — so for auth vars (`AUTH_PROVIDER`, `WORKOS_*`), sourcing the rc is useless. But `OPENAI_API_KEY` is the one var the skill allows to live in either place; if `.env` has no `OPENAI_API_KEY=` line at all, the shell value survives into the server.
-
-If sourcing surfaces the key, start `mastra dev` from the same zsh session (or `zsh -c 'cd examples/agent && pnpm mastra:dev'`) so the value reaches the server. If sourcing doesn't surface it, fall back to asking the user.
-
-When the user has fixed the issue (either themselves or via your edit), they'll tell you it's good. Restart `mastra dev` if you edited `.env` — the env file is only read at boot — then re-run preflight.
+**`.env` policy:** the scaffold **owns** `$PROJECT_DIR/.env`. Re-running scaffold overwrites it. Do not hand-edit the scaffolded `.env`; instead, re-run scaffold with different flags. (The skill never edits `.env` files outside `$PROJECT_DIR`.)
 
 ## Starting the dev server
 
 If the server is not running on `:4111`, the Setup section starts it. The convenience helpers live under `scripts/`:
 
 ```bash
-# Preflight env vars (exits non-zero if anything required is missing)
-bash .claude/skills/builder-smoke-test/scripts/preflight.sh
+# Scaffold + preflight (writes .env, installs deps, detects auth mode)
+bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
 
-# Start the server — NOTE: examples/agent has no `pnpm dev`. Use mastra:dev.
-cd examples/agent
+# Start the server from the scaffolded project
+cd ~/mastra-builder-smoke-tests/builder-smoke
 pnpm mastra:dev
 
 # Poll /api/agents until 200 (60s budget). Detects mastra dev's port-bump.
 bash .claude/skills/builder-smoke-test/scripts/wait-for-server.sh
 
-# Detect auth mode purely from examples/agent/.env (because mastra dev
+# Detect auth mode purely from $PROJECT_DIR/.env (because mastra dev
 # overwrites process.env with .env at boot, only .env matters here).
 bash .claude/skills/builder-smoke-test/scripts/auth-detect.sh
 # → prints `mode=off`, `mode=on:workos`, or `mode=ambiguous` (shell-only AUTH_PROVIDER)
@@ -327,7 +339,7 @@ Mobile renders a bottom-bar with the same primary entries.
 
 Use whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.). Don't assume a specific provider — discover what's available, then drive the same checklist in `references/ui.md`.
 
-If the browser provider configured in `examples/agent` is Stagehand/Browserbase but no `BROWSERBASE_*` keys are set, fall back to API-only and mark UI as `⏭️ Skipped (no browser provider)`.
+The scaffolded project registers `StagehandBrowser` (matching `examples/agent-builder`). If `BROWSERBASE_*` keys aren't set in the shell, Stagehand falls back to local Playwright; that's fine for smoke. If neither Stagehand nor a local browser is reachable, mark UI as `⏭️ Skipped (no browser provider)`.
 
 ## Result reporting
 
@@ -339,7 +351,7 @@ After testing, provide:
 **Date**: <date>
 **Branch**: <branch>
 **Commit**: <short sha>
-**Server**: examples/agent @ localhost:4111
+**Server**: scaffolded project @ localhost:4111 (`$PROJECT_DIR`)
 **Auth**: on / off / auto-skipped
 
 | #   | Section            | Status   | Notes                           |
@@ -370,16 +382,17 @@ After testing, provide:
 
 The branch has accumulated minor papercuts. Note these in your report only if you hit them; don't fail the run on them:
 
-- `pnpm clean` does not remove `examples/agent/mastra.db`. Use `--fixtures-reset` if you need a clean DB.
+- `--fixtures-reset` is the canonical way to wipe `$PROJECT_DIR/mastra.db`. Don't `rm` the file by hand while the server is up.
 - Dev server can crash on hot-reload from `/auth/refresh` polling. Restart and continue.
 - `OPENAI_API_KEY` is required at startup — server won't boot without it, even if you only test non-LLM surfaces.
-- `mastra dev` overwrites `process.env` from `.env` at boot, so inline env overrides on the command line don't reach the server. Edit `examples/agent/.env` instead.
+- `mastra dev` overwrites `process.env` from `.env` at boot, so inline env overrides on the command line don't reach the server. Re-run scaffold to change `.env`.
+- The scaffold links against the **current worktree's** packages via `link:` overrides. If you switch worktrees, re-run scaffold so the symlinks point at the right tree.
 
 ## Out of smoke-test scope
 
 Some flows are documented in `references/` but are not driven by the smoke-test agent because they require server-lifecycle gymnastics that don't fit a single run:
 
-- **Reconciliation steps 2/3/4/6** (`references/reconciliation.md`) require editing `examples/agent/src/mastra/index.ts` (changing `basePath` / `workspaceId` / config), restarting `mastra dev` multiple times, and observing drift detection or orphan archival across restarts. The smoke-test agent runs only **Step 1** (fresh-startup persistence) and **Step 5** (non-builder workspaces untouched). Run the rest by hand when changing reconciliation code.
+- **Reconciliation steps 2/3/4/6** (`references/reconciliation.md`) require editing `$PROJECT_DIR/src/mastra/index.ts` (changing `basePath` / `workspaceId` / config), restarting `mastra dev` multiple times, and observing drift detection or orphan archival across restarts. The smoke-test agent runs only **Step 1** (fresh-startup persistence) and **Step 5** (non-builder workspaces untouched). Run the rest by hand when changing reconciliation code.
 - **Real role-swap testing** (logging in as multiple WorkOS users with different roles in the same run) is out of scope. The agent verifies whichever role the live `--role` user actually has, and additionally exercises the **UI-only role impersonation** flow under `--role admin` (see `references/ui.md`).
 
 ## References
@@ -399,7 +412,8 @@ Some flows are documented in `references/` but are not driven by the smoke-test 
 - `references/channels.md` — Slack provider visibility, connectChannel tool
 - `references/ui.md` — browser checklist across Builder routes
 - `references/auth.md` — WorkOS on/off, 401 behavior, authorId, mode-toggle via `.env`
-- `scripts/preflight.sh` — env detection + mode expectation (`--expect off|on`)
+- `scripts/scaffold.sh` — scaffold or refresh the hermetic project at `$PROJECT_DIR`
+- `scripts/preflight.sh` — wraps `scaffold.sh` + mode expectation (`--expect off|on`)
 - `scripts/wait-for-server.sh` — poll `:4111` until healthy
 - `scripts/auth-detect.sh` — detect auth mode from `.env`
-- `scripts/fixtures-reset.sh` — wipe + reseed `examples/agent/mastra.db`
+- `scripts/fixtures-reset.sh` — wipe + reseed `$PROJECT_DIR/mastra.db`

@@ -1,0 +1,123 @@
+import { Mastra } from '@mastra/core/mastra';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { MastraEditor } from '@mastra/editor';
+import { builderAgent } from '@mastra/editor/ee';
+import { LibSQLStore } from '@mastra/libsql';
+import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { SlackProvider } from '@mastra/slack';
+import { StagehandBrowser } from '@mastra/stagehand';
+
+import { mastraAuth, rbacProvider } from './auth';
+import { weatherAgent } from './agents';
+import { weatherInfo } from './tools';
+import { greetWorkflow } from './workflows';
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+});
+
+const builderWorkspace = new Workspace({
+  id: 'builder-workspace',
+  name: 'Builder Workspace',
+  filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
+});
+
+export const mastra = new Mastra({
+  storage,
+  workspace: builderWorkspace,
+  agents: {
+    builderAgent,
+    weatherAgent,
+  },
+  tools: {
+    weatherInfo,
+  },
+  workflows: {
+    greetWorkflow,
+  },
+  bundler: {
+    sourcemap: true,
+  },
+  channels: {
+    slack: new SlackProvider({
+      baseUrl: process.env.MASTRA_BASE_URL,
+    }),
+  },
+  server: {
+    auth: mastraAuth,
+    rbac: rbacProvider,
+    build: {
+      swaggerUI: true,
+    },
+  },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'builder-smoke',
+        exporters: [new DefaultExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  }),
+  editor: new MastraEditor({
+    browsers: {
+      stagehand: {
+        id: 'stagehand',
+        name: 'Stagehand Browser',
+        createBrowser: config =>
+          new StagehandBrowser({
+            ...config,
+            apiKey: process.env.BROWSERBASE_API_KEY ?? '',
+            env: 'BROWSERBASE',
+            projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
+          }),
+      },
+    },
+    builder: {
+      enabled: true,
+      features: {
+        agent: {
+          tools: true,
+          agents: true,
+          workflows: true,
+          stars: true,
+          skills: true,
+          model: true,
+          browser: true,
+          avatarUpload: true,
+        },
+        skill: {
+          stars: true,
+        },
+      },
+      configuration: {
+        agent: {
+          workspace: { type: 'id', workspaceId: 'builder-workspace' },
+          memory: {
+            observationalMemory: true,
+            options: {
+              lastMessages: 10,
+            },
+          },
+          browser: {
+            type: 'inline',
+            config: {
+              provider: 'stagehand',
+            },
+          },
+          models: {
+            allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
+            default: {
+              provider: 'openai',
+              modelId: 'gpt-4o-mini',
+            },
+          },
+          tools: { allowed: ['weather-info'] },
+          agents: { allowed: ['weather-agent'] },
+          workflows: { allowed: ['greet-workflow'] },
+        },
+      },
+    },
+  }),
+});
