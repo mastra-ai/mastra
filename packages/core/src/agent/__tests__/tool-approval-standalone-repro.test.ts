@@ -571,4 +571,34 @@ describe('tool approval with ToolSearchProcessor', () => {
       },
     });
   }, 30000);
+
+  it('executes a dynamically loaded tool from a processor workflow wrapped with createStep after approval resume', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_wrapped_workflow_approval_tool',
+      agentId: 'wrapped-workflow-tool-search-approval-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => {
+        const toolSearchProcessor = new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        });
+        const innerProcessorWorkflow = createWorkflow({
+          id: 'inner-tool-search-approval-processor-workflow',
+          inputSchema: ProcessorStepInputSchema,
+          outputSchema: ProcessorStepOutputSchema,
+        })
+          .then(createStep(toolSearchProcessor))
+          .commit();
+        const parentProcessorWorkflow = createWorkflow({
+          id: 'parent-tool-search-approval-processor-workflow',
+          inputSchema: ProcessorStepInputSchema,
+          outputSchema: ProcessorStepOutputSchema,
+        })
+          .then(createStep(innerProcessorWorkflow as any))
+          .commit();
+
+        return [parentProcessorWorkflow];
+      },
+    });
+  }, 30000);
 });
