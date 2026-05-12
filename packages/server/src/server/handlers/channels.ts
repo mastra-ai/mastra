@@ -1,3 +1,4 @@
+import type { RequestContext } from '@mastra/core/di';
 import { coreFeatures } from '@mastra/core/features';
 
 import { HTTPException } from '../http-exception';
@@ -12,6 +13,7 @@ import {
 } from '../schemas/channels';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { assertWriteAccess } from './authorship';
 import { handleError } from './error';
 
 // ============================================================================
@@ -45,6 +47,38 @@ function assertAgentExists(mastra: any, agentId: string) {
       message: `Agent "${agentId}" not found`,
     });
   }
+}
+
+/**
+ * Attaching/detaching a channel bot is a write to the agent: it changes how
+ * that agent receives traffic and which external bot represents it. Gate it
+ * with the same ownership rules as editing the stored agent record.
+ *
+ * If the agent isn't in the stored-agents store (code-defined agent), there
+ * is no per-agent ownership metadata to enforce — the route's `requiresAuth`
+ * remains the effective gate.
+ */
+async function assertChannelAgentWriteAccess(
+  mastra: any,
+  requestContext: RequestContext,
+  agentId: string,
+): Promise<void> {
+  const storage = mastra.getStorage?.();
+  if (!storage) return;
+
+  const agentsStore = await storage.getStore('agents');
+  if (!agentsStore?.getById) return;
+
+  const stored = await agentsStore.getById(agentId);
+  if (!stored) return;
+
+  assertWriteAccess({
+    requestContext,
+    resource: 'agents',
+    resourceId: agentId,
+    action: 'edit',
+    record: stored,
+  });
 }
 
 // ============================================================================
@@ -126,7 +160,7 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
   description: 'Creates a platform app for the agent and returns an OAuth authorization URL',
   tags: ['Channels'],
   requiresAuth: true,
-  handler: async ({ mastra, platform, agentId, options }) => {
+  handler: async ({ mastra, requestContext, platform, agentId, options }) => {
     assertChannelsAvailable();
     try {
       const channel = getChannelOrThrow(mastra, platform);
@@ -136,6 +170,8 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
           message: `Channel "${platform}" does not support programmatic connection`,
         });
       }
+
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId);
 
       return await channel.connect(agentId, options);
     } catch (error) {
@@ -157,7 +193,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   description: 'Deletes the platform app and cleans up the installation',
   tags: ['Channels'],
   requiresAuth: true,
-  handler: async ({ mastra, platform, agentId }) => {
+  handler: async ({ mastra, requestContext, platform, agentId }) => {
     assertChannelsAvailable();
     try {
       assertAgentExists(mastra, agentId);
@@ -168,6 +204,8 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
           message: `Channel "${platform}" does not support programmatic disconnection`,
         });
       }
+
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId);
 
       await channel.disconnect(agentId);
       return { success: true };
