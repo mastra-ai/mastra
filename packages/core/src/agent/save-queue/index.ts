@@ -9,6 +9,7 @@ export class SaveQueueManager {
   private memory?: MastraMemory;
 
   private static MAX_STALENESS_MS = 1000;
+  private static MAX_TOOL_STATE_METADATA_ENTRIES = 1000;
 
   constructor({ logger, debounceMs, memory }: { logger?: IMastraLogger; debounceMs?: number; memory?: MastraMemory }) {
     this.logger = logger;
@@ -18,6 +19,36 @@ export class SaveQueueManager {
   private saveQueues = new Map<string, Promise<void>>();
   private saveDebounceTimers = new Map<string, NodeJS.Timeout>();
   private toolStateMetadata = new Map<string, Record<string, Record<string, unknown>>>();
+
+  private getToolStateMetadataKey(threadId: string, messageId: string) {
+    return `${threadId}:${messageId}`;
+  }
+
+  private getToolStateMetadata(threadId: string, messageId: string) {
+    const key = this.getToolStateMetadataKey(threadId, messageId);
+    const value = this.toolStateMetadata.get(key);
+    if (value) {
+      this.toolStateMetadata.delete(key);
+      this.toolStateMetadata.set(key, value);
+    }
+    return value;
+  }
+
+  private setToolStateMetadata(threadId: string, messageId: string, metadata: Record<string, Record<string, unknown>>) {
+    const key = this.getToolStateMetadataKey(threadId, messageId);
+    this.toolStateMetadata.delete(key);
+    this.toolStateMetadata.set(key, metadata);
+
+    while (this.toolStateMetadata.size > SaveQueueManager.MAX_TOOL_STATE_METADATA_ENTRIES) {
+      const oldestKey = this.toolStateMetadata.keys().next().value;
+      if (!oldestKey) break;
+      this.toolStateMetadata.delete(oldestKey);
+    }
+  }
+
+  private removeToolStateMetadata(threadId: string, messageId: string) {
+    this.toolStateMetadata.delete(this.getToolStateMetadataKey(threadId, messageId));
+  }
 
   /**
    * Debounces save operations for a thread, ensuring that consecutive save requests
@@ -149,8 +180,7 @@ export class SaveQueueManager {
 
     return messages.map(message => {
       const existing = existingById.get(message.id);
-      const toolStateMetadataKey = `${threadId}:${message.id}`;
-      const accumulatedMetadata = this.toolStateMetadata.get(toolStateMetadataKey);
+      const accumulatedMetadata = this.getToolStateMetadata(threadId, message.id);
       const existingMetadata = existing?.content.metadata;
       const incomingMetadata = message.content.metadata;
 
@@ -181,14 +211,16 @@ export class SaveQueueManager {
         }
       }
 
-      this.toolStateMetadata.set(
-        toolStateMetadataKey,
-        Object.fromEntries(
-          toolStateKeys
-            .filter(key => mergedMetadata[key] && typeof mergedMetadata[key] === 'object')
-            .map(key => [key, mergedMetadata[key] as Record<string, unknown>]),
-        ),
+      const nextToolStateMetadata = Object.fromEntries(
+        toolStateKeys
+          .filter(key => mergedMetadata[key] && typeof mergedMetadata[key] === 'object')
+          .map(key => [key, mergedMetadata[key] as Record<string, unknown>]),
       );
+      if (Object.keys(nextToolStateMetadata).length > 0) {
+        this.setToolStateMetadata(threadId, message.id, nextToolStateMetadata);
+      } else {
+        this.removeToolStateMetadata(threadId, message.id);
+      }
 
       return {
         ...message,

@@ -67,6 +67,22 @@ describe('SaveQueueManager', () => {
     expect(saveCalls).toBe(0);
   });
 
+  it('bounds accumulated tool state metadata', () => {
+    const maxEntries = SaveQueueManager['MAX_TOOL_STATE_METADATA_ENTRIES'];
+
+    for (let i = 0; i <= maxEntries; i++) {
+      manager['setToolStateMetadata']('thread-1', `m${i}`, {
+        suspendedTools: {
+          [`call-${i}`]: { toolCallId: `call-${i}` },
+        },
+      });
+    }
+
+    expect(manager['toolStateMetadata'].size).toBe(maxEntries);
+    expect(manager['getToolStateMetadata']('thread-1', 'm0')).toBeUndefined();
+    expect(manager['getToolStateMetadata']('thread-1', `m${maxEntries}`)).toBeDefined();
+  });
+
   it('should serialize saves with a save queue under rapid step completion', async () => {
     let concurrent = 0;
     let maxConcurrent = 0;

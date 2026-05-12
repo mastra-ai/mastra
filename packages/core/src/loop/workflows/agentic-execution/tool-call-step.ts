@@ -259,6 +259,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
                 {} as Record<string, any>,
               );
+            if (metadata && suspendedTools) {
+              metadata[metadataKey] = suspendedTools;
+            }
           }
 
           if (suspendedTools && typeof suspendedTools === 'object') {
