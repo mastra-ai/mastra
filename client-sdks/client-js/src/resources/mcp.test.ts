@@ -219,6 +219,8 @@ describe('MCP Server Registry Client Methods', () => {
       const [, init] = (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
       expect(init.method).toBe('POST');
       expect(init.body).toBe('{}');
+      const headers = new Headers(init.headers);
+      expect(headers.get('content-type')).toContain('application/json');
     });
   });
 });
