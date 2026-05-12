@@ -239,41 +239,19 @@ export class LibSQLStore extends MastraCompositeStore {
     }
   }
 
-  private getDomainsToInit(): LibSQLStorageDomain[] {
-    return [
-      'memory',
-      'workflows',
-      'scores',
-      'observability',
-      'agents',
-      'datasets',
-      'experiments',
-      'promptBlocks',
-      'scorerDefinitions',
-      'mcpClients',
-      'mcpServers',
-      'workspaces',
-      'skills',
-      'blobs',
-      'backgroundTasks',
-      'schedules',
-      'channels',
-    ];
+  private getStoresToInit() {
+    return Object.values(this.stores).filter(Boolean);
   }
 
   private async initDomainsSequentially(): Promise<boolean> {
-    for (const domain of this.getDomainsToInit()) {
-      await this.stores[domain]?.init();
+    for (const store of this.getStoresToInit()) {
+      await store.init();
     }
     return true;
   }
 
   private async initDomainsInParallel(): Promise<boolean> {
-    await Promise.all(
-      this.getDomainsToInit()
-        .map(domain => this.stores[domain]?.init())
-        .filter(Boolean),
-    );
+    await Promise.all(this.getStoresToInit().map(store => store.init()));
     return true;
   }
 
