@@ -46,9 +46,22 @@ To pin the deploy to a specific env file (instead of relying on the default sele
 mastra studio deploy --env-file .env.production --yes
 ```
 
+### Observability
+
+The following environment variables configure the Observability product on the Mastra platform.
+
+| Variable | Description |
+| - | - |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Org-scoped access token. The CLI writes this during observability provisioning and uses it for platform authentication. |
+| `MASTRA_PROJECT_ID` | UUID of the platform project. `MastraPlatformExporter`, `mastra studio deploy`, and `mastra server deploy` use it to link observability data and deploys to an existing platform project. |
+| `MASTRA_PLATFORM_TRACES_ENDPOINT` | Optional traces endpoint override. This is only set automatically for local platform development. Defaults to `https://observability.mastra.ai`. |
+| `MASTRA_ORG_ID` | Overrides the active organization for CLI commands. You can also set it with the `--org` flag on supported commands. |
+
+`MastraPlatformExporter` currently reads `MASTRA_CLOUD_ACCESS_TOKEN` to activate platform export. The CLI provisioning flow writes this alongside `MASTRA_PLATFORM_ACCESS_TOKEN`.
+
 ## Multiple environments
 
-A platform project maps to a single deployed instance with one set of env vars. There is no built-in concept of `staging` vs `production` slots within a project. To run the same codebase across multiple environments, create one project per environment and override `.mastra-project.json` per deploy.
+A platform project maps to a single deployed instance with one set of env vars. Platform projects don't have built-in `staging` vs `production` slots. To run the same codebase across multiple environments, create one project per environment and override `.mastra-project.json` per deploy.
 
 ```bash
 # Create-and-deploy each environment (first time only)
@@ -60,4 +73,4 @@ MASTRA_PROJECT_ID="<staging-id>" mastra studio deploy --env-file .env.staging --
 MASTRA_PROJECT_ID="<production-id>" mastra studio deploy --env-file .env.production --yes
 ```
 
-Each project has its own Studio URL and its own observability data. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_CLOUD_ACCESS_TOKEN` per environment so traces route to the matching Studio project.
+Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_CLOUD_ACCESS_TOKEN` per environment so traces route to the matching platform project.
