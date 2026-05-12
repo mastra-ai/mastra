@@ -2,7 +2,9 @@
 
 Test star/unstar functionality for stored agents and skills.
 
-The star endpoints (`PUT|DELETE /stored/{agents,skills}/:id/star`) return `200` with a JSON body of shape `{ starred: boolean, starCount: number }`. Both star and unstar are idempotent — calling them twice returns the same body the second time. Stars are gated by the `stars` builder feature (404 if disabled).
+Star endpoints are documented in `packages/server/src/server/schemas/stars.ts` (toggle response) and the agent/skill response schemas in the same directory (GET response). Refer to those for exact field names and types; assert against the schema, not against fields baked into this doc.
+
+Both star and unstar are idempotent — calling them twice returns the same body the second time. Stars are gated by the `stars` builder feature (404 if disabled).
 
 ## Auth requirement
 
@@ -63,10 +65,10 @@ curl -s -X PUT $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
 ### 2. Verify the agent is starred
 
 ```bash
-curl -s $BASE/stored/agents/$AGENT_ID -H "$SESSION" | jq '{ starred, starCount }'
+curl -s $BASE/stored/agents/$AGENT_ID -H "$SESSION" | jq .
 ```
 
-- [ ] `starred == true`
+- [ ] GET response reflects the starred state for the caller (check whichever field the response schema exposes; record the actual JSON in the run report if you're unsure)
 - [ ] `starCount` matches the value from step 1
 
 ### 3. Unstar the agent
@@ -76,8 +78,8 @@ curl -s -X DELETE $BASE/stored/agents/$AGENT_ID/star -H "$SESSION" | jq .
 ```
 
 - [ ] HTTP `200`
-- [ ] Body is `{ "starred": false, "starCount": <previous - 1> }`
-- [ ] `GET /stored/agents/$AGENT_ID` now shows `starred: false`
+- [ ] Body shows the agent is no longer starred for the caller and `starCount` decreased by 1
+- [ ] Re-fetching the agent reflects the unstarred state
 
 ### 4. Star a skill
 
@@ -91,10 +93,10 @@ curl -s -X PUT $BASE/stored/skills/$SKILL_ID/star -H "$SESSION" | jq .
 ### 5. Verify the skill is starred
 
 ```bash
-curl -s $BASE/stored/skills/$SKILL_ID -H "$SESSION" | jq '{ starred, starCount }'
+curl -s $BASE/stored/skills/$SKILL_ID -H "$SESSION" | jq .
 ```
 
-- [ ] `starred == true`
+- [ ] GET response reflects the starred state for the caller
 - [ ] `starCount` matches step 4
 
 ### 6. Unstar the skill

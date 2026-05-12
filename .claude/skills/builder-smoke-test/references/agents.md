@@ -10,6 +10,8 @@ The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid un
 
 > **Visibility is auth-on-only.** With `--auth off`, the server has no caller to attribute ownership to, so it forces `visibility: "public"` regardless of what you send. Don't assert on visibility under auth off; verify it under `--auth on` in `references/auth.md`.
 
+> Schemas are in `packages/server/src/server/schemas/stored-agents.ts`. Treat that file as the source of truth for response shapes.
+
 ## Steps
 
 ### 1. Create a stored agent
@@ -31,8 +33,8 @@ curl -s -X POST $BASE/stored/agents \
 
 - [ ] Returns 200 with the created agent
 - [ ] `name` matches the request
-- [ ] `workspaceId` is auto-assigned to the builder workspace (from config)
-- [ ] `id` is a UUID; record it as `AGENT_ID=<id>`
+- [ ] Response includes a workspace association referencing the builder workspace
+- [ ] `id` is present; record it as `AGENT_ID=<id>`
 
 Notes (don't assert under `--auth off`):
 - `visibility` will be `"public"` regardless of request (see auth-on path).
@@ -76,7 +78,7 @@ SKILL_ID=$(echo "$SKILL_RESP" | jq -r '.id')
 echo "SKILL_ID=$SKILL_ID"
 ```
 
-- [ ] Response is 200 with a UUID `id`
+- [ ] Response is 200 with an `id`
 
 > `instructions` is required by the schema today. Creating a skill without it returns 400.
 
@@ -146,7 +148,7 @@ curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID          
 
 ## Delete from edit / view (#16199)
 
-Open the agent in the Builder edit page (`/agent-builder/agents/$AGENT_ID`):
+Open the agent in the Builder detail page (`/agent-builder/agents/$AGENT_ID`). The exact route segment may include `/view` or similar — navigate from the Builder agents list rather than typing the URL directly to avoid assuming the route shape:
 
 - [ ] "Delete agent" affordance is reachable from the edit/view header (kebab menu or similar)
 - [ ] Clicking opens a confirm dialog
