@@ -45,7 +45,12 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
 
   return (
     <ThreadWrapper>
-      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+      <ThreadPrimitive.Viewport
+        ref={areaRef}
+        autoScroll={false}
+        className="overflow-y-scroll h-full"
+        style={{ overflowAnchor: 'none' }}
+      >
         <ThreadWelcome agentName={agentName} />
 
         <div
