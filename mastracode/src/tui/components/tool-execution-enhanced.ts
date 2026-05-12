@@ -17,7 +17,6 @@ import {
   getCellDimensions,
 } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
-import { InlineImageComponent } from './images/index.js';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
@@ -25,6 +24,7 @@ import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
+import { InlineImageComponent } from './images/index.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
 

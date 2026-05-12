@@ -18,6 +18,7 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
+import { imageManager } from './components/images/index.js';
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
@@ -33,7 +34,6 @@ import type { UserMessageComponent } from './components/user-message.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
-import { imageManager } from './components/images/index.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================

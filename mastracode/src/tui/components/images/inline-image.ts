@@ -37,7 +37,8 @@
 import { visibleWidth } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import { theme } from '../../theme.js';
-import { imageManager, type ImageOwner } from './image-manager.js';
+import { imageManager } from './image-manager.js';
+import type { ImageOwner } from './image-manager.js';
 
 export interface InlineImageArgs {
   /** Total terminal rows this component reserves. Stable across frames. */
