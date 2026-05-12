@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { setInternalToolExecutionHints } from '../../../tools/internal-execution-hints';
 import {
   effectiveToolCallsRequireSequentialExecution,
   effectiveToolSetRequiresSequentialExecution,
   resolveConfiguredToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './tool-call-concurrency';
-import { setInternalToolExecutionHints } from '../../../tools/internal-execution-hints';
 
 describe('tool call concurrency resolution', () => {
   const safeTool = {};
