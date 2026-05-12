@@ -46,6 +46,7 @@ interface GatewayOMRecord {
   bufferedReflection?: string | null;
   bufferedReflectionTokens?: number | null;
   bufferedReflectionInputTokens?: number | null;
+  bufferedReflectionExtracted?: Record<string, unknown> | null;
 }
 
 export class GatewayMemoryClient {
@@ -265,6 +266,7 @@ export function toLocalOMRecord(gr: GatewayOMRecord) {
     bufferedReflection: gr.bufferedReflection ?? undefined,
     bufferedReflectionTokens: gr.bufferedReflectionTokens ?? undefined,
     bufferedReflectionInputTokens: gr.bufferedReflectionInputTokens ?? undefined,
+    bufferedReflectionExtracted: gr.bufferedReflectionExtracted ?? undefined,
   };
 }
 

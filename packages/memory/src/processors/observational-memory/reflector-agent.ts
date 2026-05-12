@@ -1,4 +1,6 @@
 import { stripEphemeralAnchorIds } from './anchor-ids';
+import type { Extractor } from './extractor';
+import { buildExtractorOutputSections, parseExtractedValues, stripExtractorSections } from './extractor';
 import { reconcileObservationGroupsFromReflection, stripObservationGroups } from './observation-groups';
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
@@ -16,6 +18,8 @@ import type { ReflectorResult as BaseReflectorResult } from './types';
 export interface ReflectorResult extends BaseReflectorResult {
   /** Token count of output (for compression validation) */
   tokenCount?: number;
+  /** User-defined extracted values keyed by extractor slug. */
+  extractedValues?: Record<string, unknown>;
 }
 
 /**
@@ -30,7 +34,11 @@ export interface ReflectorResult extends BaseReflectorResult {
  *
  * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildReflectorSystemPrompt(instruction?: string): string {
+export function buildReflectorSystemPrompt(
+  instruction?: string,
+  extractors: ReadonlyArray<Extractor<any>> = [],
+): string {
+  const extractorSectionsSpec = buildExtractorOutputSections(extractors);
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -123,7 +131,7 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>
+</suggested-response>${extractorSectionsSpec}
 
 User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
 }
@@ -238,6 +246,7 @@ export function buildReflectorPrompt(
   manualPrompt?: string,
   compressionLevel?: boolean | CompressionLevel,
   skipContinuationHints?: boolean,
+  extractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
   const level: CompressionLevel = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
@@ -267,7 +276,11 @@ ${guidance}`;
   }
 
   if (skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
+    const extraSections = extractors.map(extractor => `<${extractor.slug}>`);
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${extraSections.length > 0 ? ` and ${extraSections.join(', ')}` : ''}.`;
+  } else if (extractors.length > 0) {
+    const extraSections = extractors.map(extractor => `<${extractor.slug}>`).join(', ');
+    prompt += `\n\nIn addition to <observations>, <current-task>, and <suggested-response>, also output the following XML section(s) per the format spec in your instructions: ${extraSections}.`;
   }
 
   return prompt;
@@ -277,7 +290,12 @@ ${guidance}`;
  * Parse the Reflector's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseReflectorOutput(output: string, sourceObservations?: string): ReflectorResult {
+export function parseReflectorOutput(
+  output: string,
+  sourceObservations?: string,
+  extractors: ReadonlyArray<Extractor<any>> = [],
+  onParseError?: (extractor: Extractor<any>, error: unknown, rawValue: string) => void,
+): ReflectorResult {
   // Check for degenerate repetition before parsing
   if (detectDegenerateRepetition(output)) {
     return {
@@ -287,7 +305,15 @@ export function parseReflectorOutput(output: string, sourceObservations?: string
   }
 
   const parsed = parseReflectorSectionXml(output);
-  const sanitizedObservations = sanitizeObservationLines(stripEphemeralAnchorIds(parsed.observations || ''));
+  const extractedValues =
+    extractors.length > 0
+      ? parseExtractedValues(output, extractors, {
+          onParseError: error => onParseError?.(error.extractor, error.error, error.rawValue),
+        })
+      : undefined;
+  const observationsWithoutExtractorSections =
+    extractors.length > 0 ? stripExtractorSections(parsed.observations || '', extractors) : parsed.observations || '';
+  const sanitizedObservations = sanitizeObservationLines(stripEphemeralAnchorIds(observationsWithoutExtractorSections));
   const reconciledObservations = sourceObservations
     ? reconcileObservationGroupsFromReflection(sanitizedObservations, sourceObservations)
     : null;
@@ -295,6 +321,7 @@ export function parseReflectorOutput(output: string, sourceObservations?: string
   return {
     observations: reconciledObservations ?? sanitizedObservations,
     suggestedContinuation: parsed.suggestedResponse || undefined,
+    extractedValues: extractedValues && Object.keys(extractedValues).length > 0 ? extractedValues : undefined,
     // Note: Reflector's currentTask is not used - thread metadata preserves per-thread tasks
   };
 }

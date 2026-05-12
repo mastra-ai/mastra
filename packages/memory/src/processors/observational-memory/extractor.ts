@@ -1,4 +1,3 @@
-import type { Agent } from '@mastra/core/agent';
 import { z } from 'zod';
 
 /**
@@ -16,7 +15,7 @@ export type ExtractorInjectionBehaviour = 'carry-forward' | 'none';
 
 /**
  * Context passed to an extractor's `onExtracted` lifecycle hook every time
- * the observer emits a value for it.
+ * the Observer or Reflector emits a value for it.
  *
  * @experimental
  */
@@ -35,21 +34,6 @@ export interface ExtractorOnExtractedContext<T> {
 
   /** The resource ID, when this thread belongs to one. */
   resourceId?: string;
-
-  /**
-   * The agent whose run triggered this observation cycle, when available.
-   *
-   * Use this to send signals back into the main agent's stream, e.g.
-   * `mainAgent.sendSignal({ type: 'system-reminder', contents: '…' }, { threadId })`.
-   *
-   * Note: `mainAgent` is best-effort — in some execution paths (e.g. running
-   * the OM engine directly outside of an agent loop) it will be `undefined`.
-   * Capture your agent in a closure if you need a guaranteed reference.
-   */
-  mainAgent?: Agent;
-
-  /** The runId of the agent execution that triggered this OM cycle, when available. */
-  runId?: string;
 }
 
 /**
@@ -63,7 +47,7 @@ export interface ExtractorConfig<T = string> {
    *
    * The name is slugified to produce the XML tag the observer emits
    * (e.g. `"Follows Policy"` → `<follows-policy>`). Names must be unique
-   * within a single `observer.extract` (or `reflector.extract`) array.
+   * within a single `observation.extract` (or `reflection.extract`) array.
    */
   name: string;
 
@@ -77,10 +61,8 @@ export interface ExtractorConfig<T = string> {
   /**
    * Zod schema describing the shape of the extracted value.
    *
-   * Only string schemas are supported in this initial release — the value
-   * is captured as the textual content of the extractor's XML tag. Object
-   * schemas are reserved for a future "promote to a separate LLM call"
-   * mode.
+   * String schemas parse the raw trimmed XML tag text. Non-string schemas
+   * parse the XML tag body as JSON and then validate that parsed value.
    *
    * @default z.string()
    */
@@ -95,21 +77,19 @@ export interface ExtractorConfig<T = string> {
   injectionBehaviour?: ExtractorInjectionBehaviour;
 
   /**
-   * Lifecycle hook invoked whenever the observer produces a new value for
-   * this extractor. Use this to drive side effects — for example, calling
-   * `mainAgent.sendSignal(...)` to inject a runtime signal back into the
-   * main agent based on what was observed.
+   * Lifecycle hook invoked whenever the Observer or Reflector produces a new
+   * value for this extractor. Use this to drive thread-scoped side effects.
    *
    * Errors thrown from this callback are caught and logged — they do not
-   * fail the observation cycle.
+   * fail the observation or reflection cycle.
    */
   onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => void | Promise<void>;
 }
 
 /**
  * Built-in extractor slugs used by ObservationalMemory's default extraction
- * pipeline. These slugs are reserved — custom extractors should not collide
- * with them.
+ * pipeline. These slugs are reserved — user-defined extractors should not
+ * collide with them.
  *
  * @internal
  */
@@ -177,30 +157,24 @@ const DEFAULT_SUGGESTED_RESPONSE_INSTRUCTIONS = [
  * Declarative configuration for a single piece of information you want the
  * Observer (or Reflector) to extract from the recent conversation history.
  *
- * Extractors are emitted by the Observer as XML-tagged sections inside its
- * structured output. Each extractor's value is parsed back out, optionally
- * carried forward into the next observer call as a "prior" hint, and
- * surfaced to a lifecycle hook (`onExtracted`) where you can react — for
- * example, by calling `mainAgent.sendSignal(...)` to push a runtime signal
- * back into the main agent.
+ * Extractors are emitted by the Observer or Reflector as XML-tagged sections
+ * inside structured output. Each extractor's value is parsed back out,
+ * optionally carried forward into the next model call as a "prior" hint, and
+ * surfaced to a thread-scoped lifecycle hook (`onExtracted`) where you can
+ * react to the typed value.
  *
- * @example Custom extractor that signals the main agent on policy violations
+ * @example User-defined extractor with a Zod schema
  * ```ts
  * import { Extractor } from '@mastra/memory/processors';
  * import { z } from 'zod';
  *
  * new Extractor({
- *   name: 'follows-policy',
- *   instructions: 'Output "ok" or describe the policy violation.',
- *   schema: z.string(),
+ *   name: 'user-priority',
+ *   instructions: 'Output JSON like {"priority":"high","reason":"..."}.',
+ *   schema: z.object({ priority: z.enum(['low', 'medium', 'high']), reason: z.string() }),
  *   injectionBehaviour: 'carry-forward',
- *   onExtracted: ({ mainAgent, extracted, threadId }) => {
- *     if (mainAgent && extracted && extracted !== 'ok') {
- *       mainAgent.sendSignal(
- *         { type: 'system-reminder', contents: `POLICY: ${extracted}` },
- *         { threadId, ifIdle: { behavior: 'discard' } },
- *       );
- *     }
+ *   onExtracted: ({ extracted, threadId }) => {
+ *     console.log(threadId, extracted.priority);
  *   },
  * });
  * ```
@@ -316,7 +290,7 @@ export class Extractor<T = string> {
 }
 
 /**
- * XML tags reserved by the observer/reflector pipeline itself. Custom
+ * XML tags reserved by the observer/reflector pipeline itself. User-defined
  * extractor names must not slugify to any of these.
  *
  * @internal
@@ -330,8 +304,8 @@ const RESERVED_XML_TAGS = new Set<string>(['observations', 'thread', ...Object.v
  * @internal
  */
 export function validateExtractorList(
-  extractors: ReadonlyArray<Extractor<unknown>>,
-  context: 'observer.extract' | 'reflector.extract',
+  extractors: ReadonlyArray<Extractor<any>>,
+  context: 'observation.extract' | 'reflection.extract' | 'observer.extract' | 'reflector.extract',
 ): void {
   const seen = new Map<string, string>();
   for (const extractor of extractors) {
@@ -355,25 +329,28 @@ export function validateExtractorList(
 }
 
 /**
- * Build the XML section instructions appended to the observer's output
- * format spec for each non-built-in extractor.
+ * Build the XML section instructions appended to the Observer/Reflector output
+ * format spec for each user-defined extractor.
  *
  * @internal
  */
-export function buildCustomExtractorOutputSections(extractors: ReadonlyArray<Extractor<unknown>>): string {
+export function buildExtractorOutputSections(extractors: ReadonlyArray<Extractor<any>>): string {
   if (extractors.length === 0) {
     return '';
   }
   const sections: string[] = [];
   for (const extractor of extractors) {
-    sections.push(`<${extractor.slug}>\n${extractor.instructions.trim()}\n</${extractor.slug}>`);
+    const schemaInstruction = isStringSchema(extractor.schema)
+      ? ''
+      : '\nOutput valid JSON that matches this extractor schema.';
+    sections.push(`<${extractor.slug}>\n${extractor.instructions.trim()}${schemaInstruction}\n</${extractor.slug}>`);
   }
   return `\n\n${sections.join('\n\n')}`;
 }
 
 /**
  * Stringify an extracted value for use as a "prior" hint in the next
- * observer call. Falls back to JSON for non-string values.
+ * Observer/Reflector call. Falls back to JSON for non-string values.
  *
  * @internal
  */
@@ -395,8 +372,8 @@ function stringifyExtractedValue(value: unknown): string {
  *
  * @internal
  */
-export function buildCustomExtractorPriorLines(
-  extractors: ReadonlyArray<Extractor<unknown>>,
+export function buildExtractorPriorLines(
+  extractors: ReadonlyArray<Extractor<any>>,
   priorValues: Readonly<Record<string, unknown>> | undefined,
 ): string[] {
   if (!priorValues || extractors.length === 0) {
@@ -421,19 +398,41 @@ function escapeSlugForRegex(slug: string): string {
 }
 
 /**
- * Parse custom-extractor XML sections from a body of observer/thread
- * output text. Returns a map of `slug -> trimmed string content` for
- * every extractor whose tag was found. Tags must appear at the start of
+ * Parse extractor XML sections from a body of Observer/Reflector output text.
+ * Returns a map of `slug -> schema-parsed value` for every extractor whose
+ * tag was found. Tags must appear at the start of
  * a line (after optional whitespace) to mirror the parsing convention
  * used for built-in observer sections.
  *
  * @internal
  */
-export function parseCustomExtractorValues(
+export interface ExtractedValueParseError {
+  extractor: Extractor<any>;
+  rawValue: string;
+  error: unknown;
+}
+
+export interface ParseExtractedValuesOptions {
+  onParseError?: (error: ExtractedValueParseError) => void;
+}
+
+function isStringSchema(schema: z.ZodType<unknown>): boolean {
+  return schema instanceof z.ZodString;
+}
+
+function parseExtractedValue(extractor: Extractor<any>, rawValue: string): unknown {
+  if (isStringSchema(extractor.schema)) {
+    return extractor.schema.parse(rawValue);
+  }
+  return extractor.schema.parse(JSON.parse(rawValue));
+}
+
+export function parseExtractedValues(
   content: string,
-  extractors: ReadonlyArray<Extractor<unknown>>,
-): Record<string, string> {
-  const result: Record<string, string> = {};
+  extractors: ReadonlyArray<Extractor<any>>,
+  options: ParseExtractedValuesOptions = {},
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
   if (!content || extractors.length === 0) return result;
 
   for (const extractor of extractors) {
@@ -443,9 +442,12 @@ export function parseCustomExtractorValues(
     const re = new RegExp(`^[ \\t]*<${slug}>([\\s\\S]*?)</${slug}>`, 'im');
     const match = content.match(re);
     if (match?.[1] !== undefined) {
-      const value = match[1].trim();
-      if (value) {
-        result[extractor.slug] = value;
+      const rawValue = match[1].trim();
+      if (!rawValue) continue;
+      try {
+        result[extractor.slug] = parseExtractedValue(extractor, rawValue);
+      } catch (error) {
+        options.onParseError?.({ extractor, rawValue, error });
       }
     }
   }
@@ -454,18 +456,18 @@ export function parseCustomExtractorValues(
 }
 
 /**
- * Strip the textual XML sections for custom extractors out of a chunk of
- * observer output. Used by the observer parser so the leftover
- * `observations` block doesn't end up containing the custom tags.
+ * Strip the textual XML sections for extractors out of a chunk of
+ * Observer/Reflector output. Used by parsers so the leftover
+ * `observations` block doesn't end up containing extractor tags.
  *
  * @internal
  */
-export function stripCustomExtractorSections(content: string, extractors: ReadonlyArray<Extractor<unknown>>): string {
+export function stripExtractorSections(content: string, extractors: ReadonlyArray<Extractor<any>>): string {
   if (!content || extractors.length === 0) return content;
   let result = content;
   for (const extractor of extractors) {
     const slug = escapeSlugForRegex(extractor.slug);
-    const re = new RegExp(`<${slug}>[\\s\\S]*?</${slug}>`, 'gi');
+    const re = new RegExp(`^[ \\t]*<${slug}>[\\s\\S]*?</${slug}>[ \\t]*(?:\\r?\\n)?`, 'gim');
     result = result.replace(re, '');
   }
   return result;
@@ -475,17 +477,17 @@ export function stripCustomExtractorSections(content: string, extractors: Readon
  * Resolve the extracted value for a single extractor from an observation
  * cycle's per-extractor results. Built-in slugs are mapped to the
  * dedicated fields on `ObserverOutput`; everything else is looked up in
- * `customExtractorValues` by slug.
+ * `extractedValues` by slug.
  *
  * @internal
  */
 export function getExtractedValueForExtractor(
-  extractor: Extractor<unknown>,
+  extractor: Extractor<any>,
   values: {
     currentTask?: string;
     suggestedContinuation?: string;
     threadTitle?: string;
-    customExtractorValues?: Readonly<Record<string, unknown>>;
+    extractedValues?: Readonly<Record<string, unknown>>;
   },
 ): unknown {
   switch (extractor.slug) {
@@ -496,7 +498,7 @@ export function getExtractedValueForExtractor(
     case BUILT_IN_EXTRACTOR_SLUGS.suggestedResponse:
       return values.suggestedContinuation;
     default:
-      return values.customExtractorValues?.[extractor.slug];
+      return values.extractedValues?.[extractor.slug];
   }
 }
 
@@ -509,20 +511,18 @@ export function getExtractedValueForExtractor(
  * @internal
  */
 export async function invokeExtractorHooks(
-  extractors: ReadonlyArray<Extractor<unknown>>,
+  extractors: ReadonlyArray<Extractor<any>>,
   values: {
     currentTask?: string;
     suggestedContinuation?: string;
     threadTitle?: string;
-    customExtractorValues?: Readonly<Record<string, unknown>>;
+    extractedValues?: Readonly<Record<string, unknown>>;
   },
   ctx: {
     threadId: string;
     resourceId?: string;
-    mainAgent?: Agent;
-    runId?: string;
   },
-  onError?: (extractor: Extractor<unknown>, error: unknown) => void,
+  onError?: (extractor: Extractor<any>, error: unknown) => void,
 ): Promise<void> {
   if (extractors.length === 0) return;
   await Promise.all(
@@ -537,11 +537,9 @@ export async function invokeExtractorHooks(
       try {
         await extractor.onExtracted({
           extracted,
-          extractor: extractor as Extractor<unknown>,
+          extractor: extractor as Extractor<any>,
           threadId: ctx.threadId,
           resourceId: ctx.resourceId,
-          mainAgent: ctx.mainAgent,
-          runId: ctx.runId,
         });
       } catch (err) {
         onError?.(extractor, err);

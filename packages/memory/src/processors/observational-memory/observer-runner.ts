@@ -43,7 +43,7 @@ export interface ObserverExchange {
     currentTask?: string;
     suggestedContinuation?: string;
     threadTitle?: string;
-    customExtractorValues?: Record<string, string>;
+    extractedValues?: Record<string, unknown>;
     degenerate?: boolean;
   };
   model: string;
@@ -83,7 +83,7 @@ export class ObserverRunner {
   private createAgent(
     model: ConcreteObservationModel,
     isMultiThread = false,
-    customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+    additionalExtractors: ReadonlyArray<Extractor<any>> = [],
   ): Agent {
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
@@ -92,7 +92,7 @@ export class ObserverRunner {
         isMultiThread,
         this.observationConfig.instruction,
         this.observationConfig.threadTitle,
-        customExtractors,
+        additionalExtractors,
       ),
       model,
     });
@@ -129,21 +129,21 @@ export class ObserverRunner {
       priorThreadTitle?: string;
       wasTruncated?: boolean;
       model?: ConcreteObservationModel;
-      customExtractors?: ReadonlyArray<Extractor<unknown>>;
-      priorCustomExtractorValues?: Readonly<Record<string, unknown>>;
+      additionalExtractors?: ReadonlyArray<Extractor<any>>;
+      priorExtractedValues?: Readonly<Record<string, unknown>>;
     },
   ): Promise<{
     observations: string;
     currentTask?: string;
     suggestedContinuation?: string;
     threadTitle?: string;
-    customExtractorValues?: Record<string, string>;
+    extractedValues?: Record<string, unknown>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-    const customExtractors = options?.customExtractors ?? [];
-    const agent = this.createAgent(resolvedModel.model, false, customExtractors);
+    const additionalExtractors = options?.additionalExtractors ?? [];
+    const agent = this.createAgent(resolvedModel.model, false, additionalExtractors);
 
     const observerMessages = [
       {
@@ -151,8 +151,8 @@ export class ObserverRunner {
         content: buildObserverTaskPrompt(existingObservations, {
           ...options,
           includeThreadTitle: this.observationConfig.threadTitle,
-          customExtractors,
-          priorCustomExtractorValues: options?.priorCustomExtractorValues,
+          additionalExtractors,
+          priorExtractedValues: options?.priorExtractedValues,
         }),
       },
       buildObserverHistoryMessage(messagesToObserve, {
@@ -197,13 +197,13 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    let parsed = parseObserverOutput(result.text, customExtractors);
+    let parsed = parseObserverOutput(result.text, additionalExtractors);
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
-      parsed = parseObserverOutput(result.text, customExtractors);
+      parsed = parseObserverOutput(result.text, additionalExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
@@ -215,7 +215,7 @@ export class ObserverRunner {
       false,
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
-      customExtractors,
+      additionalExtractors,
     );
     this.lastExchange = {
       systemPrompt,
@@ -226,7 +226,7 @@ export class ObserverRunner {
         currentTask: parsed.currentTask,
         suggestedContinuation: parsed.suggestedContinuation,
         threadTitle: parsed.threadTitle,
-        customExtractorValues: parsed.customExtractorValues,
+        extractedValues: parsed.extractedValues,
         degenerate: parsed.degenerate,
       },
       model: String(resolvedModel.model),
@@ -242,7 +242,7 @@ export class ObserverRunner {
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
       threadTitle: parsed.threadTitle,
-      customExtractorValues: parsed.customExtractorValues,
+      extractedValues: parsed.extractedValues,
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
@@ -264,12 +264,12 @@ export class ObserverRunner {
         currentTask?: string;
         suggestedResponse?: string;
         threadTitle?: string;
-        customExtractorValues?: Readonly<Record<string, unknown>>;
+        extractedValues?: Readonly<Record<string, unknown>>;
       }
     >,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
-    customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+    additionalExtractors: ReadonlyArray<Extractor<any>> = [],
   ): Promise<{
     results: Map<
       string,
@@ -278,7 +278,7 @@ export class ObserverRunner {
         currentTask?: string;
         suggestedContinuation?: string;
         threadTitle?: string;
-        customExtractorValues?: Record<string, string>;
+        extractedValues?: Record<string, unknown>;
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -288,7 +288,7 @@ export class ObserverRunner {
       0,
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
-    const agent = this.createAgent(resolvedModel.model, true, customExtractors);
+    const agent = this.createAgent(resolvedModel.model, true, additionalExtractors);
 
     const observerMessages = [
       {
@@ -299,7 +299,7 @@ export class ObserverRunner {
           priorMetadataByThread,
           undefined,
           this.observationConfig.threadTitle,
-          customExtractors,
+          additionalExtractors,
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
@@ -350,13 +350,13 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    let parsed = parseMultiThreadObserverOutput(result.text, customExtractors);
+    let parsed = parseMultiThreadObserverOutput(result.text, additionalExtractors);
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
-      parsed = parseMultiThreadObserverOutput(result.text, customExtractors);
+      parsed = parseMultiThreadObserverOutput(result.text, additionalExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
@@ -368,7 +368,7 @@ export class ObserverRunner {
       true,
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
-      customExtractors,
+      additionalExtractors,
     );
     this.lastExchange = {
       systemPrompt,
@@ -397,7 +397,7 @@ export class ObserverRunner {
         currentTask?: string;
         suggestedContinuation?: string;
         threadTitle?: string;
-        customExtractorValues?: Record<string, string>;
+        extractedValues?: Record<string, unknown>;
       }
     >();
     for (const [threadId, threadResult] of parsed.threads) {
@@ -406,7 +406,7 @@ export class ObserverRunner {
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
         threadTitle: threadResult.threadTitle,
-        customExtractorValues: threadResult.customExtractorValues,
+        extractedValues: threadResult.extractedValues,
       });
     }
 

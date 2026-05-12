@@ -1125,7 +1125,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
-    const { id, reflection, tokenCount, inputTokenCount, reflectedObservationLineCount } = input;
+    const { id, reflection, tokenCount, inputTokenCount, reflectedObservationLineCount, extractedValues } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -1135,6 +1135,10 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedReflection = existing ? `${existing}\n\n${reflection}` : reflection;
     record.bufferedReflectionTokens = (record.bufferedReflectionTokens || 0) + tokenCount;
     record.bufferedReflectionInputTokens = (record.bufferedReflectionInputTokens || 0) + inputTokenCount;
+    record.bufferedReflectionExtracted = {
+      ...(record.bufferedReflectionExtracted ?? {}),
+      ...(extractedValues ?? {}),
+    };
     record.reflectedObservationLineCount = reflectedObservationLineCount;
     record.updatedAt = new Date();
   }
@@ -1176,6 +1180,7 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedReflection = undefined;
     record.bufferedReflectionTokens = undefined;
     record.bufferedReflectionInputTokens = undefined;
+    record.bufferedReflectionExtracted = undefined;
     record.reflectedObservationLineCount = undefined;
 
     return newRecord;

@@ -1,6 +1,37 @@
 ---
-'@mastra/memory': minor
-'@mastra/core': patch
+"@mastra/memory": minor
+"@mastra/core": patch
+"@mastra/server": patch
 ---
 
-Add public `Extractor` API for Observational Memory. Custom extractors can now be configured via `observation.extract: [...]` and run as XML-tagged sections inside the Observer's existing LLM call. Each extractor declares a `name` (slugified into its XML tag), `instructions`, optional Zod `schema`, an `injectionBehaviour` (`'carry-forward' | 'none'`) for how prior values are reused, and an `onExtracted({ extracted, mainAgent, threadId, resourceId, runId })` lifecycle hook that can call `mainAgent.sendSignal(...)` to push runtime signals back into the main agent. Built-in extractors (`thread-title`, `current-task`, `suggested-response`) are now exposed as `Extractor.threadTitle()` / `Extractor.currentTask()` / `Extractor.suggestedResponse()` factories using the same public API. Existing config (e.g. `observation.threadTitle`) remains backwards-compatible.
+Add a public `Extractor` API for Observational Memory. User-defined extractors can be configured on both `observation.extract` and `reflection.extract`, parsed with their Zod schema, persisted to `thread.metadata.mastra.om.extracted`, and delivered to `onExtracted` hooks with thread context.
+
+```ts
+import { Extractor, ObservationalMemory } from '@mastra/memory/processors';
+import { z } from 'zod';
+
+const topicExtractor = new Extractor({
+  name: 'active-topic',
+  instructions: 'Output JSON like {"topic":"billing","confidence":0.9}.',
+  schema: z.object({
+    topic: z.string(),
+    confidence: z.number(),
+  }),
+  injectionBehaviour: 'carry-forward',
+  onExtracted: ({ extracted, threadId }) => {
+    console.log(threadId, extracted?.topic);
+  },
+});
+
+new ObservationalMemory({
+  storage,
+  observation: {
+    extract: [topicExtractor],
+  },
+  reflection: {
+    extract: [topicExtractor],
+  },
+});
+```
+
+Built-in extractors (`thread-title`, `current-task`, `suggested-response`) remain available via `Extractor.threadTitle()`, `Extractor.currentTask()`, and `Extractor.suggestedResponse()`.

@@ -31,8 +31,8 @@ export interface ObserverOutput {
   currentTask?: string;
   suggestedContinuation?: string;
   threadTitle?: string;
-  /** Values extracted for user-defined custom extractors, keyed by extractor slug. */
-  customExtractorValues?: Record<string, string>;
+  /** User-defined extracted values, keyed by extractor slug. */
+  extractedValues?: Record<string, unknown>;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 
@@ -56,11 +56,11 @@ export interface ProcessedObservation {
     currentTask?: string;
     threadTitle?: string;
     lastObservedMessageCursor?: { createdAt: string; id: string };
-    customExtractorValues?: Record<string, string>;
+    extractedValues?: Record<string, unknown>;
   }>;
   suggestedContinuation?: string;
   currentTask?: string;
   threadTitle?: string;
-  /** Values for user-defined custom extractors (non-built-in slugs), keyed by slug. */
-  customExtractorValues?: Record<string, string>;
+  /** User-defined extracted values (non-built-in slugs), keyed by slug. */
+  extractedValues?: Record<string, unknown>;
 }
