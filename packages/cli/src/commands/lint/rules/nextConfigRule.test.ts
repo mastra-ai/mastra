@@ -50,7 +50,7 @@ describe('nextConfigRule', () => {
       };
     `);
 
-    await expect(nextConfigRule.run(createContext(rootDir))).resolves.toBe(true);
+    await expect(nextConfigRule.run(createContext(rootDir))).resolves.toEqual([]);
   });
 
   test('does not execute code while reading next.config.js', async () => {
@@ -64,7 +64,7 @@ describe('nextConfigRule', () => {
       };
     `);
 
-    await expect(nextConfigRule.run(createContext(rootDir))).resolves.toBe(true);
+    await expect(nextConfigRule.run(createContext(rootDir))).resolves.toEqual([]);
     expect(Reflect.has(globalThis, exploitMarker)).toBe(false);
   });
 });
