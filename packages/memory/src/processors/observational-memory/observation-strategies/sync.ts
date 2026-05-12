@@ -15,6 +15,28 @@ import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
+/**
+ * Filter a raw `customExtractorValues` map (as returned by the observer) down
+ * to just the slugs registered for non-built-in extractors. Built-in slugs
+ * (current-task, suggested-response, thread-title) are stored on their
+ * dedicated thread-metadata fields, so they should not be duplicated into
+ * the generic `extractors` map.
+ */
+function filterCustomExtractorValuesForStorage(
+  values: Record<string, string> | undefined,
+  customExtractors: ReadonlyArray<{ slug: string }>,
+): Record<string, string> | undefined {
+  if (!values || customExtractors.length === 0) return undefined;
+  const result: Record<string, string> = {};
+  for (const extractor of customExtractors) {
+    const value = values[extractor.slug];
+    if (value !== undefined && value !== '') {
+      result[extractor.slug] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 export class SyncObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
   private readonly lastMessage: MastraDBMessage | undefined;
@@ -105,6 +127,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
+      customExtractors: this.deps.customExtractors,
+      priorCustomExtractorValues: omMeta?.extractors,
     });
     this.observerResult = result;
     return result;
@@ -153,6 +177,10 @@ export class SyncObservationStrategy extends ObservationStrategy {
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      customExtractorValues: filterCustomExtractorValuesForStorage(
+        output.customExtractorValues,
+        this.deps.customExtractors,
+      ),
     };
   }
 
@@ -166,11 +194,20 @@ export class SyncObservationStrategy extends ObservationStrategy {
       const oldTitle = thread.title?.trim();
       const newTitle = processed.threadTitle?.trim();
       const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      // Merge new custom-extractor values on top of any prior persisted values
+      // so an empty cycle (e.g. observer didn't emit a value for one extractor)
+      // doesn't wipe out the previous extracted state.
+      const priorMeta = getThreadOMMetadata(thread.metadata);
+      const mergedCustomExtractors =
+        priorMeta?.extractors || processed.customExtractorValues
+          ? { ...(priorMeta?.extractors ?? {}), ...(processed.customExtractorValues ?? {}) }
+          : undefined;
       const newMetadata = setThreadOMMetadata(thread.metadata, {
         suggestedResponse: processed.suggestedContinuation,
         currentTask: processed.currentTask,
         threadTitle: processed.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
+        extractors: mergedCustomExtractors,
       });
       await this.storage.updateThread({
         id: threadId,

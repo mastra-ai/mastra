@@ -180,6 +180,7 @@ function parseActivationTTL(value: number | string | false | undefined, fieldPat
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
+import { Extractor, isBuiltInExtractorSlug, validateExtractorList, BUILT_IN_EXTRACTOR_SLUGS } from './extractor';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -292,6 +293,21 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+
+  /**
+   * Resolved list of extractors driving the Observer agent (built-ins +
+   * user-supplied customs). Initialized in the constructor.
+   * @internal
+   */
+  private observerExtractors: ReadonlyArray<Extractor<unknown>> = [];
+
+  /**
+   * Subset of `observerExtractors` whose slugs are NOT built-in. These need
+   * to be threaded into the Observer prompt as additional XML output
+   * sections and parsed back from the response.
+   * @internal
+   */
+  private observerCustomExtractors: ReadonlyArray<Extractor<unknown>> = [];
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -497,6 +513,8 @@ export class ObservationalMemory {
       threadTitle: config.observation?.threadTitle ?? false,
     };
 
+    this.resolveObserverExtractors(config.observation?.extract);
+
     // Resolve reflection config with defaults
     this.reflectionConfig = {
       model: reflectionModel,
@@ -681,6 +699,41 @@ export class ObservationalMemory {
     routingThresholds?: string;
   } {
     return this.resolveTieredModel(this.reflectionConfig.model, inputTokens);
+  }
+
+  /**
+   * Resolve the final list of extractors driving the Observer agent by
+   * merging built-in extractors (controlled by legacy boolean flags) with
+   * any user-supplied custom extractors from `observation.extract`.
+   *
+   * The current task and suggested-response built-ins are always included
+   * unless the user has already supplied an extractor with the matching
+   * slug. The thread-title built-in is only included when the legacy
+   * `observation.threadTitle` flag is enabled (default `false`).
+   *
+   * Validation (uniqueness, reserved tag collisions) is performed once
+   * here so the constructor surface reports configuration errors eagerly.
+   */
+  private resolveObserverExtractors(userExtractors: ReadonlyArray<Extractor<unknown>> | undefined): void {
+    const supplied = userExtractors ?? [];
+    const suppliedSlugs = new Set(supplied.map(e => e.slug));
+
+    const builtIns: Extractor<unknown>[] = [];
+    if (!suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.currentTask)) {
+      builtIns.push(Extractor.currentTask() as Extractor<unknown>);
+    }
+    if (!suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.suggestedResponse)) {
+      builtIns.push(Extractor.suggestedResponse() as Extractor<unknown>);
+    }
+    if (this.observationConfig.threadTitle && !suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.threadTitle)) {
+      builtIns.push(Extractor.threadTitle() as Extractor<unknown>);
+    }
+
+    const merged: Extractor<unknown>[] = [...builtIns, ...supplied];
+    validateExtractorList(merged, 'observer.extract');
+
+    this.observerExtractors = merged;
+    this.observerCustomExtractors = merged.filter(e => !isBuiltInExtractorSlug(e.slug));
   }
 
   private resolveTieredModel<TModel extends ObservationalMemoryModel>(
@@ -3581,6 +3634,31 @@ ${formattedMessages}
    */
   getObscureThreadIds(): boolean {
     return this.shouldObscureThreadIds;
+  }
+
+  /**
+   * Get the fully-resolved list of extractors driving the Observer agent.
+   *
+   * Includes both the built-in factories (`Extractor.currentTask`,
+   * `Extractor.suggestedResponse`, optionally `Extractor.threadTitle`) and
+   * any custom user-supplied extractors from `observation.extract`.
+   *
+   * @experimental
+   */
+  getObserverExtractors(): ReadonlyArray<Extractor<unknown>> {
+    return this.observerExtractors;
+  }
+
+  /**
+   * Get the subset of observer extractors that are *not* built-in. These
+   * are the ones that need to be threaded into the Observer prompt as
+   * additional XML output sections.
+   *
+   * @experimental
+   * @internal
+   */
+  getObserverCustomExtractors(): ReadonlyArray<Extractor<unknown>> {
+    return this.observerCustomExtractors;
   }
 
   /**

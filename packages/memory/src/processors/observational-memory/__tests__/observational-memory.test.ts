@@ -2413,8 +2413,8 @@ describe('Observer Agent Helpers', () => {
 
       expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
       expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
-      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
-      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
+      expect(observerCreateAgentSpy.mock.calls[0]?.[0]).toBe('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy.mock.calls[0]?.[0]).toBe('openai/gpt-4o-mini');
     });
   });
 

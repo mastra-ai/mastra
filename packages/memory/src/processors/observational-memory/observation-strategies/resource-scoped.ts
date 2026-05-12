@@ -2,6 +2,8 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import { omError } from '../debug';
+import { invokeExtractorHooks } from '../extractor';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -16,6 +18,26 @@ import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
+/**
+ * Filter a raw `customExtractorValues` map (as returned by the observer) down
+ * to just the slugs registered for non-built-in extractors. Mirrors the
+ * helpers used by the sync/async-buffer strategies.
+ */
+function filterCustomExtractorValuesForStorage(
+  values: Record<string, string> | undefined,
+  customExtractors: ReadonlyArray<{ slug: string }>,
+): Record<string, string> | undefined {
+  if (!values || customExtractors.length === 0) return undefined;
+  const result: Record<string, string> = {};
+  for (const extractor of customExtractors) {
+    const value = values[extractor.slug];
+    if (value !== undefined && value !== '') {
+      result[extractor.slug] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
   private cycleId?: string;
@@ -28,17 +50,34 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private messagesByThread = new Map<string, MastraDBMessage[]>();
   private multiThreadResults = new Map<
     string,
-    { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
+    {
+      observations: string;
+      currentTask?: string;
+      suggestedContinuation?: string;
+      threadTitle?: string;
+      customExtractorValues?: Record<string, string>;
+    }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   private observationResults: Array<{
     threadId: string;
     threadMessages: MastraDBMessage[];
-    result: { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string };
+    result: {
+      observations: string;
+      currentTask?: string;
+      suggestedContinuation?: string;
+      threadTitle?: string;
+      customExtractorValues?: Record<string, string>;
+    };
   }> = [];
   private priorMetadataByThread = new Map<
     string,
-    { currentTask?: string; suggestedResponse?: string; threadTitle?: string }
+    {
+      currentTask?: string;
+      suggestedResponse?: string;
+      threadTitle?: string;
+      customExtractorValues?: Readonly<Record<string, unknown>>;
+    }
   >();
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
@@ -65,11 +104,17 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
       threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
-      if (omMetadata?.currentTask || omMetadata?.suggestedResponse || omMetadata?.threadTitle) {
+      if (
+        omMetadata?.currentTask ||
+        omMetadata?.suggestedResponse ||
+        omMetadata?.threadTitle ||
+        omMetadata?.extractors
+      ) {
         this.priorMetadataByThread.set(thread.id, {
           currentTask: omMetadata.currentTask,
           suggestedResponse: omMetadata.suggestedResponse,
           threadTitle: omMetadata.threadTitle,
+          customExtractorValues: omMetadata.extractors,
         });
       }
     }
@@ -245,6 +290,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.requestContext,
           this.priorMetadataByThread,
           this.opts.observabilityContext,
+          undefined,
+          this.deps.customExtractors,
         );
       }),
     );
@@ -305,6 +352,10 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         currentTask: result.currentTask,
         threadTitle: result.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(threadMessages),
+        customExtractorValues: filterCustomExtractorValuesForStorage(
+          result.customExtractorValues,
+          this.deps.customExtractors,
+        ),
       });
 
       const isFirstThread = this.observationResults.indexOf(obsResult) === 0;
@@ -352,12 +403,18 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           const oldTitle = thread.title?.trim();
           const newTitle = update.threadTitle?.trim();
           const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+          const priorMeta = getThreadOMMetadata(thread.metadata);
+          const mergedCustomExtractors =
+            priorMeta?.extractors || update.customExtractorValues
+              ? { ...(priorMeta?.extractors ?? {}), ...(update.customExtractorValues ?? {}) }
+              : undefined;
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: update.lastObservedAt,
             suggestedResponse: update.suggestedResponse,
             currentTask: update.currentTask,
             threadTitle: update.threadTitle,
             lastObservedMessageCursor: update.lastObservedMessageCursor,
+            extractors: mergedCustomExtractors,
           });
           await this.storage.updateThread({
             id: update.threadId,
@@ -403,6 +460,35 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         ),
       );
     }
+  }
+
+  /**
+   * Fan out `onExtracted` hooks per-thread. The default base impl assumes
+   * a single-thread strategy, but resource-scoped runs observe many threads
+   * in one cycle and writes per-thread metadata, so each thread needs its
+   * own hook invocation with the right values.
+   */
+  protected override async runExtractorHooks(processed: ProcessedObservation): Promise<void> {
+    if (this.deps.extractors.length === 0) return;
+    const updates = processed.threadMetadataUpdates ?? [];
+    if (updates.length === 0) return;
+
+    await Promise.all(
+      updates.map(update =>
+        invokeExtractorHooks(
+          this.deps.extractors,
+          {
+            currentTask: update.currentTask,
+            suggestedContinuation: update.suggestedResponse,
+            threadTitle: update.threadTitle,
+            customExtractorValues: update.customExtractorValues,
+          },
+          { threadId: update.threadId, resourceId: this.resourceId },
+          (extractor, error) =>
+            omError(`[OM] extractor.onExtracted (${extractor.slug}) threw for thread ${update.threadId}`, error),
+        ),
+      ),
+    );
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

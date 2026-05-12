@@ -2,6 +2,7 @@ import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
@@ -188,9 +189,65 @@ export interface ObservationConfig {
    * When enabled, the Observer will analyze conversation context and
    * suggest a short, descriptive title for the thread.
    *
+   * Ignored when an explicit `extract` array is provided — instead include
+   * `Extractor.threadTitle()` in the array.
+   *
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Declarative list of extractors that drive what the Observer outputs.
+   *
+   * Each `Extractor` is emitted as its own XML-tagged section in the
+   * observer's structured output, parsed back out, optionally carried
+   * forward into the next observer call, and surfaced to a lifecycle hook
+   * (`onExtracted`) where you can react to the value — for example, by
+   * calling `mainAgent.sendSignal(...)` to push a runtime signal back into
+   * the main agent.
+   *
+   * When omitted, ObservationalMemory defaults to extracting `current-task`,
+   * `suggested-response`, and (when `threadTitle: true`) `thread-title`.
+   *
+   * When set, this array completely replaces the default list — include
+   * `Extractor.currentTask()` / `Extractor.suggestedResponse()` /
+   * `Extractor.threadTitle()` if you want to keep the built-in behaviour
+   * alongside your custom extractors.
+   *
+   * @example
+   * ```ts
+   * import { Extractor } from '@mastra/memory/processors';
+   * import { z } from 'zod';
+   *
+   * new ObservationalMemory({
+   *   storage,
+   *   observation: {
+   *     extract: [
+   *       Extractor.currentTask(),
+   *       Extractor.suggestedResponse(),
+   *       Extractor.threadTitle(),
+   *       new Extractor({
+   *         name: 'follows-policy',
+   *         instructions: 'Output "ok" or describe the policy violation.',
+   *         schema: z.string(),
+   *         injectionBehaviour: 'carry-forward',
+   *         onExtracted: ({ mainAgent, extracted, threadId }) => {
+   *           if (mainAgent && extracted && extracted !== 'ok') {
+   *             mainAgent.sendSignal(
+   *               { type: 'system-reminder', contents: `POLICY: ${extracted}` },
+   *               { threadId, ifIdle: { behavior: 'discard' } },
+   *             );
+   *           }
+   *         },
+   *       }),
+   *     ],
+   *   },
+   * });
+   * ```
+   *
+   * @experimental
+   */
+  extract?: Array<Extractor<unknown>>;
 }
 
 /**
@@ -278,6 +335,22 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Declarative list of extractors that drive what the Reflector outputs.
+   *
+   * Each `Extractor` is emitted as its own XML-tagged section in the
+   * reflector's structured output and surfaced to a lifecycle hook
+   * (`onExtracted`) where you can react to the value.
+   *
+   * Currently the Reflector treats this list as a forward-compatible
+   * placeholder — values are still extracted but reflector-specific
+   * behaviour beyond the built-in summarisation will be expanded in
+   * future releases.
+   *
+   * @experimental
+   */
+  extract?: Array<Extractor<unknown>>;
 }
 
 /**

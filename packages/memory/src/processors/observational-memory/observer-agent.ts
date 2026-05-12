@@ -3,6 +3,13 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
 import { isTemporalGapMarker } from './date-utils';
+import type { Extractor } from './extractor';
+import {
+  buildCustomExtractorOutputSections,
+  buildCustomExtractorPriorLines,
+  parseCustomExtractorValues,
+  stripCustomExtractorSections,
+} from './extractor';
 import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
@@ -275,7 +282,10 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
+export function buildObserverOutputFormat(
+  includeThreadTitle: boolean = false,
+  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+): string {
   const threadTitleSection = includeThreadTitle
     ? `
 <thread-title>
@@ -286,6 +296,7 @@ A short, noun-phrase title for this conversation (2-5 words). Examples:
 Only update when the topic meaningfully changes.
 </thread-title>`
     : '';
+  const customSectionsSpec = buildCustomExtractorOutputSections(customExtractors);
 
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
@@ -325,7 +336,7 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>${threadTitleSection}`;
+</suggested-response>${threadTitleSection}${customSectionsSpec}`;
 }
 
 /**
@@ -354,13 +365,16 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
+ * @param includeThreadTitle - Whether to include the <thread-title> section
+ * @param customExtractors - Additional user-defined extractors to append as XML sections
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
+  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
 ): string {
-  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
+  const outputFormat = buildObserverOutputFormat(includeThreadTitle, customExtractors);
   const multiThreadTitleInstruction = includeThreadTitle
     ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
     : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
@@ -484,6 +498,15 @@ export interface ObserverResult {
 
   /** The suggested thread title (short/concise, for thread metadata) */
   threadTitle?: string;
+
+  /**
+   * Values extracted for any user-defined custom extractors, keyed by
+   * extractor slug. Built-in extractors (current-task, suggested-response,
+   * thread-title) continue to use their dedicated fields above.
+   *
+   * @experimental
+   */
+  customExtractorValues?: Record<string, string>;
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
@@ -1094,9 +1117,18 @@ export function buildMultiThreadObserverHistoryMessage(
 export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    {
+      currentTask?: string;
+      suggestedResponse?: string;
+      threadTitle?: string;
+      customExtractorValues?: Readonly<Record<string, unknown>>;
+    }
+  >,
   wasTruncated?: boolean,
   includeThreadTitle?: boolean,
+  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
 ): string {
   let prompt = '';
 
@@ -1110,21 +1142,29 @@ export function buildMultiThreadObserverTaskPrompt(
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
+      const customPriorLines = buildCustomExtractorPriorLines(customExtractors, metadata?.customExtractorValues);
       const hasRelevantMetadata =
-        metadata?.currentTask || metadata?.suggestedResponse || (includeThreadTitle && metadata?.threadTitle);
+        metadata?.currentTask ||
+        metadata?.suggestedResponse ||
+        (includeThreadTitle && metadata?.threadTitle) ||
+        customPriorLines.length > 0;
       if (!hasRelevantMetadata) {
         return '';
       }
 
       const lines = [`- thread ${threadId}`];
-      if (metadata.currentTask) {
+      if (metadata?.currentTask) {
         lines.push(`  - prior current-task: ${metadata.currentTask}`);
       }
-      if (metadata.suggestedResponse) {
+      if (metadata?.suggestedResponse) {
         lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
       }
-      if (includeThreadTitle && metadata.threadTitle) {
+      if (includeThreadTitle && metadata?.threadTitle) {
         lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
+      }
+      for (const customLine of customPriorLines) {
+        // customLine already starts with `- prior <slug>: ...`; indent it under the thread bullet.
+        lines.push(`  ${customLine}`);
       }
       return lines.join('\n');
     })
@@ -1172,13 +1212,29 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    {
+      currentTask?: string;
+      suggestedResponse?: string;
+      threadTitle?: string;
+      customExtractorValues?: Readonly<Record<string, unknown>>;
+    }
+  >,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
   includeThreadTitle?: boolean,
+  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(
+    existingObservations,
+    threadOrder,
+    priorMetadataByThread,
+    wasTruncated,
+    includeThreadTitle,
+    customExtractors,
+  )}`;
 }
 
 /**
@@ -1195,8 +1251,15 @@ export interface MultiThreadObserverResult {
 
 /**
  * Parse multi-thread Observer output to extract per-thread results.
+ *
+ * @param output - Raw text output from the observer model
+ * @param customExtractors - Optional list of user-defined custom extractors
+ *   whose XML sections should be parsed out of each thread's content
  */
-export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
+export function parseMultiThreadObserverOutput(
+  output: string,
+  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
 
   // Check for degenerate repetition on the whole output
@@ -1245,6 +1308,13 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<thread-title>[\s\S]*?<\/thread-title>/i, '');
     }
 
+    // Extract custom-extractor values for this thread, then strip their sections from observations.
+    const customExtractorValues =
+      customExtractors.length > 0 ? parseCustomExtractorValues(threadContent, customExtractors) : {};
+    if (customExtractors.length > 0) {
+      observations = stripCustomExtractorSections(observations, customExtractors);
+    }
+
     // Clean up observations and apply line truncation
     observations = sanitizeObservationLines(observations.trim());
 
@@ -1253,6 +1323,7 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       currentTask,
       suggestedContinuation,
       threadTitle,
+      customExtractorValues: customExtractors.length > 0 ? customExtractorValues : undefined,
       rawOutput: threadContent,
     });
   }
@@ -1275,6 +1346,8 @@ export function buildObserverTaskPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
+    customExtractors?: ReadonlyArray<Extractor<unknown>>;
+    priorCustomExtractorValues?: Readonly<Record<string, unknown>>;
   },
 ): string {
   let prompt = '';
@@ -1296,6 +1369,11 @@ export function buildObserverTaskPrompt(
   if (options?.includeThreadTitle && options?.priorThreadTitle) {
     priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
   }
+  if (options?.customExtractors && options?.priorCustomExtractorValues) {
+    priorMetadataLines.push(
+      ...buildCustomExtractorPriorLines(options.customExtractors, options.priorCustomExtractorValues),
+    );
+  }
 
   if (priorMetadataLines.length > 0) {
     prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
@@ -1315,8 +1393,21 @@ export function buildObserverTaskPrompt(
     prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
   }
 
+  if (options?.customExtractors && options.customExtractors.length > 0) {
+    const slugList = options.customExtractors.map(e => `<${e.slug}>`).join(', ');
+    prompt += `\n\nIn addition to <observations>, also output the following XML section(s) per the format spec in your instructions: ${slugList}.`;
+  }
+
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
+    const extraSections: string[] = [];
+    if (options?.includeThreadTitle) extraSections.push('<thread-title>');
+    if (options?.customExtractors) {
+      for (const ext of options.customExtractors) {
+        extraSections.push(`<${ext.slug}>`);
+      }
+    }
+    const extraSuffix = extraSections.length > 0 ? ` and ${extraSections.join(', ')}` : '';
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${extraSuffix}.`;
   }
 
   return prompt;
@@ -1336,6 +1427,8 @@ export function buildObserverPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
+    customExtractors?: ReadonlyArray<Extractor<unknown>>;
+    priorCustomExtractorValues?: Readonly<Record<string, unknown>>;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1345,8 +1438,15 @@ export function buildObserverPrompt(
 /**
  * Parse the Observer's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
+ *
+ * @param output - Raw text output from the observer model
+ * @param customExtractors - Optional list of user-defined custom extractors
+ *   whose XML sections should also be parsed out of the output
  */
-export function parseObserverOutput(output: string): ObserverResult {
+export function parseObserverOutput(
+  output: string,
+  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+): ObserverResult {
   // Check for degenerate repetition before parsing (operates on raw output)
   if (detectDegenerateRepetition(output)) {
     return {
@@ -1359,14 +1459,23 @@ export function parseObserverOutput(output: string): ObserverResult {
   const parsed = parseMemorySectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
-  // Those are stored separately in thread metadata and injected dynamically
-  const observations = sanitizeObservationLines(parsed.observations || '');
+  // Those are stored separately in thread metadata and injected dynamically.
+  // Also strip any custom extractor sections so they don't leak into the
+  // observations text.
+  const observationsContent = parsed.observations || '';
+  const observationsSansCustom = stripCustomExtractorSections(observationsContent, customExtractors);
+  const observations = sanitizeObservationLines(observationsSansCustom);
+
+  // Parse custom extractor values from the full output (custom tags may appear
+  // outside the <observations> block or inside it depending on model behaviour).
+  const customExtractorValues = customExtractors.length > 0 ? parseCustomExtractorValues(output, customExtractors) : {};
 
   return {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     threadTitle: parsed.threadTitle || undefined,
+    customExtractorValues: customExtractors.length > 0 ? customExtractorValues : undefined,
     rawOutput: output,
   };
 }
