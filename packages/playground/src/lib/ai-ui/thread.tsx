@@ -1,11 +1,12 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, Button, ButtonsGroup, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
+import './composer-sending.css';
 import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
@@ -128,6 +129,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
   // triggers form submission instead of completing the IME composition.
   // See: https://github.com/mastra-ai/mastra/issues/16109
   const isComposingRef = useRef(false);
+  const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
@@ -163,53 +165,80 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) =
         ) : null}
       </div> */}
       {/* <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}> */}
-      <ComposerPrimitive.Root>
+      <ComposerPrimitive.Root onSubmit={() => setSendPulseKey(k => k + 1)}>
         <ComposerAttachments />
 
         <div
-          className="bg-surface3 rounded-[22px] border border-border1 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
+          className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
           onClick={e => {
             if (e.target === e.currentTarget) textareaRef.current?.focus();
           }}
         >
-          <ComposerPrimitive.Input asChild className="w-full">
-            <textarea
-              ref={textareaRef}
-              autoFocus={false}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-              name=""
-              id=""
-              onChange={e => setThreadInput?.(e.target.value)}
-              onCompositionStart={() => {
-                isComposingRef.current = true;
-              }}
-              onCompositionEnd={() => {
-                isComposingRef.current = false;
-              }}
-              onKeyDown={e => {
-                // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
-                // while an IME composition session is active (e.g. Chinese pinyin).
-                // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
-                // not prevent the primitive's onKeyDown from running on the same element —
-                // preventDefault() is required. e.nativeEvent.isComposing is added as a
-                // defensive fallback for browsers/timings where compositionend has already fired.
-                if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }
-              }}
-              disabled={!canExecuteAgent}
+          <ComposerSendingGradient pulseKey={sendPulseKey} />
+          <div className="relative z-10">
+            <ComposerPrimitive.Input asChild className="w-full">
+              <textarea
+                ref={textareaRef}
+                autoFocus={false}
+                className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                name=""
+                id=""
+                onChange={e => setThreadInput?.(e.target.value)}
+                onCompositionStart={() => {
+                  isComposingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  isComposingRef.current = false;
+                }}
+                onKeyDown={e => {
+                  // Block Enter from reaching ComposerPrimitive.Input's composed submit handler
+                  // while an IME composition session is active (e.g. Chinese pinyin).
+                  // With asChild composition (@radix-ui/react-slot), stopPropagation() alone does
+                  // not prevent the primitive's onKeyDown from running on the same element —
+                  // preventDefault() is required. e.nativeEvent.isComposing is added as a
+                  // defensive fallback for browsers/timings where compositionend has already fired.
+                  if (e.key === 'Enter' && (isComposingRef.current || e.nativeEvent.isComposing)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }}
+                disabled={!canExecuteAgent}
+              />
+            </ComposerPrimitive.Input>
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
+            <ComposerActionRow
+              canExecute={canExecuteAgent}
+              agentId={agentId}
+              showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
             />
-          </ComposerPrimitive.Input>
-          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
-          <ComposerActionRow
-            canExecute={canExecuteAgent}
-            agentId={agentId}
-            showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-          />
+          </div>
         </div>
       </ComposerPrimitive.Root>
+    </div>
+  );
+};
+
+const ComposerGradientColumn = ({ className }: { className?: string }) => (
+  <div className={cn('flex h-full w-full flex-col -space-y-3', className)}>
+    <div className="w-full flex-1 bg-accent1 blur-xl" />
+    <div className="w-full flex-1 bg-accent1Dark blur-xl" />
+    <div className="w-full flex-1 bg-accent1 blur-xl" />
+    <div className="w-full flex-1 bg-accent1Darker blur-xl" />
+  </div>
+);
+
+const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
+  if (pulseKey === 0) return null;
+  return (
+    <div
+      key={pulseKey}
+      aria-hidden
+      className="composer-sending pointer-events-none absolute -left-[10%] top-0 z-0 flex h-10 w-[120%] transform-gpu"
+    >
+      <ComposerGradientColumn />
+      <ComposerGradientColumn className="-translate-y-2" />
+      <ComposerGradientColumn />
     </div>
   );
 };

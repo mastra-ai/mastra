@@ -1,6 +1,7 @@
 import {
   Badge,
   Button,
+  ButtonsGroup,
   Combobox,
   CopyButton,
   DropdownMenu,
@@ -74,7 +75,7 @@ export function AgentPlaygroundVersionBar({
     params: { sortDirection: 'DESC' },
   });
 
-  const versions = data?.versions ?? [];
+  const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const latestVersion = versions[0];
 
   const activeVersion = activeVersionId ? versions.find(v => v.id === activeVersionId) : undefined;
@@ -163,77 +164,66 @@ export function AgentPlaygroundVersionBar({
       </div>
     ),
     actionBar: (
-      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border1 bg-surface2">
-        {/* Split button: Save + dropdown caret */}
-        <div className="flex items-center">
+      <div className="flex items-center justify-end px-3 py-2 border-t border-border1 bg-surface2">
+        <ButtonsGroup className="flex-wrap justify-end">
+          <ButtonsGroup spacing="close">
+            <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
+              {isSavingDraft ? (
+                <>
+                  <Spinner className="h-3.5 w-3.5" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Icon size="sm">
+                    <Save />
+                  </Icon>
+                  Save New Version
+                </>
+              )}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button variant="default" size="md" disabled={saveDisabled} aria-label="More save options">
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end">
+                <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
+                  <Icon size="sm">
+                    <MessageSquare />
+                  </Icon>
+                  Save with message
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </ButtonsGroup>
+
           <Button
-            variant="default"
+            variant="cta"
             size="md"
-            onClick={() => onSaveDraft()}
-            disabled={saveDisabled}
-            className="rounded-r-none border-r-0"
+            onClick={onPublish}
+            disabled={
+              isViewingPreviousVersion
+                ? selectedVersionId === activeVersionId || isPublishing || isSavingDraft
+                : readOnly || !hasDraft || isPublishing || isSavingDraft
+            }
           >
-            {isSavingDraft ? (
+            {isPublishing ? (
               <>
                 <Spinner className="h-3.5 w-3.5" />
-                Saving...
+                Publishing...
               </>
             ) : (
               <>
                 <Icon size="sm">
-                  <Save />
+                  <Check />
                 </Icon>
-                Save New Version
+                {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
               </>
             )}
           </Button>
-          <DropdownMenu>
-            <DropdownMenu.Trigger asChild>
-              <Button
-                variant="default"
-                size="md"
-                disabled={saveDisabled}
-                aria-label="More save options"
-                className="rounded-l-none px-1.5"
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
-                <Icon size="sm">
-                  <MessageSquare />
-                </Icon>
-                Save with message
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </div>
-
-        <Button
-          variant="cta"
-          size="md"
-          onClick={onPublish}
-          disabled={
-            isViewingPreviousVersion
-              ? selectedVersionId === activeVersionId || isPublishing || isSavingDraft
-              : readOnly || !hasDraft || isPublishing || isSavingDraft
-          }
-        >
-          {isPublishing ? (
-            <>
-              <Spinner className="h-3.5 w-3.5" />
-              Publishing...
-            </>
-          ) : (
-            <>
-              <Icon size="sm">
-                <Check />
-              </Icon>
-              {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-            </>
-          )}
-        </Button>
+        </ButtonsGroup>
 
         {/* Change message dialog */}
         <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
