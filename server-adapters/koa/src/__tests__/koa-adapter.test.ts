@@ -349,6 +349,46 @@ describe('Koa Server Adapter', () => {
       expect(secondResponse.status).toBe(200);
       await expect(secondResponse.json()).resolves.toEqual({ route: 'second' });
     });
+
+    it('does not crash when registerRoute is called with a host whose middleware stack is not exposed', async () => {
+      // Subclasses sometimes call super.registerRoute() with a wrapper instead of a raw
+      // Koa instance. The wrapper may not expose `middleware`. We should tolerate that
+      // rather than throwing `Cannot read properties of undefined (reading 'length')`.
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      const hostWithoutMiddlewareArray = {
+        use: app.use.bind(app),
+      } as unknown as Koa;
+
+      await expect(
+        adapter.registerRoute(
+          hostWithoutMiddlewareArray,
+          {
+            method: 'POST',
+            path: '/chat',
+            responseType: 'json',
+            handler: async () => ({ ok: true }),
+          },
+          { prefix: '' },
+        ),
+      ).resolves.toBeUndefined();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      const response = await fetch(`http://localhost:${port}/chat`, { method: 'POST' });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ ok: true });
+    });
   });
 
   describe('Stream Data Redaction', () => {

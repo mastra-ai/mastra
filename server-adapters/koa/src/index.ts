@@ -270,8 +270,17 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   private getRouteDispatcherGroup(app: Koa): RouteDispatcherGroup {
+    // app.middleware is Koa's internal middleware stack. We sniff its length to detect
+    // when another middleware was added after our dispatcher so we can start a new group
+    // and preserve registration order. Subclasses or non-standard hosts may not expose it,
+    // in which case we fall back to reusing the cached group rather than crashing.
+    const middlewareCount = Array.isArray(app.middleware) ? app.middleware.length : undefined;
+
     const activeGroup = this.activeRouteDispatchers.get(app);
-    if (activeGroup && app.middleware.length === activeGroup.stackLengthAfterRegistration) {
+    if (
+      activeGroup &&
+      (middlewareCount === undefined || middlewareCount === activeGroup.stackLengthAfterRegistration)
+    ) {
       return activeGroup;
     }
 
@@ -280,7 +289,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       stackLengthAfterRegistration: 0,
     };
     app.use(this.createRouteDispatcherMiddleware(group));
-    group.stackLengthAfterRegistration = app.middleware.length;
+    group.stackLengthAfterRegistration = Array.isArray(app.middleware) ? app.middleware.length : 0;
     this.activeRouteDispatchers.set(app, group);
     return group;
   }
