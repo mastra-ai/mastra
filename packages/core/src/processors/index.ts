@@ -2,6 +2,7 @@ import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
@@ -55,6 +56,13 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
+  /**
+   * Add a signal to the message list, rotate the response message id when supported,
+   * and emit the signal as a data-* stream part when a writer is available.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.

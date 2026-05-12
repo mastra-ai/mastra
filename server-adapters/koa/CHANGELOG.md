@@ -1,5 +1,59 @@
 # @mastra/koa
 
+## 1.5.2-alpha.13
+
+### Patch Changes
+
+- Fixed `TypeError: Cannot read properties of undefined (reading 'length')` thrown during `MastraServer.init()` when a subclass forwards a non-Koa app-like object (for example a `koa-router` instance, a mounted sub-app, or a custom wrapper) to `super.registerRoute(app, route, opts)`. The dispatcher-reuse optimization introduced in 1.5.0 now requires the target to expose an `app.middleware` array; otherwise it falls back to registering a fresh dispatcher per route via `app.use`, matching the pre-1.5.0 per-route behavior. ([#16484](https://github.com/mastra-ai/mastra/pull/16484))
+
+  **Example (subclass that previously crashed):**
+
+  ```ts
+  import { MastraServer } from '@mastra/koa';
+  import Router from 'koa-router';
+
+  class CustomKoaMastraServer extends MastraServer {
+    private router = new Router();
+
+    async registerCustomApiRoutes() {
+      const routes = this.mastra.getServer()?.apiRoutes ?? [];
+      for (const route of routes) {
+        // The router has no `middleware` array — this used to throw at init.
+        await super.registerRoute(this.router as any, route, { prefix: this.prefix });
+      }
+      this.app.use(this.router.routes());
+    }
+  }
+  ```
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+  - @mastra/server@1.33.0-alpha.13
+
+## 1.5.2-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+  - @mastra/server@1.33.0-alpha.12
+
+## 1.5.2-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`37c0dc5`](https://github.com/mastra-ai/mastra/commit/37c0dc5697d343db98628bf867bf71ce6deec6d7), [`ef6b584`](https://github.com/mastra-ai/mastra/commit/ef6b5847ac33c0a7e80af3a86e8801e2933dd3ee), [`4dd900d`](https://github.com/mastra-ai/mastra/commit/4dd900d75dfe9be89f8c15188b368a8622aa1e18), [`4ff5bdf`](https://github.com/mastra-ai/mastra/commit/4ff5bdfe170cba6dfb5260c6af0f4ba668430772), [`bbcd93c`](https://github.com/mastra-ai/mastra/commit/bbcd93cf7d8aa1007d6d84bfd033b8015c912087), [`308bd07`](https://github.com/mastra-ai/mastra/commit/308bd074f35cef0c75d82fc1eb19382fe04ecf6f)]:
+  - @mastra/core@1.33.0-alpha.11
+  - @mastra/server@1.33.0-alpha.11
+
+## 1.5.2-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`7ad5585`](https://github.com/mastra-ai/mastra/commit/7ad55856406f1de398dc713f6a9eaa78b2784bb6), [`210ea7a`](https://github.com/mastra-ai/mastra/commit/210ea7af559791b73a44fc9c12179908aaa3183f), [`83218c8`](https://github.com/mastra-ai/mastra/commit/83218c88b37773c9424fbe733b37be556e55e94d), [`265ec9f`](https://github.com/mastra-ai/mastra/commit/265ec9f887b5c81255c873a76ff7796f16e4f99b), [`6ce80bf`](https://github.com/mastra-ai/mastra/commit/6ce80bf4872a891e0bddf8b80561a80584efb14b), [`9268531`](https://github.com/mastra-ai/mastra/commit/9268531e7ec4be98beeba3b3ae8be0a7ea380662), [`13ead79`](https://github.com/mastra-ai/mastra/commit/13ead79149486b88144db7e11e6ff551caef5be1), [`bd36d8e`](https://github.com/mastra-ai/mastra/commit/bd36d8eb6de8c9a0310352649dbd4b06703c2299), [`8ac9141`](https://github.com/mastra-ai/mastra/commit/8ac9141439caa8fdd674944c4d84f29b3c730296)]:
+  - @mastra/core@1.33.0-alpha.10
+  - @mastra/server@1.33.0-alpha.10
+
 ## 1.5.2-alpha.9
 
 ### Patch Changes

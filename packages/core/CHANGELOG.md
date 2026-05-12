@@ -1,5 +1,124 @@
 # @mastra/core
 
+## 1.33.0-alpha.13
+
+### Minor Changes
+
+- Improved Harness support for Agent thread signals. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+  Harness thread subscriptions now own stream processing for followed runs, echo user-message signal data with stable IDs, and support idle signal starts without delaying optimistic rendering.
+
+- Improved foreach workflow execution to keep concurrency slots filled as iterations finish. ([#12860](https://github.com/mastra-ai/mastra/pull/12860))
+
+### Patch Changes
+
+- - Fixed `foreach` state update and `foreach` bail in evented workflows ([#16436](https://github.com/mastra-ai/mastra/pull/16436))
+  - Fixed suspend-resume in evented-workflows legacy stream.
+
+- Fixed goal reminders in MastraCode to continue through signals without duplicating prompts. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+- Fixed suspend and resume for evented workflows that use parallel steps, `.branch()`, `dountil`/`dowhile` loops, and nested workflows — previously these only worked reliably for simple linear flows. ([#16476](https://github.com/mastra-ai/mastra/pull/16476))
+
+  **Parallel & `.branch()` steps** — when more than one branch suspends at the same time (e.g. each branch waits on its own approval), every suspended branch can now be resumed, the workflow stays suspended until all of them have been resumed, and the branch outputs are merged correctly. Before, only the last branch to suspend was resumable, and resuming one branch could prematurely complete the run.
+
+  **`dountil` / `dowhile` loops** — a loop body that calls `suspend()` now suspends the workflow instead of crashing the run. And after a resume, subsequent loop iterations run fresh instead of re-receiving the resume data — which previously made loops either run forever or skip their own suspend logic.
+
+  **Nested workflows** — resuming a suspended step inside a nested workflow now gives it the correct input (the output of the step right before it, not the nested workflow's own input), so it produces correct results, even when workflows are nested several levels deep. The suspended-step path returned in a workflow result is also correct now, so you can pass it straight back into `resume({ step })`.
+
+## 1.33.0-alpha.12
+
+### Minor Changes
+
+- Added Agent signals for sending contextual messages into agent thread loops and subscribing to thread activity. ([#16229](https://github.com/mastra-ai/mastra/pull/16229))
+
+  Call `agent.sendSignal()` to inject context into a running agent loop. When the thread is idle, that same signal becomes the prompt that starts the next loop by default. Use `ifActive.behavior` and `ifIdle.behavior` to deliver, persist, discard, or wake from a signal.
+
+  Use `agent.subscribeToThread()` to follow the raw stream chunks for a memory thread, observe signal echoes with stable IDs, and abort the active stream for that thread.
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+
+  void (async () => {
+    for await (const part of subscription.stream) {
+      if (part.type === 'finish') {
+        subscription.unsubscribe();
+      }
+    }
+  })();
+
+  agent.sendSignal({ type: 'user-message', contents: 'Use the latest answer' }, { resourceId, threadId });
+  ```
+
+- Added processor `sendSignal` support and routed built-in system reminders through signal messages. ([#16438](https://github.com/mastra-ai/mastra/pull/16438))
+
+### Patch Changes
+
+- A tool's `toModelOutput` result is now computed before the `tool-result` chunk is emitted, so it travels with the chunk on `providerMetadata.mastra.modelOutput`. Previously `toModelOutput` only ran later when the message list was updated, meaning live stream consumers couldn't see it without re-running the tool. ([#16457](https://github.com/mastra-ai/mastra/pull/16457))
+
+  The harness now forwards that `providerMetadata` on `tool_result` content (both streaming and replayed history) and on `tool_end` events, so UIs can render rich tool output (e.g. screenshot images) inline.
+
+  ```ts
+  harness.on('tool_end', event => {
+    const modelOutput = event.providerMetadata?.mastra?.modelOutput;
+    // e.g. { type: 'content', value: [{ type: 'image-data', mediaType: 'image/png', data: '...' }] }
+  });
+  ```
+
+## 1.33.0-alpha.11
+
+### Patch Changes
+
+- Fixed ToolCallFilter so assistant messages with top-level text are preserved when tool parts are removed. ([#16077](https://github.com/mastra-ai/mastra/pull/16077))
+
+- Fixed tool result media content not reaching the model. Tools using `toModelOutput` to return images or files (e.g. screenshot tools) now work correctly with all AI SDK providers (Anthropic, OpenAI, Google). ([#16449](https://github.com/mastra-ai/mastra/pull/16449))
+
+- Added subagent display names to Harness display state so UIs can render configured subagent names without duplicating agent type lookup. ([#16237](https://github.com/mastra-ai/mastra/pull/16237))
+
+- Fixed agent requests to Anthropic failing with `400 unexpected tool_use_id` when recalled history contained an incomplete `tool_use` / `tool_result` pair. This most commonly hit agents using parallel tool calls when an earlier run was interrupted before every tool finished — pulling that broken exchange into a new prompt no longer crashes the next request. ([#16201](https://github.com/mastra-ai/mastra/pull/16201))
+
+  Closes #16193
+
+- Fixed FGA EE license gating so production servers require an Enterprise license when FGA is configured. ([#16362](https://github.com/mastra-ai/mastra/pull/16362))
+
+- Fixed a bug where message-level `providerOptions` could be lost or applied to the wrong turn after tool calls. Anthropic `cacheControl` markers now stay attached to the intended message in tool-using conversations. ([#16133](https://github.com/mastra-ai/mastra/pull/16133))
+
+## 1.33.0-alpha.10
+
+### Minor Changes
+
+- Added `preserveModelOutput` to `ToolCallFilter` so filtered tool history can keep compact model-facing output without raw tool args or results. ([#16060](https://github.com/mastra-ai/mastra/pull/16060))
+
+  ```ts
+  import { ToolCallFilter } from '@mastra/core/processors';
+
+  const filter = new ToolCallFilter({
+    preserveModelOutput: true,
+  });
+  ```
+
+- Added a SubAgent interface for custom supervisor subagents. ([#16359](https://github.com/mastra-ai/mastra/pull/16359))
+
+### Patch Changes
+
+- dependencies updates: ([#16398](https://github.com/mastra-ai/mastra/pull/16398))
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.27` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.27) (from `npm:@ai-sdk/provider-utils@4.0.26`, in `dependencies`)
+
+- Fixed processor-combined workflows to use the agent logger so processor step failures are logged through the configured logger instead of console output. ([#16369](https://github.com/mastra-ai/mastra/pull/16369))
+
+- Fixed AI SDK v6 dynamic tool UI messages so MessageList preserves tool state during history normalization. Fixes #16046. ([#16062](https://github.com/mastra-ai/mastra/pull/16062))
+
+- Hide internal spans from Mastra-owned processors in exported traces. The `PROCESSOR_RUN` span still appears, but the agent, model, and tool spans that processors create under the hood are now marked internal and filtered out by default. ([#16424](https://github.com/mastra-ai/mastra/pull/16424))
+
+  Affects the moderation, PII detector, language detector, prompt-injection detector, system-prompt scrubber, and structured-output processors.
+
+  To inspect the internals (e.g. for debugging a Mastra-owned processor's behavior), set `includeInternalSpans: true` on your Observability config and the full subtree will be exported.
+
+- Fixed `timeTravel()` on evented workflows so jumping to a `.branch()` step no longer returns empty results for branches that did not run. Branch results now include only the branch that ran, matching the default workflow engine. ([#16428](https://github.com/mastra-ai/mastra/pull/16428))
+
+- Fix `abort()` not cancelling evented workflows ([#16416](https://github.com/mastra-ai/mastra/pull/16416))
+
+- Added validation to evented workflows to ensure execution prerequisites are met. `EventedWorkflow.createRun()` now throw clear error messages when the workflow execution flow is empty (missing `.then()`, `.branch()`, etc. calls) or when the step graph has uncommitted changes (missing `.commit()` call). This catches configuration errors early rather than failing during execution. ([#16361](https://github.com/mastra-ai/mastra/pull/16361))
+
 ## 1.33.0-alpha.9
 
 ### Minor Changes
