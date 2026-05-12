@@ -73,7 +73,8 @@ function toolCallRequiresSequentialExecution({
     resolveInternalExecutionHint(internalExecutionHints?.safeForConcurrentExecution, args) && bypassGlobalToolApproval;
 
   return (
-    !safeForConcurrentExecution && Boolean(requireToolApproval || maybeTool.requireApproval || maybeTool.hasSuspendSchema)
+    !safeForConcurrentExecution &&
+    Boolean(requireToolApproval || maybeTool.requireApproval || maybeTool.hasSuspendSchema)
   );
 }
 
