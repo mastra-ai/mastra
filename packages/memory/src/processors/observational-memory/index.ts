@@ -14,6 +14,10 @@
 // Engine
 export { ObservationalMemory } from './observational-memory';
 
+// Extractor public API
+export { Extractor } from './extractor';
+export type { ExtractorConfig, ExtractorInjectionBehaviour, ExtractorOnExtractedContext } from './extractor';
+
 // Constants
 export {
   OBSERVATIONAL_MEMORY_DEFAULTS,

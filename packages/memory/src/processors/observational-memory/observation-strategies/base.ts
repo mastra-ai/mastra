@@ -4,6 +4,8 @@ import type { MemoryStorage } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import { omDebug, omError } from '../debug';
+import type { Extractor } from '../extractor';
+import { invokeExtractorHooks } from '../extractor';
 import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
@@ -38,6 +40,17 @@ export interface StrategyDeps {
   reflector: ReflectorRunner;
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
+  /**
+   * Resolved list of `Extractor` instances from `observer.extract`. Includes
+   * both built-in factories (Extractor.threadTitle / currentTask /
+   * suggestedResponse) and any custom user-supplied extractors.
+   */
+  extractors: ReadonlyArray<Extractor<unknown>>;
+  /**
+   * Subset of `extractors` whose slugs are not built-in. These need to be
+   * threaded into the Observer prompt/parser as additional XML sections.
+   */
+  customExtractors: ReadonlyArray<Extractor<unknown>>;
   onIndexObservations?: (observation: {
     text: string;
     groupId: string;
@@ -103,6 +116,7 @@ export abstract class ObservationStrategy {
       const output = await this.observe(existingObservations, messages);
       const processed = await this.process(output, existingObservations);
       await this.persist(processed);
+      await this.runExtractorHooks(processed);
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
@@ -150,6 +164,29 @@ export abstract class ObservationStrategy {
 
   protected generateCycleId(): string {
     return crypto.randomUUID();
+  }
+
+  /**
+   * Fire `onExtracted` lifecycle hooks for every extractor in the resolved
+   * list. The default impl assumes a single-thread strategy (sync /
+   * async-buffer) — resource-scoped overrides this to fan out per thread.
+   *
+   * Hook errors are swallowed (logged via `omError`) so a buggy user hook
+   * never breaks the observation cycle.
+   */
+  protected async runExtractorHooks(processed: ProcessedObservation): Promise<void> {
+    if (this.deps.extractors.length === 0) return;
+    await invokeExtractorHooks(
+      this.deps.extractors,
+      {
+        currentTask: processed.currentTask,
+        suggestedContinuation: processed.suggestedContinuation,
+        threadTitle: processed.threadTitle,
+        customExtractorValues: processed.customExtractorValues,
+      },
+      { threadId: this.opts.threadId, resourceId: this.opts.resourceId },
+      (extractor, error) => omError(`[OM] extractor.onExtracted (${extractor.slug}) threw`, error),
+    );
   }
 
   protected async streamMarker(marker: { type: string; data: unknown }): Promise<void> {
