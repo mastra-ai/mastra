@@ -54,15 +54,19 @@ Keep PR descriptions concise and reviewer-facing:
 
 ```markdown
 ## Summary
+
 This is PR N of M split from a larger change.
 
 ## Scope
+
 - ...
 
 ## Intentionally excluded
+
 - Follow-up PR will handle ...
 
 ## Verification
+
 - ...
 ```
 
