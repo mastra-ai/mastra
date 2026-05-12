@@ -523,8 +523,8 @@ export class MastraTUI {
       await this.showOnboarding();
     }
 
-    // Check for updates (after onboarding so it doesn't interfere)
-    await this.checkForUpdate();
+    // Check for updates after first render so network latency never blocks startup.
+    void this.checkForUpdate().catch(() => {});
 
     // Periodically recheck for updates during long-running sessions (passive only)
     this.updateCheckTimer = setInterval(() => {

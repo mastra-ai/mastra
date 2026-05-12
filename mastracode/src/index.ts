@@ -1,7 +1,6 @@
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
-import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
@@ -132,7 +131,7 @@ export interface MastraCodeConfig {
    */
   memory?: HarnessConfig['memory'];
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
-  browser?: MastraBrowser;
+  browser?: HarnessConfig['browser'];
 }
 
 export function createAuthStorage() {
@@ -215,13 +214,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  try {
-    await gatewayRegistry.syncGateways(true);
-  } catch (error) {
-    console.warn('Failed to sync gateways at startup', error);
-  }
+  void Promise.resolve(gatewayRegistry.syncGateways(true)).catch(() => {});
 
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  const mgApiKey = storedGatewayKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
 
   // Project detection
   const project = detectProject(cwd);

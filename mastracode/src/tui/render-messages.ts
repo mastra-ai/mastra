@@ -454,45 +454,18 @@ function applyTaskToolResult(
   return tasks;
 }
 
-function replayTaskState(messages: HarnessMessage[]): TaskItemSnapshot[] {
-  let tasks: TaskItemSnapshot[] = [];
-
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
-
-    for (const content of message.content) {
-      if (content.type !== 'tool_call') continue;
-      if (
-        content.name !== 'task_write' &&
-        content.name !== 'task_update' &&
-        content.name !== 'task_complete' &&
-        content.name !== 'task_check'
-      ) {
-        continue;
-      }
-
-      const toolResult = message.content.find(c => c.type === 'tool_result' && c.id === content.id);
-      if (toolResult?.type !== 'tool_result') continue;
-
-      tasks = applyTaskToolResult(tasks, content.name, content.args, toolResult.result, toolResult.isError);
-    }
-  }
-
-  return tasks;
-}
-
 // =============================================================================
 // renderExistingMessages
 // =============================================================================
+
+const STARTUP_MESSAGE_WINDOW_SIZE = 40;
 
 /**
  * Re-render all existing messages from the harness thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const allMessages = await state.harness.listMessages();
-  const messages = allMessages.slice(-40);
-  const messagesBeforeVisibleWindow = allMessages.slice(0, Math.max(0, allMessages.length - messages.length));
+  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
 
   state.chatContainer.clear();
   state.pendingTools.clear();
@@ -505,9 +478,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during visible history reconstruction.
-  // Seed it from the full prior history so long threads keep task state even when
-  // the original task_write is outside the rendered message window.
-  let previousTasksAcc = replayTaskState(messagesBeforeVisibleWindow);
+  // Startup only replays task state from the bounded message window. If no task
+  // snapshot exists in that window, keep the existing display-state snapshot.
+  let previousTasksAcc: TaskItemSnapshot[] = [];
+  let hasReplayedTaskState = false;
 
   for (const message of messages) {
     if (message.role === 'user') {
@@ -633,6 +607,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           // not as regular tool result boxes.
           let replacedWithInline = false;
           if (isTaskMutationTool(content.name) && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            hasReplayedTaskState = true;
             const nextTasks = applyTaskToolResult(
               previousTasksAcc,
               content.name,
@@ -646,6 +621,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
+            hasReplayedTaskState = true;
             previousTasksAcc = applyTaskToolResult(
               previousTasksAcc,
               content.name,
@@ -760,26 +736,30 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     }
   }
 
-  // Restore or clear the pinned task list from history replay.
-  if (state.taskProgress) {
-    state.taskProgress.updateTasks(previousTasksAcc);
-  }
-  const currentTasks =
-    typeof state.harness.getState === 'function'
-      ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
-      : undefined;
-  if (!areTasksEqual(currentTasks, previousTasksAcc)) {
-    try {
-      await state.harness.setState({ tasks: previousTasksAcc });
-    } catch {
-      // Custom harness state schemas may not accept TUI replayed task state.
-      // Keep the reconstructed task list local to display state in that case.
+  // Restore or clear the pinned task list from history replay when the bounded
+  // window contains a task snapshot. Otherwise, keep the existing display-state
+  // snapshot instead of clobbering older tasks that are outside the render window.
+  if (hasReplayedTaskState) {
+    if (state.taskProgress) {
+      state.taskProgress.updateTasks(previousTasksAcc);
     }
+    const currentTasks =
+      typeof state.harness.getState === 'function'
+        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
+        : undefined;
+    if (!areTasksEqual(currentTasks, previousTasksAcc)) {
+      try {
+        await state.harness.setState({ tasks: previousTasksAcc });
+      } catch {
+        // Custom harness state schemas may not accept TUI replayed task state.
+        // Keep the reconstructed task list local to display state in that case.
+      }
+    }
+    const harnessWithReplayTasks = state.harness as typeof state.harness & {
+      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
+    };
+    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
   }
-  const harnessWithReplayTasks = state.harness as typeof state.harness & {
-    restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
-  };
-  harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
 
   state.ui.requestRender();
 }

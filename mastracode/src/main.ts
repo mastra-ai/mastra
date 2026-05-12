@@ -34,30 +34,24 @@ process.on('unhandledRejection', reason => {
 });
 
 async function tuiMain(pipedInput?: string | null) {
-  // Load browser from settings (before creating harness)
   const settings = loadSettings();
-  const browser = await createBrowserFromSettings(settings.browser);
+  let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
+  const loadBrowser = () => {
+    browserPromise ??= createBrowserFromSettings(settings.browser);
+    return browserPromise;
+  };
 
-  const result = await createMastraCode({ browser });
+  const result = await createMastraCode();
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
-
-  // Track the initial browser settings in harness state for config drift detection
-  if (browser) {
-    harness.setState({ activeBrowserSettings: settings.browser } as any);
-  }
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
   }
   if (result.observabilityWarning) {
     console.info(`⚠ ${result.observabilityWarning}`);
-  }
-
-  if (browser) {
-    console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);
   }
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that
@@ -96,10 +90,19 @@ async function tuiMain(pipedInput?: string | null) {
     inlineQuestions: true,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
-
   tui.run().catch(error => {
     handleFatalError(error);
   });
+
+  if (settings.browser.enabled) {
+    void loadBrowser()
+      .then(browser => {
+        if (!browser) return;
+        harness.setBrowser(browser);
+        void harness.setState({ activeBrowserSettings: settings.browser } as any);
+      })
+      .catch(() => {});
+  }
 }
 
 const asyncCleanup = async () => {
@@ -176,7 +179,8 @@ async function main() {
 
     // Always reopen a real TTY — even if the pipe was empty, the original
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
-    if (!reopenStdinFromTTY()) {
+    const reopenedStdin = reopenStdinFromTTY();
+    if (!reopenedStdin) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return headlessMain(pipedInput);
     }

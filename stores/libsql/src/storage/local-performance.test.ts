@@ -124,6 +124,26 @@ describe('LibSQLStore local performance initialization', () => {
     expect(executedSql.some(sql => /CREATE TABLE IF NOT EXISTS mastra_workflow_snapshot/i.test(sql))).toBe(false);
   });
 
+  it('creates message indexes for startup history reads', async () => {
+    const { client, statements } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({
+      id: 'local-file-message-indexes',
+      url: 'file:local-performance-message-indexes.db',
+      autoInitDomains: ['memory'],
+    });
+    await store.init();
+
+    const executedSql = sqls(statements);
+    expect(executedSql).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_messages_thread_created_at ON mastra_messages (thread_id, "createdAt")',
+    );
+    expect(executedSql).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON mastra_messages (thread_id, "resourceId", "createdAt")',
+    );
+  });
+
   it('caches local file DB init after success', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);
