@@ -253,22 +253,21 @@ If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS
 
 1. Check whether the var is already in the process env you can see (`echo "${OPENAI_API_KEY:-<unset>}"`). If yes, re-run scaffold with `--openai-key "$OPENAI_API_KEY"` (and equivalent for WorkOS).
 2. Check whether the var is in `$PROJECT_DIR/.env` from a prior run (`grep -E "^(OPENAI_API_KEY|WORKOS_)" "$PROJECT_DIR/.env" 2>/dev/null`). If yes, you can pass `--reuse` to the next scaffold call.
-3. If neither, ask the user, in one message, *both* questions:
-   - "Can you paste the value, or give me permission to source one of these rc files?"
-   - List the candidates that exist on disk: `~/.zshrc`, `~/.bashrc`, `~/.zshenv`, `~/.profile`, `~/.mastra-env`, `~/.env.global`. Show only the ones that exist; don't fabricate.
-4. Only after the user explicitly approves a specific file, source it in a subshell and rerun preflight with the inherited env. The canonical recipes are:
+3. If neither, look for rc files that exist on disk. Common candidates: `~/.zshrc`, `~/.bashrc`, `~/.zshenv`, `~/.profile`, `~/.env.global`, and any project-local `.env` you find. Use `ls -1` (or `test -f`) to confirm before listing — don't fabricate paths.
+4. Ask the user in one message: "Can you paste the value(s), or give me permission to source one of these files?" Include the list of files that actually exist.
+5. Only after the user explicitly approves a specific file, source it in a subshell and rerun preflight with the inherited env. Pattern:
 
    ```bash
    # auth off
-   zsh -c 'source ~/.mastra-env && bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off --reuse'
+   zsh -c 'source <approved-file> && bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off --reuse'
 
    # auth on (preflight auto-picks WORKOS_API_KEY / WORKOS_CLIENT_ID / WORKOS_ORGANIZATION_ID from the sourced env)
-   zsh -c 'source ~/.mastra-env && bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on --reuse'
+   zsh -c 'source <approved-file> && bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on --reuse'
    ```
 
-   (Substitute the approved file for `~/.mastra-env`; use `bash -c` instead of `zsh -c` if the rc file is a bashrc.)
+   Use `bash -c` instead of `zsh -c` if the approved file is a bashrc.
 
-5. Never write the secret value back into any rc file, never `export` it into the user's interactive shell, and never echo it back in chat in full. Refer to it as `<your-openai-key>` once you've used it.
+6. Never write the secret value back into any rc file, never `export` it into the user's interactive shell, and never echo it back in chat in full. Refer to it as `<your-openai-key>` once you've used it.
 
 | Error code               | What it means                                                                                       | What the agent should do                                                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
