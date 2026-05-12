@@ -2,7 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-Changed the default Observability list mode to branches (all traces, including nested). Removed the list-mode toggle from the local studio UI; the query logic still recognizes `?listMode=traces` to opt back into the top-level-only view.
+Changed the default Observability list mode to branches (all traces, including nested). The query logic still recognizes `?listMode=traces` to opt back into the top-level-only view.
 
 **Before**
 
