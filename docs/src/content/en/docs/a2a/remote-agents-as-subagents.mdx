@@ -18,7 +18,7 @@ This is useful for specialized agents owned by another service or team, especial
 
 ## Quickstart
 
-Create an `A2AAgent` with a remote agent card URL or with the remote agent domain. Then register it in the parent agent's `agents` map.
+Create an `A2AAgent` with a remote agent card URL, then register it in the parent agent's `agents` map. For a single-agent server, you can pass the remote domain. For a multi-agent server, include the agent ID in the card URL.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -39,7 +39,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-known/agent-card.json`. If `url` already ends with `/agent-card.json`, Mastra uses that URL directly.
+If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-known/agent-card.json`. Use this mode for single-agent servers. For multi-agent servers, pass the explicit card URL, such as `https://agent.example.com/.well-known/:agentId/agent-card.json`. If `url` already ends with `/agent-card.json`, Mastra uses that URL directly. `A2AAgent` doesn't discover agent IDs beyond the URL you provide.
 
 ## How it works
 

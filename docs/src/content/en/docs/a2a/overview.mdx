@@ -81,7 +81,7 @@ A client agent is the caller. It may be a Mastra agent, a backend service, a bro
 Mastra supports two client-side paths:
 
 - **`MastraClient.getA2A()`**: Use this when an application needs direct programmatic access to a remote Mastra agent over A2A. The returned client can fetch the agent card, send messages, stream task updates, resubscribe to tasks, cancel tasks, and configure push notifications.
-- **`A2AAgent`**: Use this when a Mastra parent agent should call a remote A2A agent as a subagent. `A2AAgent` discovers the agent card, caches it, calls the execution endpoint, and maps remote task results back into Mastra's subagent flow.
+- **`A2AAgent`**: Use this when a Mastra parent agent should call a remote A2A agent as a subagent. `A2AAgent` fetches the configured agent card, caches it, calls the execution endpoint, and maps remote task results back into Mastra's subagent flow.
 
 Use `MastraClient.getA2A()` for application-level integration, debugging, or building your own client experience around remote tasks:
 
