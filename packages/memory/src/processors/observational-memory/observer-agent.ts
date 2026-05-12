@@ -5,10 +5,10 @@ import { stripEphemeralAnchorIds } from './anchor-ids';
 import { isTemporalGapMarker } from './date-utils';
 import type { Extractor } from './extractor';
 import {
-  buildCustomExtractorOutputSections,
-  buildCustomExtractorPriorLines,
-  parseCustomExtractorValues,
-  stripCustomExtractorSections,
+  buildExtractorOutputSections,
+  buildExtractorPriorLines,
+  parseExtractedValues,
+  stripExtractorSections,
 } from './extractor';
 import { safeSlice } from './string-utils';
 import {
@@ -284,7 +284,7 @@ export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
 export function buildObserverOutputFormat(
   includeThreadTitle: boolean = false,
-  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   const threadTitleSection = includeThreadTitle
     ? `
@@ -296,7 +296,7 @@ A short, noun-phrase title for this conversation (2-5 words). Examples:
 Only update when the topic meaningfully changes.
 </thread-title>`
     : '';
-  const customSectionsSpec = buildCustomExtractorOutputSections(customExtractors);
+  const customSectionsSpec = buildExtractorOutputSections(additionalExtractors);
 
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
@@ -366,15 +366,15 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
  * @param includeThreadTitle - Whether to include the <thread-title> section
- * @param customExtractors - Additional user-defined extractors to append as XML sections
+ * @param additionalExtractors - Additional user-defined extractors to append as XML sections
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
-  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
-  const outputFormat = buildObserverOutputFormat(includeThreadTitle, customExtractors);
+  const outputFormat = buildObserverOutputFormat(includeThreadTitle, additionalExtractors);
   const multiThreadTitleInstruction = includeThreadTitle
     ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
     : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
@@ -500,13 +500,13 @@ export interface ObserverResult {
   threadTitle?: string;
 
   /**
-   * Values extracted for any user-defined custom extractors, keyed by
-   * extractor slug. Built-in extractors (current-task, suggested-response,
-   * thread-title) continue to use their dedicated fields above.
+   * User-defined extracted values keyed by extractor slug. Built-in extractors
+   * (current-task, suggested-response, thread-title) continue to use their
+   * dedicated fields above.
    *
    * @experimental
    */
-  customExtractorValues?: Record<string, string>;
+  extractedValues?: Record<string, unknown>;
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
@@ -1123,12 +1123,12 @@ export function buildMultiThreadObserverTaskPrompt(
       currentTask?: string;
       suggestedResponse?: string;
       threadTitle?: string;
-      customExtractorValues?: Readonly<Record<string, unknown>>;
+      extractedValues?: Readonly<Record<string, unknown>>;
     }
   >,
   wasTruncated?: boolean,
   includeThreadTitle?: boolean,
-  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   let prompt = '';
 
@@ -1142,7 +1142,7 @@ export function buildMultiThreadObserverTaskPrompt(
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
-      const customPriorLines = buildCustomExtractorPriorLines(customExtractors, metadata?.customExtractorValues);
+      const customPriorLines = buildExtractorPriorLines(additionalExtractors, metadata?.extractedValues);
       const hasRelevantMetadata =
         metadata?.currentTask ||
         metadata?.suggestedResponse ||
@@ -1218,13 +1218,13 @@ export function buildMultiThreadObserverPrompt(
       currentTask?: string;
       suggestedResponse?: string;
       threadTitle?: string;
-      customExtractorValues?: Readonly<Record<string, unknown>>;
+      extractedValues?: Readonly<Record<string, unknown>>;
     }
   >,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
   includeThreadTitle?: boolean,
-  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
   return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(
@@ -1233,7 +1233,7 @@ export function buildMultiThreadObserverPrompt(
     priorMetadataByThread,
     wasTruncated,
     includeThreadTitle,
-    customExtractors,
+    additionalExtractors,
   )}`;
 }
 
@@ -1253,12 +1253,12 @@ export interface MultiThreadObserverResult {
  * Parse multi-thread Observer output to extract per-thread results.
  *
  * @param output - Raw text output from the observer model
- * @param customExtractors - Optional list of user-defined custom extractors
+ * @param additionalExtractors - Optional list of user-defined extractors
  *   whose XML sections should be parsed out of each thread's content
  */
 export function parseMultiThreadObserverOutput(
   output: string,
-  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
 
@@ -1309,10 +1309,10 @@ export function parseMultiThreadObserverOutput(
     }
 
     // Extract custom-extractor values for this thread, then strip their sections from observations.
-    const customExtractorValues =
-      customExtractors.length > 0 ? parseCustomExtractorValues(threadContent, customExtractors) : {};
-    if (customExtractors.length > 0) {
-      observations = stripCustomExtractorSections(observations, customExtractors);
+    const extractedValues =
+      additionalExtractors.length > 0 ? parseExtractedValues(threadContent, additionalExtractors) : {};
+    if (additionalExtractors.length > 0) {
+      observations = stripExtractorSections(observations, additionalExtractors);
     }
 
     // Clean up observations and apply line truncation
@@ -1323,7 +1323,7 @@ export function parseMultiThreadObserverOutput(
       currentTask,
       suggestedContinuation,
       threadTitle,
-      customExtractorValues: customExtractors.length > 0 ? customExtractorValues : undefined,
+      extractedValues: additionalExtractors.length > 0 ? extractedValues : undefined,
       rawOutput: threadContent,
     });
   }
@@ -1346,8 +1346,8 @@ export function buildObserverTaskPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
-    customExtractors?: ReadonlyArray<Extractor<unknown>>;
-    priorCustomExtractorValues?: Readonly<Record<string, unknown>>;
+    additionalExtractors?: ReadonlyArray<Extractor<any>>;
+    priorExtractedValues?: Readonly<Record<string, unknown>>;
   },
 ): string {
   let prompt = '';
@@ -1369,10 +1369,8 @@ export function buildObserverTaskPrompt(
   if (options?.includeThreadTitle && options?.priorThreadTitle) {
     priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
   }
-  if (options?.customExtractors && options?.priorCustomExtractorValues) {
-    priorMetadataLines.push(
-      ...buildCustomExtractorPriorLines(options.customExtractors, options.priorCustomExtractorValues),
-    );
+  if (options?.additionalExtractors && options?.priorExtractedValues) {
+    priorMetadataLines.push(...buildExtractorPriorLines(options.additionalExtractors, options.priorExtractedValues));
   }
 
   if (priorMetadataLines.length > 0) {
@@ -1393,16 +1391,16 @@ export function buildObserverTaskPrompt(
     prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
   }
 
-  if (options?.customExtractors && options.customExtractors.length > 0) {
-    const slugList = options.customExtractors.map(e => `<${e.slug}>`).join(', ');
+  if (options?.additionalExtractors && options.additionalExtractors.length > 0) {
+    const slugList = options.additionalExtractors.map(e => `<${e.slug}>`).join(', ');
     prompt += `\n\nIn addition to <observations>, also output the following XML section(s) per the format spec in your instructions: ${slugList}.`;
   }
 
   if (options?.skipContinuationHints) {
     const extraSections: string[] = [];
     if (options?.includeThreadTitle) extraSections.push('<thread-title>');
-    if (options?.customExtractors) {
-      for (const ext of options.customExtractors) {
+    if (options?.additionalExtractors) {
+      for (const ext of options.additionalExtractors) {
         extraSections.push(`<${ext.slug}>`);
       }
     }
@@ -1427,8 +1425,8 @@ export function buildObserverPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
-    customExtractors?: ReadonlyArray<Extractor<unknown>>;
-    priorCustomExtractorValues?: Readonly<Record<string, unknown>>;
+    additionalExtractors?: ReadonlyArray<Extractor<any>>;
+    priorExtractedValues?: Readonly<Record<string, unknown>>;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1440,12 +1438,12 @@ export function buildObserverPrompt(
  * Uses XML tag parsing for structured extraction.
  *
  * @param output - Raw text output from the observer model
- * @param customExtractors - Optional list of user-defined custom extractors
+ * @param additionalExtractors - Optional list of user-defined extractors
  *   whose XML sections should also be parsed out of the output
  */
 export function parseObserverOutput(
   output: string,
-  customExtractors: ReadonlyArray<Extractor<unknown>> = [],
+  additionalExtractors: ReadonlyArray<Extractor<any>> = [],
 ): ObserverResult {
   // Check for degenerate repetition before parsing (operates on raw output)
   if (detectDegenerateRepetition(output)) {
@@ -1460,22 +1458,22 @@ export function parseObserverOutput(
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically.
-  // Also strip any custom extractor sections so they don't leak into the
+  // Also strip any extractor sections so they don't leak into the
   // observations text.
   const observationsContent = parsed.observations || '';
-  const observationsSansCustom = stripCustomExtractorSections(observationsContent, customExtractors);
+  const observationsSansCustom = stripExtractorSections(observationsContent, additionalExtractors);
   const observations = sanitizeObservationLines(observationsSansCustom);
 
-  // Parse custom extractor values from the full output (custom tags may appear
+  // Parse extracted values from the full output (custom tags may appear
   // outside the <observations> block or inside it depending on model behaviour).
-  const customExtractorValues = customExtractors.length > 0 ? parseCustomExtractorValues(output, customExtractors) : {};
+  const extractedValues = additionalExtractors.length > 0 ? parseExtractedValues(output, additionalExtractors) : {};
 
   return {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     threadTitle: parsed.threadTitle || undefined,
-    customExtractorValues: customExtractors.length > 0 ? customExtractorValues : undefined,
+    extractedValues: additionalExtractors.length > 0 ? extractedValues : undefined,
     rawOutput: output,
   };
 }

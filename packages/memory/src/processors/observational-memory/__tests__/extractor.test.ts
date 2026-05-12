@@ -4,14 +4,14 @@ import { z } from 'zod';
 import {
   BUILT_IN_EXTRACTOR_SLUGS,
   Extractor,
-  buildCustomExtractorOutputSections,
-  buildCustomExtractorPriorLines,
+  buildExtractorOutputSections,
+  buildExtractorPriorLines,
   getExtractedValueForExtractor,
   invokeExtractorHooks,
   isBuiltInExtractorSlug,
-  parseCustomExtractorValues,
+  parseExtractedValues,
   slugifyExtractorName,
-  stripCustomExtractorSections,
+  stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
 
@@ -152,13 +152,13 @@ describe('Extractor public API', () => {
     });
   });
 
-  describe('buildCustomExtractorOutputSections', () => {
+  describe('buildExtractorOutputSections', () => {
     it('returns empty string for empty input', () => {
-      expect(buildCustomExtractorOutputSections([])).toBe('');
+      expect(buildExtractorOutputSections([])).toBe('');
     });
 
     it('renders one <slug> section per extractor', () => {
-      const result = buildCustomExtractorOutputSections([
+      const result = buildExtractorOutputSections([
         new Extractor({ name: 'Follows Policy', instructions: 'Output ok or violation.' }),
         new Extractor({ name: 'User Profile', instructions: 'JSON-ish blob.' }),
       ]);
@@ -167,10 +167,10 @@ describe('Extractor public API', () => {
     });
   });
 
-  describe('buildCustomExtractorPriorLines', () => {
+  describe('buildExtractorPriorLines', () => {
     it('returns nothing when priorValues is undefined', () => {
       expect(
-        buildCustomExtractorPriorLines(
+        buildExtractorPriorLines(
           [new Extractor({ name: 'foo', instructions: 'x', injectionBehaviour: 'carry-forward' })],
           undefined,
         ),
@@ -178,7 +178,7 @@ describe('Extractor public API', () => {
     });
 
     it('only emits lines for extractors with carry-forward and non-empty prior values', () => {
-      const lines = buildCustomExtractorPriorLines(
+      const lines = buildExtractorPriorLines(
         [
           new Extractor({ name: 'foo', instructions: 'x', injectionBehaviour: 'carry-forward' }),
           new Extractor({ name: 'bar', instructions: 'x', injectionBehaviour: 'none' }),
@@ -190,7 +190,7 @@ describe('Extractor public API', () => {
     });
 
     it('stringifies non-string values via JSON', () => {
-      const lines = buildCustomExtractorPriorLines(
+      const lines = buildExtractorPriorLines(
         [
           new Extractor({
             name: 'profile',
@@ -205,10 +205,14 @@ describe('Extractor public API', () => {
     });
   });
 
-  describe('parseCustomExtractorValues', () => {
+  describe('parseExtractedValues', () => {
     const extractors = [
       new Extractor({ name: 'follows-policy', instructions: 'x' }),
-      new Extractor({ name: 'user-profile', instructions: 'x' }),
+      new Extractor({
+        name: 'user-profile',
+        instructions: 'x',
+        schema: z.object({ name: z.string() }),
+      }),
     ];
 
     it('parses leading-line XML sections', () => {
@@ -220,34 +224,53 @@ describe('Extractor public API', () => {
         '{"name":"alice"}',
         '</user-profile>',
       ].join('\n');
-      expect(parseCustomExtractorValues(content, extractors)).toEqual({
+      expect(parseExtractedValues(content, extractors)).toEqual({
         'follows-policy': 'ok',
-        'user-profile': '{"name":"alice"}',
+        'user-profile': { name: 'alice' },
       });
     });
 
     it('returns empty when content is empty or no extractors', () => {
-      expect(parseCustomExtractorValues('', extractors)).toEqual({});
-      expect(parseCustomExtractorValues('<follows-policy>ok</follows-policy>', [])).toEqual({});
+      expect(parseExtractedValues('', extractors)).toEqual({});
+      expect(parseExtractedValues('<follows-policy>ok</follows-policy>', [])).toEqual({});
     });
 
     it('omits extractors whose tags are missing', () => {
-      expect(parseCustomExtractorValues('<follows-policy>ok</follows-policy>', extractors)).toEqual({
+      expect(parseExtractedValues('<follows-policy>ok</follows-policy>', extractors)).toEqual({
         'follows-policy': 'ok',
       });
+    });
+
+    it('skips invalid JSON/schema values and reports parse errors', () => {
+      const onParseError = vi.fn();
+      const content = [
+        '<follows-policy>',
+        'ok',
+        '</follows-policy>',
+        '<user-profile>',
+        '{"name":123}',
+        '</user-profile>',
+      ].join('\n');
+
+      expect(parseExtractedValues(content, extractors, { onParseError })).toEqual({
+        'follows-policy': 'ok',
+      });
+      expect(onParseError).toHaveBeenCalledTimes(1);
+      expect(onParseError.mock.calls[0]![0]!.extractor.slug).toBe('user-profile');
     });
 
     it('ignores inline mentions of the tag inside other content', () => {
       // Tag must appear at start of a line; inline mention should NOT be captured.
       const content = 'Some observation that mentions <follows-policy>foo</follows-policy> inline.';
-      expect(parseCustomExtractorValues(content, extractors)).toEqual({});
+      expect(parseExtractedValues(content, extractors)).toEqual({});
     });
   });
 
-  describe('stripCustomExtractorSections', () => {
+  describe('stripExtractorSections', () => {
     it('removes XML sections for given extractors', () => {
-      const content = 'before\n<follows-policy>ok</follows-policy>\nmiddle\n<user-profile>blob</user-profile>\nafter';
-      const result = stripCustomExtractorSections(content, [
+      const content =
+        'before\n<follows-policy>ok</follows-policy>\nmiddle\n<user-profile>\nblob\n</user-profile>\nafter';
+      const result = stripExtractorSections(content, [
         new Extractor({ name: 'follows-policy', instructions: 'x' }),
         new Extractor({ name: 'user-profile', instructions: 'x' }),
       ]);
@@ -258,8 +281,15 @@ describe('Extractor public API', () => {
       expect(result).toContain('after');
     });
 
+    it('preserves inline tag mentions', () => {
+      const content = 'User talked about the <follows-policy> tag inline.';
+      expect(stripExtractorSections(content, [new Extractor({ name: 'follows-policy', instructions: 'x' })])).toBe(
+        content,
+      );
+    });
+
     it('passes through unchanged when no extractors', () => {
-      expect(stripCustomExtractorSections('hello', [])).toBe('hello');
+      expect(stripExtractorSections('hello', [])).toBe('hello');
     });
   });
 
@@ -269,15 +299,15 @@ describe('Extractor public API', () => {
         currentTask: 'task',
         suggestedContinuation: 'sugg',
         threadTitle: 'title',
-        customExtractorValues: { 'follows-policy': 'ok' },
+        extractedValues: { 'follows-policy': 'ok' },
       };
       expect(getExtractedValueForExtractor(Extractor.currentTask(), values)).toBe('task');
       expect(getExtractedValueForExtractor(Extractor.suggestedResponse(), values)).toBe('sugg');
       expect(getExtractedValueForExtractor(Extractor.threadTitle(), values)).toBe('title');
     });
 
-    it('reads custom slugs from customExtractorValues map', () => {
-      const values = { customExtractorValues: { 'follows-policy': 'ok' } };
+    it('reads custom slugs from extractedValues map', () => {
+      const values = { extractedValues: { 'follows-policy': 'ok' } };
       const ext = new Extractor({ name: 'follows-policy', instructions: 'x' });
       expect(getExtractedValueForExtractor(ext, values)).toBe('ok');
     });
@@ -299,7 +329,7 @@ describe('Extractor public API', () => {
 
       await invokeExtractorHooks(
         extractors,
-        { customExtractorValues: { 'follows-policy': 'violation: rule X' } },
+        { extractedValues: { 'follows-policy': 'violation: rule X' } },
         { threadId: 't1', resourceId: 'r1' },
       );
 
@@ -326,12 +356,7 @@ describe('Extractor public API', () => {
         new Extractor({ name: 'good', instructions: 'x', onExtracted: goodHook }),
       ];
 
-      await invokeExtractorHooks(
-        extractors,
-        { customExtractorValues: { bad: 'b', good: 'g' } },
-        { threadId: 't1' },
-        onError,
-      );
+      await invokeExtractorHooks(extractors, { extractedValues: { bad: 'b', good: 'g' } }, { threadId: 't1' }, onError);
 
       expect(badHook).toHaveBeenCalledTimes(1);
       expect(goodHook).toHaveBeenCalledTimes(1);
@@ -340,21 +365,22 @@ describe('Extractor public API', () => {
       expect((onError.mock.calls[0]![1] as Error).message).toBe('boom');
     });
 
-    it('forwards mainAgent + runId from context to hook', async () => {
+    it('passes typed extracted values to hooks with thread context', async () => {
       const hook = vi.fn();
-      const mainAgent = { sendSignal: vi.fn() } as any;
-      const ext = new Extractor({ name: 'follows-policy', instructions: 'x', onExtracted: hook });
+      const ext = new Extractor({
+        name: 'user-profile',
+        instructions: 'x',
+        schema: z.object({ name: z.string() }),
+        onExtracted: hook,
+      });
 
-      await invokeExtractorHooks(
-        [ext],
-        { customExtractorValues: { 'follows-policy': 'ok' } },
-        { threadId: 't1', mainAgent, runId: 'run-1' },
-      );
+      await invokeExtractorHooks([ext], { extractedValues: { 'user-profile': { name: 'alice' } } }, { threadId: 't1' });
 
       expect(hook).toHaveBeenCalledTimes(1);
       const ctx = hook.mock.calls[0]![0]!;
-      expect(ctx.mainAgent).toBe(mainAgent);
-      expect(ctx.runId).toBe('run-1');
+      expect(ctx.extracted).toEqual({ name: 'alice' });
+      expect(ctx.threadId).toBe('t1');
+      expect(Object.keys(ctx)).not.toContain('run' + 'Id');
     });
   });
 });

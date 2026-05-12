@@ -41,16 +41,16 @@ export interface StrategyDeps {
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
   /**
-   * Resolved list of `Extractor` instances from `observer.extract`. Includes
+   * Resolved list of `Extractor` instances from `observation.extract`. Includes
    * both built-in factories (Extractor.threadTitle / currentTask /
    * suggestedResponse) and any custom user-supplied extractors.
    */
-  extractors: ReadonlyArray<Extractor<unknown>>;
+  extractors: ReadonlyArray<Extractor<any>>;
   /**
    * Subset of `extractors` whose slugs are not built-in. These need to be
    * threaded into the Observer prompt/parser as additional XML sections.
    */
-  customExtractors: ReadonlyArray<Extractor<unknown>>;
+  additionalExtractors: ReadonlyArray<Extractor<any>>;
   onIndexObservations?: (observation: {
     text: string;
     groupId: string;
@@ -168,24 +168,47 @@ export abstract class ObservationStrategy {
 
   /**
    * Fire `onExtracted` lifecycle hooks for every extractor in the resolved
-   * list. The default impl assumes a single-thread strategy (sync /
-   * async-buffer) — resource-scoped overrides this to fan out per thread.
+   * list. Hooks are scoped to the thread that produced the extracted value.
    *
    * Hook errors are swallowed (logged via `omError`) so a buggy user hook
    * never breaks the observation cycle.
    */
   protected async runExtractorHooks(processed: ProcessedObservation): Promise<void> {
     if (this.deps.extractors.length === 0) return;
-    await invokeExtractorHooks(
-      this.deps.extractors,
-      {
-        currentTask: processed.currentTask,
-        suggestedContinuation: processed.suggestedContinuation,
-        threadTitle: processed.threadTitle,
-        customExtractorValues: processed.customExtractorValues,
-      },
-      { threadId: this.opts.threadId, resourceId: this.opts.resourceId },
-      (extractor, error) => omError(`[OM] extractor.onExtracted (${extractor.slug}) threw`, error),
+
+    const updates = processed.threadMetadataUpdates;
+    const hookTargets = updates?.length
+      ? updates.map(update => ({
+          output: {
+            currentTask: update.currentTask,
+            suggestedContinuation: update.suggestedResponse,
+            threadTitle: update.threadTitle,
+            extractedValues: update.extractedValues,
+          },
+          threadId: update.threadId,
+        }))
+      : [
+          {
+            output: {
+              currentTask: processed.currentTask,
+              suggestedContinuation: processed.suggestedContinuation,
+              threadTitle: processed.threadTitle,
+              extractedValues: processed.extractedValues,
+            },
+            threadId: this.opts.threadId,
+          },
+        ];
+
+    await Promise.all(
+      hookTargets.map(target =>
+        invokeExtractorHooks(
+          this.deps.extractors,
+          target.output,
+          { threadId: target.threadId, resourceId: this.opts.resourceId },
+          (extractor, error) =>
+            omError(`[OM] extractor.onExtracted (${extractor.slug}) threw for thread ${target.threadId}`, error),
+        ),
+      ),
     );
   }
 

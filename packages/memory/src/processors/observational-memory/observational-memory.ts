@@ -299,7 +299,7 @@ export class ObservationalMemory {
    * user-supplied customs). Initialized in the constructor.
    * @internal
    */
-  private observerExtractors: ReadonlyArray<Extractor<unknown>> = [];
+  private observerExtractors: ReadonlyArray<Extractor<any>> = [];
 
   /**
    * Subset of `observerExtractors` whose slugs are NOT built-in. These need
@@ -307,7 +307,13 @@ export class ObservationalMemory {
    * sections and parsed back from the response.
    * @internal
    */
-  private observerCustomExtractors: ReadonlyArray<Extractor<unknown>> = [];
+  private observerAdditionalExtractors: ReadonlyArray<Extractor<any>> = [];
+
+  /**
+   * Resolved list of user-defined extractors driving the Reflector agent.
+   * @internal
+   */
+  private reflectorExtractors: ReadonlyArray<Extractor<any>> = [];
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -514,6 +520,7 @@ export class ObservationalMemory {
     };
 
     this.resolveObserverExtractors(config.observation?.extract);
+    this.resolveReflectorExtractors(config.reflection?.extract);
 
     // Resolve reflection config with defaults
     this.reflectionConfig = {
@@ -582,6 +589,7 @@ export class ObservationalMemory {
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
+      extractors: this.reflectorExtractors,
       mastra: config.mastra,
     });
 
@@ -704,7 +712,7 @@ export class ObservationalMemory {
   /**
    * Resolve the final list of extractors driving the Observer agent by
    * merging built-in extractors (controlled by legacy boolean flags) with
-   * any user-supplied custom extractors from `observation.extract`.
+   * any user-supplied extractors from `observation.extract`.
    *
    * The current task and suggested-response built-ins are always included
    * unless the user has already supplied an extractor with the matching
@@ -714,26 +722,32 @@ export class ObservationalMemory {
    * Validation (uniqueness, reserved tag collisions) is performed once
    * here so the constructor surface reports configuration errors eagerly.
    */
-  private resolveObserverExtractors(userExtractors: ReadonlyArray<Extractor<unknown>> | undefined): void {
+  private resolveObserverExtractors(userExtractors: ReadonlyArray<Extractor<any>> | undefined): void {
     const supplied = userExtractors ?? [];
     const suppliedSlugs = new Set(supplied.map(e => e.slug));
 
-    const builtIns: Extractor<unknown>[] = [];
+    const builtIns: Extractor<any>[] = [];
     if (!suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.currentTask)) {
-      builtIns.push(Extractor.currentTask() as Extractor<unknown>);
+      builtIns.push(Extractor.currentTask() as Extractor<any>);
     }
     if (!suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.suggestedResponse)) {
-      builtIns.push(Extractor.suggestedResponse() as Extractor<unknown>);
+      builtIns.push(Extractor.suggestedResponse() as Extractor<any>);
     }
     if (this.observationConfig.threadTitle && !suppliedSlugs.has(BUILT_IN_EXTRACTOR_SLUGS.threadTitle)) {
-      builtIns.push(Extractor.threadTitle() as Extractor<unknown>);
+      builtIns.push(Extractor.threadTitle() as Extractor<any>);
     }
 
-    const merged: Extractor<unknown>[] = [...builtIns, ...supplied];
+    const merged: Extractor<any>[] = [...builtIns, ...supplied];
     validateExtractorList(merged, 'observer.extract');
 
     this.observerExtractors = merged;
-    this.observerCustomExtractors = merged.filter(e => !isBuiltInExtractorSlug(e.slug));
+    this.observerAdditionalExtractors = merged.filter(e => !isBuiltInExtractorSlug(e.slug));
+  }
+
+  private resolveReflectorExtractors(userExtractors: ReadonlyArray<Extractor<any>> | undefined): void {
+    const supplied = userExtractors ?? [];
+    validateExtractorList(supplied, 'reflection.extract');
+    this.reflectorExtractors = [...supplied];
   }
 
   private resolveTieredModel<TModel extends ObservationalMemoryModel>(
@@ -3641,12 +3655,12 @@ ${formattedMessages}
    *
    * Includes both the built-in factories (`Extractor.currentTask`,
    * `Extractor.suggestedResponse`, optionally `Extractor.threadTitle`) and
-   * any custom user-supplied extractors from `observation.extract`.
+   * any user-supplied extractors from `observation.extract`.
    *
    * @experimental
    */
-  getObserverExtractors(): ReadonlyArray<Extractor<unknown>> {
-    return this.observerExtractors;
+  getObserverExtractors(): ReadonlyArray<Extractor<any>> {
+    return [...this.observerExtractors];
   }
 
   /**
@@ -3657,8 +3671,18 @@ ${formattedMessages}
    * @experimental
    * @internal
    */
-  getObserverCustomExtractors(): ReadonlyArray<Extractor<unknown>> {
-    return this.observerCustomExtractors;
+  getObserverAdditionalExtractors(): ReadonlyArray<Extractor<any>> {
+    return [...this.observerAdditionalExtractors];
+  }
+
+  /**
+   * Get the fully-resolved list of extractors driving the Reflector agent.
+   *
+   * @experimental
+   * @internal
+   */
+  getReflectorExtractors(): ReadonlyArray<Extractor<any>> {
+    return [...this.reflectorExtractors];
   }
 
   /**

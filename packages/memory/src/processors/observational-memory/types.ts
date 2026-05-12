@@ -189,8 +189,8 @@ export interface ObservationConfig {
    * When enabled, the Observer will analyze conversation context and
    * suggest a short, descriptive title for the thread.
    *
-   * Ignored when an explicit `extract` array is provided — instead include
-   * `Extractor.threadTitle()` in the array.
+   * When an explicit `extract` array includes the `thread-title` slug, that
+   * extractor overrides the built-in thread title extractor.
    *
    * @default false
    */
@@ -200,19 +200,15 @@ export interface ObservationConfig {
    * Declarative list of extractors that drive what the Observer outputs.
    *
    * Each `Extractor` is emitted as its own XML-tagged section in the
-   * observer's structured output, parsed back out, optionally carried
-   * forward into the next observer call, and surfaced to a lifecycle hook
-   * (`onExtracted`) where you can react to the value — for example, by
-   * calling `mainAgent.sendSignal(...)` to push a runtime signal back into
-   * the main agent.
+   * observer's structured output, parsed back out, schema-validated,
+   * optionally carried forward into the next observer call, persisted to
+   * thread metadata, and surfaced to a lifecycle hook (`onExtracted`).
    *
    * When omitted, ObservationalMemory defaults to extracting `current-task`,
    * `suggested-response`, and (when `threadTitle: true`) `thread-title`.
    *
-   * When set, this array completely replaces the default list — include
-   * `Extractor.currentTask()` / `Extractor.suggestedResponse()` /
-   * `Extractor.threadTitle()` if you want to keep the built-in behaviour
-   * alongside your custom extractors.
+   * When set, this array extends the default list. Supplying an extractor
+   * with the same slug as a built-in overrides that built-in.
    *
    * @example
    * ```ts
@@ -231,12 +227,9 @@ export interface ObservationConfig {
    *         instructions: 'Output "ok" or describe the policy violation.',
    *         schema: z.string(),
    *         injectionBehaviour: 'carry-forward',
-   *         onExtracted: ({ mainAgent, extracted, threadId }) => {
-   *           if (mainAgent && extracted && extracted !== 'ok') {
-   *             mainAgent.sendSignal(
-   *               { type: 'system-reminder', contents: `POLICY: ${extracted}` },
-   *               { threadId, ifIdle: { behavior: 'discard' } },
-   *             );
+   *         onExtracted: ({ extracted, threadId }) => {
+   *           if (extracted && extracted !== 'ok') {
+   *             console.warn(`Policy issue in ${threadId}: ${extracted}`);
    *           }
    *         },
    *       }),
@@ -247,7 +240,7 @@ export interface ObservationConfig {
    *
    * @experimental
    */
-  extract?: Array<Extractor<unknown>>;
+  extract?: Array<Extractor<any>>;
 }
 
 /**
@@ -340,17 +333,16 @@ export interface ReflectionConfig {
    * Declarative list of extractors that drive what the Reflector outputs.
    *
    * Each `Extractor` is emitted as its own XML-tagged section in the
-   * reflector's structured output and surfaced to a lifecycle hook
-   * (`onExtracted`) where you can react to the value.
+   * reflector's structured output, parsed, schema-validated, persisted to
+   * thread metadata, and surfaced to a thread-scoped lifecycle hook
+   * (`onExtracted`) after the reflection is persisted.
    *
-   * Currently the Reflector treats this list as a forward-compatible
-   * placeholder — values are still extracted but reflector-specific
-   * behaviour beyond the built-in summarisation will be expanded in
-   * future releases.
+   * Extractor sections are stripped from reflected observations before the
+   * reflection is stored so extracted values do not leak into memory text.
    *
    * @experimental
    */
-  extract?: Array<Extractor<unknown>>;
+  extract?: Array<Extractor<any>>;
 }
 
 /**

@@ -379,6 +379,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   bufferedReflection: { type: 'text', nullable: true }, // JSON string of buffered reflection content
   bufferedReflectionTokens: { type: 'integer', nullable: true }, // Token count of buffered reflection (post-compression)
   bufferedReflectionInputTokens: { type: 'integer', nullable: true }, // Token count of observations fed to reflector (pre-compression)
+  bufferedReflectionExtracted: { type: 'jsonb', nullable: true }, // User-defined values extracted during async reflection buffering
   reflectedObservationLineCount: { type: 'integer', nullable: true }, // Number of observation lines that were reflected on during async buffering
   bufferedObservationChunks: { type: 'jsonb', nullable: true }, // JSON array of BufferedObservationChunk objects
   isBufferingObservation: { type: 'boolean', nullable: false },

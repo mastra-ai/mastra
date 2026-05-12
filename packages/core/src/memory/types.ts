@@ -62,13 +62,14 @@ export type ThreadOMMetadata = {
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
   lastObservedMessageCursor?: { createdAt: string; id: string };
   /**
-   * Latest extracted values for user-defined extractors, keyed by extractor slug.
-   * Built-in extractors (`current-task`, `suggested-response`, `thread-title`)
-   * continue to use their dedicated fields above for backwards compatibility.
+   * Latest user-defined extracted values from Observer/Reflector extractors,
+   * keyed by extractor slug. Built-in extractors (`current-task`,
+   * `suggested-response`, `thread-title`) continue to use their dedicated
+   * fields above for backwards compatibility.
    *
    * @experimental
    */
-  extractors?: Record<string, unknown>;
+  extracted?: Record<string, unknown>;
   // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
 };
 
