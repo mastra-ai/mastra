@@ -20,7 +20,8 @@ config();
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const describeE2E = process.env.OPENAI_API_KEY ? describe : describe.skip;
+const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummyapikey');
+const describeE2E = hasOpenAIKey ? describe : describe.skip;
 
 const testStorage = new MockStore();
 

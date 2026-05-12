@@ -8,12 +8,13 @@ config();
 
 const mock = createGatewayMock();
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummyapikey');
 
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
 describe('OpenAI reasoning summary streaming (e2e)', { timeout: 120_000 }, () => {
-  it.skipIf(!process.env.OPENAI_API_KEY)(
+  it.skipIf(!hasOpenAIKey)(
     'streams and persists reasoning summaries from gpt-5.4 with per-id chunk integrity',
     async () => {
       const agent = new Agent({

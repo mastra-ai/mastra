@@ -1,4 +1,4 @@
-import { cp, mkdir } from 'node:fs/promises';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
@@ -16,6 +16,7 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
 
   await mkdir(newPath, { recursive: true });
   await cp(templatePath, newPath, { recursive: true });
+  await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
 
