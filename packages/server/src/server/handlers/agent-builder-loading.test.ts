@@ -21,7 +21,7 @@ describe('agent builder route loading', () => {
     vi.resetModules();
   });
 
-  it('does not load agent builder when importing the server routes', async () => {
+  it('does not load or register agent builder when importing the server routes', async () => {
     const loadAgentBuilder = vi.fn(() => ({
       agentBuilderWorkflows: {},
     }));
@@ -30,7 +30,7 @@ describe('agent builder route loading', () => {
 
     const routes = await import('../server-adapter/routes');
 
-    expect(routes.SERVER_ROUTES.some(route => route.path.startsWith('/agent-builder'))).toBe(true);
+    expect(routes.SERVER_ROUTES.some(route => route.path.startsWith('/agent-builder'))).toBe(false);
     expect(loadAgentBuilder).not.toHaveBeenCalled();
   });
 
