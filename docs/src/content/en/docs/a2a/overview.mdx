@@ -1,6 +1,6 @@
 ---
 title: "A2A overview | A2A"
-description: "Learn how Mastra uses A2A for remote agents, subagents, and Mastra Client integrations."
+description: "Learn how Mastra uses A2A for remote agents and subagents."
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
@@ -19,9 +19,7 @@ Mastra exposes agents through the Agent-to-Agent (A2A) protocol so another agent
 
 ## Pages in this section
 
-- [Build remote A2A agents](/docs/a2a/build-remote-agents): Expose a Mastra agent over A2A from Mastra Server
-- [Use remote A2A agents as subagents](/docs/a2a/remote-agents-as-subagents): Compose remote agents into a larger multi-agent system
-- [Connect to a remote A2A agent with Mastra Client](/docs/a2a/connect-with-mastra-client): Discover agent cards, send messages, and manage remote tasks from a client
+- [Subagents](/docs/a2a/remote-agents-as-subagents): Compose remote agents into a larger multi-agent system
 
 ## How A2A works in Mastra
 
@@ -39,17 +37,12 @@ The flow looks like this:
 1. Mastra exposes that agent through an agent card at `/.well-known/:agentId/agent-card.json` and an execution endpoint at `/a2a/:agentId`.
 1. A client agent or application reads the card, sends messages, and receives task, artifact, and status events.
 
-This makes A2A useful for agent-to-agent calls across process boundaries, across services, or across teams. The client does not need direct access to the remote agent's internal code or tools. It only needs the A2A endpoint.
+This makes A2A useful for agent-to-agent calls across process boundaries, across services, or across teams. The client doesn't need direct access to the remote agent's internal code or tools. It only needs the A2A endpoint.
 
 ## Get started
 
-Start with the page that matches your role:
-
-- If you are exposing a Mastra agent for others to call, read [Build remote A2A agents](/docs/a2a/build-remote-agents)
-- If you are calling a remote A2A agent from an app or service, read [Connect to a remote A2A agent with Mastra Client](/docs/a2a/connect-with-mastra-client)
+Start with [Subagents](/docs/a2a/remote-agents-as-subagents) when you want to use a remote A2A agent inside a larger Mastra agent system.
 
 ## Next steps
 
-- [Build remote A2A agents](/docs/a2a/build-remote-agents)
-- [Use remote A2A agents as subagents](/docs/a2a/remote-agents-as-subagents)
-- [Connect to a remote A2A agent with Mastra Client](/docs/a2a/connect-with-mastra-client)
+- [Subagents](/docs/a2a/remote-agents-as-subagents)

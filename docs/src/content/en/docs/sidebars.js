@@ -333,18 +333,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'a2a/build-remote-agents',
-          label: 'Remote Agents',
-        },
-        {
-          type: 'doc',
           id: 'a2a/remote-agents-as-subagents',
           label: 'Subagents',
-        },
-        {
-          type: 'doc',
-          id: 'a2a/connect-with-mastra-client',
-          label: 'Mastra Client',
         },
       ],
     },
