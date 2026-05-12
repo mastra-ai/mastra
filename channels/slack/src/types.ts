@@ -4,54 +4,30 @@ import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
 
 /**
- * Adapter-level options forwarded to every `createSlackAdapter()` call this
- * provider makes. Credentials and identity that come from the installation
- * (`botToken`, `botUserId`, `signingSecret`, `userName`, `clientId`,
- * `clientSecret`) are managed by the provider and intentionally not overridable
- * here.
+ * SlackAdapter fields that the provider forwards to every `createSlackAdapter()`
+ * call. Excludes installation-managed credentials/identity (`botToken`,
+ * `botUserId`, `signingSecret`, `userName`, `clientId`, `clientSecret`) and
+ * `encryptionKey` (which the provider owns at its top level for installation
+ * data encryption).
  */
-export type SlackProviderAdapterOptions = Pick<
+type ForwardedSlackAdapterOptions = Pick<
   SlackAdapterConfig,
-  | 'apiUrl'
-  | 'appToken'
-  | 'encryptionKey'
-  | 'installationKeyPrefix'
-  | 'logger'
-  | 'mode'
-  | 'socketForwardingSecret'
-  | 'webhookVerifier'
+  'apiUrl' | 'appToken' | 'installationKeyPrefix' | 'logger' | 'mode' | 'socketForwardingSecret' | 'webhookVerifier'
 >;
 
 /**
  * Per-adapter overrides forwarded to the SlackAdapter entry inside
- * `AgentChannels.adapters`. The actual `adapter` instance is created by the
- * provider, so it isn't included here.
+ * `AgentChannels.adapters` — equivalent to passing
+ * `{ adapter, ...adapterConfig }` when wiring up `AgentChannels` manually.
+ * The `adapter` instance itself is created by the provider.
  */
-export type SlackProviderAdapterConfig = Omit<ChannelAdapterConfig, 'adapter'>;
+export type SlackAdapterChannelConfig = Omit<ChannelAdapterConfig, 'adapter'>;
 
-/**
- * `AgentChannels` options forwarded to every agent connected via this provider.
- * `adapters` and `userName` are managed by the provider and intentionally not
- * overridable here.
- *
- * Set `adapterConfig` to tweak per-adapter behavior like `cards`,
- * `formatToolCall`, and `formatError`.
- */
-export interface SlackProviderChannelsOptions
-  extends Pick<ChannelConfig, 'inlineMedia' | 'inlineLinks' | 'state' | 'threadContext' | 'tools' | 'chatOptions'> {
-  /**
-   * Override built-in event handlers (e.g. `onDirectMessage`, `onMention`).
-   * @see ChannelHandlers
-   */
-  handlers?: ChannelHandlers;
-
-  /**
-   * Per-adapter overrides applied to the Slack adapter entry — equivalent to
-   * passing `{ adapter, ...adapterConfig }` to `AgentChannels.adapters.slack`
-   * when wiring it up manually.
-   */
-  adapterConfig?: SlackProviderAdapterConfig;
-}
+/** AgentChannels fields that the provider forwards. `adapters` and `userName` are provider-managed. */
+type ForwardedAgentChannelsOptions = Pick<
+  ChannelConfig,
+  'inlineMedia' | 'inlineLinks' | 'state' | 'threadContext' | 'tools' | 'chatOptions'
+>;
 
 // =============================================================================
 // Global Configuration (Mastra-level)
@@ -59,8 +35,36 @@ export interface SlackProviderChannelsOptions
 
 /**
  * Configuration for SlackProvider at the Mastra level.
+ *
+ * In addition to the provider-specific fields documented below, this accepts
+ * options that are forwarded to the underlying `SlackAdapter` and
+ * `AgentChannels` instances managed by the provider — for example `handlers`,
+ * `inlineMedia`, `mode: 'socket'`, and `adapterConfig`.
  */
-export interface SlackProviderConfig {
+export interface SlackProviderConfig extends ForwardedSlackAdapterOptions, ForwardedAgentChannelsOptions {
+  /**
+   * Override built-in event handlers (e.g. `onDirectMessage`, `onMention`).
+   * Forwarded to `AgentChannels` for every agent connected via this provider.
+   *
+   * @example
+   * ```ts
+   * handlers: {
+   *   onDirectMessage: async (thread, message, defaultHandler) => {
+   *     console.log('DM:', message.text);
+   *     await defaultHandler(thread, message);
+   *   },
+   * }
+   * ```
+   */
+  handlers?: ChannelHandlers;
+
+  /**
+   * Per-adapter overrides applied to the Slack adapter entry inside
+   * `AgentChannels.adapters` — for example `cards`, `formatToolCall`,
+   * `formatError`.
+   */
+  adapterConfig?: SlackAdapterChannelConfig;
+
   /**
    * Slack App Configuration access token for programmatic app creation.
    * Generate at: https://api.slack.com/apps > "Your App Configuration Tokens"
@@ -117,50 +121,6 @@ export interface SlackProviderConfig {
    */
   encryptionKey?: string;
 
-  /**
-   * Options forwarded to `createSlackAdapter()` for every installation managed
-   * by this provider. Use this for advanced SlackAdapter configuration such as
-   * switching to `mode: 'socket'`, supplying a custom logger, or overriding the
-   * webhook verifier.
-   *
-   * Provider-managed fields (`botToken`, `botUserId`, `signingSecret`,
-   * `userName`, `clientId`, `clientSecret`) come from each installation and are
-   * not overridable here.
-   *
-   * @example
-   * ```ts
-   * new SlackProvider({
-   *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
-   *   adapter: { mode: 'socket', appToken: process.env.SLACK_APP_TOKEN },
-   * });
-   * ```
-   */
-  adapter?: SlackProviderAdapterOptions;
-
-  /**
-   * Options forwarded to `AgentChannels` for every agent connected via this
-   * provider. Use this to override the built-in `handlers`, customize
-   * `inlineMedia` / `inlineLinks`, or tweak per-adapter rendering through
-   * `adapterConfig`.
-   *
-   * @example
-   * ```ts
-   * new SlackProvider({
-   *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
-   *   channels: {
-   *     handlers: {
-   *       onDirectMessage: async (thread, message, defaultHandler) => {
-   *         console.log('DM:', message.text);
-   *         await defaultHandler(thread, message);
-   *       },
-   *     },
-   *     inlineMedia: ['image/*', 'video/*'],
-   *     adapterConfig: { cards: false },
-   *   },
-   * });
-   * ```
-   */
-  channels?: SlackProviderChannelsOptions;
 }
 
 // =============================================================================
