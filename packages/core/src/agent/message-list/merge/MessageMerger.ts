@@ -46,6 +46,13 @@ export class MessageMerger {
     // Don't merge into sealed messages (e.g., messages that have been observed)
     if (MessageMerger.isSealed(latestMessage)) return false;
 
+    if (
+      (latestMessage.content?.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra
+        ?.responseBoundary
+    ) {
+      return false;
+    }
+
     // Don't merge completion result message (network uses completionResult, supervisor uses isTaskCompleteResult)
     if (
       incomingMessage.content.metadata?.completionResult ||
