@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import nodeExternals from 'rollup-plugin-node-externals';
-import type { UserConfig } from 'vite';
+import type { PluginOption, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
@@ -24,7 +24,7 @@ const libConfig: UserConfig = {
       insertTypesEntry: true,
     }),
     libInjectCss(),
-    nodeExternals(),
+    nodeExternals() as PluginOption,
   ],
   build: {
     lib: {

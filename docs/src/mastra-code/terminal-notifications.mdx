@@ -1,0 +1,290 @@
+---
+title: 'Terminal notifications'
+description: 'Set up clickable macOS notifications for Mastra Code running in WezTerm.'
+packages:
+  - 'mastracode'
+---
+
+# Terminal notifications
+
+This guide shows a WezTerm setup that sends a clickable macOS notification when Mastra Code needs attention and the terminal pane is not active.
+
+This guide is for WezTerm on macOS. To adapt it for another terminal or operating system, share these instructions with Mastra Code and ask it to adjust the scripts for your setup.
+
+The setup uses hooks to:
+
+- notify when the agent finishes a response with the `Stop` event
+- focus the original WezTerm pane when you select the notification
+- clear the notification after you return to the pane
+
+## Requirements
+
+This example is for macOS with [WezTerm](https://wezfurlong.org/wezterm/) and [terminal-notifier](https://github.com/julienXX/terminal-notifier).
+
+Install the command-line dependencies:
+
+```sh
+brew install terminal-notifier jq sqlite3
+```
+
+Ensure the WezTerm command-line interface is available:
+
+```sh
+wezterm cli list --format json
+```
+
+## Create the hook directory
+
+Create a global hooks directory:
+
+```sh
+mkdir -p ~/.mastracode/hooks
+```
+
+## Add the focus script
+
+The focus script activates WezTerm, switches to the original tab, focuses the pane, and removes the active notification.
+
+```bash title="~/.mastracode/hooks/wezterm-focus-pane.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+
+pane_id="${1:?pane id required}"
+tab_id="${2:?tab id required}"
+group_id="mastracode-$pane_id"
+
+open -a WezTerm
+wezterm cli activate-tab --tab-id "$tab_id" >/dev/null 2>&1 || true
+wezterm cli activate-pane --pane-id "$pane_id" >/dev/null 2>&1 || true
+open -a WezTerm
+
+if command -v terminal-notifier >/dev/null 2>&1; then
+  terminal-notifier -remove "$group_id" >/dev/null 2>&1 || true
+fi
+```
+
+Make the script executable:
+
+```sh
+chmod +x ~/.mastracode/hooks/wezterm-focus-pane.sh
+```
+
+## Add the notification clearing script
+
+The clearing script watches for the original pane to become active again. When it does, it removes the notification.
+
+```bash title="~/.mastracode/hooks/wezterm-clear-toast.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+
+pane_id="${1:?pane id required}"
+group_id="${2:?notification group required}"
+
+for _ in $(seq 1 3600); do
+  focused_panes="$(wezterm cli list-clients --format json 2>/dev/null | jq -r '.[].focused_pane_id' || true)"
+  frontmost_app="$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true' 2>/dev/null || true)"
+
+  if [ "$frontmost_app" = "com.github.wez.wezterm" ] && printf '%s\n' "$focused_panes" | grep -qx "$pane_id"; then
+    if command -v terminal-notifier >/dev/null 2>&1; then
+      terminal-notifier -remove "$group_id" >/dev/null 2>&1 || true
+    fi
+    exit 0
+  fi
+
+  sleep 1
+done
+```
+
+Make the script executable:
+
+```sh
+chmod +x ~/.mastracode/hooks/wezterm-clear-toast.sh
+```
+
+## Add the notification hook script
+
+This script receives hook payloads from Mastra Code through stdin. It checks whether the current WezTerm pane is already active. If the pane is not active, it shows a clickable notification.
+
+```bash title="~/.mastracode/hooks/wezterm-mastracode-notify.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+
+payload="$(cat)"
+log_file="$HOME/.mastracode/hooks/wezterm-mastracode-notify.log"
+
+log() {
+  printf '%s %s\n' "$(date -Iseconds)" "$*" >> "$log_file"
+}
+
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  /usr/bin/perl -e 'alarm shift; exec @ARGV' "$seconds" "$@"
+}
+
+hook_event="$(printf '%s' "$payload" | jq -r '.hook_event_name // empty')"
+stop_reason="$(printf '%s' "$payload" | jq -r '.stop_reason // empty')"
+
+if [ "$hook_event" != "Stop" ]; then
+  log "exit: unsupported event=$hook_event"
+  exit 0
+fi
+
+if [ "$stop_reason" != "complete" ]; then
+  log "exit: Stop stop_reason=$stop_reason"
+  exit 0
+fi
+
+pane_id="${WEZTERM_PANE:-}"
+if [ -z "$pane_id" ]; then
+  log "exit: missing WEZTERM_PANE event=$hook_event"
+  exit 0
+fi
+
+focused_panes="$(
+  run_with_timeout 1 wezterm cli list-clients --format json 2>/dev/null \
+    | jq -r '.[].focused_pane_id' 2>/dev/null \
+    || true
+)"
+frontmost_app="$(
+  run_with_timeout 1 osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true' 2>/dev/null \
+    || true
+)"
+
+# Suppress the notification only when WezTerm is frontmost and this pane is focused.
+# If WezTerm is in the background, still notify.
+if [ "$frontmost_app" = "com.github.wez.wezterm" ] && printf '%s\n' "$focused_panes" | grep -qx "$pane_id"; then
+  log "exit: already focused event=$hook_event pane=$pane_id frontmost=$frontmost_app"
+  exit 0
+fi
+
+pane_info="$(
+  run_with_timeout 1 wezterm cli list --format json 2>/dev/null \
+    | jq -r --argjson pane "$pane_id" '.[] | select(.pane_id == $pane) | @base64' 2>/dev/null \
+    | head -n 1 \
+    || true
+)"
+if [ -z "$pane_info" ]; then
+  log "exit: pane not found event=$hook_event pane=$pane_id"
+  exit 0
+fi
+
+decode_pane_info() {
+  printf '%s' "$pane_info" | base64 --decode | jq -r "$1"
+}
+
+tab_id="$(decode_pane_info '.tab_id')"
+tab_title="$(decode_pane_info '.title // empty' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
+if [ -z "$tab_id" ] || [ "$tab_id" = "null" ]; then
+  log "exit: tab not found event=$hook_event pane=$pane_id"
+  exit 0
+fi
+
+session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty')"
+thread_title=""
+
+if [ -n "$session_id" ] && command -v sqlite3 >/dev/null 2>&1; then
+  db_path="${MASTRA_DB_PATH:-$HOME/Library/Application Support/mastracode/mastra.db}"
+  if [ -f "$db_path" ]; then
+    escaped_session_id="${session_id//\'/\'\'}"
+    thread_title="$(
+      run_with_timeout 1 sqlite3 "$db_path" \
+        "select title from mastra_threads where id = '$escaped_session_id' limit 1;" 2>/dev/null \
+        | head -n 1 \
+        || true
+    )"
+  fi
+fi
+
+truncate() {
+  local max="$1"
+  awk -v max="$max" '
+    BEGIN { ORS = "" }
+    {
+      gsub(/[[:space:]]+/, " ")
+      text = text (text ? " " : "") $0
+    }
+    END {
+      if (length(text) > max) print substr(text, 1, max - 1) "…"
+      else print text
+    }
+  '
+}
+
+context="${thread_title:-$tab_title}"
+context="$(printf '%s' "$context" | truncate 80)"
+notification_title="Mastra Code"
+notification_message="${context:-Agent finished}"
+
+group_id="mastracode-$pane_id"
+focus_cmd="/bin/bash $HOME/.mastracode/hooks/wezterm-focus-pane.sh $pane_id $tab_id"
+clear_cmd="/bin/bash $HOME/.mastracode/hooks/wezterm-clear-toast.sh $pane_id $group_id"
+
+log "notify: event=$hook_event pane=$pane_id tab=$tab_id frontmost=$frontmost_app message=$notification_message"
+
+if command -v terminal-notifier >/dev/null 2>&1; then
+  terminal_notifier_args=(
+    -title "$notification_title"
+    -message "$notification_message"
+    -activate "com.github.wez.wezterm"
+    -execute "$focus_cmd"
+    -group "$group_id"
+  )
+  if ! run_with_timeout 2 terminal-notifier "${terminal_notifier_args[@]}"; then
+    log "warn: terminal-notifier timed out or failed event=$hook_event pane=$pane_id"
+  fi
+
+  nohup /bin/bash -c "$clear_cmd" >/dev/null 2>&1 &
+else
+  if ! run_with_timeout 2 osascript -e "display notification \"${notification_message//\"/\\\"}\" with title \"${notification_title//\"/\\\"}\""; then
+    log "warn: osascript notification timed out or failed event=$hook_event pane=$pane_id"
+  fi
+fi
+```
+
+Make the script executable:
+
+```sh
+chmod +x ~/.mastracode/hooks/wezterm-mastracode-notify.sh
+```
+
+## Configure Mastra Code hooks
+
+Create or update the global hook configuration:
+
+```json title="~/.mastracode/hooks.json"
+{
+  "Stop": [
+    {
+      "type": "command",
+      "command": "bash \"$HOME/.mastracode/hooks/wezterm-mastracode-notify.sh\"",
+      "description": "Notify when Mastra Code goes idle in an inactive WezTerm pane"
+    }
+  ]
+}
+```
+
+If Mastra Code is already running, reload hooks:
+
+```text
+/hooks reload
+```
+
+Script changes do not require reload. Configuration changes in `hooks.json` require reload.
+
+## Test the setup
+
+Run a Mastra Code prompt, then switch to another app or another WezTerm pane before the agent finishes. When the `Stop` hook runs, macOS shows a notification with the thread or tab title.
+
+Select the notification to focus the original WezTerm tab and pane.
+
+To debug the hook, inspect the log file:
+
+```sh
+tail -n 50 ~/.mastracode/hooks/wezterm-mastracode-notify.log
+```
+
+## Customize the setup
+
+Extend the script to handle other hook events when you want notifications for additional moments in your workflow. For a list of hook events and payloads, see [Configuration](/configuration#hooks).

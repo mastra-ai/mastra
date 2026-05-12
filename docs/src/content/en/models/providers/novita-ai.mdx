@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "novita-ai/baichuan/baichuan-m2-32b"
+  model: "novita-ai/Sao10K/L3-8B-Stheno-v3.2"
 });
 
 // Generate a response
@@ -207,7 +207,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 16384,
     "inputCost": 0.15,
@@ -219,7 +219,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 64000,
     "maxOutput": 32000,
     "inputCost": 0.3,
@@ -404,6 +404,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "novita-ai/inclusionai/ling-2.6-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
     "model": "novita-ai/kwaipilot/kat-coder-pro",
@@ -1042,18 +1054,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.6
   },
   {
-    "model": "novita-ai/qwen/qwen3.6-27b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.6,
-    "outputCost": 3.6
-  },
-  {
     "model": "novita-ai/sao10k/l3-70b-euryale-v2.1",
     "imageInput": false,
     "audioInput": false,
@@ -1078,7 +1078,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "novita-ai/sao10k/L3-8B-Stheno-v3.2",
+    "model": "novita-ai/Sao10K/L3-8B-Stheno-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1246,7 +1246,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.novita.ai/openai",
-    id: "novita-ai/baichuan/baichuan-m2-32b",
+    id: "novita-ai/Sao10K/L3-8B-Stheno-v3.2",
     apiKey: process.env.NOVITA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -1265,7 +1265,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "novita-ai/zai-org/glm-5.1"
-      : "novita-ai/baichuan/baichuan-m2-32b";
+      : "novita-ai/Sao10K/L3-8B-Stheno-v3.2";
   }
 });
 ```

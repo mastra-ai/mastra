@@ -455,6 +455,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
+        { type: 'doc', id: 'storage/dsql', label: 'Aurora DSQL Storage' },
         { type: 'doc', id: 'storage/clickhouse', label: 'ClickHouse Storage' },
         { type: 'doc', id: 'storage/cloudflare-d1', label: 'Cloudflare D1 Storage' },
         { type: 'doc', id: 'storage/cloudflare', label: 'Cloudflare KV Storage' },

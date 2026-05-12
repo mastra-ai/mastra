@@ -1,5 +1,75 @@
 # @mastra/playground-ui
 
+## 27.0.0-alpha.14
+
+### Minor Changes
+
+- Added an "All traces, nested too" mode to the Observability → Traces page. ([#16479](https://github.com/mastra-ai/mastra/pull/16479))
+
+  The traces list now has a switcher in the toolbar to toggle between two views:
+  - **Top-level traces only** (default) — one row per top-level run, the existing behavior.
+  - **All traces, nested too** — one row per invocation, including every agent, workflow, tool, processor, scorer, and RAG ingestion that ran nested inside another run.
+
+  This makes it possible to find every invocation of a given entity (e.g. "every run of `recipe-maker` workflow") regardless of how it was triggered. Selecting a row in the new mode opens a detail panel showing just that branch's subtree.
+
+  **New hooks** for consumers building their own observability UIs:
+  - `useBranch({ traceId, spanId, depth? })` — fetches the span subtree rooted at an anchor span.
+  - `useTraceOrBranchSpans({ traceId, spanId, listMode })` — returns trace spans or a branch subtree depending on the active mode.
+
+- **Added** new `pill-ghost` variant on `Tabs` and `sticky` prop on `TabList` for sticky tab headers. ([#16433](https://github.com/mastra-ai/mastra/pull/16433))
+
+  ```tsx
+  <Tabs defaultTab="overview">
+    <TabList variant="pill-ghost" sticky>
+      <Tab value="overview">Overview</Tab>
+      <Tab value="settings">Settings</Tab>
+    </TabList>
+  </Tabs>
+  ```
+
+  **Added** `variant` prop on `Combobox` (`default`, `ghost`, `link`) for flexible trigger styling. Note: this prop existed previously but was a no-op; it now actually drives the trigger appearance, so callers passing `variant` will see updated styles.
+
+  ```tsx
+  // Bordered form input (default)
+  <Combobox options={options} value={value} onValueChange={setValue} />
+
+  // Borderless, hover-only surface
+  <Combobox options={options} value={value} onValueChange={setValue} variant="ghost" />
+
+  // Text-only trigger
+  <Combobox options={options} value={value} onValueChange={setValue} variant="link" />
+  ```
+
+  **Improved** `EntityHeader` layout — title and children now share a single row with wrapping, and padding is tighter for denser headers.
+
+  **Improved** `ScrollArea` to handle vertical/horizontal orientation correctly, preventing forced horizontal scroll when only vertical is needed.
+
+  **Improved** `PanelSeparator` with a pill-shaped handle that grows on hover/active for a clearer affordance.
+
+  **Removed** `Threads`, `ThreadList`, `ThreadItem`, `ThreadLink`, `ThreadDeleteButton` exports. These had no consumers outside this repository. Downstream users relying on these exports should compose an equivalent list locally using the underlying DS primitives (`Button`, `Icon`, `Txt`) — the `playground` package now contains a reference implementation under `src/components/thread-list`.
+
+  ```diff
+  - import { Threads, ThreadList, ThreadItem, ThreadLink, ThreadDeleteButton } from '@mastra/playground-ui';
+  + // Compose locally with @mastra/playground-ui primitives (Button, Icon, Txt)
+  + // or copy the reference implementation from the playground package.
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+  - @mastra/client-js@1.18.0-alpha.14
+  - @mastra/react@0.2.36-alpha.14
+
+## 27.0.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`19a2b5e`](https://github.com/mastra-ai/mastra/commit/19a2b5eda9d93f6e1026e0c84f3c1f1c85700a9f), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+  - @mastra/client-js@1.18.0-alpha.13
+  - @mastra/react@0.2.36-alpha.13
+
 ## 27.0.0-alpha.12
 
 ### Patch Changes
