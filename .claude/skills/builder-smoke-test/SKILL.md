@@ -83,9 +83,6 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 /builder-smoke-test --scope skills
 /builder-smoke-test --scope quick
 
-# Reset fixtures and re-seed (deletes $PROJECT_DIR/mastra.db)
-/builder-smoke-test --fixtures-reset --scope quick
-
 # Force auth on / off (otherwise auto-detected from WORKOS_* env vars)
 /builder-smoke-test --auth on
 /builder-smoke-test --auth off
@@ -106,7 +103,6 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 | `--scope`                                                                | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.                                                                                                                                                                                               | (none)                                       |
 | `--auth`                                                                 | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set.                                                                                                                                                                                            | `auto`                                       |
 | `--role`                                                                 | Expected role of the logged-in user under `--auth on`: `owner`, `admin`, `member`, or `viewer`. Setup asserts the live `/api/auth/me` roles match; on mismatch the run stops and the user is told to either change their WorkOS role or re-run with the correct `--role`. Ignored under `--auth off`. | `admin`                                      |
-| `--fixtures-reset`                                                       | Stop the dev server, wipe `$PROJECT_DIR/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                        | `false`                                      |
 | `--clean`                                                                | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                                                                                                                                                                                                            | `false`                                      |
 | `--skip-browser`                                                         | Run only API/`curl` checks. UI section is skipped.                                                                                                                                                                                                                                                    | `false`                                      |
 | `--dir`                                                                  | Project directory the skill scaffolds into. Forwarded to `scripts/scaffold.sh`. Also reads `$BUILDER_SMOKE_TEST_DIR` from the environment when the flag is omitted.                                                                                                                                   | `~/mastra-builder-smoke-tests/builder-smoke` |
@@ -162,11 +158,9 @@ Always leave the project in a runnable state. At the end of every run:
 1. Delete every smoke-test entity you created (workspaces, agents,
    skills). Use the per-section cleanup snippet from the matching
    reference file or `--clean`.
-2. If you ran `--fixtures-reset`, confirm the seeded public skills are
-   back in place by listing `/stored/skills?visibility=public`.
-3. If you toggled `.env` for Auth, restore it to the state you found it
+2. If you toggled `.env` for Auth, restore it to the state you found it
    in and ask the user to confirm.
-4. If a section bailed mid-flight (assertion failure, network error),
+3. If a section bailed mid-flight (assertion failure, network error),
    record the partial state in the report's **Issues** section so the
    next run knows what to expect.
 
@@ -200,7 +194,7 @@ The `.env` is the **only** thing that flips auth on/off — the same `src/mastra
 
 ### Project dir resolution
 
-`$PROJECT_DIR` is determined by every script (scaffold, preflight, auth-detect, fixtures-reset) using this order:
+`$PROJECT_DIR` is determined by every script (scaffold, preflight, wait-for-server) using this order:
 
 1. `--dir <path>` flag
 2. `BUILDER_SMOKE_TEST_DIR` env var (e.g. `export BUILDER_SMOKE_TEST_DIR=~/code/builder-smoke`)
@@ -210,15 +204,13 @@ For a long-lived setup, exporting `BUILDER_SMOKE_TEST_DIR` once in your shell rc
 
 ### Running scripts (cwd matters)
 
-All four scripts under `.claude/skills/builder-smoke-test/scripts/` resolve the worktree root from their own location. They can be invoked from anywhere, but conventionally the repo root.
+All scripts under `.claude/skills/builder-smoke-test/scripts/` resolve the worktree root from their own location. They can be invoked from anywhere, but conventionally the repo root.
 
 | Script               | Run from | Notes                                                                                          |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------- |
 | `scaffold.sh`        | anywhere | Creates / refreshes `$PROJECT_DIR`. Forwards `--openai-key`, `--workos-*`, `--reuse`, `--dir`. |
 | `preflight.sh`       | anywhere | Calls `scaffold.sh` then asserts the resulting `.env` matches `--expect off\|on`.              |
-| `auth-detect.sh`     | anywhere | Reads `$PROJECT_DIR/.env` only.                                                                |
 | `wait-for-server.sh` | anywhere | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                                   |
-| `fixtures-reset.sh`  | anywhere | Wipes `$PROJECT_DIR/mastra.db` + reseeds. Requires the dev server stopped.                     |
 
 Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh`. Don't `cd` into `scripts/` first — relative path resolution will break.
 
@@ -287,7 +279,7 @@ If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS
 | `project-not-installed` | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                                                | Re-run the scaffold without `--reuse`. If that still fails, delete `$PROJECT_DIR` and re-run.                                            |
 | `openai-key-missing`    | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                                             | Follow the "Resolving missing env vars" section above. Re-run preflight with `--openai-key <value>` once you have it.                    |
 | `workos-keys-missing`   | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Follow the "Resolving missing env vars" section above. Re-run preflight with all three `--workos-*` flags.                               |
-| `mode-mismatch`         | `--expect` disagrees with what `auth-detect.sh` reports for `$PROJECT_DIR/.env`.                                                | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change. |
+| `mode-mismatch`         | `--expect` disagrees with the auth mode detected from `$PROJECT_DIR/.env`.                                                      | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change. |
 | `bad-expect-value`      | `--expect` got something other than `off` or `on`.                                                                              | Fix the invocation.                                                                                                                      |
 
 **`.env` policy:** the scaffold **owns** `$PROJECT_DIR/.env`. Re-running scaffold overwrites it. Do not hand-edit the scaffolded `.env`; instead, re-run scaffold with different flags. (The skill never edits `.env` files outside `$PROJECT_DIR`.)
@@ -306,14 +298,6 @@ pnpm mastra:dev
 
 # Poll /api/agents until 200 (60s budget). Detects mastra dev's port-bump.
 bash .claude/skills/builder-smoke-test/scripts/wait-for-server.sh
-
-# Detect auth mode purely from $PROJECT_DIR/.env (because mastra dev
-# overwrites process.env with .env at boot, only .env matters here).
-bash .claude/skills/builder-smoke-test/scripts/auth-detect.sh
-# → prints `mode=off`, `mode=on:workos`, or `mode=ambiguous` (shell-only AUTH_PROVIDER)
-
-# Reset fixtures (only if --fixtures-reset is set)
-bash .claude/skills/builder-smoke-test/scripts/fixtures-reset.sh
 ```
 
 `wait-for-server.sh` probes `/api/agents` — not `/` — because the SPA shell can return 200 before the API mounts. If it reports the server is up on `:4112`+ instead of `:4111`, `mastra dev` fell through to the next port; stop, free `:4111`, and restart. Continuing on a non-default port silently breaks every curl in every reference.
@@ -341,7 +325,7 @@ run the per-section commands in `references/<section>.md`.
 | Registries (list) | `GET /editor/builder/registries`                                              |
 | Registry search   | `GET /editor/builder/registries/:registryId/search?q=…`                       |
 | Registry popular  | `GET /editor/builder/registries/:registryId/popular`                          |
-| Registry preview  | `GET /editor/builder/registries/:registryId/preview?repository=…&skillName=…` |
+| Registry preview  | `GET /editor/builder/registries/:registryId/preview?owner=…&repo=…&path=…`    |
 | Registry install  | `POST /editor/builder/registries/:registryId/install`                         |
 | Workspace CRUD    | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                              |
 | Agent CRUD        | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                                  |
@@ -422,7 +406,7 @@ After testing, provide:
 
 The branch has accumulated minor papercuts. Note these in your report only if you hit them; don't fail the run on them:
 
-- `--fixtures-reset` is the canonical way to wipe `$PROJECT_DIR/mastra.db`. Don't `rm` the file by hand while the server is up.
+- Don't `rm` `$PROJECT_DIR/mastra.db` by hand while the server is up — stop the server first, then delete.
 - Dev server can crash on hot-reload from `/auth/refresh` polling. Restart and continue.
 - `OPENAI_API_KEY` is required at startup — server won't boot without it, even if you only test non-LLM surfaces.
 - `mastra dev` overwrites `process.env` from `.env` at boot, so inline env overrides on the command line don't reach the server. Re-run scaffold to change `.env`.
@@ -455,5 +439,3 @@ Some flows are documented in `references/` but are not driven by the smoke-test 
 - `scripts/scaffold.sh` — scaffold or refresh the hermetic project at `$PROJECT_DIR`
 - `scripts/preflight.sh` — wraps `scaffold.sh` + mode expectation (`--expect off|on`)
 - `scripts/wait-for-server.sh` — poll `:4111` until healthy
-- `scripts/auth-detect.sh` — detect auth mode from `.env`
-- `scripts/fixtures-reset.sh` — wipe + reseed `$PROJECT_DIR/mastra.db`
