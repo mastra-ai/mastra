@@ -24,7 +24,6 @@ export type {
   OnDelegationCompleteHandler,
   DelegationConfig,
   MessageFilterContext,
-  SubAgent,
   /** @deprecated Use MessageFilterContext instead */
   MessageFilterContext as ContextFilterContext,
   // Iteration hook types
@@ -42,5 +41,7 @@ export type {
   NetworkOptions,
   NetworkRoutingConfig,
 } from './agent.types';
+
+export type { SubAgent, isAgentCompatible, SubAgentGenerateResult, SubAgentStreamResult } from './subagent';
 
 export type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';

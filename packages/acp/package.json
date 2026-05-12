@@ -1,6 +1,6 @@
 {
   "name": "@mastra/acp",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "ACP package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -55,7 +55,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.33.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "engines": {

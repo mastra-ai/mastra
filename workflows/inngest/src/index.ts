@@ -38,8 +38,18 @@ function isInngestWorkflow(input: unknown): input is InngestWorkflow<any, any, a
   return input instanceof InngestWorkflow;
 }
 
-function isAgent<TStepId extends string>(input: unknown): input is Agent<TStepId, any> {
-  return input instanceof Agent;
+/**
+ * copied from @mastra/core/agent/subagent.ts for compatible
+ */
+function isAgentCompatible<TId extends string>(input: unknown): input is Agent<TId, any> {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'generate' in input &&
+    'stream' in input &&
+    'getDescription' in input &&
+    'getModel' in input
+  );
 }
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
@@ -218,7 +228,7 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
     return params;
   }
 
-  if (isAgent(params)) {
+  if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
 

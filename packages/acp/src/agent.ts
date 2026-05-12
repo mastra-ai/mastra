@@ -12,10 +12,10 @@ import type {
 import { MessageList, coreContentToString } from '@mastra/core/agent/message-list';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
-import type { MastraMemory } from '@mastra/core/memory';
 import type { ChunkType } from '@mastra/core/stream';
 import type { DynamicArgument } from '@mastra/core/types';
 
+import type { MastraLanguageModelV3 } from '../../core/dist/llm/model/shared.types';
 import { ACPConnection } from './connection';
 import type { CreateACPToolOptions } from './types';
 
@@ -24,22 +24,39 @@ const CHUNK_FROM_AGENT = 'AGENT' as ChunkType['from'];
 const model = {
   modelId: 'acp-agent',
   provider: '@mastra/acp',
-  specificationVersion: 'v2',
-  version: 'v2',
-} as const;
+  specificationVersion: 'v3',
+  supportedUrls: {},
+  doGenerate: async () => ({
+    stream: new ReadableStream({
+      start: async controller => {
+        controller.close();
+      },
+    }),
+  }),
+  doStream: async () => ({
+    stream: new ReadableStream({
+      start: async controller => {
+        controller.close();
+      },
+    }),
+  }),
+} as const satisfies MastraLanguageModelV3;
 
 export type AcpAgentOptions = CreateACPToolOptions & {
   name?: string;
 };
 
-export class AcpAgent implements SubAgent {
-  readonly id: string;
+export class AcpAgent<
+  TId extends string = string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> implements SubAgent<TId, TRequestContext> {
+  readonly id: TId;
   readonly name: string;
   readonly connection: ACPConnection;
   readonly description: string;
 
   constructor(options: AcpAgentOptions) {
-    this.id = options.id;
+    this.id = options.id as TId;
     this.name = options.name ?? options.id;
     this.description = options.description;
     this.connection = new ACPConnection(options);
@@ -51,19 +68,15 @@ export class AcpAgent implements SubAgent {
     return this.description;
   }
 
-  getModel(): typeof model {
+  getModel(): ReturnType<SubAgent<TId, TRequestContext>['getModel']> {
     return model;
-  }
-
-  getDefaultOptions(): undefined {
-    return undefined;
   }
 
   hasOwnMemory(): boolean {
     return false;
   }
 
-  __setMemory(_memory: DynamicArgument<MastraMemory>): void {}
+  __setMemory(_memory: DynamicArgument<any, any>): void {}
 
   getMemory(): undefined {
     return undefined;
@@ -124,7 +137,12 @@ export class AcpAgent implements SubAgent {
 
           for await (const chunk of this.connection.promptStream(prompt, signal)) {
             chunks.push(chunk);
-            controller.enqueue({ type: 'text-delta', runId, from: CHUNK_FROM_AGENT, payload: { id: textId, text: chunk } });
+            controller.enqueue({
+              type: 'text-delta',
+              runId,
+              from: CHUNK_FROM_AGENT,
+              payload: { id: textId, text: chunk },
+            });
           }
 
           const text = chunks.join('');
