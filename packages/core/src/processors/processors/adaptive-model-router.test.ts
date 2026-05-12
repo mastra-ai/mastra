@@ -21,8 +21,8 @@ import type {
 
 /** Two-model default used by most tests. */
 const DEFAULT_MODELS: AdaptiveModelRouterModel[] = [
-  { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-  { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+  { id: 'openai/gpt-5', model: 'openai/gpt-5' },
+  { id: 'openai/gpt-5-mini', model: 'openai/gpt-5-mini' },
 ];
 
 function createMockObservabilityStorage(overrides?: {
@@ -81,7 +81,7 @@ function createInputStepArgs(overrides: Partial<ProcessInputStepArgs> = {}): Pro
       throw new TripWire(reason ?? 'abort', options ?? {});
     }) as any,
     retryCount: 0,
-    model: { modelId: 'gpt-4o', provider: 'openai', specificationVersion: 'v2' } as any,
+    model: { modelId: 'gpt-5', provider: 'openai', specificationVersion: 'v2' } as any,
     systemMessages: [],
     state: {},
     ...overrides,
@@ -166,7 +166,7 @@ describe('AdaptiveModelRouter', () => {
   describe('constructor', () => {
     it('throws if fewer than 2 models provided', () => {
       expect(() => new AdaptiveModelRouter({ models: [] })).toThrow('at least 2 models');
-      expect(() => new AdaptiveModelRouter({ models: [{ id: 'a', model: 'openai/gpt-4o' }] })).toThrow(
+      expect(() => new AdaptiveModelRouter({ models: [{ id: 'a', model: 'openai/gpt-5' }] })).toThrow(
         'at least 2 models',
       );
     });
@@ -247,7 +247,7 @@ describe('AdaptiveModelRouter', () => {
 
     it('stores modelIds derived from models array', () => {
       const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
-      expect((router as any).modelIds).toEqual(['openai/gpt-4o', 'openai/gpt-4o-mini']);
+      expect((router as any).modelIds).toEqual(['openai/gpt-5', 'openai/gpt-5-mini']);
     });
   });
 
@@ -434,7 +434,7 @@ describe('AdaptiveModelRouter', () => {
 
       // 4/10 = 40% > 30% threshold
       expect(result).toBeDefined();
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
 
     it('does not switch when total requests are below minRequests', async () => {
@@ -478,7 +478,7 @@ describe('AdaptiveModelRouter', () => {
       // First call — error rate 70% exceeds threshold, opens circuit
       const args1 = createInputStepArgs({ stepNumber: 1, requestContext });
       const result1 = await router.processInputStep(args1);
-      expect(result1?.model).toBe('openai/gpt-4o-mini');
+      expect(result1?.model).toBe('openai/gpt-5-mini');
       expect(cache.set).toHaveBeenCalled();
 
       // Second call — circuit is open, should still route to fallback without re-querying breakdown
@@ -487,7 +487,7 @@ describe('AdaptiveModelRouter', () => {
 
       const args2 = createInputStepArgs({ stepNumber: 2, requestContext });
       const result2 = await router.processInputStep(args2);
-      expect(result2?.model).toBe('openai/gpt-4o-mini');
+      expect(result2?.model).toBe('openai/gpt-5-mini');
     });
 
     it('applies time window filter for non-run scopes', async () => {
@@ -566,7 +566,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       // 5/10 = 50% > 30%
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
   });
 
@@ -619,7 +619,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       expect(result).toBeDefined();
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
 
     it('does not switch when score is null (no data)', async () => {
@@ -673,13 +673,13 @@ describe('AdaptiveModelRouter', () => {
       // First call — score below threshold
       const args1 = createInputStepArgs({ stepNumber: 1, requestContext });
       const result1 = await router.processInputStep(args1);
-      expect(result1?.model).toBe('openai/gpt-4o-mini');
+      expect(result1?.model).toBe('openai/gpt-5-mini');
       expect(cache.set).toHaveBeenCalled();
 
       // Second call — should still route to fallback (cooldown active)
       const args2 = createInputStepArgs({ stepNumber: 2, requestContext });
       const result2 = await router.processInputStep(args2);
-      expect(result2?.model).toBe('openai/gpt-4o-mini');
+      expect(result2?.model).toBe('openai/gpt-5-mini');
     });
 
     it('handles storage errors gracefully', async () => {
@@ -704,7 +704,7 @@ describe('AdaptiveModelRouter', () => {
 
   describe('feedback rule', () => {
     const FEEDBACK_MODELS: AdaptiveModelRouterModel[] = [
-      { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+      { id: 'openai/gpt-5', model: 'openai/gpt-5' },
       { id: 'anthropic/claude-3-sonnet', model: 'anthropic/claude-3-sonnet' },
     ];
 
@@ -725,11 +725,11 @@ describe('AdaptiveModelRouter', () => {
       const obsStorage = createMockObservabilityStorage({
         getFeedbackBreakdown: vi.fn().mockResolvedValue({
           groups: [
-            { dimensions: { entityName: 'openai/gpt-4o' }, value: 0.6 },
+            { dimensions: { entityName: 'openai/gpt-5' }, value: 0.6 },
             { dimensions: { entityName: 'anthropic/claude-3-sonnet' }, value: 0.85 },
             // Enough groups to pass minSamples
             ...Array.from({ length: 10 }, (_, i) => ({
-              dimensions: { entityName: i % 2 === 0 ? 'openai/gpt-4o' : 'anthropic/claude-3-sonnet' },
+              dimensions: { entityName: i % 2 === 0 ? 'openai/gpt-5' : 'anthropic/claude-3-sonnet' },
               value: i % 2 === 0 ? 0.6 : 0.85,
             })),
           ],
@@ -744,7 +744,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({ stepNumber: 1, requestContext });
       const result = await router.processInputStep(args);
 
-      // anthropic/claude-3-sonnet has higher score, and current model is openai/gpt-4o
+      // anthropic/claude-3-sonnet has higher score, and current model is openai/gpt-5
       expect(result).toBeDefined();
       expect(result?.model).toBe('anthropic/claude-3-sonnet');
     });
@@ -753,7 +753,7 @@ describe('AdaptiveModelRouter', () => {
       const obsStorage = createMockObservabilityStorage({
         getFeedbackBreakdown: vi.fn().mockResolvedValue({
           groups: [
-            { dimensions: { entityName: 'openai/gpt-4o' }, value: 0.9 },
+            { dimensions: { entityName: 'openai/gpt-5' }, value: 0.9 },
             { dimensions: { entityName: 'anthropic/claude-3-sonnet' }, value: 0.6 },
           ],
         }),
@@ -764,11 +764,11 @@ describe('AdaptiveModelRouter', () => {
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
 
-      // Current model is openai/gpt-4o which is already the best-rated
+      // Current model is openai/gpt-5 which is already the best-rated
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: { modelId: 'gpt-4o', provider: 'openai', specificationVersion: 'v2' } as any,
+        model: { modelId: 'gpt-5', provider: 'openai', specificationVersion: 'v2' } as any,
       });
       const result = await router.processInputStep(args);
 
@@ -778,7 +778,7 @@ describe('AdaptiveModelRouter', () => {
     it('does not switch when not enough feedback samples', async () => {
       const obsStorage = createMockObservabilityStorage({
         getFeedbackBreakdown: vi.fn().mockResolvedValue({
-          groups: [{ dimensions: { entityName: 'openai/gpt-4o' }, value: 0.9 }],
+          groups: [{ dimensions: { entityName: 'openai/gpt-5' }, value: 0.9 }],
         }),
       });
 
@@ -831,8 +831,8 @@ describe('AdaptiveModelRouter', () => {
 
   describe('chained fallbacks', () => {
     const THREE_MODELS: AdaptiveModelRouterModel[] = [
-      { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
-      { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+      { id: 'openai/gpt-5', model: 'openai/gpt-5' },
+      { id: 'openai/gpt-5-mini', model: 'openai/gpt-5-mini' },
       { id: 'anthropic/claude-3-haiku', model: 'anthropic/claude-3-haiku' },
     ];
 
@@ -861,18 +861,18 @@ describe('AdaptiveModelRouter', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-chain');
 
       // Put first fallback in cooldown manually
-      const cooldownKey = 'adaptive-router:circuit-breaker:openai/gpt-4o-mini:resource:user-chain';
+      const cooldownKey = 'adaptive-router:circuit-breaker:openai/gpt-5-mini:resource:user-chain';
       await cache.set(cooldownKey, Date.now());
 
       const args = createInputStepArgs({ stepNumber: 1, requestContext });
 
       // First, open the circuit for the primary model
-      const primaryKey = 'adaptive-router:circuit-breaker:openai/gpt-4o:resource:user-chain';
+      const primaryKey = 'adaptive-router:circuit-breaker:openai/gpt-5:resource:user-chain';
       await cache.set(primaryKey, Date.now());
 
       const result = await router.processInputStep(args);
 
-      // Should skip openai/gpt-4o-mini (in cooldown) and use anthropic/claude-3-haiku
+      // Should skip openai/gpt-5-mini (in cooldown) and use anthropic/claude-3-haiku
       expect(result).toBeDefined();
       expect(result?.model).toBe('anthropic/claude-3-haiku');
     });
@@ -902,11 +902,11 @@ describe('AdaptiveModelRouter', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-all-down');
 
       // Put all fallbacks in cooldown
-      await cache.set('adaptive-router:circuit-breaker:openai/gpt-4o-mini:resource:user-all-down', Date.now());
+      await cache.set('adaptive-router:circuit-breaker:openai/gpt-5-mini:resource:user-all-down', Date.now());
       await cache.set('adaptive-router:circuit-breaker:anthropic/claude-3-haiku:resource:user-all-down', Date.now());
 
       // Also put primary in cooldown to trigger the cooldown path
-      await cache.set('adaptive-router:circuit-breaker:openai/gpt-4o:resource:user-all-down', Date.now());
+      await cache.set('adaptive-router:circuit-breaker:openai/gpt-5:resource:user-all-down', Date.now());
 
       const args = createInputStepArgs({ stepNumber: 1, requestContext });
       const result = await router.processInputStep(args);
@@ -963,8 +963,8 @@ describe('AdaptiveModelRouter', () => {
 
   describe('per-rule fallbackOrder', () => {
     const FOUR_MODELS: AdaptiveModelRouterModel[] = [
-      { id: 'gpt-4o', model: 'gpt-4o' },
-      { id: 'gpt-4o-mini', model: 'gpt-4o-mini' },
+      { id: 'gpt-5', model: 'gpt-5' },
+      { id: 'gpt-5-mini', model: 'gpt-5-mini' },
       { id: 'claude-sonnet', model: 'claude-sonnet' },
       { id: 'claude-haiku', model: 'claude-haiku' },
     ];
@@ -984,7 +984,7 @@ describe('AdaptiveModelRouter', () => {
         () =>
           new AdaptiveModelRouter({
             models: FOUR_MODELS,
-            rules: [{ signal: 'error-rate', threshold: 0.3, fallbackOrder: ['claude-sonnet', 'gpt-4o-mini'] }],
+            rules: [{ signal: 'error-rate', threshold: 0.3, fallbackOrder: ['claude-sonnet', 'gpt-5-mini'] }],
           }),
       ).not.toThrow();
     });
@@ -1007,8 +1007,8 @@ describe('AdaptiveModelRouter', () => {
             {
               signal: 'error-rate',
               threshold: 0.3,
-              // Prefer claude-sonnet over gpt-4o-mini (reverse of default order)
-              fallbackOrder: ['claude-sonnet', 'gpt-4o-mini'],
+              // Prefer claude-sonnet over gpt-5-mini (reverse of default order)
+              fallbackOrder: ['claude-sonnet', 'gpt-5-mini'],
             },
           ],
           scope: 'resource',
@@ -1023,11 +1023,11 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'gpt-4o' as any,
+        model: 'gpt-5' as any,
       });
       const result = await router.processInputStep(args);
 
-      // Should pick claude-sonnet (first in fallbackOrder), NOT gpt-4o-mini (second in models array)
+      // Should pick claude-sonnet (first in fallbackOrder), NOT gpt-5-mini (second in models array)
       expect(result?.model).toBe('claude-sonnet');
     });
 
@@ -1050,7 +1050,7 @@ describe('AdaptiveModelRouter', () => {
               signal: 'error-rate',
               threshold: 0.3,
               cooldown: '2m',
-              fallbackOrder: ['claude-sonnet', 'gpt-4o-mini', 'claude-haiku'],
+              fallbackOrder: ['claude-sonnet', 'gpt-5-mini', 'claude-haiku'],
             },
           ],
           scope: 'resource',
@@ -1068,12 +1068,12 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'gpt-4o' as any,
+        model: 'gpt-5' as any,
       });
       const result = await router.processInputStep(args);
 
-      // claude-sonnet is in cooldown → should pick gpt-4o-mini (second in fallbackOrder)
-      expect(result?.model).toBe('gpt-4o-mini');
+      // claude-sonnet is in cooldown → should pick gpt-5-mini (second in fallbackOrder)
+      expect(result?.model).toBe('gpt-5-mini');
     });
 
     it('score rule uses custom fallbackOrder', async () => {
@@ -1106,7 +1106,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'gpt-4o' as any,
+        model: 'gpt-5' as any,
       });
       const result = await router.processInputStep(args);
 
@@ -1136,7 +1136,7 @@ describe('AdaptiveModelRouter', () => {
             {
               signal: 'error-rate',
               threshold: 0.3,
-              fallbackOrder: ['gpt-4o-mini', 'claude-haiku'],
+              fallbackOrder: ['gpt-5-mini', 'claude-haiku'],
             },
             {
               signal: 'score',
@@ -1157,20 +1157,20 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'gpt-4o' as any,
+        model: 'gpt-5' as any,
       });
       const result = await router.processInputStep(args);
 
-      // Error-rate rule fires first → should use gpt-4o-mini (from error-rate's fallbackOrder)
-      expect(result?.model).toBe('gpt-4o-mini');
+      // Error-rate rule fires first → should use gpt-5-mini (from error-rate's fallbackOrder)
+      expect(result?.model).toBe('gpt-5-mini');
     });
 
     it('feedback rule with fallbackOrder limits candidate set', async () => {
       const obsStorage = createMockObservabilityStorage({
         getFeedbackBreakdown: vi.fn().mockResolvedValue({
           groups: [
-            { dimensions: { entityName: 'gpt-4o' }, value: 3.0 },
-            { dimensions: { entityName: 'gpt-4o-mini' }, value: 4.5 },
+            { dimensions: { entityName: 'gpt-5' }, value: 3.0 },
+            { dimensions: { entityName: 'gpt-5-mini' }, value: 4.5 },
             { dimensions: { entityName: 'claude-sonnet' }, value: 5.0 },
             { dimensions: { entityName: 'claude-haiku' }, value: 4.0 },
           ],
@@ -1186,8 +1186,8 @@ describe('AdaptiveModelRouter', () => {
               signal: 'feedback',
               feedbackType: 'rating',
               minSamples: 1,
-              // Only consider gpt-4o-mini and claude-haiku as candidates
-              fallbackOrder: ['gpt-4o-mini', 'claude-haiku'],
+              // Only consider gpt-5-mini and claude-haiku as candidates
+              fallbackOrder: ['gpt-5-mini', 'claude-haiku'],
             },
           ],
           scope: 'resource',
@@ -1202,13 +1202,13 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'gpt-4o' as any,
+        model: 'gpt-5' as any,
       });
       const result = await router.processInputStep(args);
 
       // claude-sonnet has highest score (5.0) but is NOT in fallbackOrder
-      // Among candidates: gpt-4o-mini (4.5) vs claude-haiku (4.0) → gpt-4o-mini wins
-      expect(result?.model).toBe('gpt-4o-mini');
+      // Among candidates: gpt-5-mini (4.5) vs claude-haiku (4.0) → gpt-5-mini wins
+      expect(result?.model).toBe('gpt-5-mini');
     });
 
     it('falls back to default models order when fallbackOrder is not specified', async () => {
@@ -1238,12 +1238,12 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'gpt-4o' as any,
+        model: 'gpt-5' as any,
       });
       const result = await router.processInputStep(args);
 
-      // No fallbackOrder → uses default models order → gpt-4o-mini (index 1)
-      expect(result?.model).toBe('gpt-4o-mini');
+      // No fallbackOrder → uses default models order → gpt-5-mini (index 1)
+      expect(result?.model).toBe('gpt-5-mini');
     });
   });
 
@@ -1283,7 +1283,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       // Both rules would fire, but error-rate is first -> wins
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
       // Score rule should not have been called
       expect(obsStorage.getScoreAggregate).not.toHaveBeenCalled();
     });
@@ -1320,7 +1320,7 @@ describe('AdaptiveModelRouter', () => {
 
       // Error rate 10% < 30%, so it falls through to score rule
       // Score 0.4 < 0.7, so score rule fires
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
 
     it('returns undefined when no rules fire', async () => {
@@ -1394,7 +1394,7 @@ describe('AdaptiveModelRouter', () => {
           detail: expect.objectContaining({
             rule: 'error-rate',
             originalModel: expect.any(String),
-            selectedModel: 'openai/gpt-4o-mini',
+            selectedModel: 'openai/gpt-5-mini',
           }),
         }),
       );
@@ -1430,7 +1430,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       // Should still return the fallback despite the callback error
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
   });
 
@@ -1469,7 +1469,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       // Should still evaluate the rule and switch models
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
 
     it('continues working when cache.set throws', async () => {
@@ -1502,7 +1502,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       // Should still route to fallback
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
 
     it('works without cache (no cache configured)', async () => {
@@ -1531,7 +1531,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({ stepNumber: 1, requestContext });
       const result = await router.processInputStep(args);
 
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
     });
   });
 
@@ -1550,7 +1550,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'openai/gpt-4o' as any,
+        model: 'openai/gpt-5' as any,
       });
       await router.processInputStep(args);
 
@@ -1568,7 +1568,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: { modelId: 'gpt-4o', provider: 'openai', specificationVersion: 'v2' } as any,
+        model: { modelId: 'gpt-5', provider: 'openai', specificationVersion: 'v2' } as any,
       });
       await router.processInputStep(args);
 
@@ -1585,7 +1585,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: { providerId: 'openai', modelId: 'gpt-4o' } as any,
+        model: { providerId: 'openai', modelId: 'gpt-5' } as any,
       });
       await router.processInputStep(args);
 
@@ -1609,10 +1609,10 @@ describe('AdaptiveModelRouter', () => {
       });
 
       const models: AdaptiveModelRouterModel[] = [
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-5', model: 'openai/gpt-5' },
         {
-          id: 'openai/gpt-4o-mini',
-          model: 'openai/gpt-4o-mini',
+          id: 'openai/gpt-5-mini',
+          model: 'openai/gpt-5-mini',
           modelSettings: { temperature: 0.5, maxTokens: 1000 },
           providerOptions: { openai: { reasoningEffort: 'low' } },
         },
@@ -1631,7 +1631,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       expect(result).toBeDefined();
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
       expect(result?.modelSettings).toEqual({ temperature: 0.5, maxTokens: 1000 });
       expect(result?.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
     });
@@ -1659,7 +1659,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processInputStep(args);
 
       expect(result).toBeDefined();
-      expect(result?.model).toBe('openai/gpt-4o-mini');
+      expect(result?.model).toBe('openai/gpt-5-mini');
       expect(result?.modelSettings).toBeUndefined();
       expect(result?.providerOptions).toBeUndefined();
     });
@@ -1672,15 +1672,15 @@ describe('AdaptiveModelRouter', () => {
     it('returns { retry: true } and opens circuit on API failure', async () => {
       const cache = createMockCache();
       const models: AdaptiveModelRouterModel[] = [
-        { id: 'openai/gpt-4o', model: 'openai/gpt-4o' },
+        { id: 'openai/gpt-5', model: 'openai/gpt-5' },
         { id: 'anthropic/claude-3.5-sonnet', model: 'anthropic/claude-3.5-sonnet' },
-        { id: 'openai/gpt-4o-mini', model: 'openai/gpt-4o-mini' },
+        { id: 'openai/gpt-5-mini', model: 'openai/gpt-5-mini' },
       ];
       const router = new AdaptiveModelRouter({ models });
       (router as any).cache = cache;
 
       const state: Record<string, unknown> = {
-        __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+        __adaptiveRouter_currentModelId: 'openai/gpt-5',
         __adaptiveRouter_scopeKey: 'resource:user-1',
       };
 
@@ -1693,9 +1693,9 @@ describe('AdaptiveModelRouter', () => {
 
       expect(result).toEqual({ retry: true });
       // Circuit should be open for the failed model
-      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-5'), expect.any(Number));
       // Retried models should be tracked in state
-      expect(state.__adaptiveRouter_retriedModels).toEqual(['openai/gpt-4o']);
+      expect(state.__adaptiveRouter_retriedModels).toEqual(['openai/gpt-5']);
     });
 
     it('returns undefined when missing state (no prior processInputStep call)', async () => {
@@ -1712,9 +1712,9 @@ describe('AdaptiveModelRouter', () => {
       (router as any).cache = cache;
 
       const state: Record<string, unknown> = {
-        __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+        __adaptiveRouter_currentModelId: 'openai/gpt-5',
         __adaptiveRouter_scopeKey: 'resource:user-1',
-        __adaptiveRouter_retriedModels: ['openai/gpt-4o-mini'], // Already retried the other model
+        __adaptiveRouter_retriedModels: ['openai/gpt-5-mini'], // Already retried the other model
       };
 
       const result = await router.processAPIError(createAPIErrorArgs({ state }));
@@ -1763,14 +1763,14 @@ describe('AdaptiveModelRouter', () => {
       await router.processAPIError(
         createAPIErrorArgs({
           state: {
-            __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+            __adaptiveRouter_currentModelId: 'openai/gpt-5',
             __adaptiveRouter_scopeKey: 'resource:user-1',
           },
         }),
       );
 
       expect(violations).toHaveLength(1);
-      expect(violations[0]!.message).toContain('openai/gpt-4o');
+      expect(violations[0]!.message).toContain('openai/gpt-5');
       expect(violations[0]!.message).toContain('API error');
     });
 
@@ -1783,7 +1783,7 @@ describe('AdaptiveModelRouter', () => {
       const result = await router.processAPIError(
         createAPIErrorArgs({
           state: {
-            __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+            __adaptiveRouter_currentModelId: 'openai/gpt-5',
             __adaptiveRouter_scopeKey: 'resource:user-1',
           },
         }),
@@ -1815,7 +1815,7 @@ describe('AdaptiveModelRouter', () => {
         finishReason: 'stop',
         text: 'Some response',
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
@@ -1834,13 +1834,13 @@ describe('AdaptiveModelRouter', () => {
         finishReason: 'error',
         text: '',
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
 
       await router.processOutputStep(args);
-      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-5'), expect.any(Number));
     });
 
     it('opens circuit on unknown finish reason', async () => {
@@ -1851,13 +1851,13 @@ describe('AdaptiveModelRouter', () => {
       const args = createOutputStepArgs({
         finishReason: 'unknown',
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
 
       await router.processOutputStep(args);
-      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-5'), expect.any(Number));
     });
 
     it('opens circuit on empty response (stop with no text and no tool calls)', async () => {
@@ -1870,13 +1870,13 @@ describe('AdaptiveModelRouter', () => {
         text: '',
         toolCalls: [],
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
 
       await router.processOutputStep(args);
-      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o'), expect.any(Number));
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-5'), expect.any(Number));
     });
 
     it('does NOT open circuit when stop with text', async () => {
@@ -1888,7 +1888,7 @@ describe('AdaptiveModelRouter', () => {
         finishReason: 'stop',
         text: 'valid response',
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
@@ -1907,7 +1907,7 @@ describe('AdaptiveModelRouter', () => {
         text: '',
         toolCalls: [{ toolCallId: 'tc1', toolName: 'search', args: {} }],
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
@@ -1927,7 +1927,7 @@ describe('AdaptiveModelRouter', () => {
         createOutputStepArgs({
           finishReason: 'error',
           state: {
-            __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+            __adaptiveRouter_currentModelId: 'openai/gpt-5',
             __adaptiveRouter_scopeKey: 'resource:user-1',
           },
         }),
@@ -1935,7 +1935,7 @@ describe('AdaptiveModelRouter', () => {
 
       expect(violations).toHaveLength(1);
       expect(violations[0]!.message).toContain('Soft failure');
-      expect(violations[0]!.message).toContain('openai/gpt-4o');
+      expect(violations[0]!.message).toContain('openai/gpt-5');
     });
 
     it('returns messages unchanged even when cache fails', async () => {
@@ -1947,7 +1947,7 @@ describe('AdaptiveModelRouter', () => {
       const args = createOutputStepArgs({
         finishReason: 'error',
         state: {
-          __adaptiveRouter_currentModelId: 'openai/gpt-4o',
+          __adaptiveRouter_currentModelId: 'openai/gpt-5',
           __adaptiveRouter_scopeKey: 'resource:user-1',
         },
       });
@@ -1975,13 +1975,13 @@ describe('AdaptiveModelRouter', () => {
       const args = createInputStepArgs({
         stepNumber: 1,
         requestContext,
-        model: 'openai/gpt-4o' as any,
+        model: 'openai/gpt-5' as any,
         state,
       });
 
       await router.processInputStep(args);
 
-      expect(state.__adaptiveRouter_currentModelId).toBe('openai/gpt-4o');
+      expect(state.__adaptiveRouter_currentModelId).toBe('openai/gpt-5');
       expect(state.__adaptiveRouter_scopeKey).toBeDefined();
     });
   });

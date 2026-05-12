@@ -35,6 +35,19 @@ export type RouterScope = 'run' | 'resource' | 'thread';
 export type RouterWindow = '5m' | '1h' | '6h' | '24h' | '7d' | '30d' | '365d';
 
 /**
+ * Known auto-extracted metric names emitted by the Mastra observability layer.
+ * Custom metric names are also accepted — this type provides autocomplete for
+ * the well-known built-in metrics while remaining open-ended.
+ */
+export type MastraMetricName =
+  | 'mastra_model_duration_ms'
+  | 'mastra_model_total_input_tokens'
+  | 'mastra_model_total_output_tokens'
+  | 'mastra_agent_duration_ms'
+  | 'mastra_tool_duration_ms'
+  | (string & {});
+
+/**
  * A model reference that the router can switch to.
  * Supports the same types as ProcessInputStepResult.model.
  */
@@ -52,15 +65,25 @@ export interface FallbackModelSettings {
 }
 
 /**
+ * A resolver function that receives request context and returns a value.
+ * Used for DynamicArgument fields that may need per-request resolution.
+ */
+export type DynamicResolver<T> = (ctx: { requestContext: RequestContext; mastra?: Mastra }) => T | Promise<T>;
+
+/**
  * A model entry in the AdaptiveModelRouter's fallback chain.
  * Maps 1:1 to entries in an agent's ModelFallbacks config.
+ *
+ * Fields that are DynamicArgument functions (model, modelSettings, providerOptions,
+ * headers) can be passed as resolver functions. The router resolves them with
+ * the current request context in processInputStep before returning the result.
  */
 export interface AdaptiveModelRouterModel {
   id: string;
-  model: FallbackModel;
-  modelSettings?: FallbackModelSettings['modelSettings'];
-  providerOptions?: FallbackModelSettings['providerOptions'];
-  headers?: FallbackModelSettings['headers'];
+  model: FallbackModel | DynamicResolver<FallbackModel>;
+  modelSettings?: Omit<CallSettings, 'abortSignal'> | DynamicResolver<Omit<CallSettings, 'abortSignal'>>;
+  providerOptions?: ProviderOptions | DynamicResolver<ProviderOptions>;
+  headers?: Record<string, string> | DynamicResolver<Record<string, string>>;
 }
 
 /**
@@ -73,7 +96,7 @@ export interface ErrorRateRule {
    * Metric name to query for error rate.
    * @default 'mastra_model_duration_ms'
    */
-  metric?: string;
+  metric?: MastraMetricName;
   /** Error rate threshold (0-1). When exceeded, the rule fires. */
   threshold: number;
   /** Minimum number of requests before the rule can fire. @default 5 */
@@ -311,6 +334,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
 
   private observabilityStorage?: ObservabilityStorage;
   private cache?: MastraServerCache;
+  private mastra?: Mastra;
 
   constructor(options: AdaptiveModelRouterOptions) {
     if (!options.models || options.models.length < 2) {
@@ -318,7 +342,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     }
 
     this.models = options.models;
-    this.modelIds = options.models.map(m => getModelId(m.model));
+    this.modelIds = options.models.map(m => m.id);
     this.scope = options.scope ?? 'resource';
     this.defaultWindow = options.window ?? '24h';
     this.defaultCooldownMs = parseCooldownMs(options.cooldown ?? '2m');
@@ -372,6 +396,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       );
     }
     this.observabilityStorage = obsStorage;
+    this.mastra = mastra;
 
     try {
       this.cache = mastra.getServerCache();
@@ -435,18 +460,32 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     }
   }
 
-  private buildFallbackResult(entry: AdaptiveModelRouterModel): ProcessInputStepResult {
-    const result: ProcessInputStepResult = { model: entry.model };
+  private async buildFallbackResult(
+    entry: AdaptiveModelRouterModel,
+    requestContext?: RequestContext,
+  ): Promise<ProcessInputStepResult> {
+    const ctx = { requestContext: requestContext!, mastra: this.mastra };
+    const hasCtx = !!requestContext;
+
+    const resolvedModel =
+      hasCtx && typeof entry.model === 'function' ? await entry.model(ctx) : (entry.model as FallbackModel);
+    const resolvedSettings =
+      hasCtx && typeof entry.modelSettings === 'function' ? await entry.modelSettings(ctx) : entry.modelSettings;
+    const resolvedProviderOptions =
+      hasCtx && typeof entry.providerOptions === 'function' ? await entry.providerOptions(ctx) : entry.providerOptions;
+    const resolvedHeaders = hasCtx && typeof entry.headers === 'function' ? await entry.headers(ctx) : entry.headers;
+
+    const result: ProcessInputStepResult = { model: resolvedModel };
     // Merge per-model headers into modelSettings so the LLM execution step
     // applies them via currentStep.modelSettings.headers.
-    if (entry.modelSettings || entry.headers) {
-      const settings: Record<string, unknown> = { ...(entry.modelSettings ?? {}) };
-      if (entry.headers) {
-        settings.headers = { ...entry.headers, ...((settings.headers as Record<string, string>) ?? {}) };
+    if (resolvedSettings || resolvedHeaders) {
+      const settings: Record<string, unknown> = { ...(resolvedSettings ?? {}) };
+      if (resolvedHeaders) {
+        settings.headers = { ...resolvedHeaders, ...((settings.headers as Record<string, string>) ?? {}) };
       }
       result.modelSettings = settings as ProcessInputStepResult['modelSettings'];
     }
-    if (entry.providerOptions) result.providerOptions = entry.providerOptions;
+    if (resolvedProviderOptions) result.providerOptions = resolvedProviderOptions;
     return result;
   }
 
@@ -463,7 +502,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     fallbackOrder?: string[],
   ): Promise<AdaptiveModelRouterModel | undefined> {
     if (fallbackOrder) {
-      const modelMap = new Map(this.models.map(m => [getModelId(m.model), m]));
+      const modelMap = new Map(this.models.map(m => [m.id, m]));
       for (const id of fallbackOrder) {
         if (id === currentModelId) continue;
         const entry = modelMap.get(id);
@@ -474,9 +513,8 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       return undefined;
     }
     for (const entry of this.models) {
-      const id = getModelId(entry.model);
-      if (id === currentModelId) continue;
-      const inCooldown = await this.isModelInCooldown(id, cooldownMs, scopeKey);
+      if (entry.id === currentModelId) continue;
+      const inCooldown = await this.isModelInCooldown(entry.id, cooldownMs, scopeKey);
       if (!inCooldown) return entry;
     }
     return undefined;
@@ -487,6 +525,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     currentModelId: string,
     scopeFilter: Record<string, string>,
     scopeKey?: string,
+    requestContext?: RequestContext,
   ): Promise<ProcessInputStepResult | undefined> {
     if (!this.observabilityStorage) return undefined;
 
@@ -497,9 +536,8 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     if (await this.isModelInCooldown(currentModelId, cooldownMs, scopeKey)) {
       const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey, rule.fallbackOrder);
       if (fallback) {
-        const selectedId = getModelId(fallback.model);
-        await this.notifyViolation('error-rate', currentModelId, selectedId, 'Model in cooldown (circuit open)');
-        return this.buildFallbackResult(fallback);
+        await this.notifyViolation('error-rate', currentModelId, fallback.id, 'Model in cooldown (circuit open)');
+        return this.buildFallbackResult(fallback, requestContext);
       }
       return undefined;
     }
@@ -544,10 +582,9 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       await this.openCircuit(currentModelId, scopeKey);
       const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey, rule.fallbackOrder);
       if (fallback) {
-        const selectedId = getModelId(fallback.model);
         const reason = `Error rate ${(errorRate * 100).toFixed(1)}% exceeds threshold ${(rule.threshold * 100).toFixed(1)}%`;
-        await this.notifyViolation('error-rate', currentModelId, selectedId, reason);
-        return this.buildFallbackResult(fallback);
+        await this.notifyViolation('error-rate', currentModelId, fallback.id, reason);
+        return this.buildFallbackResult(fallback, requestContext);
       }
     } catch {
       // Query errors should not prevent the agent from running
@@ -561,6 +598,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     currentModelId: string,
     scopeFilter: Record<string, string>,
     scopeKey?: string,
+    requestContext?: RequestContext,
   ): Promise<ProcessInputStepResult | undefined> {
     if (!this.observabilityStorage) return undefined;
 
@@ -572,14 +610,13 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     if (await this.isModelInCooldown(cooldownKey, cooldownMs, scopeKey)) {
       const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey, rule.fallbackOrder);
       if (fallback) {
-        const selectedId = getModelId(fallback.model);
         await this.notifyViolation(
           'score',
           currentModelId,
-          selectedId,
+          fallback.id,
           `Score rule for '${rule.scorerId}' in cooldown`,
         );
-        return this.buildFallbackResult(fallback);
+        return this.buildFallbackResult(fallback, requestContext);
       }
       return undefined;
     }
@@ -608,10 +645,9 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       await this.openCircuit(cooldownKey, scopeKey);
       const fallback = await this.findAvailableFallback(currentModelId, cooldownMs, scopeKey, rule.fallbackOrder);
       if (fallback) {
-        const selectedId = getModelId(fallback.model);
         const reason = `Score '${rule.scorerId}' ${result.value.toFixed(2)} below minimum ${rule.minScore}`;
-        await this.notifyViolation('score', currentModelId, selectedId, reason);
-        return this.buildFallbackResult(fallback);
+        await this.notifyViolation('score', currentModelId, fallback.id, reason);
+        return this.buildFallbackResult(fallback, requestContext);
       }
     } catch {
       // Query errors should not prevent the agent from running
@@ -624,6 +660,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     rule: FeedbackRule,
     currentModelId: string,
     scopeFilter: Record<string, string>,
+    requestContext?: RequestContext,
   ): Promise<ProcessInputStepResult | undefined> {
     if (!this.observabilityStorage) return undefined;
 
@@ -654,9 +691,8 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       const modelScores = new Map<string, number>();
       const modelEntryMap = new Map<string, AdaptiveModelRouterModel>();
       for (const entry of this.models) {
-        const id = getModelId(entry.model);
-        if (candidateIds && !candidateIds.has(id) && id !== currentModelId) continue;
-        modelEntryMap.set(id, entry);
+        if (candidateIds && !candidateIds.has(entry.id) && entry.id !== currentModelId) continue;
+        modelEntryMap.set(entry.id, entry);
       }
 
       let totalSamples = 0;
@@ -686,7 +722,7 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       if (bestEntry && bestId !== currentModelId) {
         const reason = `Feedback '${rule.feedbackType}' favors '${bestId}' (score: ${bestScore.toFixed(2)})`;
         await this.notifyViolation('feedback', currentModelId, bestId, reason);
-        return this.buildFallbackResult(bestEntry);
+        return this.buildFallbackResult(bestEntry, requestContext);
       }
     } catch {
       // Query errors should not prevent the agent from running
@@ -742,15 +778,14 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     if (await this.isModelInCooldown(currentModelId, this.defaultCooldownMs, scopeKey)) {
       const fallback = await this.findAvailableFallback(currentModelId, this.defaultCooldownMs, scopeKey);
       if (fallback) {
-        const selectedId = getModelId(fallback.model);
         await this.notifyViolation(
           'error-rate',
           currentModelId,
-          selectedId,
+          fallback.id,
           'Model in cooldown (skipping in fallback chain)',
         );
-        args.state.__adaptiveRouter_currentModelId = selectedId;
-        return this.buildFallbackResult(fallback);
+        args.state.__adaptiveRouter_currentModelId = fallback.id;
+        return this.buildFallbackResult(fallback, args.requestContext);
       }
       // All models in cooldown -- let the normal chain proceed
       return undefined;
@@ -766,11 +801,11 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       let result: ProcessInputStepResult | undefined;
 
       if (rule.signal === 'error-rate') {
-        result = await this.evaluateErrorRateRule(rule, currentModelId, scopeFilter, scopeKey);
+        result = await this.evaluateErrorRateRule(rule, currentModelId, scopeFilter, scopeKey, args.requestContext);
       } else if (rule.signal === 'score') {
-        result = await this.evaluateScoreRule(rule, currentModelId, scopeFilter, scopeKey);
+        result = await this.evaluateScoreRule(rule, currentModelId, scopeFilter, scopeKey, args.requestContext);
       } else if (rule.signal === 'feedback') {
-        result = await this.evaluateFeedbackRule(rule, currentModelId, scopeFilter);
+        result = await this.evaluateFeedbackRule(rule, currentModelId, scopeFilter, args.requestContext);
       }
 
       if (result) {
@@ -797,6 +832,14 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
    * This provides backwards compatibility with the existing model fallback
    * behavior -- even without observability data, the router can react to
    * real-time failures and route to healthy models.
+   *
+   * NOTE: processAPIError fires for non-retryable API rejections (the
+   * provider rejected the request content, e.g. 400/422 status codes).
+   * Retryable HTTP/network errors (500, 429, DNS failures, etc.) are handled
+   * by the lower-level retry layer (p-retry) and do NOT reach this hook.
+   * If a `processRequestError` hook is added to the Processor interface in
+   * the future for those retryable errors, we should implement it here too
+   * so the router can also react to transient network failures.
    */
   async processAPIError(
     args: ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata>,

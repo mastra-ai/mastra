@@ -60,7 +60,7 @@ import type {
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { AdaptiveModelRouter } from '../processors/processors/adaptive-model-router';
-import type { FallbackModel } from '../processors/processors/adaptive-model-router';
+import type { AdaptiveModelRouterModel, FallbackModel } from '../processors/processors/adaptive-model-router';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
@@ -710,16 +710,16 @@ export class Agent<
     if (fallbacks.length < 2) return [];
 
     // Build the router from the agent's model fallbacks.
-    // DynamicArgument fields (model, modelSettings, etc.) may be functions — use the
-    // model `id` string as the FallbackModel when the model itself is a function, and
-    // skip function-typed settings since they need request context to resolve.
+    // DynamicArgument fields (model, modelSettings, etc.) may be functions —
+    // pass them through directly and let the router resolve them with request
+    // context at runtime via buildFallbackResult.
     const router = new AdaptiveModelRouter({
       models: fallbacks.map(f => ({
         id: f.id,
-        model: typeof f.model === 'function' ? (f.id as FallbackModel) : (f.model as FallbackModel),
-        modelSettings: typeof f.modelSettings === 'function' ? undefined : f.modelSettings,
-        providerOptions: typeof f.providerOptions === 'function' ? undefined : f.providerOptions,
-        headers: typeof f.headers === 'function' ? undefined : f.headers,
+        model: f.model as FallbackModel | AdaptiveModelRouterModel['model'],
+        modelSettings: f.modelSettings as AdaptiveModelRouterModel['modelSettings'],
+        providerOptions: f.providerOptions as AdaptiveModelRouterModel['providerOptions'],
+        headers: f.headers as AdaptiveModelRouterModel['headers'],
       })),
     });
 
