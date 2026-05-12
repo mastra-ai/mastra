@@ -133,7 +133,15 @@ export function createHarnessTest({ storage }: HarnessTestOptions) {
           },
           tokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
           state: { foo: { bar: [1, 2, 3] }, n: 42 },
-          goal: { id: 'g1', objective: 'finish', status: 'active', turnsUsed: 3, maxTurns: 50 },
+          goal: {
+            id: 'g1',
+            objective: 'finish',
+            status: 'active',
+            turnsUsed: 3,
+            maxTurns: 50,
+            judgeModelId: 'openai/gpt-4o-mini',
+            createdAt: Date.now(),
+          },
         });
 
         await harness.saveSession(record, { ownerId: 'h-1', ifVersion: 0 });

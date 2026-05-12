@@ -33,6 +33,8 @@ import type {
   TABLE_SKILL_BLOBS,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_HARNESS_SESSIONS,
+  TABLE_HARNESS_ATTACHMENTS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -168,6 +170,8 @@ export type RecordTypes = {
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;
   mastra_channel_installations: Record<string, any>;
   mastra_channel_config: Record<string, any>;
+  [TABLE_HARNESS_SESSIONS]: Record<string, any>;
+  [TABLE_HARNESS_ATTACHMENTS]: Record<string, any>;
 };
 
 export type ListOptions = {
