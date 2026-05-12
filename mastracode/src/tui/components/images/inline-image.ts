@@ -19,11 +19,12 @@
  * "Placeholder" vs "drawn" is decided per-frame by a single call to
  * `imageManager.isPlaceholder(self)`. The manager returns true when this
  * is no longer the most recent inline image (a newer screenshot took
- * over — we do not stack kitty placements) or when rendering has been
- * externally suppressed (e.g. an overlay is up; pi-tui's compositor
- * cannot paint over image-bearing lines, so the watcher tells the
- * manager to hide ours and write a delete-by-id to clear the graphics
- * layer; the next frame after the overlay closes re-emits the escape).
+ * over — we do not stack kitty placements) or when the manager's display
+ * mode has been set to `'placeholder'` externally (e.g. an overlay is
+ * up; pi-tui's compositor cannot paint over image-bearing lines, so the
+ * watcher flips the manager to placeholder mode and the manager writes
+ * a delete-by-id to clear the graphics layer; the next frame after the
+ * overlay closes flips back to `'image'` and re-emits the escape).
  *
  * Why a custom component (not Text)
  * ---------------------------------
@@ -61,7 +62,7 @@ export class InlineImageComponent implements Component, ImageOwner {
   private readonly sequence: string;
   private readonly moveUp: string;
   private readonly kittyImageId?: number;
-  /** Cached "empty bordered" lines reused while suppressed. */
+  /** Cached "empty bordered" lines reused while in placeholder mode. */
   private readonly emptyLines: string[];
   /** Pre-rendered "(image)" placeholder lines (same row count as `rows`). */
   private readonly placeholderLines: string[];

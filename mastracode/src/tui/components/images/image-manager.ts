@@ -27,14 +27,14 @@
  * fall back to a placeholder presentation that occupies the same rows:
  *
  *   - The image is no longer the active one (a newer image registered).
- *   - Rendering is currently *suppressed* — set by external callers when
- *     a popup is open, or any other future reason to hide the image.
+ *   - Display mode is currently `'placeholder'` — set by external callers
+ *     when a popup is open, or any other future reason to hide the image.
  *
  * Components ask `isPlaceholder(self)` each frame; it's a pure read of
  * those two pieces of state. The manager doesn't know what an overlay is.
  *
- * External callers drive the suppression flag via `suppress()` /
- * `unsuppress()`. Those setters are where the side effects live: deleting
+ * External callers drive the display mode via `setDisplayMode('image' |
+ * 'placeholder')`. That setter is where the side effects live: deleting
  * the kitty placement so a popup isn't punched through, and forcing a
  * full pi-tui redraw so popup glyphs don't ghost on image-bearing rows.
  * Today the only caller is the overlay watcher in `state.ts`, but the
@@ -52,6 +52,8 @@ import type { TUI } from '@mariozechner/pi-tui';
  */
 export type ImageOwner = object;
 
+export type ImageDisplayMode = 'image' | 'placeholder';
+
 interface Registration {
   owner: ImageOwner;
   kittyImageId?: number;
@@ -60,8 +62,8 @@ interface Registration {
 class ImageManager {
   private ui: TUI | null = null;
   private active: Registration | null = null;
-  /** External flag set via `suppress()` / `unsuppress()`. */
-  private suppressed = false;
+  /** External setting driven via `setDisplayMode()`. */
+  private displayMode: ImageDisplayMode = 'image';
 
   attachTui(ui: TUI): void {
     this.ui = ui;
@@ -92,35 +94,27 @@ class ImageManager {
   /**
    * Pure predicate. Returns true when the component should render its
    * muted "(image)" placeholder instead of the kitty/iTerm2 escape —
-   * either because it isn't the active image, or because rendering is
-   * currently suppressed.
+   * either because it isn't the active image, or because the manager
+   * is currently in `'placeholder'` display mode.
    */
   isPlaceholder(owner: ImageOwner): boolean {
-    return this.suppressed || this.active?.owner !== owner;
+    return this.displayMode === 'placeholder' || this.active?.owner !== owner;
   }
 
   /**
-   * Tell the manager to fall back to placeholder rendering. Idempotent.
-   * On the leading edge (false -> true) deletes the active kitty
-   * placement so it doesn't bleed through whatever's covering the image,
-   * and forces a full pi-tui redraw so the graphics layer is wiped.
+   * Set the manager's display mode. Idempotent.
+   *
+   * Switching to `'placeholder'` deletes the active kitty placement so
+   * it doesn't bleed through whatever's covering the image, and forces
+   * a full pi-tui redraw so the graphics layer is wiped. Switching back
+   * to `'image'` forces a full redraw so the next frame re-emits the
+   * kitty escape and any leftover glyphs from whatever was covering
+   * the image are repainted.
    */
-  suppress(): void {
-    if (this.suppressed) return;
-    this.suppressed = true;
-    if (this.active) this.deletePlacement(this.active);
-    this.forceFullRedraw();
-  }
-
-  /**
-   * Resume normal image rendering. Idempotent. On the trailing edge
-   * (true -> false) forces a full pi-tui redraw so the next frame
-   * re-emits the kitty escape and any leftover glyphs from whatever
-   * was covering the image are repainted.
-   */
-  unsuppress(): void {
-    if (!this.suppressed) return;
-    this.suppressed = false;
+  setDisplayMode(mode: ImageDisplayMode): void {
+    if (mode === this.displayMode) return;
+    this.displayMode = mode;
+    if (mode === 'placeholder' && this.active) this.deletePlacement(this.active);
     this.forceFullRedraw();
   }
 

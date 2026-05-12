@@ -226,8 +226,8 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
   const instructions = `  ${hintParts.join(sep)}`;
 
-  // Zero-row component that toggles the image manager's suppress flag
-  // based on pi-tui's overlay state once per frame. Must be added before
+  // Zero-row component that drives the image manager's display mode
+  // from pi-tui's overlay state once per frame. Must be added before
   // any inline image can appear.
   state.ui.addChild(new OverlayWatcherComponent(state.ui));
 
