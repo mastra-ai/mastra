@@ -17,7 +17,7 @@ export const testAgent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
   instructions: 'You are a helpful test agent.',
-  model: 'mastra/openai/gpt-4o-mini',
+  model: 'openai/gpt-4o-mini',
   tools: { calculator: calculatorTool, 'string-transform': stringTool },
   memory,
 });
@@ -26,7 +26,7 @@ export const helperAgent = new Agent({
   id: 'helper-agent',
   name: 'Helper Agent',
   instructions: 'You are a helper sub-agent. Answer concisely.',
-  model: 'mastra/openai/gpt-4o-mini',
+  model: 'openai/gpt-4o-mini',
   tools: { 'string-transform': stringTool },
 });
 
@@ -35,7 +35,7 @@ export const networkAgent = new Agent({
   name: 'Network Agent',
   instructions:
     'You are an orchestrator agent. When the user asks you to delegate or ask your helper, you MUST call the helper-agent sub-agent tool. Never answer directly when delegation is requested.',
-  model: 'mastra/openai/gpt-4o-mini',
+  model: 'openai/gpt-4o-mini',
   agents: { 'helper-agent': helperAgent },
   memory,
 });
@@ -45,7 +45,7 @@ export const workflowAgent = new Agent({
   name: 'Workflow Agent',
   instructions:
     'You are an agent with a workflow. When the user asks you to greet someone, you MUST call the sequential-steps workflow with their name. Never answer directly — always use the workflow.',
-  model: 'mastra/openai/gpt-4o-mini',
+  model: 'openai/gpt-4o-mini',
   workflows: { 'sequential-steps': sequentialSteps },
 });
 
@@ -53,6 +53,6 @@ export const approvalAgent = new Agent({
   id: 'approval-agent',
   name: 'Approval Agent',
   instructions: 'You are a helpful agent. When asked to greet someone, always use the needs-approval tool.',
-  model: 'mastra/openai/gpt-4o-mini',
+  model: 'openai/gpt-4o-mini',
   tools: { 'needs-approval': approvalTool },
 });

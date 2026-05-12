@@ -21,12 +21,12 @@
     "@mastra/observability": "alpha"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "^1.60.0",
     "execa": "^9.6.1",
     "get-port": "^7.2.0",
     "mastra": "alpha",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.6",
     "zod": "^4.4.3"
   }
 }

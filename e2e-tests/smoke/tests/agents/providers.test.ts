@@ -15,11 +15,11 @@ describe('agent providers', () => {
     expect(typeof provider.connected).toBe('boolean');
   });
 
-  it('should include Mastra gateway as a connected provider', async () => {
+  it('should include OpenAI as a connected provider', async () => {
     const { data } = await fetchJson<any>('/api/agents/providers');
 
-    const mastra = data.providers.find((p: any) => p.id === 'mastra');
-    expect(mastra, 'Mastra provider not found in provider list').toBeDefined();
-    expect(mastra.connected).toBe(true);
+    const openai = data.providers.find((p: any) => p.id === 'openai');
+    expect(openai, 'OpenAI provider not found in provider list').toBeDefined();
+    expect(openai.connected).toBe(true);
   });
 });

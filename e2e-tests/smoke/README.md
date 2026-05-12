@@ -6,7 +6,7 @@ Post-release smoke tests that run against `alpha`-tagged Mastra packages. Tests 
 
 ```bash
 cd e2e-tests/smoke
-cp .env.example .env   # fill in MASTRA_GATEWAY_API_KEY (required), Slack vars (optional)
+cp .env.example .env   # fill in OPENAI_API_KEY (required), Slack vars (optional)
 pnpm install --ignore-workspace
 ```
 
@@ -73,7 +73,7 @@ All GitHub-managed config is prefixed `SMOKE_*` so it groups together in repo **
 
 | Secret | Description |
 |---|---|
-| `SMOKE_MASTRA_GATEWAY_API_KEY` | Mastra gateway API key (`mg_...`). Agents use models like `mastra/openai/gpt-4o-mini`, so all LLM traffic flows through the gateway. |
+| `SMOKE_OPENAI_API_KEY` | OpenAI API key used by all smoke agents (`gpt-4o-mini`). |
 | `SMOKE_SLACK_BOT_TOKEN` | Slack Bot User OAuth Token (`xoxb-...`) |
 
 ### Required repository variables
