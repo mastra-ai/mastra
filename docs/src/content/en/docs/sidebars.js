@@ -338,6 +338,9 @@ const sidebars = {
       type: 'category',
       label: 'A2A',
       collapsed: true,
+      customProps: {
+        tags: ['new'],
+      },
       items: [
         {
           type: 'doc',
