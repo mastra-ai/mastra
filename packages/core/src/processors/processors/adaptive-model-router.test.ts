@@ -958,6 +958,296 @@ describe('AdaptiveModelRouter', () => {
   });
 
   // =========================================================================
+  // Per-rule fallbackOrder
+  // =========================================================================
+
+  describe('per-rule fallbackOrder', () => {
+    const FOUR_MODELS: AdaptiveModelRouterModel[] = [
+      { id: 'gpt-4o', model: 'gpt-4o' },
+      { id: 'gpt-4o-mini', model: 'gpt-4o-mini' },
+      { id: 'claude-sonnet', model: 'claude-sonnet' },
+      { id: 'claude-haiku', model: 'claude-haiku' },
+    ];
+
+    it('constructor throws when fallbackOrder references an unknown model ID', () => {
+      expect(
+        () =>
+          new AdaptiveModelRouter({
+            models: DEFAULT_MODELS,
+            rules: [{ signal: 'error-rate', threshold: 0.3, fallbackOrder: ['nonexistent-model'] }],
+          }),
+      ).toThrow("unknown model 'nonexistent-model'");
+    });
+
+    it('constructor accepts fallbackOrder with valid model IDs', () => {
+      expect(
+        () =>
+          new AdaptiveModelRouter({
+            models: FOUR_MODELS,
+            rules: [{ signal: 'error-rate', threshold: 0.3, fallbackOrder: ['claude-sonnet', 'gpt-4o-mini'] }],
+          }),
+      ).not.toThrow();
+    });
+
+    it('error-rate rule uses custom fallbackOrder instead of default models order', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getMetricBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { 'labels.status': 'ok' }, value: 2 },
+            { dimensions: { 'labels.status': 'error' }, value: 8 },
+          ],
+        }),
+      });
+
+      const cache = createMockCache();
+      const router = createRouter(
+        {
+          models: FOUR_MODELS,
+          rules: [
+            {
+              signal: 'error-rate',
+              threshold: 0.3,
+              // Prefer claude-sonnet over gpt-4o-mini (reverse of default order)
+              fallbackOrder: ['claude-sonnet', 'gpt-4o-mini'],
+            },
+          ],
+          scope: 'resource',
+        },
+        obsStorage,
+        cache,
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-order');
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'gpt-4o' as any,
+      });
+      const result = await router.processInputStep(args);
+
+      // Should pick claude-sonnet (first in fallbackOrder), NOT gpt-4o-mini (second in models array)
+      expect(result?.model).toBe('claude-sonnet');
+    });
+
+    it('error-rate rule skips cooled-down models in custom fallbackOrder', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getMetricBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { 'labels.status': 'ok' }, value: 2 },
+            { dimensions: { 'labels.status': 'error' }, value: 8 },
+          ],
+        }),
+      });
+
+      const cache = createMockCache();
+      const router = createRouter(
+        {
+          models: FOUR_MODELS,
+          rules: [
+            {
+              signal: 'error-rate',
+              threshold: 0.3,
+              cooldown: '2m',
+              fallbackOrder: ['claude-sonnet', 'gpt-4o-mini', 'claude-haiku'],
+            },
+          ],
+          scope: 'resource',
+        },
+        obsStorage,
+        cache,
+      );
+
+      // Put claude-sonnet in cooldown
+      await cache.set('adaptive-router:circuit-breaker:claude-sonnet:resource:user-fo', Date.now());
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-fo');
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'gpt-4o' as any,
+      });
+      const result = await router.processInputStep(args);
+
+      // claude-sonnet is in cooldown → should pick gpt-4o-mini (second in fallbackOrder)
+      expect(result?.model).toBe('gpt-4o-mini');
+    });
+
+    it('score rule uses custom fallbackOrder', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getScoreAggregate: vi.fn().mockResolvedValue({ value: 0.4 }),
+      });
+
+      const cache = createMockCache();
+      const router = createRouter(
+        {
+          models: FOUR_MODELS,
+          rules: [
+            {
+              signal: 'score',
+              scorerId: 'relevance',
+              minScore: 0.7,
+              // On quality issues → prefer stronger model
+              fallbackOrder: ['claude-sonnet', 'claude-haiku'],
+            },
+          ],
+          scope: 'resource',
+        },
+        obsStorage,
+        cache,
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-score-fo');
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'gpt-4o' as any,
+      });
+      const result = await router.processInputStep(args);
+
+      // Score 0.4 < 0.7 → should use claude-sonnet (first in fallbackOrder)
+      expect(result?.model).toBe('claude-sonnet');
+    });
+
+    it('different rules can specify different fallback orders', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getMetricBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { 'labels.status': 'ok' }, value: 2 },
+            { dimensions: { 'labels.status': 'error' }, value: 8 },
+          ],
+        }),
+        getScoreAggregate: vi.fn().mockResolvedValue({ value: 0.4 }),
+      });
+
+      const cache = createMockCache();
+
+      // Error-rate rule fires first (threshold 0.3, error rate is 80%)
+      // It should use the error-rate rule's fallbackOrder, not the score rule's
+      const router = createRouter(
+        {
+          models: FOUR_MODELS,
+          rules: [
+            {
+              signal: 'error-rate',
+              threshold: 0.3,
+              fallbackOrder: ['gpt-4o-mini', 'claude-haiku'],
+            },
+            {
+              signal: 'score',
+              scorerId: 'relevance',
+              minScore: 0.7,
+              fallbackOrder: ['claude-sonnet', 'claude-haiku'],
+            },
+          ],
+          scope: 'resource',
+        },
+        obsStorage,
+        cache,
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-multi-fo');
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'gpt-4o' as any,
+      });
+      const result = await router.processInputStep(args);
+
+      // Error-rate rule fires first → should use gpt-4o-mini (from error-rate's fallbackOrder)
+      expect(result?.model).toBe('gpt-4o-mini');
+    });
+
+    it('feedback rule with fallbackOrder limits candidate set', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getFeedbackBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { entityName: 'gpt-4o' }, value: 3.0 },
+            { dimensions: { entityName: 'gpt-4o-mini' }, value: 4.5 },
+            { dimensions: { entityName: 'claude-sonnet' }, value: 5.0 },
+            { dimensions: { entityName: 'claude-haiku' }, value: 4.0 },
+          ],
+        }),
+      });
+
+      const cache = createMockCache();
+      const router = createRouter(
+        {
+          models: FOUR_MODELS,
+          rules: [
+            {
+              signal: 'feedback',
+              feedbackType: 'rating',
+              minSamples: 1,
+              // Only consider gpt-4o-mini and claude-haiku as candidates
+              fallbackOrder: ['gpt-4o-mini', 'claude-haiku'],
+            },
+          ],
+          scope: 'resource',
+        },
+        obsStorage,
+        cache,
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-fb-fo');
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'gpt-4o' as any,
+      });
+      const result = await router.processInputStep(args);
+
+      // claude-sonnet has highest score (5.0) but is NOT in fallbackOrder
+      // Among candidates: gpt-4o-mini (4.5) vs claude-haiku (4.0) → gpt-4o-mini wins
+      expect(result?.model).toBe('gpt-4o-mini');
+    });
+
+    it('falls back to default models order when fallbackOrder is not specified', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        getMetricBreakdown: vi.fn().mockResolvedValue({
+          groups: [
+            { dimensions: { 'labels.status': 'ok' }, value: 2 },
+            { dimensions: { 'labels.status': 'error' }, value: 8 },
+          ],
+        }),
+      });
+
+      const cache = createMockCache();
+      const router = createRouter(
+        {
+          models: FOUR_MODELS,
+          rules: [{ signal: 'error-rate', threshold: 0.3 }],
+          scope: 'resource',
+        },
+        obsStorage,
+        cache,
+      );
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-default');
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        model: 'gpt-4o' as any,
+      });
+      const result = await router.processInputStep(args);
+
+      // No fallbackOrder → uses default models order → gpt-4o-mini (index 1)
+      expect(result?.model).toBe('gpt-4o-mini');
+    });
+  });
+
+  // =========================================================================
   // Rule priority
   // =========================================================================
 
