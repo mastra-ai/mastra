@@ -39,4 +39,4 @@ for f in "${PROJECT_DIR}/mastra.db" "${PROJECT_DIR}/mastra.db-wal" "${PROJECT_DI
   fi
 done
 
-echo "✓ Fixtures reset. Start the dev server with: (cd ${PROJECT_DIR} && pnpm dev) — or restart via the smoke-test preflight."
+echo "✓ Fixtures reset. Start the dev server with: (cd ${PROJECT_DIR} && pnpm mastra:dev) — or restart via the smoke-test preflight."
