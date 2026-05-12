@@ -1,5 +1,27 @@
 # mastracode
 
+## 0.18.0-alpha.15
+
+### Minor Changes
+
+- Added signal-based follow-up support for Mastra Code. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+  Text submitted while an agent run is active now continues the current thread, shows as pending until the signal echo confirms it, and avoids duplicate stream rendering by following thread output through one subscription owner.
+
+  For example, pressing `Ctrl+F` while the agent is streaming queues the editor contents as a follow-up signal instead of waiting for the run to finish:
+
+  ```ts
+  const signal = harness.sendSignal({ content: 'one more constraint: keep the fix minimal' });
+  await signal.accepted;
+  ```
+
+### Patch Changes
+
+- Fixed goal reminders in MastraCode to continue through signals without duplicating prompts. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+
 ## 0.18.0-alpha.14
 
 ### Patch Changes
