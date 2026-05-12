@@ -1,0 +1,32 @@
+{
+  "name": "e2e-smoke-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npx mastra build",
+    "dev": "npx mastra dev",
+    "build:studio": "npx mastra build --studio",
+    "test": "vitest run",
+    "test:ui": "playwright test",
+    "test:all": "vitest run && playwright test",
+    "report:slack": "npx tsx scripts/slack-report.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "alpha",
+    "@mastra/duckdb": "alpha",
+    "@mastra/libsql": "alpha",
+    "@mastra/mcp": "alpha",
+    "@mastra/memory": "alpha",
+    "@mastra/observability": "alpha"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "execa": "^9.6.1",
+    "get-port": "^7.2.0",
+    "mastra": "alpha",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
+    "zod": "^4.4.3"
+  }
+}
