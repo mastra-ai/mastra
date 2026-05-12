@@ -103,6 +103,8 @@ Record what already exists:
 
 List endpoints return a paginated envelope: `{ hasMore, page, perPage, total, workspaces|agents|skills }`. The arrays live under the named key; use `.<key> | length` for the page count and `.total` for the full count.
 
+> The page array is filtered for caller visibility (private records the caller can't see are excluded), but `total` reflects the underlying DB count for the query. Expect `(.<key> | length) <= .total` even on the first page when private records exist that the caller can't see.
+
 ```bash
 # Workspaces
 curl -s $BASE/stored/workspaces | jq '{ page: (.workspaces | length), total: .total }'

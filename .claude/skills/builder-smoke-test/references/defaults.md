@@ -36,11 +36,11 @@ AGENT_ID=$(echo "$RESP" | jq -r '.id // .agent.id')
 
 Verify the response (or a follow-up `GET /stored/agents/$AGENT_ID`):
 
-- [ ] `workspaceId` is `"builder-workspace"` (from `workspace.type=id`)
+- [ ] `workspace.workspaceId` is `"builder-workspace"` (nested under `workspace`, type=`"id"`)
 - [ ] `model.provider` is `"openai"` and `model.name` is `"gpt-5.4"` (default model — API persists the config's `modelId` under the `name` field)
 - [ ] `memory.options.lastMessages` is `10`
 - [ ] `browser.config.provider` is `"stagehand"` (inline provider)
-- [ ] `authorId` set (or undefined if auth is off)
+- [ ] `authorId` set (or `null` if auth is off)
 
 ### 2. Create an agent with explicit overrides
 
@@ -58,10 +58,12 @@ curl -s -X POST "$BASE/stored/agents" \
 
 - [ ] `model` matches the override (`anthropic / claude-opus-4-7`)
 - [ ] `memory.options.lastMessages` is `3`, not `10`
-- [ ] `workspaceId` is still the default builder workspace (not overridden)
+- [ ] `workspace.workspaceId` is still the default builder workspace (not overridden)
 - [ ] `browser` is still the default
 
-### 3. Create an agent with explicit `null` to opt out
+### 3. Create an agent with explicit `null` to opt out (`browser` only)
+
+`browser` accepts `null` (or `false`) to opt out of the default. `memory` and `workspace` schemas do NOT accept `null` — omit the field entirely to "opt out" (the default just won't apply for omitted fields anyway). Sending `memory: null` returns HTTP 400.
 
 ```bash
 curl -s -X POST "$BASE/stored/agents" \
@@ -70,15 +72,24 @@ curl -s -X POST "$BASE/stored/agents" \
     "name": "Null Opt-out Smoke Agent",
     "instructions": "Smoke test that explicit null preserves opt-out.",
     "browser": null,
-    "memory": null,
     "visibility": "private"
   }' | jq .
 ```
 
 - [ ] `browser` is `null` (default was NOT applied because caller set null)
-- [ ] `memory` is `null`
+- [ ] `memory` still got the default (caller omitted the field)
 - [ ] `model` still got the default
-- [ ] `workspaceId` still got the default
+- [ ] `workspace.workspaceId` still got the default
+
+Verify the negative path:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BASE/stored/agents" \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "Memory Null Smoke", "instructions": "x", "memory": null }'
+```
+
+- [ ] Status code is `400` (schema rejects `memory: null`)
 
 ### 4. Verify defaults expose via settings
 
@@ -102,5 +113,6 @@ curl -s -X DELETE "$BASE/stored/agents/$AGENT_ID" | jq .
 - [ ] Default memory applied when caller omits
 - [ ] Default browser applied when caller omits
 - [ ] Explicit fields are preserved (not overwritten)
-- [ ] Explicit `null` preserves opt-out (default NOT applied)
+- [ ] Explicit `null` on `browser` preserves opt-out (default NOT applied)
+- [ ] Explicit `null` on `memory` returns HTTP 400 (schema does not allow null)
 - [ ] Settings endpoint exposes the configured defaults

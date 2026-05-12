@@ -144,23 +144,26 @@ curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID          
 
 The publish flow is the path that materializes `SKILL.md` (and any `references/`, `scripts/`, `assets/` subdirs) on disk. Verify by inspecting filesystem state before and after a successful publish.
 
-### F1. Files on plain create
+The relevant field on the GET response is `tree` (a directory tree under the skill's base dir), not `files`.
+
+### F1. Tree on plain create
 
 ```bash
-curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
+curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.tree'
 ```
 
-- [ ] Record the value. If it's an array, list the paths. If it's `null` or absent, note that.
+- [ ] Record the value. Expected: `null` on plain create (no filesystem materialization until publish).
 
-### F2. Files after publish (when applicable)
+### F2. Tree after publish (when applicable)
 
 For any skill that was successfully published in step 7:
 
 ```bash
-curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
+curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.tree.entries'
 ```
 
-- [ ] If `files` is an array, `SKILL.md` should be present and `instructions` should not be duplicated inside the file entry
+- [ ] `tree.entries` is populated and includes a `SKILL.md` entry
+- [ ] `instructions` is not duplicated inside the tree entry contents
 
 ### F3. Auto-publish on visibility flip
 
@@ -187,5 +190,5 @@ See `references/registry.md` for the install flow.
 - [ ] Create + list a second skill
 - [ ] Publish: empty body validation, in-tree `skillPath` behavior
 - [ ] Delete returns 200; follow-up GET returns 404
-- [ ] Inspect `files` field before and after publish
+- [ ] Inspect `tree` field before and after publish
 - [ ] (Optional) Duplicate-name handling
