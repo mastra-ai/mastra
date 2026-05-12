@@ -1,6 +1,6 @@
 ---
 name: builder-smoke-test
-description: Smoke test the Agent Builder feature branch end-to-end against examples/agent on localhost:4111. Covers workspace reconciliation, stored agents/skills CRUD, ownership, visibility, stars, registry/library Copy flow, picker allowlists, model policy, RBAC role preview, builder defaults, infrastructure diagnostics, channels, and Studio + Agent Builder UI. Trigger when validating the agent-builder feature branch, PRs that touch packages/server, packages/playground, packages/playground-ui agent-builder routes, or builder EE code paths.
+description: Smoke test the Agent Builder feature branch end-to-end against examples/agent on localhost:4111. Covers workspace reconciliation, stored agents/skills CRUD, ownership, visibility, stars, registry/library Copy flow, picker allowlists, model policy, RBAC role gating, role impersonation UI, builder defaults, infrastructure diagnostics, channels, and Studio + Agent Builder UI. Trigger when validating the agent-builder feature branch, PRs that touch packages/server, packages/playground, packages/playground-ui agent-builder routes, or builder EE code paths.
 ---
 
 # Builder Smoke Test
@@ -19,7 +19,7 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 | --- | ---------------------- | -------------------------------- | --------------------------------------------------------------------------- |
 | 1   | **Setup**              | `references/setup.md`            | Always                                                                      |
 | 2   | **Workspace**          | `references/workspace.md`        | `--test workspace` or full                                                  |
-| 3   | **Reconciliation**     | `references/reconciliation.md`   | `--test reconciliation` or full (long-running, optional during quick smoke) |
+| 3   | **Reconciliation**     | `references/reconciliation.md`   | Steps 1 + 5 only; steps 2/3/4/6 are out of smoke-test scope (see below)     |
 | 4   | **Defaults**           | `references/defaults.md`         | `--test defaults` or full                                                   |
 | 5   | **Model Policy**       | `references/model-policy.md`     | `--test model-policy` or full                                               |
 | 6   | **Skills**             | `references/skills.md`           | `--test skills` or full                                                     |
@@ -89,6 +89,10 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 /builder-smoke-test --auth on
 /builder-smoke-test --auth off
 
+# Run auth-on as a non-admin role (must match the logged-in user's actual role)
+/builder-smoke-test --auth on --role viewer
+/builder-smoke-test --auth on --role member
+
 # Skip the browser pass (API-only run)
 /builder-smoke-test --skip-browser
 ```
@@ -100,6 +104,7 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 | `--test`           | Comma-separated section names (see table above).                                                           | (all sections) |
 | `--scope`          | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.    | (none)         |
 | `--auth`           | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set. | `auto`         |
+| `--role`           | Expected role of the logged-in user under `--auth on`: `owner`, `admin`, `member`, or `viewer`. Setup asserts the live `/api/auth/me` roles match; on mismatch the run stops and the user is told to either change their WorkOS role or re-run with the correct `--role`. Ignored under `--auth off`. | `admin`        |
 | `--fixtures-reset` | Stop the dev server, wipe `examples/agent/mastra.db`, restart, restore the seeded public skills.           | `false`        |
 | `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                 | `false`        |
 | `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                         | `false`        |
@@ -300,7 +305,7 @@ run the per-section commands in `references/<section>.md`.
 | Skill CRUD          | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                                  |
 | Skill publish       | `POST /stored/skills/:id/publish`                                             |
 | Skill star          | `PUT / DELETE /stored/skills/:id/star`                                        |
-| Role preview header | `X-Mastra-Role-Preview: <role>` (admin-only; see `references/permissions.md`) |
+| Auth me             | `GET /api/auth/me` (returns logged-in user + roles + permissions)             |
 | Auth refresh        | `POST /auth/refresh`                                                          |
 
 ## Builder Studio routes
@@ -365,12 +370,17 @@ After testing, provide:
 
 The branch has accumulated minor papercuts. Note these in your report only if you hit them; don't fail the run on them:
 
-- Viewer role may still see create/edit buttons on some sub-pages (route-level RBAC is solid; component-level gating in progress).
-- "My agents" page lacks visibility badges.
 - `pnpm clean` does not remove `examples/agent/mastra.db`. Use `--fixtures-reset` if you need a clean DB.
 - Dev server can crash on hot-reload from `/auth/refresh` polling. Restart and continue.
 - `OPENAI_API_KEY` is required at startup — server won't boot without it, even if you only test non-LLM surfaces.
 - `mastra dev` overwrites `process.env` from `.env` at boot, so inline env overrides on the command line don't reach the server. Edit `examples/agent/.env` instead.
+
+## Out of smoke-test scope
+
+Some flows are documented in `references/` but are not driven by the smoke-test agent because they require server-lifecycle gymnastics that don't fit a single run:
+
+- **Reconciliation steps 2/3/4/6** (`references/reconciliation.md`) require editing `examples/agent/src/mastra/index.ts` (changing `basePath` / `workspaceId` / config), restarting `mastra dev` multiple times, and observing drift detection or orphan archival across restarts. The smoke-test agent runs only **Step 1** (fresh-startup persistence) and **Step 5** (non-builder workspaces untouched). Run the rest by hand when changing reconciliation code.
+- **Real role-swap testing** (logging in as multiple WorkOS users with different roles in the same run) is out of scope. The agent verifies whichever role the live `--role` user actually has, and additionally exercises the **UI-only role impersonation** flow under `--role admin` (see `references/ui.md`).
 
 ## References
 
@@ -384,7 +394,7 @@ The branch has accumulated minor papercuts. Note these in your report only if yo
 - `references/agents.md` — stored agent CRUD, skill attachment, model swap, delete-from-edit, avatar upload
 - `references/picker-allowlist.md` — tools/agents/workflows pickers respect allowlists
 - `references/stars.md` — star/unstar agents and skills, idempotency
-- `references/permissions.md` — viewer/member/admin gating, role preview, auth-off bypass
+- `references/permissions.md` — viewer/member/admin/owner gating, role expectation matrix, UI impersonation, auth-off bypass
 - `references/infrastructure.md` — `/editor/builder/infrastructure` payload + admin UI
 - `references/channels.md` — Slack provider visibility, connectChannel tool
 - `references/ui.md` — browser checklist across Builder routes

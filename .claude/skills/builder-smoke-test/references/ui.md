@@ -172,6 +172,25 @@ On Agents and Skills list pages:
 - [ ] Column does not collapse when the detail pane slides in
 - [ ] Detail pane animates in cleanly (no layout jump)
 
+### 15. Role impersonation *(Core, admin/owner only)*
+
+UI-only feature wired through `role-impersonation-context.tsx`. Frontend state, no backend role-override header. Only run this subset when the live user is `admin` or `owner` (otherwise the menu is hidden).
+
+Open the user menu → "View as role" (or equivalent picker — confirm exact label in the live UI and log it if it differs):
+
+- [ ] Picker offers `admin`, `member`, `viewer`
+- [ ] Selecting `viewer`:
+  - [ ] Impersonation banner appears at the top of the page indicating the active role
+  - [ ] Sidebar collapses to viewer-allowed entries (no Create/Edit affordances)
+  - [ ] Create buttons (e.g. "New skill", "New agent") disappear or render disabled
+  - [ ] Direct navigation to a write-only route (e.g. `/agent-builder/skills/new`) is blocked at the UI layer
+- [ ] Selecting `member`:
+  - [ ] Banner updates to show member
+  - [ ] Read + execute affordances visible; create/edit hidden
+- [ ] "Exit impersonation" (or equivalent) restores the original admin UI
+
+> **Important:** impersonation is UI-only. The API still answers per the *real* logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
+
 ### Cleanup
 
 If created via UI:

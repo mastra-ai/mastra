@@ -2,7 +2,11 @@
 
 Test the config-driven workspace lifecycle managed by `ensureBuilderWorkspaces()`.
 
-These tests require server restarts and config changes, so they're more involved than pure API tests. Some scenarios are already covered by unit tests in `packages/editor/src/editor-workspace-reconciliation.test.ts` — this section verifies the behavior end-to-end.
+## Smoke-test scope
+
+The smoke-test agent only runs **Step 1** (fresh-startup persistence — already covered by Setup) and **Step 5** (non-builder workspaces untouched after restart). Steps 2, 3, 4, and 6 require editing `examples/agent/src/mastra/index.ts`, restarting the dev server multiple times, and reverting changes — they don't fit a single smoke-test run and are kept here as a manual checklist for code changes to `ensureBuilderWorkspaces()` (`packages/editor/src/editor-workspace-reconciliation.test.ts` covers most of this at unit level).
+
+When the agent is invoked without `--test reconciliation`, mark steps 2/3/4/6 as `⏭️ out-of-scope (manual)` in the report. Run them by hand if you touched reconciliation code.
 
 ## Background
 
@@ -37,7 +41,7 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 - [ ] `runtimeRegistered` is `true`
 - [ ] Filesystem and sandbox config match what's in `examples/agent/src/mastra/index.ts`
 
-### 2. Idempotent Restart (No-Op)
+### 2. Idempotent Restart (No-Op) — manual only
 
 Restart the server without changing any config. Record the workspace's `updatedAt` and `resolvedVersionId` before and after.
 
@@ -54,7 +58,7 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{updatedAt, resolvedVersionI
 - [ ] `resolvedVersionId` is unchanged
 - [ ] No duplicate workspace records
 
-### 3. Config Drift Detection
+### 3. Config Drift Detection — manual only
 
 Change the workspace config in `examples/agent/src/mastra/index.ts`. For example, change the `basePath`:
 
@@ -84,7 +88,7 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 filesystem: new LocalFilesystem({ basePath: '.mastra/workspace' }),
 ```
 
-### 4. Orphan Archival
+### 4. Orphan Archival — manual only
 
 Change the workspace ID in the builder config:
 
@@ -140,7 +144,7 @@ Clean up:
 curl -s -X DELETE $BASE/stored/workspaces/user-workspace
 ```
 
-### 6. Metadata Backfill
+### 6. Metadata Backfill — unit-test only
 
 This scenario covers old workspace records that were created before `metadata.source` was added. It's difficult to test manually without direct DB access. **Covered by unit tests** in `editor-workspace-reconciliation.test.ts`.
 

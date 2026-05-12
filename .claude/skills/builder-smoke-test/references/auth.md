@@ -64,6 +64,23 @@ In the browser:
 - [ ] Redirected to WorkOS login
 - [ ] After login, builder loads normally
 
+### 1b. Auth ON — assert the logged-in role matches `--role`
+
+`--role` defaults to `admin`. After login, ask the server who you are:
+
+```bash
+curl -s -H "Cookie: <session-cookie>" "$BASE/auth/me" | jq '{userId, email, roles, permissions}'
+```
+
+- [ ] HTTP 200 + JSON body with `userId`, `email`, `roles`, `permissions`
+- [ ] `roles` includes the value passed via `--role` (e.g. `--role viewer` → `roles` contains `"viewer"`)
+
+If `roles` does not contain the `--role` value, **stop the run** and tell the user:
+
+> The logged-in user's roles are `<actual roles>` but `--role` is `<expected>`. Either change your WorkOS role to `<expected>` and restart the server, or re-run the smoke test with `--role <one of your actual roles>`.
+
+Do not try to "simulate" a different role by setting headers — there is no server-side role-override header in this build. The only way to test a different role is to log in as a user that actually has it.
+
 ### 2. Auth ON — verify authorId is set
 
 After logging in, create an entity (use the browser session or copy the
@@ -111,7 +128,7 @@ With `AUTH_PROVIDER` absent, ownership/role checks at the route layer
 should be bypassed cleanly:
 
 - [ ] Creating entities returns `200/201` with no `authorId` in the response (the server resolves `getCallerAuthorId` → `null` and writes the row without an author)
-- [ ] Reads / writes succeed without `X-Mastra-Role-Preview`
+- [ ] Reads / writes succeed without any auth header
 - [ ] Library page still surfaces public skills
 
 ### 6. Error handling
