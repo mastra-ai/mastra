@@ -1885,7 +1885,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       await processWorkflowWaitForEvent(
         {
           ...workflowData,
-          workflow: this.mastra.getWorkflow(workflowData.workflowId),
+          workflow: this.mastra.getWorkflowById(workflowData.workflowId),
         },
         {
           pubsub: this.mastra.pubsub,
@@ -1902,7 +1902,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else if (workflowData.parentWorkflow) {
       workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
     } else {
-      workflow = this.mastra.getWorkflow(workflowData.workflowId);
+      workflow = this.mastra.getWorkflowById(workflowData.workflowId);
     }
 
     if (!workflow) {
