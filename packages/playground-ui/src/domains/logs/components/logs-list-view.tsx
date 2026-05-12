@@ -1,11 +1,17 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import type { LogRecord } from '../types';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 import { cn } from '@/lib/utils';
 
-// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';
+/** Column definition shape callers pass to render the list. */
+export type LogsListColumnDef = {
+  name: string;
+  label: string;
+  gridSize: string;
+  renderCell: (log: LogRecord) => ReactNode;
+};
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -23,6 +29,9 @@ export interface LogsListViewProps {
   featuredLogId?: string | null;
   /** Called when a row is clicked. The current toggle + trace-sync logic is the consumer's call. */
   onLogClick: (log: LogRecord) => void;
+  /** Column defs to render. Each entry's `gridSize` becomes a CSS grid track,
+   *  so fixed-rem widths on non-flex columns avoid virtualizer-induced jitter. */
+  columnDefs: LogsListColumnDef[];
 }
 
 /**
@@ -39,8 +48,10 @@ export function LogsListView({
   logIdMap,
   featuredLogId,
   onLogClick,
+  columnDefs,
 }: LogsListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const gridColumns = useMemo(() => columnDefs.map(c => c.gridSize).join(' '), [columnDefs]);
 
   const virtualizer = useVirtualizer({
     count: logs.length,
@@ -68,7 +79,7 @@ export function LogsListView({
   }, [isLoading]);
 
   if (isLoading) {
-    return <LogsDataListSkeleton columns={COLUMNS} />;
+    return <LogsDataListSkeleton columns={gridColumns} />;
   }
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -78,14 +89,11 @@ export function LogsListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <LogsDataList columns={gridColumns} scrollRef={scrollRef} className="min-w-0">
       <LogsDataList.Top>
-        <LogsDataList.TopCell>Date</LogsDataList.TopCell>
-        <LogsDataList.TopCell>Time</LogsDataList.TopCell>
-        <LogsDataList.TopCell>Level</LogsDataList.TopCell>
-        <LogsDataList.TopCell>Entity</LogsDataList.TopCell>
-        <LogsDataList.TopCell>Message</LogsDataList.TopCell>
-        <LogsDataList.TopCell>Data</LogsDataList.TopCell>
+        {columnDefs.map(col => (
+          <LogsDataList.TopCell key={col.name}>{col.label}</LogsDataList.TopCell>
+        ))}
       </LogsDataList.Top>
 
       {logs.length === 0 ? (
@@ -111,12 +119,9 @@ export function LogsListView({
                 onClick={() => onLogClick(log)}
                 className={cn(isFeatured && 'bg-surface4')}
               >
-                <LogsDataList.DateCell timestamp={log.timestamp} />
-                <LogsDataList.TimeCell timestamp={log.timestamp} />
-                <LogsDataList.LevelCell level={log.level} />
-                <LogsDataList.EntityCell entityType={log.entityType} entityName={log.entityName} />
-                <LogsDataList.MessageCell message={log.message} />
-                <LogsDataList.DataCell data={log.data} />
+                {columnDefs.map(col => (
+                  <Fragment key={col.name}>{col.renderCell(log)}</Fragment>
+                ))}
               </LogsDataList.RowButton>
             );
           })}

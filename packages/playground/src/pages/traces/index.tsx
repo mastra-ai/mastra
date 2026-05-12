@@ -1,6 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   ButtonWithTooltip,
+  ColumnsConfigurator,
   DateTimeRangePicker,
   NoTracesInfo,
   PageHeader,
@@ -8,6 +9,7 @@ import {
   PropertyFilterCreator,
   SpanDataPanelView,
   TraceDataPanelView,
+  TracesDataList,
   TracesErrorContent,
   TracesLayout,
   TracesListView,
@@ -15,6 +17,9 @@ import {
   buildTraceListFilters,
   createTracePropertyFilterFields,
   neutralizeFilterTokens,
+  buildVisibleColumnDefs,
+  useColumnPreferences,
+  useCustomColumns,
   useEntityNames,
   useEnvironments,
   useServiceNames,
@@ -27,19 +32,57 @@ import {
   useTraceUrlState,
   useTraces,
 } from '@mastra/playground-ui';
-import type { SpanTab } from '@mastra/playground-ui';
+import type { CustomColumnSource, SpanTab } from '@mastra/playground-ui';
 import { BookIcon, EyeIcon, ListIcon, ListTreeIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { useRootSpanJsonKeys } from '@/domains/observability/hooks/use-root-span-json-keys';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list';
 import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
+import {
+  ALL_BUILT_IN_COLUMN_DEFS,
+  OPTIONAL_TRACES_COLUMN_CONFIGS,
+  TRACES_COLUMN_CONFIGS,
+  TRACES_COLUMN_NAMES,
+  TRACE_COLUMN_DEFS,
+  TRACE_CUSTOM_COLUMN_SOURCES,
+  formatCellValue,
+  resolveCustomColumnValue,
+} from '@/domains/traces/components/trace-columns';
+import type { Trace, TraceCustomColumnSource } from '@/domains/traces/components/trace-columns';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { Link } from '@/lib/link';
+
+const TRACES_COLUMNS_STORAGE_KEY = 'traces:columns:visible';
+const TRACES_CUSTOM_COLUMNS_STORAGE_KEY = 'traces:columns:custom';
+const TRACES_REQUIRED_COLUMNS = ['shortId'];
+
+/**
+ * Per-column grid sizes used by the virtualized list. Built-in columns use
+ * fixed widths to avoid horizontal jitter as rows enter/leave the virtualizer
+ * window; only the input cell flexes. Custom columns fall back to
+ * `TRACES_COLUMN_WIDTHS.other` below.
+ */
+const TRACES_COLUMN_WIDTHS: Record<string, string> = {
+  shortId: '7rem',
+  date: '6rem',
+  time: '9rem',
+  name: 'minmax(8rem,1fr)',
+  input: 'minmax(12rem,2fr)',
+  entityId: '14rem',
+  status: '6rem',
+  other: '10rem',
+};
+
+const CUSTOM_SOURCE_LABELS: Record<TraceCustomColumnSource, string> = {
+  metadata: 'Metadata',
+  attributes: 'Attributes',
+};
 
 type TracesPageProps = {
   scopedEntityId?: string;
@@ -82,6 +125,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     : undefined;
 
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
+  const [visibleColumnNames, setVisibleColumnNames] = useColumnPreferences(
+    TRACES_COLUMNS_STORAGE_KEY,
+    TRACES_COLUMN_NAMES,
+  );
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
@@ -177,6 +224,40 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
   const threadTitles = tracesData?.threadTitles ?? {};
 
+  // Autocomplete hints come from the backend's project-wide distinct-keys discovery
+  // (see /observability/discovery/root-span-keys). Narrowing trace filters does not
+  // shrink these lists.
+  const { data: discoveredMetadataKeys = [] } = useRootSpanJsonKeys('metadata');
+  const { data: discoveredAttributeKeys = [] } = useRootSpanJsonKeys('attributes');
+
+  const { customColumns, addCustomColumn, removeCustomColumn } = useCustomColumns(TRACES_CUSTOM_COLUMNS_STORAGE_KEY);
+
+  const customColumnSources: CustomColumnSource[] = useMemo(
+    () =>
+      TRACE_CUSTOM_COLUMN_SOURCES.map(id => ({
+        id,
+        label: CUSTOM_SOURCE_LABELS[id],
+        discoveredKeys: id === 'metadata' ? discoveredMetadataKeys : discoveredAttributeKeys,
+      })),
+    [discoveredMetadataKeys, discoveredAttributeKeys],
+  );
+
+  const visibleColumnDefs = useMemo(
+    () =>
+      buildVisibleColumnDefs<Trace>({
+        visibleNames: visibleColumnNames,
+        defaultDefs: TRACE_COLUMN_DEFS,
+        allBuiltInDefs: ALL_BUILT_IN_COLUMN_DEFS,
+        customColumns,
+        widths: TRACES_COLUMN_WIDTHS,
+        customSources: TRACE_CUSTOM_COLUMN_SOURCES,
+        renderCustomCell: (trace, source, key) => (
+          <TracesDataList.NameCell name={formatCellValue(resolveCustomColumnValue(trace, source, key))} />
+        ),
+      }),
+    [visibleColumnNames, customColumns],
+  );
+
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(lightSpans, url.spanIdParam ?? null, id =>
     url.handleSpanChange(id),
   );
@@ -229,6 +310,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         disabled={isTracesLoading}
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
+      />
+      <ColumnsConfigurator
+        columns={TRACES_COLUMN_CONFIGS}
+        optionalColumns={OPTIONAL_TRACES_COLUMN_CONFIGS}
+        visibleColumns={visibleColumnNames}
+        onVisibleColumnsChange={setVisibleColumnNames}
+        requiredColumns={TRACES_REQUIRED_COLUMNS}
+        customColumns={customColumns}
+        customColumnSources={customColumnSources}
+        onAddCustomColumn={addCustomColumn}
+        onRemoveCustomColumn={removeCustomColumn}
+        disabled={isTracesLoading}
+        defaultVisibleColumns={TRACES_COLUMN_NAMES}
       />
       <ButtonWithTooltip
         disabled={isTracesLoading}
@@ -331,6 +425,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             onTraceClick={trace => url.handleTraceClick(url.traceIdParam === trace.traceId ? '' : trace.traceId)}
             groupByThread={groupByThread}
             threadTitles={threadTitles}
+            columnDefs={visibleColumnDefs}
           />
         }
         tracePanelSlot={

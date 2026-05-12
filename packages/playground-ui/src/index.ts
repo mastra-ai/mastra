@@ -20,6 +20,7 @@ export * from './ds/components/Txt/index';
 export * from './ds/components/AlertDialog';
 export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
+export * from './ds/components/ColumnsConfigurator';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
 export * from './ds/components/CodeBlock';

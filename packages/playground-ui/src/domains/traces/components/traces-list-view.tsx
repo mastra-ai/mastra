@@ -1,10 +1,17 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
-import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
+
+/** Column definition shape callers pass to render the list. */
+export type TracesListColumnDef = {
+  name: string;
+  label: string;
+  gridSize: string;
+  renderCell: (trace: TracesListViewTrace) => ReactNode;
+};
 
 /** Span attributes fields the list view reads directly. Extra unknown keys are allowed so callers
  *  can pass the full attributes record from @mastra/core/storage without mapping. */
@@ -28,9 +35,6 @@ export type TracesListViewTrace = {
   threadId?: string | null;
 };
 
-// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
-
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
 
@@ -51,6 +55,9 @@ export type TracesListViewProps = {
   onTraceClick: (trace: TracesListViewTrace) => void;
   groupByThread?: boolean;
   threadTitles?: Record<string, string>;
+  /** Column defs to render. Each entry's `gridSize` becomes a CSS grid track,
+   *  so fixed-rem widths on non-flex columns avoid virtualizer-induced jitter. */
+  columnDefs: TracesListColumnDef[];
 };
 
 /**
@@ -69,8 +76,10 @@ export function TracesListView({
   onTraceClick,
   groupByThread,
   threadTitles,
+  columnDefs,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const gridColumns = useMemo(() => columnDefs.map(c => c.gridSize).join(' '), [columnDefs]);
 
   const items = useMemo<ListItem[]>(() => {
     if (traces.length === 0) return [];
@@ -140,7 +149,7 @@ export function TracesListView({
   }, [isLoading]);
 
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={gridColumns} />;
   }
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -150,15 +159,11 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={gridColumns} scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>ID</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Date</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Time</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Name</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Input</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Entity</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Status</TracesDataList.TopCell>
+        {columnDefs.map(col => (
+          <TracesDataList.TopCell key={col.name}>{col.label}</TracesDataList.TopCell>
+        ))}
       </TracesDataList.Top>
 
       {items.length === 0 ? (
@@ -182,9 +187,6 @@ export function TracesListView({
 
             const trace = item.trace;
             const isFeatured = trace.traceId === featuredTraceId;
-            const displayDate = trace.startedAt ?? trace.createdAt;
-            const entityName =
-              trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
 
             return (
               <TracesDataList.RowButton
@@ -194,13 +196,9 @@ export function TracesListView({
                 onClick={() => onTraceClick(trace)}
                 className={cn(isFeatured && 'bg-surface4')}
               >
-                <TracesDataList.IdCell traceId={trace.traceId} />
-                <TracesDataList.DateCell timestamp={displayDate} />
-                <TracesDataList.TimeCell timestamp={displayDate} />
-                <TracesDataList.NameCell name={trace.name} />
-                <TracesDataList.InputCell input={getInputPreview(trace.input)} />
-                <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
-                <TracesDataList.StatusCell status={trace.attributes?.status} />
+                {columnDefs.map(col => (
+                  <Fragment key={col.name}>{col.renderCell(trace)}</Fragment>
+                ))}
               </TracesDataList.RowButton>
             );
           })}
