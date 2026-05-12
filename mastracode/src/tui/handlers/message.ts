@@ -181,6 +181,8 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
 
   for (const reminder of systemReminderParts) {
+    if (reminder.reminderType === 'goal-judge') continue;
+
     const reminderKey = `${message.id}:${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
     if (!state.currentRunSystemReminderKeys.has(reminderKey)) {
       state.currentRunSystemReminderKeys.add(reminderKey);

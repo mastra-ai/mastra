@@ -1679,6 +1679,7 @@ export class Harness<TState = {}> {
         return { accepted: result.accepted, runId: result.runId };
       }
 
+      this.abortRequested = false;
       this.abortController ??= new AbortController();
       const requestContext = await this.buildRequestContext(requestContextInput);
       const isYolo = (this.state as Record<string, unknown>).yolo === true;

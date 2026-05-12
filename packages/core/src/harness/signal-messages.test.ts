@@ -307,6 +307,26 @@ describe('Harness signal messages', () => {
     expect(assistantEnd?.message.content).toEqual([{ type: 'text', text: 'Hello' }]);
   });
 
+  it('does not carry a stale abort reason into a later idle signal run', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await harness.createThread();
+    harness.abort();
+    const signal = harness.sendSignal({ content: 'hello after stale abort' });
+    await signal.accepted;
+    await waitFor(() => events.some(event => event.type === 'agent_end'));
+
+    const agentEnd = events.find(
+      (event): event is Extract<HarnessEvent, { type: 'agent_end' }> => event.type === 'agent_end',
+    );
+    expect(agentEnd?.reason).toBe('complete');
+  });
+
   it('routes active interjections after repeated idle signal-started runs', async () => {
     const storage = new InMemoryStore();
     const releaseInitialCalls: Array<() => void> = [];
