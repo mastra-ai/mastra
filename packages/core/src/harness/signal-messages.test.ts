@@ -184,6 +184,60 @@ describe('Harness signal messages', () => {
     expect(abort).toHaveBeenCalled();
   });
 
+  it('ignores trailing chunks from an aborted subscription run', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-trailing-agent',
+      name: 'abort-trailing-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const harness = createHarness(storage, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    let activeRunId: string | null = 'run-1';
+    let releaseAbort!: () => void;
+    const abortReleased = new Promise<void>(resolve => {
+      releaseAbort = resolve;
+    });
+    const abort = vi.fn(() => {
+      activeRunId = null;
+      releaseAbort();
+      return true;
+    });
+
+    await harness.createThread();
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {
+        yield { type: 'start', runId: 'run-1' };
+        await abortReleased;
+        yield { type: 'abort', runId: 'run-1' };
+        yield { type: 'finish', runId: 'run-1' };
+      })(),
+      unsubscribe: vi.fn(),
+      abort,
+      activeRunId: () => activeRunId,
+    });
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'run-1',
+      signal: createSignal({ type: 'user-message', contents: 'active hello' }),
+    });
+
+    const signal = harness.sendSignal({ content: 'active hello' });
+    await signal.accepted;
+    await waitFor(() => events.some(event => event.type === 'agent_start'));
+    harness.abort();
+    await waitFor(() => events.some(event => event.type === 'agent_end'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+  });
+
   it('starts a new idle signal after a subscription-owned run completes', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);

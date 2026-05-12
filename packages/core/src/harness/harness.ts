@@ -1605,9 +1605,17 @@ export class Harness<TState = {}> {
   private async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
     const requestContext = await this.buildRequestContext();
     let currentRun: HarnessStreamState | undefined;
+    let lastFinishedRunId: string | null = null;
 
     for await (const chunk of subscription.stream) {
-      if (!this.isActiveAgentThreadSubscription(subscription)) break;
+      if (!this.isActiveAgentThreadSubscription(subscription)) {
+        break;
+      }
+
+      const chunkRunId = 'runId' in chunk ? chunk.runId : null;
+      if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
+        continue;
+      }
 
       if (!currentRun) {
         currentRun = this.createStreamState();
@@ -1631,6 +1639,7 @@ export class Harness<TState = {}> {
           chunk.type === 'abort' ||
           chunk.type === 'tool-call-suspended'
         ) {
+          const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
           await this.finishSubscribedStreamRun({
             suspended:
               chunk.type === 'tool-call-suspended' ||
@@ -1638,6 +1647,7 @@ export class Harness<TState = {}> {
               undefined,
             error: chunk.type === 'error',
           });
+          lastFinishedRunId = finishedRunId;
           currentRun = undefined;
         }
       } catch (error) {
