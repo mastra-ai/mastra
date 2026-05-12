@@ -220,7 +220,85 @@ For trace/branch polling, prefer dedicated cursor tables or polling-oriented der
 
 DuckDB is local-only / test-only.
 
-Use explicit local cursor writes with a monotonic local counter or equivalent local-only mechanism.
+Use inline cursor columns with a monotonic local cursor id allocated by DuckDB.
+
+Cursor primitive:
+
+- a DuckDB `SEQUENCE` that produces a monotonic `BIGINT` cursor id
+
+Do not use:
+
+- event timestamps
+- DuckDB `rowid`
+- `(timestamp, id)` composite cursors
+
+Those are all weaker than an explicit monotonic cursor id.
+
+All DuckDB observability event tables should use nullable inline `cursorId BIGINT`
+columns:
+
+- `span_events`
+- `log_events`
+- `metric_events`
+- `score_events`
+- `feedback_events`
+
+Use a schema-only migration for each table:
+
+- add the nullable column with no default so existing rows stay `NULL`
+- then set the column default from a DuckDB `SEQUENCE` so only new rows get cursor ids
+- do not backfill historical rows
+
+This means:
+
+- historical rows remain page-visible
+- historical rows are not delta-visible
+- delta polling starts from rows written after the feature lands
+- if a filtered result set matches only historical `NULL`-cursor rows, its `liveCursor` is effectively absent until a new cursorized row matches
+
+For append-style signals, delta mode reads `WHERE cursorId > after ORDER BY cursorId ASC`.
+
+#### Traces and branches
+
+Treat `span_events` start rows as the anchor rows for both list queries:
+
+- traces use root start rows: `eventType = 'start' AND parentSpanId IS NULL`
+- branches use branch-anchor start rows: `eventType = 'start' AND spanType IN (...)`
+
+Delta mode should reuse those same anchor rules with an added `cursorId > after`
+constraint.
+
+This means:
+
+- traces remain “newly listed only” because later span updates do not change the
+  anchor row cursor
+- branches remain “newly listed only” for the same reason
+- many non-anchor span rows will still receive cursor ids, which is acceptable
+
+#### Read-path rules
+
+Append-style signals:
+
+- page mode: existing list query plus filtered watermark for `liveCursor`
+- delta mode with no `after`: no rows, no backfill, return filtered watermark
+- delta mode with `after`: rows where `cursorId > after`, ordered by `cursorId ASC`
+- use `limit + 1` to determine `hasMore`
+- when rows are returned, `liveCursor` is the last returned row cursor
+- when no rows are returned, `liveCursor` is the current filtered watermark
+
+Traces:
+
+- delta source is anchor rows in `span_events`
+- prefilter on `eventType = 'start' AND parentSpanId IS NULL AND cursorId > after`
+- join those anchor rows to the current trace reconstruction / filter pipeline
+- order delta results by anchor-row `cursorId ASC`
+
+Branches:
+
+- delta source is anchor rows in `span_events`
+- prefilter on `eventType = 'start' AND spanType IN (...) AND cursorId > after`
+- join those anchor rows to the current branch reconstruction / filter pipeline
+- order delta results by anchor-row `cursorId ASC`
 
 Shared external behavior must match ClickHouse:
 
