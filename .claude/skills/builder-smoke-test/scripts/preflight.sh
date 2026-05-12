@@ -40,6 +40,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# If --expect on and no --workos-* flags were passed, fill them from env so
+# the caller doesn't have to repeat values that are already in the shell.
+has_flag() {
+  local needle="$1"
+  for a in "${SCAFFOLD_ARGS[@]:-}"; do
+    case "$a" in "${needle}"|"${needle}="*) return 0 ;; esac
+  done
+  return 1
+}
+if [ "${EXPECT_MODE}" = "on" ]; then
+  if ! has_flag --workos-api-key && [ -n "${WORKOS_API_KEY:-}" ]; then
+    SCAFFOLD_ARGS+=(--workos-api-key "${WORKOS_API_KEY}")
+  fi
+  if ! has_flag --workos-client-id && [ -n "${WORKOS_CLIENT_ID:-}" ]; then
+    SCAFFOLD_ARGS+=(--workos-client-id "${WORKOS_CLIENT_ID}")
+  fi
+  if ! has_flag --workos-organization-id && [ -n "${WORKOS_ORGANIZATION_ID:-}" ]; then
+    SCAFFOLD_ARGS+=(--workos-organization-id "${WORKOS_ORGANIZATION_ID}")
+  fi
+fi
+
 errors=0
 err() { echo "✗ $*" >&2; errors=$((errors + 1)); }
 ok()  { echo "✓ $*"; }

@@ -256,13 +256,17 @@ If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS
 3. If neither, ask the user, in one message, *both* questions:
    - "Can you paste the value, or give me permission to source one of these rc files?"
    - List the candidates that exist on disk: `~/.zshrc`, `~/.bashrc`, `~/.zshenv`, `~/.profile`, `~/.mastra-env`, `~/.env.global`. Show only the ones that exist; don't fabricate.
-4. Only after the user explicitly approves a specific file, source it in a subshell and rerun scaffold with the inherited env. The canonical recipe is:
+4. Only after the user explicitly approves a specific file, source it in a subshell and rerun preflight with the inherited env. The canonical recipes are:
 
    ```bash
-   zsh -c 'source ~/.mastra-env && bash .claude/skills/builder-smoke-test/scripts/scaffold.sh --reuse'
+   # auth off
+   zsh -c 'source ~/.mastra-env && bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off --reuse'
+
+   # auth on (preflight auto-picks WORKOS_API_KEY / WORKOS_CLIENT_ID / WORKOS_ORGANIZATION_ID from the sourced env)
+   zsh -c 'source ~/.mastra-env && bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on --reuse'
    ```
 
-   (Substitute the approved file for `~/.mastra-env`; substitute `zsh -c` for `bash -c` if the rc file is a bashrc.)
+   (Substitute the approved file for `~/.mastra-env`; use `bash -c` instead of `zsh -c` if the rc file is a bashrc.)
 
 5. Never write the secret value back into any rc file, never `export` it into the user's interactive shell, and never echo it back in chat in full. Refer to it as `<your-openai-key>` once you've used it.
 
