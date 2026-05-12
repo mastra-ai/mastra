@@ -4,10 +4,8 @@
 # Settings → Secrets and variables → Actions.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions → Secrets):
-#   SMOKE_MASTRA_GATEWAY_API_KEY – Mastra gateway API key (mg_...). Agents use
-#                                  models like `mastra/openai/gpt-4o-mini`, so
-#                                  all LLM traffic flows through the gateway.
-#   SMOKE_SLACK_BOT_TOKEN        – Slack Bot User OAuth Token (xoxb-...)
+#   SMOKE_OPENAI_API_KEY  – OpenAI API key used by all smoke agents.
+#   SMOKE_SLACK_BOT_TOKEN – Slack Bot User OAuth Token (xoxb-...)
 #
 # Required repository variables (Settings → Secrets and variables → Actions → Variables):
 #   SMOKE_SLACK_CHANNEL_ID – Slack channel ID (C...) to post results to.
@@ -238,14 +236,14 @@ jobs:
         run: pnpm test
         continue-on-error: true
         env:
-          MASTRA_GATEWAY_API_KEY: ${{ secrets.SMOKE_MASTRA_GATEWAY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.SMOKE_OPENAI_API_KEY }}
 
       - name: Run UI tests
         id: ui-tests
         run: pnpm test:ui
         continue-on-error: true
         env:
-          MASTRA_GATEWAY_API_KEY: ${{ secrets.SMOKE_MASTRA_GATEWAY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.SMOKE_OPENAI_API_KEY }}
 
       # ── Surface JUnit failures as GitHub check annotations ─────────────
       - name: Publish API test annotations

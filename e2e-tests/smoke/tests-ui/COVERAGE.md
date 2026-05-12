@@ -231,6 +231,6 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 ## Notes
 
-- Agent chat tests require `MASTRA_GATEWAY_API_KEY` in `.env` for real LLM calls through the Mastra gateway.
+- Agent chat tests require `OPENAI_API_KEY` in `.env` for real LLM calls.
 - Workflows run against the local LibSQL database, cleaned on each test run via `global-setup.ts`.
 - All tests run sequentially (`workers: 1`) to avoid port/state conflicts.
