@@ -437,24 +437,30 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       // Derive references/scripts/assets path arrays from the files tree
       const indexedPaths = files ? extractIndexedPathsFromFiles(files, { references, scripts, assets }) : {};
 
+      // Build update payload, omitting fields not present in the request so the
+      // storage layer doesn't treat `undefined` as a clear and clobber NOT NULL
+      // columns (description/instructions) on a new version row.
+      const updatePayload: Parameters<typeof skillStore.update>[0] = { id: storedSkillId };
+      if (authorId !== undefined) updatePayload.authorId = authorId;
+      if (resolvedVisibility !== undefined) updatePayload.visibility = resolvedVisibility;
+      if (name !== undefined) updatePayload.name = name;
+      if (description !== undefined) updatePayload.description = description;
+      if (instructions !== undefined) updatePayload.instructions = instructions;
+      if (license !== undefined) updatePayload.license = license;
+      if (compatibility !== undefined) updatePayload.compatibility = compatibility;
+      if (source !== undefined) updatePayload.source = source;
+      const resolvedReferences = indexedPaths.references ?? references;
+      if (resolvedReferences !== undefined) updatePayload.references = resolvedReferences;
+      const resolvedScripts = indexedPaths.scripts ?? scripts;
+      if (resolvedScripts !== undefined) updatePayload.scripts = resolvedScripts;
+      const resolvedAssets = indexedPaths.assets ?? assets;
+      if (resolvedAssets !== undefined) updatePayload.assets = resolvedAssets;
+      if (files !== undefined) updatePayload.files = files;
+      if (metadata !== undefined) updatePayload.metadata = metadata;
+
       // Update the skill with both entity-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
-      await skillStore.update({
-        id: storedSkillId,
-        authorId,
-        visibility: resolvedVisibility,
-        name,
-        description,
-        instructions,
-        license,
-        compatibility,
-        source,
-        references: indexedPaths.references ?? references,
-        scripts: indexedPaths.scripts ?? scripts,
-        assets: indexedPaths.assets ?? assets,
-        files,
-        metadata,
-      });
+      await skillStore.update(updatePayload);
 
       // Return the resolved skill with the updated config
       const resolved = await skillStore.getByIdResolved(storedSkillId);
@@ -585,12 +591,40 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
 
       // Validate skillPath to prevent path traversal
       const path = await import('node:path');
+      const fs = await import('node:fs/promises');
       const resolvedPath = path.default.resolve(skillPath);
       const allowedBase = path.default.resolve(process.env.SKILLS_BASE_DIR || process.cwd());
       if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
         throw new HTTPException(400, {
           message: `skillPath must be within the allowed directory: ${allowedBase}`,
         });
+      }
+
+      // Verify the source directory exists and contains a SKILL.md before attempting
+      // to publish, so callers get a 400 with context instead of a raw 500/ENOENT.
+      try {
+        const stat = await fs.stat(resolvedPath);
+        if (!stat.isDirectory()) {
+          throw new HTTPException(400, { message: `skillPath is not a directory: ${resolvedPath}` });
+        }
+      } catch (err) {
+        if (err instanceof HTTPException) throw err;
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          throw new HTTPException(400, {
+            message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
+          });
+        }
+        throw err;
+      }
+      try {
+        await fs.stat(path.default.join(resolvedPath, 'SKILL.md'));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          throw new HTTPException(400, {
+            message: `skillPath is missing SKILL.md: ${resolvedPath}`,
+          });
+        }
+        throw err;
       }
 
       // Use LocalSkillSource to read from the server filesystem
