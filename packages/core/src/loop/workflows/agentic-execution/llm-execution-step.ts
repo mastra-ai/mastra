@@ -952,14 +952,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
                         !(part.data as any).resumed
                       ) {
-                        acc[(part.data as any).toolName] = part.data;
+                        acc[(part.data as any).toolCallId ?? (part.data as any).toolName] = part.data;
                       }
                       return acc;
                     },
                     {} as Record<string, any>,
                   );
               }
-              const suspendedTools = Object.values(suspendedToolObj);
+              const suspendedTools = Object.values(suspendedToolObj).filter(tool => !tool?.resumed);
               if (suspendedTools.length > 0) {
                 inputMessages = inputMessages.map((message, index) => {
                   if (message.role === 'system' && index === 0) {

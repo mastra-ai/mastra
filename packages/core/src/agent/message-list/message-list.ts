@@ -978,6 +978,13 @@ export class MessageList {
     return this.stateManager.isNewMessage(messageOrId);
   }
 
+  public markResponseMessageAsUnsaved(message: MastraDBMessage): void {
+    if (!this.stateManager.isResponseMessage(message)) {
+      this.stateManager.removeMessage(message);
+      this.stateManager.addToSource(message, 'response');
+    }
+  }
+
   /**
    * Replace a tool-invocation part matching the given toolCallId with the
    * provided result part. Walks backwards through messages to find the match.
@@ -1046,12 +1053,7 @@ export class MessageList {
               : {}),
           };
 
-          // Move the message to the response source so it gets
-          // picked up by drainUnsavedMessages for re-saving.
-          if (!this.stateManager.isResponseMessage(msg)) {
-            this.stateManager.removeMessage(msg);
-            this.stateManager.addToSource(msg, 'response');
-          }
+          this.markResponseMessageAsUnsaved(msg);
 
           return true;
         }

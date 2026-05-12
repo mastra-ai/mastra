@@ -17,6 +17,7 @@ export class SaveQueueManager {
   }
   private saveQueues = new Map<string, Promise<void>>();
   private saveDebounceTimers = new Map<string, NodeJS.Timeout>();
+  private toolStateMetadata = new Map<string, Record<string, Record<string, unknown>>>();
 
   /**
    * Debounces save operations for a thread, ensuring that consecutive save requests
@@ -60,7 +61,7 @@ export class SaveQueueManager {
   private enqueueSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
     const next = prev
-      .then(() => this.persistUnsavedMessages(messageList, memoryConfig))
+      .then(() => this.persistUnsavedMessages(messageList, threadId, memoryConfig))
       .catch(err => {
         this.logger?.error?.('Error in enqueueSave', { err, threadId });
       })
@@ -92,8 +93,123 @@ export class SaveQueueManager {
    * @param messageList - The MessageList instance for the current thread.
    * @param memoryConfig - The memory configuration for saving.
    */
-  private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
-    const newMessages = messageList.drainUnsavedMessages();
+  private async mergeConcurrentToolStateMessages(
+    messages: ReturnType<MessageList['drainUnsavedMessages']>,
+    threadId: string,
+    memoryConfig?: MemoryConfigInternal,
+  ) {
+    const toolStateKeys = ['suspendedTools', 'pendingToolApprovals', 'backgroundTasks'] as const;
+    const hasToolStateMetadata = messages.some(message =>
+      toolStateKeys.some(key => {
+        const value = message.content.metadata?.[key];
+        return value && typeof value === 'object';
+      }),
+    );
+
+    if (!hasToolStateMetadata || !this.memory) {
+      return messages;
+    }
+
+    const existingMessages = await this.memory
+      .recall({
+        threadId,
+        threadConfig: memoryConfig,
+      })
+      .then(result => result.messages)
+      .catch(error => {
+        this.logger?.warn?.('Unable to merge concurrent tool state metadata before saving messages', {
+          error,
+          threadId,
+        });
+        return [];
+      });
+
+    const existingById = new Map(existingMessages.map(message => [message.id, message]));
+    const mergeToolStateRecord = (...records: Array<Record<string, unknown> | undefined>): Record<string, unknown> => {
+      return records.reduce<Record<string, unknown>>(
+        (merged, record) => {
+          if (!record) {
+            return merged;
+          }
+
+          for (const [key, value] of Object.entries(record)) {
+            const existingValue = merged[key] as Record<string, unknown> | undefined;
+            const incomingValue = value as Record<string, unknown>;
+            merged[key] =
+              existingValue?.resumed && !incomingValue?.resumed
+                ? { ...incomingValue, ...existingValue }
+                : { ...(existingValue ?? {}), ...incomingValue };
+          }
+
+          return merged;
+        },
+        {} as Record<string, unknown>,
+      );
+    };
+
+    return messages.map(message => {
+      const existing = existingById.get(message.id);
+      const toolStateMetadataKey = `${threadId}:${message.id}`;
+      const accumulatedMetadata = this.toolStateMetadata.get(toolStateMetadataKey);
+      const existingMetadata = existing?.content.metadata;
+      const incomingMetadata = message.content.metadata;
+
+      if (!incomingMetadata) {
+        return message;
+      }
+
+      const mergedMetadata = {
+        ...(existingMetadata ?? {}),
+        ...(accumulatedMetadata ?? {}),
+        ...incomingMetadata,
+      };
+
+      for (const key of toolStateKeys) {
+        const existingValue = existingMetadata?.[key];
+        const accumulatedValue = accumulatedMetadata?.[key];
+        const incomingValue = incomingMetadata[key];
+        if (
+          (existingValue && typeof existingValue === 'object') ||
+          (accumulatedValue && typeof accumulatedValue === 'object') ||
+          (incomingValue && typeof incomingValue === 'object')
+        ) {
+          mergedMetadata[key] = mergeToolStateRecord(
+            existingValue as Record<string, unknown> | undefined,
+            accumulatedValue as Record<string, unknown> | undefined,
+            incomingValue as Record<string, unknown> | undefined,
+          );
+        }
+      }
+
+      this.toolStateMetadata.set(
+        toolStateMetadataKey,
+        Object.fromEntries(
+          toolStateKeys
+            .filter(key => mergedMetadata[key] && typeof mergedMetadata[key] === 'object')
+            .map(key => [key, mergedMetadata[key] as Record<string, unknown>]),
+        ),
+      );
+
+      return {
+        ...message,
+        content: {
+          ...message.content,
+          metadata: mergedMetadata,
+        },
+      };
+    });
+  }
+
+  private async persistUnsavedMessages(
+    messageList: MessageList,
+    threadId: string,
+    memoryConfig?: MemoryConfigInternal,
+  ) {
+    const newMessages = await this.mergeConcurrentToolStateMessages(
+      messageList.drainUnsavedMessages(),
+      threadId,
+      memoryConfig,
+    );
     if (newMessages.length > 0 && this.memory) {
       await this.memory.saveMessages({
         messages: newMessages,

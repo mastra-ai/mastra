@@ -135,9 +135,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
-        // Find the last assistant message in the response (which should contain this tool call)
         const responseMessages = messageList.get.response.db();
-        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
+        const lastAssistantMessage = [...(responseMessages.length > 0 ? responseMessages : messageList.get.all.db())]
+          .reverse()
+          .find(msg => msg.role === 'assistant');
 
         if (lastAssistantMessage) {
           const content = lastAssistantMessage.content;
@@ -148,7 +149,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
-          // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
           const inputTransform = getTransformedToolPayload(
             toolStateTransformMetadata,
             'transcript',
@@ -169,7 +169,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ? (approvalTransform ?? inputTransform ?? args)
               : (inputTransform ?? suspendTransform ?? args);
           const transformedSuspendPayload = type === 'suspension' ? (suspendTransform ?? suspendPayload) : undefined;
-          metadata[metadataKey][toolName] = {
+          metadata[metadataKey][toolCallId] = {
             toolCallId,
             toolName,
             args: transformedArgs,
@@ -180,11 +180,30 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
           };
           lastAssistantMessage.content.metadata = metadata;
+          messageList.markResponseMessageAsUnsaved(lastAssistantMessage);
         }
       };
 
-      const removeToolMetadata = async (toolName: string, type: 'suspension' | 'approval') => {
-        const { saveQueueManager, memoryConfig, threadId } = _internal || {};
+      const getToolStateEntry = (entries: Record<string, any> | undefined, toolName: string, toolCallId: string) => {
+        if (!entries || typeof entries !== 'object') return undefined;
+
+        const byToolCallId = entries[toolCallId];
+        if (byToolCallId && !byToolCallId.resumed) return byToolCallId;
+
+        const legacyByToolName = entries[toolName];
+        if (
+          legacyByToolName &&
+          !legacyByToolName.resumed &&
+          (legacyByToolName.toolCallId === toolCallId || !legacyByToolName.toolCallId)
+        ) {
+          return legacyByToolName;
+        }
+
+        return Object.values(entries).find(entry => entry?.toolCallId === toolCallId && !entry.resumed);
+      };
+
+      const removeToolMetadata = async (toolName: string, toolCallId: string, type: 'suspension' | 'approval') => {
+        const { saveQueueManager, memoryConfig, threadId, memory } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
           return;
@@ -202,21 +221,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
 
-        // Find and update the assistant message to remove approval metadata
-        // At this point, messages have been persisted, so we look in all messages
         const allMessages = messageList.get.all.db();
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
           const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
-          const foundTool = !!suspendedTools?.[toolName];
-          if (foundTool) {
+          if (getToolStateEntry(suspendedTools, toolName, toolCallId)) {
             return true;
           }
           const dataToolSuspendedParts = msg.content.parts?.filter(
             part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
           );
           if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-            const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === toolName);
+            const foundTool = dataToolSuspendedParts.find(
+              (part: any) =>
+                part.data.toolCallId === toolCallId || (!part.data.toolCallId && part.data.toolName === toolName),
+            );
             if (foundTool) {
               return true;
             }
@@ -233,7 +252,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ?.reduce(
                 (acc, part) => {
                   if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                    acc[(part.data as any).toolName] = part.data;
+                    const key = (part.data as any).toolCallId ?? (part.data as any).toolName;
+                    acc[key] = part.data;
                   }
                   return acc;
                 },
@@ -242,12 +262,56 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           if (suspendedTools && typeof suspendedTools === 'object') {
+            const persistedMessage = memory
+              ? await memory
+                  .recall({ threadId, threadConfig: memoryConfig })
+                  .then(result => result.messages.find(message => message.id === lastAssistantMessage.id))
+                  .catch(() => undefined)
+              : undefined;
+            const persistedTools = persistedMessage?.content.metadata?.[metadataKey] as Record<string, any> | undefined;
+            if (persistedTools && typeof persistedTools === 'object') {
+              for (const [key, entry] of Object.entries(persistedTools)) {
+                if (entry?.resumed) {
+                  suspendedTools[key] = {
+                    ...(suspendedTools[key] ?? {}),
+                    ...entry,
+                  };
+                }
+              }
+            }
+
             if (metadata) {
-              delete suspendedTools[toolName];
+              const markResumed = (key: string) => {
+                suspendedTools[key] = {
+                  ...(suspendedTools[key] ?? {}),
+                  toolCallId,
+                  toolName,
+                  resumed: true,
+                };
+              };
+
+              if (suspendedTools[toolCallId]) {
+                markResumed(toolCallId);
+              } else if (
+                suspendedTools[toolName] &&
+                (suspendedTools[toolName].toolCallId === toolCallId || !suspendedTools[toolName].toolCallId)
+              ) {
+                markResumed(toolName);
+              } else {
+                for (const [key, entry] of Object.entries(suspendedTools)) {
+                  if (entry?.toolCallId === toolCallId) {
+                    markResumed(key);
+                    break;
+                  }
+                }
+              }
             } else {
               lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
                 if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                  if ((part.data as any).toolName === toolName) {
+                  if (
+                    (part.data as any).toolCallId === toolCallId ||
+                    (!(part.data as any).toolCallId && (part.data as any).toolName === toolName)
+                  ) {
                     return {
                       ...part,
                       data: {
@@ -261,10 +325,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               });
             }
 
-            // If no more pending suspensions, remove the whole object
-            if (metadata && Object.keys(suspendedTools).length === 0) {
-              delete metadata[metadataKey];
-            }
+            messageList.markResponseMessageAsUnsaved(lastAssistantMessage);
 
             // Flush to persist the metadata removal
             try {
@@ -443,7 +504,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             );
           } else {
             // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolMetadata(inputData.toolName, 'approval');
+            await removeToolMetadata(inputData.toolName, inputData.toolCallId, 'approval');
 
             if (!resumeData.approved) {
               return {
@@ -617,8 +678,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
-            if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
-              suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
+            const toolStateEntry = getToolStateEntry(pendingOrSuspendedTools, inputData.toolName, inputData.toolCallId);
+            if (toolStateEntry) {
+              suspendedToolRunId = toolStateEntry.runId;
               break;
             }
 
@@ -629,7 +691,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   !(part.data as any).resumed,
               );
               if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-                const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
+                const foundTool = dataToolSuspendedParts.find(
+                  (part: any) =>
+                    part.data.toolCallId === inputData.toolCallId ||
+                    (!part.data.toolCallId && part.data.toolName === inputData.toolName),
+                );
                 if (foundTool) {
                   suspendedToolRunId = (foundTool as any).data.runId;
                   break;
@@ -643,8 +709,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        if (!toolRequiresApproval && isResumeToolCall) {
-          await removeToolMetadata(inputData.toolName, 'suspension');
+        if (!toolRequiresApproval && resumeData) {
+          await removeToolMetadata(inputData.toolName, inputData.toolCallId, 'suspension');
         }
 
         if (args === null || args === undefined) {
