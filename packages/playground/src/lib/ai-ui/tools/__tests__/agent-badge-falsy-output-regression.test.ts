@@ -10,4 +10,10 @@ describe('agent badge falsy output regression', () => {
 
     expect(source).toContain('return message.toolOutput !== undefined;');
   });
+
+  it('keeps AgentBadge content open for live and hydrated subagent content', () => {
+    const source = readSource('../badges/agent-badge.tsx');
+
+    expect(source).toContain('initialCollapsed={false}');
+  });
 });
