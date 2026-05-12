@@ -1,5 +1,4 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { config } from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
@@ -8,13 +7,10 @@ import { MockMemory } from '../memory/mock';
 import { MockStore } from '../storage';
 import { createTool } from '../tools';
 
-config();
-
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Skip if no API key
-const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'dummyapikey');
-const describeE2E = hasOpenAIKey ? describe : describe.skip;
+const describeE2E = process.env.OPENAI_API_KEY ? describe : describe.skip;
 
 const testStorage = new MockStore();
 
