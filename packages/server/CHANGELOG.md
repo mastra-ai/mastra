@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.33.0-alpha.16
+
+### Patch Changes
+
+- Fixed Cloudflare Worker startup crashes by keeping Agent Builder routes out of the default server route bundle. ([#16499](https://github.com/mastra-ai/mastra/pull/16499))
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7)]:
+  - @mastra/core@1.33.0-alpha.16
+
 ## 1.33.0-alpha.15
 
 ### Patch Changes
