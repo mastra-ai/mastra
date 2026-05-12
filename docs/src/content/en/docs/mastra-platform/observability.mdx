@@ -31,9 +31,9 @@ Enable Mastra Observability? (will open auth flow)
 
 The CLI authenticates with Mastra platform, creates a platform project, writes the required environment variables, and configures the observability exporters.
 
-### Existing projects
+### Existing non-Mastra projects
 
-For existing projects, run `mastra init` and enable Mastra Observability when prompted:
+If you already have an application, such as a Next.js app, but have not added Mastra yet, run `mastra init` and enable Mastra Observability when prompted:
 
 ```bash npm2yarn
 npx mastra init
@@ -43,7 +43,7 @@ The CLI can select an existing platform project or create a new one.
 
 ### Manual setup
 
-Create a project in Mastra Platform, add `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`, then register `MastraPlatformExporter` in your Mastra config. Add `MastraStorageExporter` if you also want to persist observability events to your configured Mastra Storage:
+Create a project in [Mastra Platform](https://projects.mastra.ai), add `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`, then register `MastraPlatformExporter` in your Mastra config. Add `MastraStorageExporter` if you also want to persist observability events to your configured Mastra Storage:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'

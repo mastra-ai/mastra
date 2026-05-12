@@ -12,9 +12,9 @@ Server on Mastra platform is a production deployment target that runs your Mastr
 
 You get a stable API endpoint, environment variable management, custom domain support, and deploy history out of the box.
 
-:::warning
+:::note
 
-Mastra platform uses an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+Server deploy provisions hosted storage automatically. If you override storage with [LibSQLStore](/reference/storage/libsql) and a file URL, switch to a remotely hosted database because Mastra platform uses an ephemeral filesystem.
 
 :::
 
