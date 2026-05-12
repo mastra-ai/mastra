@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.33.0-alpha.17
+
+### Patch Changes
+
+- Added support for attaching a browser instance to the harness after initialization so consumers can defer browser creation until it is needed: ([#16513](https://github.com/mastra-ai/mastra/pull/16513))
+
+  ```ts
+  const harness = new Harness({ agent, mastra });
+  await harness.init();
+  harness.setBrowser(browser);
+  ```
+
 ## 1.33.0-alpha.16
 
 ### Patch Changes
