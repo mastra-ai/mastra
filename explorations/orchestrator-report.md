@@ -122,6 +122,7 @@ workflow.start → workflow.step.run → workflow.step.end → workflow.step.run
 ```
 
 Each event handler does three things:
+
 1. **Reads state** from storage (workflow snapshot, step results)
 2. **Makes a decision** (what step to run next, whether to loop, branch, suspend, etc.)
 3. **Executes the step** via `StepExecutor.execute()` in the same process, then publishes the next event
@@ -159,16 +160,17 @@ This is the core question. They share the same brain — graph traversal, branch
 
 The Orchestrator keeps all the **decision-making logic** that currently lives in the WorkflowEventProcessor:
 
-| WEP Handler | What the Orchestrator Keeps |
-|---|---|
-| `processWorkflowStart` | Initialize run state, determine first step, persist initial snapshot |
+| WEP Handler              | What the Orchestrator Keeps                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `processWorkflowStart`   | Initialize run state, determine first step, persist initial snapshot                                                                             |
 | `processWorkflowStepEnd` | Determine next step from graph (increment execution path, detect branches, loops, forEach completion, parallel join), decide if workflow is done |
-| `processWorkflowSuspend` | Detect suspension, propagate to parent if nested, persist suspended state |
-| `processWorkflowResume` | Restore snapshot, determine which step to resume, rebuild execution context |
-| `processWorkflowFail` | Error handling, propagation to parent workflows, cleanup |
-| `processWorkflowCancel` | Recursive cancellation of child workflows, cleanup |
+| `processWorkflowSuspend` | Detect suspension, propagate to parent if nested, persist suspended state                                                                        |
+| `processWorkflowResume`  | Restore snapshot, determine which step to resume, rebuild execution context                                                                      |
+| `processWorkflowFail`    | Error handling, propagation to parent workflows, cleanup                                                                                         |
+| `processWorkflowCancel`  | Recursive cancellation of child workflows, cleanup                                                                                               |
 
 The Orchestrator also keeps:
+
 - **Parent-child tracking** for nested workflows (in-memory map of `childRunId → parentRunId`)
 - **Execution path arithmetic** (`[0] → [1]`, `[0,0] → [0,1]`, etc.)
 - **forEach/parallel/conditional join logic** (waiting for all branches before advancing)
@@ -186,6 +188,7 @@ The Orchestrator removes one handler entirely — `processWorkflowStepRun` — a
 6. Publish `workflow.step.end` with the result
 
 In the new model, the Mastra Server exposes this as an HTTP endpoint. The Server has direct access to:
+
 - **Step functions** (JS code that can't be serialized)
 - **Tool definitions** and tool execution runtime
 - **LLM connections** (for agent steps)
@@ -194,6 +197,7 @@ In the new model, the Mastra Server exposes this as an HTTP endpoint. The Server
 ### The key difference, concretely
 
 **Today (WEP in-process):**
+
 ```text
 WEP receives workflow.step.run event
   → calls stepExecutor.execute(step, context) directly
@@ -202,6 +206,7 @@ WEP receives workflow.step.run event
 ```
 
 **Proposed (Orchestrator + Server):**
+
 ```text
 Orchestrator receives workflow.step.run event (from its own decision logic)
   → sends HTTP POST to Server with step identity + context
@@ -339,20 +344,24 @@ The Server's `CachingPubSub` + `createReplayStream()` handles late-joining obser
 ### Scheduler
 
 **What exists today:** Nothing built-in. The only scheduling is:
+
 - `sleep()` / `sleepUntil()` steps that use `setTimeout` (lost on restart)
 - Inngest's cron support (external dependency)
 
 **What the diagram proposes:** A standalone component that:
+
 - Checks for scheduled actions on an interval
 - Sends workflow run triggers to the Mastra Server via HTTP
 - The Server then publishes `workflow.start` to PubSub as normal
 
 **Implementation options:**
+
 1. Simple cron job that `POST /workflows/:id/start-async` on schedule
 2. Storage-backed scheduler that queries a `scheduled_runs` table
 3. Leverage existing cloud schedulers (Cloud Scheduler → PubSub, EventBridge → Lambda)
 
 **Key consideration:** Sleep steps. Today `setTimeout` is used in-process. With a separate Orchestrator, sleeps should be handled differently:
+
 - Option A: Orchestrator uses durable timers (write sleep expiry to storage, poll for expired sleeps)
 - Option B: PubSub delayed delivery (GCP supports scheduled publish)
 - Option C: Scheduler polls for sleeping workflows and re-triggers them when time expires
@@ -360,12 +369,14 @@ The Server's `CachingPubSub` + `createReplayStream()` handles late-joining obser
 ### PubsubAdapter
 
 **What exists today:**
+
 - `EventEmitterPubSub` — in-memory, single process, no persistence
 - `CachingPubSub` — decorator that adds replay via `MastraServerCache`
 - `GoogleCloudPubSub` — production-grade, supports ordering + exactly-once + consumer groups
 - `InngestPubSub` — bridges Inngest realtime system
 
 **What the Orchestrator needs:**
+
 - Pull subscriptions (Worker model) — GCP supports this natively
 - Push subscriptions (Hook model) — GCP supports this natively
 - Consumer groups — so multiple Orchestrator workers share the load
@@ -383,6 +394,7 @@ POST /workflows/:workflowId/runs/:runId/steps/execute
 ```
 
 **What the Server does on this endpoint:**
+
 1. Looks up the workflow definition from the Mastra registry
 2. Resolves the step from the `stepGraph` using the provided `executionPath`
 3. Creates a `StepExecutor` with the workflow's pubsub, storage, etc.
@@ -392,11 +404,13 @@ POST /workflows/:workflowId/runs/:runId/steps/execute
 7. Returns `StepResult` as HTTP response
 
 **What the Server does NOT do:**
+
 - Decide what step to run next
 - Persist workflow snapshot (Orchestrator does this)
 - Publish workflow lifecycle events (start, end, fail)
 
 **Challenges:**
+
 - The `StepExecutor` today receives in-memory references to the workflow and pubsub. These exist on the Server naturally, so this part is fine.
 - `requestContext` needs to be serialized in the HTTP request and deserialized on the Server side.
 - The step function gets a `suspend()` callback — this still works because `StepExecutor` captures suspension internally and returns it as part of `StepResult`.
@@ -406,6 +420,7 @@ POST /workflows/:workflowId/runs/:runId/steps/execute
 Both modes run the same logic — the extracted `WorkflowEventProcessor` minus `processWorkflowStepRun`.
 
 **Worker (Pull):**
+
 - Long-running process with an event loop
 - Calls `pubsub.subscribe('workflows', handler, { group: 'orchestrators' })`
 - Multiple workers share the load via consumer group
@@ -414,6 +429,7 @@ Both modes run the same logic — the extracted `WorkflowEventProcessor` minus `
 - Best for: steady-state production workloads
 
 **Hook (Push):**
+
 - Stateless HTTP endpoint that receives pushed events
 - PubSub calls `POST /orchestrator/webhook` with event payload
 - Handler processes the event, makes HTTP call to Server, publishes next event
@@ -422,14 +438,14 @@ Both modes run the same logic — the extracted `WorkflowEventProcessor` minus `
 
 **Worker vs Hook tradeoffs:**
 
-| Concern | Worker (Pull) | Hook (Push) |
-|---|---|---|
-| Latency | Low (already connected) | Higher (cold start possible) |
-| In-memory state | Can cache AbortControllers, parent-child maps | Must reconstruct from storage each time |
-| Scaling | Manual (add more workers) | Automatic (serverless scales with events) |
-| Cost | Always running | Pay per invocation |
-| Cancellation | Easy (AbortController in memory) | Harder (must look up and signal cancellation) |
-| Nested workflows | Tracks parent-child in memory | Must persist parent-child to storage |
+| Concern          | Worker (Pull)                                 | Hook (Push)                                   |
+| ---------------- | --------------------------------------------- | --------------------------------------------- |
+| Latency          | Low (already connected)                       | Higher (cold start possible)                  |
+| In-memory state  | Can cache AbortControllers, parent-child maps | Must reconstruct from storage each time       |
+| Scaling          | Manual (add more workers)                     | Automatic (serverless scales with events)     |
+| Cost             | Always running                                | Pay per invocation                            |
+| Cancellation     | Easy (AbortController in memory)              | Harder (must look up and signal cancellation) |
+| Nested workflows | Tracks parent-child in memory                 | Must persist parent-child to storage          |
 
 ---
 
@@ -438,6 +454,7 @@ Both modes run the same logic — the extracted `WorkflowEventProcessor` minus `
 ### 1. In-Memory State in the Orchestrator
 
 The WorkflowEventProcessor maintains several in-memory maps:
+
 - `abortControllers: Map<runId, AbortController>` — for cancellation
 - `parentChildRelationships: Map<childRunId, parentRunId>` — for nested workflows
 - `runFormats: Map<runId, format>` — for stream formatting
@@ -446,6 +463,7 @@ The WorkflowEventProcessor maintains several in-memory maps:
 In the Worker model, these live naturally in the worker process. But if a worker crashes, they're lost. And in the Hook model, they don't exist at all.
 
 **Solution:** Persist these to storage. The storage layer already handles workflow snapshots — extend it to store:
+
 - Parent-child mappings (already partially stored in step metadata)
 - Active step tracking (for detecting stuck steps)
 - Cancellation flags (instead of AbortController, poll a `canceled` flag in storage)
@@ -461,6 +479,7 @@ A workflow's events must be processed in order. If two Orchestrator workers both
 Today: `processWorkflowSleep()` calls `setTimeout(ms)` in-process. If the process restarts, the sleep is lost.
 
 **Options:**
+
 - **Durable timer:** Orchestrator persists sleep expiry to storage. Scheduler polls for expired sleeps and re-publishes `workflow.step.end`.
 - **PubSub delayed delivery:** Some brokers support scheduled messages.
 - **Simple approach:** Orchestrator publishes a `workflow.sleep` event with expiry timestamp. The Scheduler picks these up on its polling interval and re-triggers them when expired. Trades precision for simplicity.
@@ -470,6 +489,7 @@ Today: `processWorkflowSleep()` calls `setTimeout(ms)` in-process. If the proces
 The Orchestrator needs to traverse the step graph to determine next steps. Today the WEP gets workflow definitions from the Mastra instance's registry (in-process).
 
 **Options:**
+
 - **Orchestrator loads definitions from Server:** HTTP call to `GET /workflows/:id` to fetch the step graph
 - **Server returns routing info:** Step execution response includes `nextSteps` or the full graph
 - **Orchestrator has its own Mastra instance:** Initialized with the same workflow definitions (requires shared config)
@@ -480,6 +500,7 @@ The cleanest option: the Server returns the serialized step graph as part of the
 ### 5. Auth Between Orchestrator and Server
 
 The Orchestrator makes HTTP calls to a Server that likely has auth middleware. Options:
+
 - **Service account / API key:** Simple, rotatable
 - **mTLS:** Strongest, but complex to set up
 - **Shared secret / JWT:** Orchestrator mints tokens signed with a shared secret
@@ -518,13 +539,13 @@ The Orchestrator makes HTTP calls to a Server that likely has auth middleware. O
 
 ## Deployment Models
 
-| Model | Orchestrator | Server | PubSub | Best For |
-|---|---|---|---|---|
-| Monolith (today) | In-process WEP | Same process | EventEmitter | Dev, simple apps |
-| Sidecar | Separate process, same machine | Same machine | GCP/Redis | Fault isolation without network hops |
-| Distributed Worker | Separate fleet | Separate fleet | GCP | Production, high throughput |
-| Serverless Hook | Cloud Function | Cloud Run | GCP Push | Cost-efficient, bursty |
-| Hybrid | Worker + Hook | Auto-scaled | GCP Both | Large-scale production |
+| Model              | Orchestrator                   | Server         | PubSub       | Best For                             |
+| ------------------ | ------------------------------ | -------------- | ------------ | ------------------------------------ |
+| Monolith (today)   | In-process WEP                 | Same process   | EventEmitter | Dev, simple apps                     |
+| Sidecar            | Separate process, same machine | Same machine   | GCP/Redis    | Fault isolation without network hops |
+| Distributed Worker | Separate fleet                 | Separate fleet | GCP          | Production, high throughput          |
+| Serverless Hook    | Cloud Function                 | Cloud Run      | GCP Push     | Cost-efficient, bursty               |
+| Hybrid             | Worker + Hook                  | Auto-scaled    | GCP Both     | Large-scale production               |
 
 ---
 
@@ -546,15 +567,15 @@ The Orchestrator makes HTTP calls to a Server that likely has auth middleware. O
 
 ## Resolved Decisions
 
-| Question | Resolution | Rationale |
-|----------|-----------|-----------|
-| Q1: Orchestrator knows graph? | **Yes — shared import** | User imports workflow definition module in both server and worker. Orchestrator has the step graph for routing decisions. |
-| Q2: forEach/parallel joins | **Atomic CAS in storage** | Counter per `(runId, joinStepId)`. The instance that reaches targetCount wins and triggers the join step. |
-| Q3: BackgroundTaskManager | **Subsumed into unified Worker** | All three worker-like components (WEP, Scheduler, BGTaskManager) become composable subsystems within a single Worker abstraction. |
-| Q4: Backward compatibility | **Automatic** | `MastraWorker` with in-process mode is created by default. Zero config change for existing users. |
-| Q6: Streaming steps | **HTTP timeout (5min) + PubSub for watch events** | Watch events (tokens, progress) publish to PubSub during execution. HTTP response carries only the final StepResult. Timeout is configurable. |
-| `worker: false` behavior | **Pure HTTP layer** | Server publishes events, exposes step endpoint, does zero local event processing. |
-| Hook vs Worker scope | **Both designed together** | Share identical subsystem logic, differ only in transport (how events arrive). |
+| Question                      | Resolution                                        | Rationale                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1: Orchestrator knows graph? | **Yes — shared import**                           | User imports workflow definition module in both server and worker. Orchestrator has the step graph for routing decisions.                     |
+| Q2: forEach/parallel joins    | **Atomic CAS in storage**                         | Counter per `(runId, joinStepId)`. The instance that reaches targetCount wins and triggers the join step.                                     |
+| Q3: BackgroundTaskManager     | **Subsumed into unified Worker**                  | All three worker-like components (WEP, Scheduler, BGTaskManager) become composable subsystems within a single Worker abstraction.             |
+| Q4: Backward compatibility    | **Automatic**                                     | `MastraWorker` with in-process mode is created by default. Zero config change for existing users.                                             |
+| Q6: Streaming steps           | **HTTP timeout (5min) + PubSub for watch events** | Watch events (tokens, progress) publish to PubSub during execution. HTTP response carries only the final StepResult. Timeout is configurable. |
+| `worker: false` behavior      | **Pure HTTP layer**                               | Server publishes events, exposes step endpoint, does zero local event processing.                                                             |
+| Hook vs Worker scope          | **Both designed together**                        | Share identical subsystem logic, differ only in transport (how events arrive).                                                                |
 
 ---
 
@@ -604,6 +625,7 @@ Temporal's architecture informed this design. Key takeaways:
 4. **Communication is always Worker-initiated.** Workers long-poll the Server. The Server never calls into Workers directly. This means workers don't need public IPs and can be behind NAT.
 
 **How we differ from Temporal:**
+
 - In Temporal, the Server is the brain and Workers execute. In our model, the Worker IS the brain (orchestration decisions) and the Server executes steps. This is because our step functions require JS runtime, tools, and LLM connections that live on the Server.
 - Temporal uses gRPC long-poll. We use PubSub (pull subscription or push delivery).
 - Temporal replays full event history for recovery. We checkpoint to storage after each step.
@@ -703,18 +725,18 @@ Temporal's architecture informed this design. Key takeaways:
 
 ### Worker vs Hook: When to Use Which
 
-| | Worker (pull) | Hook (push) |
-|---|---|---|
-| **Process model** | Long-running | Stateless per invocation |
-| **Deploy on** | VM, K8s pod, ECS task | Cloud Run, Lambda, Vercel |
-| **State** | In-memory (flushes to storage) | Loads from storage every time |
-| **Scaling** | Horizontal via consumer groups | Auto-scales with platform |
-| **Latency** | Lower (state cached in memory) | Higher (cold start + state load) |
-| **Cost model** | Always-on | Pay-per-invocation |
-| **Best for** | High-throughput, latency-sensitive | Bursty, cost-sensitive |
-| **Scheduler subsystem** | Yes (interval polling) | No (use Cloud Scheduler) |
-| **Cancellation** | In-memory AbortController | Storage flag check |
-| **Crash recovery** | PubSub nack → redelivery to peer | Platform retries on non-200 |
+|                         | Worker (pull)                      | Hook (push)                      |
+| ----------------------- | ---------------------------------- | -------------------------------- |
+| **Process model**       | Long-running                       | Stateless per invocation         |
+| **Deploy on**           | VM, K8s pod, ECS task              | Cloud Run, Lambda, Vercel        |
+| **State**               | In-memory (flushes to storage)     | Loads from storage every time    |
+| **Scaling**             | Horizontal via consumer groups     | Auto-scales with platform        |
+| **Latency**             | Lower (state cached in memory)     | Higher (cold start + state load) |
+| **Cost model**          | Always-on                          | Pay-per-invocation               |
+| **Best for**            | High-throughput, latency-sensitive | Bursty, cost-sensitive           |
+| **Scheduler subsystem** | Yes (interval polling)             | No (use Cloud Scheduler)         |
+| **Cancellation**        | In-memory AbortController          | Storage flag check               |
+| **Crash recovery**      | PubSub nack → redelivery to peer   | Platform retries on non-200      |
 
 ---
 
@@ -768,7 +790,7 @@ interface WorkerConfig {
     mode: 'in-process' | 'remote';
     serverUrl?: string;
     auth?: { type: 'api-key'; key: string } | { type: 'bearer'; token: string };
-    timeoutMs?: number;  // default: 300_000 (5 min)
+    timeoutMs?: number; // default: 300_000 (5 min)
   };
 
   /** Required for standalone mode. In-process derives from Mastra. */
@@ -779,10 +801,10 @@ interface WorkerConfig {
   workflows?: Record<string, Workflow>;
 
   /** Consumer group name for PubSub subscriptions. */
-  group?: string;  // default: 'mastra-workers'
+  group?: string; // default: 'mastra-workers'
 
   /** Max time to wait for in-flight work during shutdown. */
-  shutdownTimeoutMs?: number;  // default: 30_000
+  shutdownTimeoutMs?: number; // default: 30_000
 }
 
 interface OrchestrationSubConfig {
@@ -791,8 +813,8 @@ interface OrchestrationSubConfig {
 }
 
 interface SchedulerSubConfig {
-  tickIntervalMs?: number;   // default: 10_000
-  batchSize?: number;        // default: 100
+  tickIntervalMs?: number; // default: 10_000
+  batchSize?: number; // default: 100
 }
 
 interface BackgroundTaskSubConfig {
@@ -852,20 +874,32 @@ interface EventRouter {
 /** Worker transport: long-running, subscribes to PubSub */
 class PullTransport implements WorkerTransport {
   async start(router: EventRouter) {
-    await this.pubsub.subscribe('workflows', (event, ack) => {
-      router.route(event).then(ack);
-    }, { group: this.group });
+    await this.pubsub.subscribe(
+      'workflows',
+      (event, ack) => {
+        router.route(event).then(ack);
+      },
+      { group: this.group },
+    );
 
-    await this.pubsub.subscribe('background-tasks', (event, ack) => {
-      router.route(event).then(ack);
-    }, { group: this.group });
+    await this.pubsub.subscribe(
+      'background-tasks',
+      (event, ack) => {
+        router.route(event).then(ack);
+      },
+      { group: this.group },
+    );
   }
 }
 
 /** Hook transport: no-op start, events arrive via handleEvent() */
 class PushTransport implements WorkerTransport {
-  async start() { /* no-op — events arrive externally */ }
-  async stop() { /* no-op */ }
+  async start() {
+    /* no-op — events arrive externally */
+  }
+  async stop() {
+    /* no-op */
+  }
 }
 ```
 
@@ -899,7 +933,7 @@ interface SubsystemDeps {
   pubsub: PubSub;
   storage: MastraCompositeStore;
   logger: IMastraLogger;
-  mastra?: Mastra;  // only available in-process
+  mastra?: Mastra; // only available in-process
   stepExecutionStrategy: StepExecutionStrategy;
   workflows?: Record<string, Workflow>;
 }
@@ -930,9 +964,13 @@ interface StepExecutionParams {
 ```
 
 **InProcessStrategy** — used when Worker runs in-process with Mastra:
+
 ```typescript
 class InProcessStrategy implements StepExecutionStrategy {
-  constructor(private stepExecutor: StepExecutor, private mastra: Mastra) {}
+  constructor(
+    private stepExecutor: StepExecutor,
+    private mastra: Mastra,
+  ) {}
 
   async executeStep(params: StepExecutionParams): Promise<StepResult> {
     const step = this.resolveStep(params.workflowId, params.stepId);
@@ -944,6 +982,7 @@ class InProcessStrategy implements StepExecutionStrategy {
 ```
 
 **HttpRemoteStrategy** — used when Worker runs standalone:
+
 ```typescript
 class HttpRemoteStrategy implements StepExecutionStrategy {
   constructor(private config: { serverUrl: string; auth?; timeoutMs: number }) {}
@@ -971,6 +1010,7 @@ class HttpRemoteStrategy implements StepExecutionStrategy {
 Wraps the extracted decision-making logic from WorkflowEventProcessor.
 
 **What it keeps from WEP:**
+
 - `processWorkflowStart()` — initialize run, determine first step
 - `processWorkflowStepEnd()` — graph traversal, branching, looping, forEach/parallel joins
 - `processWorkflowSuspend()` — persist suspended state, propagate to parent
@@ -981,12 +1021,14 @@ Wraps the extracted decision-making logic from WorkflowEventProcessor.
 - Parent-child relationship tracking
 
 **What changes:**
+
 - `processWorkflowStepRun` is replaced by `StepExecutionStrategy.executeStep()`
 - In-memory maps (AbortControllers, parent-child) are backed by storage for crash recovery
 - In Worker mode: maps are hot in memory, flushed to storage after each step
 - In Hook mode: maps are loaded from storage at start of each invocation
 
 **Event routing:**
+
 ```text
 event.type starts with 'workflow.' → OrchestrationSubsystem.processEvent()
 ```
@@ -996,6 +1038,7 @@ event.type starts with 'workflow.' → OrchestrationSubsystem.processEvent()
 Thin wrapper around the existing `WorkflowScheduler`.
 
 **Behavior:**
+
 - Polls `schedules` storage table on interval for due schedules
 - Publishes `{ type: 'workflow.start' }` events to PubSub when schedule fires
 - Atomic compare-and-set on `nextFireAt` prevents double-fire across workers
@@ -1010,12 +1053,14 @@ In Hook mode, use external scheduler (GCP Cloud Scheduler → PubSub → Hook) t
 Wraps the existing `BackgroundTaskManager`.
 
 **Behavior:**
+
 - Subscribes to `'background-tasks'` topic with consumer group
 - Executes tool calls with concurrency control (global + per-agent limits)
 - Publishes results to `'background-tasks-result'` topic
 - Recovers stale tasks on startup
 
 **Event routing:**
+
 ```text
 event.type starts with 'background-task.' → BackgroundTaskSubsystem.processEvent()
 ```
@@ -1104,7 +1149,7 @@ Content-Type: application/json
 {
   "stepId": "process-payment",
   "executionPath": [0, 1],
-  "stepResults": { "validate-input": { "status": "success", "output": {"valid": true} } },
+  "stepResults": { "validate-input": { "status": "success", "output": { "valid": true } } },
   "state": { "orderId": "abc-123" },
   "requestContext": { "userId": "user-1" },
   "input": { "amount": 100 },
@@ -1168,6 +1213,7 @@ app.post('/workflows/:workflowId/runs/:runId/steps/execute', workerAuthMiddlewar
 > shipped deployments.
 
 Service-to-service authentication:
+
 - Configured on server: `MASTRA_WORKER_API_KEY=secret`
 - Configured on worker: `stepExecution.auth: { type: 'api-key', key: 'secret' }`
 - `workerAuthMiddleware` validates before passing to handler
@@ -1185,16 +1231,16 @@ Service-to-service authentication:
 
 ### Validation Rules
 
-| Config combination | Valid? | Notes |
-|---|---|---|
-| In-process + EventEmitterPubSub | Yes | Today's default |
-| In-process + GoogleCloudPubSub | Yes | External PubSub, same process |
-| Standalone Worker + GoogleCloudPubSub | Yes | Production distributed |
-| Standalone Worker + EventEmitterPubSub | **Error** | Can't span processes with in-memory PubSub |
-| Hook + remote | Yes | Serverless deployment |
-| Hook + in-process | **Error** | Hook implies separate from server |
-| Hook + scheduler subsystem | **Warning** | Scheduler needs interval loop, use external cron |
-| worker: false + no external PubSub | **Error** | Events will be published but nobody processes them |
+| Config combination                     | Valid?      | Notes                                              |
+| -------------------------------------- | ----------- | -------------------------------------------------- |
+| In-process + EventEmitterPubSub        | Yes         | Today's default                                    |
+| In-process + GoogleCloudPubSub         | Yes         | External PubSub, same process                      |
+| Standalone Worker + GoogleCloudPubSub  | Yes         | Production distributed                             |
+| Standalone Worker + EventEmitterPubSub | **Error**   | Can't span processes with in-memory PubSub         |
+| Hook + remote                          | Yes         | Serverless deployment                              |
+| Hook + in-process                      | **Error**   | Hook implies separate from server                  |
+| Hook + scheduler subsystem             | **Warning** | Scheduler needs interval loop, use external cron   |
+| worker: false + no external PubSub     | **Error**   | Events will be published but nobody processes them |
 
 ---
 
@@ -1227,9 +1273,7 @@ if (config.worker === false) {
   // - Step execution endpoint is the only way steps run
   this.#worker = null;
 } else {
-  const worker = config.worker instanceof MastraWorker
-    ? config.worker
-    : new MastraWorker(config.worker ?? {});
+  const worker = config.worker instanceof MastraWorker ? config.worker : new MastraWorker(config.worker ?? {});
   worker.__registerMastra(this);
   this.#worker = worker;
   // Worker.start() called during Mastra.startEventEngine() or init
@@ -1239,6 +1283,7 @@ if (config.worker === false) {
 ### What This Replaces
 
 The unified Worker replaces three separate initialization paths:
+
 - `new WorkflowEventProcessor({ mastra })` → `worker.orchestration` subsystem
 - `this.#ensureScheduler()` → `worker.scheduler` subsystem
 - `this.#ensureBackgroundTaskManager()` → `worker.backgroundTasks` subsystem
@@ -1335,7 +1380,7 @@ import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub';
 
 export const mastra = new Mastra({
   workflows: { myWorkflow },
-  worker: false,  // pure HTTP layer, no local event processing
+  worker: false, // pure HTTP layer, no local event processing
   pubsub: new GoogleCloudPubSub({ projectId: 'my-project' }),
 });
 ```
@@ -1385,6 +1430,7 @@ packages/core/src/worker/
 **Problem:** Multiple branches complete concurrently across workers/hooks. Who triggers the join?
 
 **Solution:** Atomic counter in storage.
+
 - Each branch completion increments a counter for `(runId, joinStepId)`
 - The increment operation returns the new count atomically
 - The instance that reaches `targetCount` wins and triggers the join step
@@ -1406,6 +1452,7 @@ packages/core/src/worker/
 **Problem:** Worker crashes mid-workflow. In-memory state lost.
 
 **Solution:**
+
 - State is persisted to storage after each step completes (existing workflow snapshot behavior)
 - PubSub nacks unacknowledged messages → redelivery to another worker in the group
 - The new worker loads state from storage and continues from last checkpoint
@@ -1416,6 +1463,7 @@ packages/core/src/worker/
 **Problem:** An agent step may stream for 60+ seconds. HTTP timeout? Connection drops?
 
 **Solution:**
+
 - HTTP timeout is configurable (default 5 min, configurable up to 30 min for agent steps)
 - Watch events (streaming tokens, tool calls, progress) are published to PubSub by the Server during execution — they don't flow through the Worker's HTTP response
 - Client observes watch events via their own PubSub subscription to `workflow.events.v2.{runId}`
@@ -1426,6 +1474,7 @@ packages/core/src/worker/
 **Problem:** Workflow events must be processed in order. Two workers processing events for the same runId would conflict.
 
 **Solution:** PubSub ordering keys.
+
 - All events for a workflow run use `orderingKey: runId`
 - GCP Pub/Sub guarantees ordered delivery within an ordering key to the same consumer
 - Existing `GoogleCloudPubSub` adapter already supports ordering for the `workflows` topic
@@ -1436,6 +1485,7 @@ packages/core/src/worker/
 **Problem:** Today `setTimeout` is in-process, lost on restart.
 
 **Solution:** Integrate with SchedulerSubsystem:
+
 - When orchestration encounters a sleep step, it writes a timer record to storage: `(runId, stepId, expiresAt)`
 - SchedulerSubsystem polls for expired timers alongside cron schedules
 - Expired timer → publish `workflow.step.end` with sleep-complete context
@@ -1451,6 +1501,7 @@ packages/core/src/worker/
 **Goal:** Wrap existing components in the Worker/Subsystem pattern without changing behavior.
 
 Steps:
+
 1. Create `packages/core/src/worker/` directory structure
 2. Define `WorkerSubsystem` interface
 3. Create `OrchestrationSubsystem` that wraps `WorkflowEventProcessor` as-is (thin delegation)
@@ -1467,6 +1518,7 @@ Steps:
 **Goal:** Users can configure worker behavior and run server-only.
 
 Steps:
+
 1. Export `MastraWorker` and config types from `@mastra/core/worker`
 2. Add `worker` option to `MastraConfig`
 3. Implement `worker: false` (server publishes events but has no local subscribers)
@@ -1479,6 +1531,7 @@ Steps:
 **Goal:** Workers can run as separate processes, calling server for step execution.
 
 Steps:
+
 1. Implement `HttpRemoteStrategy`
 2. Add step execution endpoint to `packages/server` (or deployer package)
 3. Add service-to-service auth middleware
@@ -1492,6 +1545,7 @@ Steps:
 **Goal:** Stateless serverless deployment via PubSub push delivery.
 
 Steps:
+
 1. Implement `PushTransport`
 2. Implement `StateManager` (load/save full run state per invocation)
 3. Implement `JoinTracker` (atomic CAS for parallel/forEach joins)
@@ -1507,6 +1561,7 @@ Steps:
 **Goal:** Replace `setTimeout` with persistent, crash-safe timers.
 
 Steps:
+
 1. Add `workflow_timers` table to storage schema (runId, stepId, expiresAt, status)
 2. Extend SchedulerSubsystem to poll expired timers alongside cron schedules
 3. Expired timer → publish `workflow.step.end` to resume the sleeping workflow
@@ -1517,16 +1572,16 @@ Steps:
 
 ## Testing Strategy
 
-| Level | Scope | Method |
-|-------|-------|--------|
-| Unit | Each subsystem in isolation | Mocked PubSub, Storage, Strategy |
-| Unit | Each strategy in isolation | Mocked StepExecutor / HTTP server |
-| Unit | Transport implementations | Mocked PubSub subscribe/unsubscribe |
-| Integration | MastraWorker in-process | Real EventEmitterPubSub, in-memory storage |
-| Integration | Worker + Mastra wiring | Verify existing behavior unchanged |
-| E2E (Phase 3) | Server + Worker (two processes) | Real GCP PubSub, real DB, HTTP between |
-| E2E (Phase 4) | Hook handler | Simulated push delivery, verify state persistence |
-| E2E (Phase 5) | Durable timers | Worker restart during sleep, verify resume |
+| Level         | Scope                           | Method                                            |
+| ------------- | ------------------------------- | ------------------------------------------------- |
+| Unit          | Each subsystem in isolation     | Mocked PubSub, Storage, Strategy                  |
+| Unit          | Each strategy in isolation      | Mocked StepExecutor / HTTP server                 |
+| Unit          | Transport implementations       | Mocked PubSub subscribe/unsubscribe               |
+| Integration   | MastraWorker in-process         | Real EventEmitterPubSub, in-memory storage        |
+| Integration   | Worker + Mastra wiring          | Verify existing behavior unchanged                |
+| E2E (Phase 3) | Server + Worker (two processes) | Real GCP PubSub, real DB, HTTP between            |
+| E2E (Phase 4) | Hook handler                    | Simulated push delivery, verify state persistence |
+| E2E (Phase 5) | Durable timers                  | Worker restart during sleep, verify resume        |
 
 ---
 
