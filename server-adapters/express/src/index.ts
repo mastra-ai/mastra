@@ -134,7 +134,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // connection is actually closed, which is the correct signal for client disconnection.
       res.on('close', () => {
         // Only abort if the response wasn't successfully completed
-        if (!res.writableEnded) {
+        if (!res.writableFinished) {
           controller.abort();
         }
       });
