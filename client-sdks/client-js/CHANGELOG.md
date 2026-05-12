@@ -1,5 +1,16 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.17
+
+### Patch Changes
+
+- Fix `MCPTool.execute` sending an empty/undefined request body when called without `data` or `requestContext`. The server's tool-execute endpoint expects an object body (with optional `data`), so calls like `client.getMcpServerTool(serverId, toolId).execute({})` would fail with `Invalid request body`. The SDK now always POSTs a JSON object body, defaulting to `{}` when no parameters are provided. ([#16488](https://github.com/mastra-ai/mastra/pull/16488))
+
+- Removed Agent Builder routes from the default generated API route contracts. ([#16499](https://github.com/mastra-ai/mastra/pull/16499))
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7)]:
+  - @mastra/core@1.33.0-alpha.16
+
 ## 1.18.0-alpha.16
 
 ### Patch Changes

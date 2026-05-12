@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 1.33.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7), [`1c989ea`](https://github.com/mastra-ai/mastra/commit/1c989ea0fcc3e8b6c25a64a5e423875706903420)]:
+  - @mastra/core@1.33.0-alpha.16
+  - @mastra/server@1.33.0-alpha.16
+
 ## 1.33.0-alpha.15
 
 ### Patch Changes

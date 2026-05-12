@@ -1,5 +1,23 @@
 # mastra
 
+## 1.9.0-alpha.17
+
+### Minor Changes
+
+- Added preflight checks to mastra lint with --preflight and removed the verify command. ([#16470](https://github.com/mastra-ai/mastra/pull/16470))
+
+### Patch Changes
+
+- Improved `mastra auth login` to skip the browser flow when an existing token is still valid (or can be refreshed) and surface the logged-in user's email. ([#16512](https://github.com/mastra-ai/mastra/pull/16512))
+
+  The `mastra create` observability prompt also prints the logged-in user when authentication resolves from cached credentials, so you can confirm which account you're about to enable observability for.
+
+- Removed Agent Builder routes from the default generated API route contracts. ([#16499](https://github.com/mastra-ai/mastra/pull/16499))
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7)]:
+  - @mastra/core@1.33.0-alpha.16
+  - @mastra/deployer@1.33.0-alpha.16
+
 ## 1.9.0-alpha.16
 
 ### Patch Changes
