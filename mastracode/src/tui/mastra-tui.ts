@@ -490,16 +490,10 @@ export class MastraTUI {
     this.state.isInitialized = true;
 
     // Start MCP connections now that the TUI owns the terminal.
-    // Using showInfo() instead of console.info() avoids corrupting the display.
     if (this.state.mcpManager?.hasServers()) {
-      const serverCount = Object.keys(this.state.mcpManager.getConfig().mcpServers ?? {}).length;
-      showInfo(this.state, `MCP: Connecting to ${serverCount} server(s)...`);
       this.state.mcpManager
         .initInBackground()
         .then(result => {
-          if (result.connected.length > 0) {
-            showInfo(this.state, `MCP: ${result.connected.length} server(s) connected, ${result.totalTools} tool(s)`);
-          }
           for (const s of result.failed) {
             showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
           }

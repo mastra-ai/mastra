@@ -330,12 +330,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
 
-  if (hookManager?.hasHooks()) {
-    const hookConfig = hookManager.getConfig();
-    const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
-    console.info(`Hooks: ${hookCount} hook(s) configured`);
-  }
-
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
