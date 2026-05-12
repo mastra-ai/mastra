@@ -11,11 +11,14 @@ import {
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { sendAgentSignalBodySchema, subscribeAgentThreadBodySchema } from '../schemas/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  SEND_AGENT_SIGNAL_ROUTE,
+  SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
 } from './agents';
@@ -1020,6 +1023,272 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toBe(expectedStream);
+    });
+  });
+
+  describe('SIGNAL_ROUTES', () => {
+    it('should validate typed user-message signal contents and attributes', () => {
+      const body = {
+        signal: {
+          type: 'user-message',
+          contents: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'describe these files' },
+                { type: 'image', image: 'data:image/png;base64,image-data', mediaType: 'image/png' },
+                { type: 'file', data: 'file-data', mimeType: 'application/pdf', filename: 'brief.pdf' },
+              ],
+              metadata: { source: 'studio' },
+            },
+          ],
+          attributes: { intent: 'follow-up', count: 1, urgent: false, empty: null },
+        },
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      };
+
+      expect(sendAgentSignalBodySchema.safeParse(body).success).toBe(true);
+    });
+
+    it('should validate string and string-array user-message signal contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: ['hello', 'again'] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should validate Mastra DB message shaped user-message signal contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: {
+            type: 'user-message',
+            contents: [
+              {
+                id: 'stored-message-1',
+                role: 'user',
+                createdAt: '2026-05-08T00:00:00.000Z',
+                threadId: 'thread-a',
+                resourceId: 'user-a',
+                content: {
+                  format: 2,
+                  content: 'stored hello',
+                  parts: [{ type: 'text', text: 'stored hello' }],
+                  metadata: { source: 'memory' },
+                },
+              },
+            ],
+          },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should reject malformed user-message content parts', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: {
+            type: 'user-message',
+            contents: { role: 'user', content: [{ type: 'image' }] },
+          },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should require non-user signals to use string contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: '<system-reminder>Use the tool result</system-reminder>' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: [{ role: 'user', content: 'not allowed' }] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should accept run-targeted signal bodies with active behavior', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'pause here' },
+          runId: 'run-123',
+          ifActive: { behavior: 'persist' },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should accept thread-targeted signal bodies with active and idle behavior', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: '<system-reminder>review PR comment</system-reminder>' },
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ifActive: { behavior: 'discard' },
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: {
+              maxSteps: 3,
+              instructions: 'Use the PR context.',
+            },
+          },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should accept subscribe thread bodies', () => {
+      expect(
+        subscribeAgentThreadBodySchema.safeParse({
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should send a signal using context resource and thread values', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Signal Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      });
+      let capturedSignal: any;
+      let capturedTarget: any;
+
+      (mockAgent as any).sendSignal = vi.fn((signal, target) => {
+        capturedSignal = signal;
+        capturedTarget = target;
+        return { accepted: true, runId: 'signal-run-id' };
+      });
+
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'user-message', contents: 'hello', attributes: { source: 'test', attempt: 1 } },
+        resourceId: 'user-b',
+        threadId: 'client-thread',
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(capturedSignal).toEqual({
+        type: 'user-message',
+        contents: 'hello',
+        attributes: { source: 'test', attempt: 1 },
+      });
+      expect(capturedTarget).toMatchObject({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      });
+    });
+
+    it('should reject sending a signal to a thread owned by a different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should subscribe to a thread and stream future run chunks', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Subscribe Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-from-context',
+      });
+      let capturedTarget: any;
+      const unsubscribe = vi.fn();
+      const chunk = {
+        type: 'text-delta',
+        runId: 'subscribed-run-id',
+        from: 'AGENT',
+        payload: { id: 'text-1', text: 'hello' },
+      };
+
+      (mockAgent as any).subscribeToThread = vi.fn(async target => {
+        capturedTarget = target;
+        return {
+          activeRunId: () => null,
+          abort: () => false,
+          unsubscribe,
+          stream: (async function* () {
+            yield chunk;
+          })(),
+        } as any;
+      });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-b',
+        threadId: 'client-thread',
+      } as any)) as ReadableStream;
+
+      expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
+      const reader = stream.getReader();
+      await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
+      await reader.cancel();
+      expect(unsubscribe).toHaveBeenCalled();
+    });
+
+    it('should reject subscribing to a thread owned by a different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'subscribe-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
   });
 });

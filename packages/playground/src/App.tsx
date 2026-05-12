@@ -38,6 +38,9 @@ import AgentBuilderFavorite from './pages/agent-builder/favorite';
 import AgentBuilderInfrastructure from './pages/agent-builder/infrastructure';
 import AgentBuilderLibrary from './pages/agent-builder/library';
 import AgentBuilderSkills from './pages/agent-builder/skills';
+import AgentBuilderSkillsCreate from './pages/agent-builder/skills/create';
+import AgentBuilderSkillsEdit from './pages/agent-builder/skills/edit';
+import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -247,6 +250,15 @@ const routes = [
             index: true,
             element: <AgentBuilderSkills />,
           },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderSkillsCreate /> },
+          { path: ':id/edit', element: <AgentBuilderSkillsEdit /> },
+          { path: ':id/view', element: <AgentBuilderSkillsView /> },
         ],
       },
       {

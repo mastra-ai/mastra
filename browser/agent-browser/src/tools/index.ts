@@ -17,6 +17,7 @@ import { createEvaluateTool } from './evaluate';
 import { createGotoTool } from './goto';
 import { createHoverTool } from './hover';
 import { createPressTool } from './press';
+import { createScreenshotTool } from './screenshot';
 import { createScrollTool } from './scroll';
 import { createSelectTool } from './select';
 import { createSnapshotTool } from './snapshot';
@@ -41,6 +42,8 @@ export function createAgentBrowserTools(browser: AgentBrowser): Record<string, T
     [BROWSER_TOOLS.SELECT]: createSelectTool(browser),
     [BROWSER_TOOLS.SCROLL]: createScrollTool(browser),
     [BROWSER_TOOLS.CLOSE]: createCloseTool(browser),
+    // Utility
+    [BROWSER_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
     // Extended
     [BROWSER_TOOLS.HOVER]: createHoverTool(browser),
     [BROWSER_TOOLS.BACK]: createBackTool(browser),

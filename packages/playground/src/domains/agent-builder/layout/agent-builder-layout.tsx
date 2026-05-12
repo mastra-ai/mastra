@@ -25,7 +25,7 @@ export const AgentBuilderLayout = () => {
 
 export const AgentBuilderEditionLayout = () => {
   return (
-    <div className="bg-surface1 font-sans h-screen grid grid-rows-1">
+    <div className="bg-surface1 font-sans h-screen grid grid-rows-1 grid-cols-[minmax(0,1fr)]">
       <Outlet />
     </div>
   );

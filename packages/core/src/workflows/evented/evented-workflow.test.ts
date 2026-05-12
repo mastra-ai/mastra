@@ -14,6 +14,7 @@ import type {
   TimeTravelWorkflowOptions,
   StreamWorkflowResult,
   StreamEvent,
+  WorkflowRegistry,
 } from '@internal/workflow-test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -32,6 +33,24 @@ import { createStep, createWorkflow } from '.';
 
 // Shared storage instance
 const sharedStorage = new MockStore();
+
+// Long-lived Mastra instance with every test workflow registered + workers running.
+// Most tests use their own per-run Mastra (created in the helpers below), but a few
+// shared tests call `workflow.createRun()` directly and therefore need the workflow to
+// be bound to a Mastra whose event workers are running. After each test we re-bind all
+// registry workflows back to this instance (the per-test Mastras re-bind them to
+// short-lived, stopped instances).
+let registeredMastra: Mastra | undefined;
+let registeredRegistry: WorkflowRegistry | undefined;
+
+const rebindRegistryWorkflows = () => {
+  if (!registeredMastra || !registeredRegistry) {
+    return;
+  }
+  for (const entry of Object.values(registeredRegistry)) {
+    (entry.workflow as any).__registerMastra?.(registeredMastra);
+  }
+};
 
 // @ts-expect-error - TS2589: EventedWorkflow types cause excessively deep type instantiation
 createWorkflowTestSuite({
@@ -52,9 +71,30 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
+  // Register every test workflow with a single long-lived Mastra (with its event
+  // workers running) so tests that call `workflow.createRun()` directly work.
+  registerWorkflows: async registry => {
+    registeredRegistry = registry;
+    const workflows: Record<string, any> = {};
+    for (const [id, entry] of Object.entries(registry)) {
+      workflows[id] = entry.workflow;
+    }
+    registeredMastra = new Mastra({
+      logger: false,
+      storage: sharedStorage,
+      workflows,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await registeredMastra.startWorkers();
+  },
+
   beforeAll: async () => {
     vi.unmock('crypto');
     vi.unmock('node:crypto');
+  },
+
+  afterAll: async () => {
+    await registeredMastra?.stopWorkers();
   },
 
   beforeEach: async () => {
@@ -62,6 +102,13 @@ createWorkflowTestSuite({
     // vi.resetAllMocks();
     const workflowsStore = await sharedStorage.getStore('workflows');
     await workflowsStore?.dangerouslyClearAll();
+  },
+
+  afterEach: async () => {
+    // Per-test helpers create their own Mastra (which re-binds the workflow it runs to
+    // that short-lived, now-stopped instance). Re-bind everything to the long-lived
+    // Mastra so the next test still has a running engine if it uses createRun() directly.
+    rebindRegistryWorkflows();
   },
 
   // Skip only tests that actually fail - updated after BUG fixes 2026-02
@@ -78,22 +125,6 @@ createWorkflowTestSuite({
     resumeForeachPartialIndex: true, // Same issue as resumeForeachIndex
     resumeNested: true, // Nested resume works but input value from previous step lost (26 vs 27)
     resumeDountil: true,
-
-    // Streaming - legacy API timeout issue
-    streamingSuspendResumeLegacy: true,
-
-    // Branching - nested conditions with multiple nested workflows
-    branchingNestedConditions: true, // Complex nested branching not yet supported in evented
-
-    // Foreach state tests - stateSchema with bail/setState
-    foreachStateBatch: true, // State batch propagation in evented foreach not yet supported
-    foreachBail: true, // bail() in evented foreach not yet supported
-
-    // Error handling - logger test creates its own Mastra instance (default engine only)
-    errorLogger: true,
-
-    // Callback - state test uses stateSchema/setState (WIP in evented)
-    callbackStateOnError: true,
 
     // Resume error tests - evented engine error behavior may differ
     resumeNotSuspendedWorkflow: true,
