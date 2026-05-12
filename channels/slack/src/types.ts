@@ -120,7 +120,6 @@ export interface SlackProviderConfig extends ForwardedSlackAdapterOptions, Forwa
    * Use a 32+ character random string. Can be set via MASTRA_ENCRYPTION_KEY env var.
    */
   encryptionKey?: string;
-
 }
 
 // =============================================================================
