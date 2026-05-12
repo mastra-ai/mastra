@@ -217,7 +217,17 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
         if (drainQueuedAction(ctx)) {
           return;
         }
-        ctx.fireMessage(continuation);
+        await state.harness.sendSignal({
+          type: 'system-reminder',
+          contents: continuation,
+          attributes: { type: 'goal-judge' },
+          metadata: {
+            goalId: currentGoal.id,
+            turnsUsed: currentGoal.turnsUsed,
+            maxTurns: currentGoal.maxTurns,
+            judgeModelId: currentGoal.judgeModelId,
+          },
+        }).accepted;
       } else {
         // Goal is done, paused, or waiting at an explicit checkpoint. Persist the final
         // judge response so the conversation history survives reloads.

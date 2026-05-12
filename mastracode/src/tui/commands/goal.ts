@@ -232,19 +232,29 @@ async function startGoal(
   }
   await goalManager.saveToThread(state);
 
-  ctx.addUserMessage(createGoalReminderMessage(goal.id, objective, goal.maxTurns, judgeModelId));
-
   if (options.trigger === 'none') {
     return;
   }
 
   try {
-    await state.harness.sendMessage({ content: createGoalReminderXml(objective) });
+    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function createGoalReminderSignal(goal: { objective: string; maxTurns: number; judgeModelId: string }) {
+  return {
+    type: 'system-reminder' as const,
+    contents: goal.objective,
+    attributes: { type: 'goal' },
+    metadata: {
+      goalMaxTurns: goal.maxTurns,
+      judgeModelId: goal.judgeModelId,
+    },
+  };
 }
 
 export function createGoalReminderMessage(
