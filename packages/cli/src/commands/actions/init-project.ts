@@ -44,6 +44,7 @@ export const initProject = async (args: InitArgs) => {
           mcpServer: result?.mcpServer,
           versionTag,
           observability: result?.observability,
+          observabilityToken: result?.observabilityToken,
         });
         return;
       }
