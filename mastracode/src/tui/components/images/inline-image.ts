@@ -1,38 +1,16 @@
 /**
  * Inline image component for tool result boxes.
  *
- * Two visual states, fixed row count
- * ----------------------------------
- * The component always occupies the SAME number of terminal rows. Each
- * frame it picks one of two presentations for those rows:
+ * Always occupies a fixed row count so toggling between "drawn" (kitty/
+ * iTerm2 escape on the last line) and "placeholder" (centered "(image)"
+ * label) never shifts surrounding layout. The choice is made per frame
+ * by `imageManager.isPlaceholder(self)`.
  *
- *   1. "drawn"      — (rows-1) empty bordered lines plus a final line
- *                     containing cursor-up + the kitty/iTerm2 escape, so
- *                     the image is actually rendered.
- *   2. "placeholder" — every row is empty/bordered except for a single
- *                     centered "(image)" label, used when the image
- *                     should not be drawn right now.
- *
- * Because the row count never changes the input box, prompts, etc. never
- * shift when we toggle between states.
- *
- * "Placeholder" vs "drawn" is decided per-frame by a single call to
- * `imageManager.isPlaceholder(self)`. The manager returns true when this
- * is no longer the most recent inline image (a newer screenshot took
- * over — we do not stack kitty placements) or when the manager's display
- * mode has been set to `'placeholder'` externally (e.g. an overlay is
- * up; pi-tui's compositor cannot paint over image-bearing lines, so the
- * watcher flips the manager to placeholder mode and the manager writes
- * a delete-by-id to clear the graphics layer; the next frame after the
- * overlay closes flips back to `'image'` and re-emits the escape).
- *
- * Why a custom component (not Text)
- * ---------------------------------
- * pi-tui's Text wraps via `visibleWidth`, and `visibleWidth` misparses
- * `\x1b[NA` (cursor-up) when it is immediately followed by a kitty
- * `\x1b_G` APC start — the CSI scanner stops at `G` and swallows the APC
- * introducer. The line would then be treated as thousands of columns
- * wide and sliced mid-payload, rendering as raw base64.
+ * Why a custom component instead of `Text`: pi-tui's `Text` wraps via
+ * `visibleWidth`, which misparses `\x1b[NA` (cursor-up) immediately
+ * followed by a kitty `\x1b_G` APC — the CSI scanner stops at `G` and
+ * swallows the APC introducer. The line gets treated as thousands of
+ * columns wide and sliced mid-payload, rendering as raw base64.
  */
 
 import { visibleWidth } from '@mariozechner/pi-tui';
@@ -62,9 +40,7 @@ export class InlineImageComponent implements Component, ImageOwner {
   private readonly sequence: string;
   private readonly moveUp: string;
   private readonly kittyImageId?: number;
-  /** Cached "empty bordered" lines reused while in placeholder mode. */
   private readonly emptyLines: string[];
-  /** Pre-rendered "(image)" placeholder lines (same row count as `rows`). */
   private readonly placeholderLines: string[];
 
   constructor(args: InlineImageArgs) {
