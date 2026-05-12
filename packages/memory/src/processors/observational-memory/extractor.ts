@@ -129,12 +129,21 @@ const BUILT_IN_SLUG_SET = new Set<string>(Object.values(BUILT_IN_EXTRACTOR_SLUGS
  * @internal
  */
 export function slugifyExtractorName(name: string): string {
-  return name
+  const collapsed = name
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '');
+    .replace(/[^a-z0-9]+/g, '-');
+  // Trim leading/trailing dashes without regex to avoid CodeQL flagging
+  // anchored `-+` patterns as polynomial on uncontrolled input.
+  let start = 0;
+  while (start < collapsed.length && collapsed.charCodeAt(start) === 45 /* '-' */) {
+    start++;
+  }
+  let end = collapsed.length;
+  while (end > start && collapsed.charCodeAt(end - 1) === 45 /* '-' */) {
+    end--;
+  }
+  return collapsed.slice(start, end);
 }
 
 export function isBuiltInExtractorSlug(slug: string): slug is BuiltInExtractorSlug {
