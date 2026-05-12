@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.18.0-alpha.19
+
+### Patch Changes
+
+- Improved Mastra Code startup time by loading only the most recent thread messages during initial render, using app-specific local LibSQL PRAGMA tuning, and deferring browser setup, gateway sync, and update checks until after first render. ([#16513](https://github.com/mastra-ai/mastra/pull/16513))
+
+- Updated dependencies [[`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd), [`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd), [`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd)]:
+  - @mastra/libsql@1.10.1-alpha.3
+  - @mastra/core@1.33.0-alpha.17
+
 ## 0.18.0-alpha.18
 
 ### Patch Changes
