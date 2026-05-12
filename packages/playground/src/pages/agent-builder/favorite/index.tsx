@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui';
 import { SparklesIcon, StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
@@ -21,22 +22,24 @@ import {
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-builder-list/skill-builder-list';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { SkillEditDialog } from '@/domains/agents/components/agent-cms-pages/skill-edit-dialog';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 type Tab = 'agents' | 'skills';
 
 export default function AgentBuilderFavoritePage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('agents');
-  const [selectedSkill, setSelectedSkill] = useState<StoredSkillResponse | null>(null);
   const features = useBuilderAgentFeatures();
   const { data: currentUser } = useCurrentUser();
-  const { hasPermission, rbacEnabled } = usePermissions();
-  const canWriteSkills = !rbacEnabled || hasPermission('stored-skills:write');
+
+  const handleSkillClick = (skill: StoredSkillResponse) => {
+    const isOwner = !skill.authorId || currentUser?.id === skill.authorId;
+    const destination = isOwner ? 'edit' : 'view';
+    void navigate(`/agent-builder/skills/${skill.id}/${destination}`, { viewTransition: true });
+  };
 
   const agentListParams = useMemo<ListStoredAgentsParams>(
     () => ({
@@ -118,9 +121,7 @@ export default function AgentBuilderFavoritePage() {
         </div>
       );
     }
-    return (
-      <SkillBuilderList skills={skills} search={search} onSkillClick={canWriteSkills ? setSelectedSkill : undefined} />
-    );
+    return <SkillBuilderList skills={skills} search={search} onSkillClick={handleSkillClick} />;
   })();
 
   return (
@@ -168,16 +169,6 @@ export default function AgentBuilderFavoritePage() {
 
         {body}
       </PageLayout>
-
-      {selectedSkill && (
-        <SkillEditDialog
-          isOpen={!!selectedSkill}
-          onClose={() => setSelectedSkill(null)}
-          skill={selectedSkill}
-          currentUserId={currentUser?.id}
-          isAdmin={canWriteSkills}
-        />
-      )}
     </>
   );
 }
