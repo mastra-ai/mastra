@@ -130,15 +130,15 @@ describe('Channel Handlers RBAC', () => {
     it('rejects a non-owner attempting to connect a private agent (404)', async () => {
       const ctx = asAuthenticatedUser(createContext(mastra), 'mallory');
 
-      await expect(
-        CONNECT_CHANNEL_ROUTE.handler({
-          ...ctx,
-          platform: 'slack',
-          agentId: 'agent-owned-by-alice',
-          options: undefined,
-        }),
-      ).rejects.toMatchObject({ status: 404 });
+      const error = await CONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+        options: undefined,
+      }).catch(e => e);
 
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
       expect(slackChannel.connect).not.toHaveBeenCalled();
     });
 
@@ -295,16 +295,94 @@ describe('Channel Handlers RBAC', () => {
       expect(slackChannel.disconnect).toHaveBeenCalledWith('agent-owned-by-alice');
     });
 
+    it('allows a caller with a scoped agents:edit:<id> permission', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'mallory', ['agents:edit:agent-owned-by-alice']);
+
+      await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+      });
+
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('agent-owned-by-alice');
+    });
+
+    it('treats legacy unowned stored agents as writable by any authenticated caller', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'mallory');
+
+      await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-legacy-unowned',
+      });
+
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('agent-legacy-unowned');
+    });
+
+    it('allows disconnecting a code-defined agent (no stored record) for any authenticated caller', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'anyone');
+
+      await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'code-defined-agent',
+      });
+
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('code-defined-agent');
+    });
+
+    it('skips ownership enforcement when auth is not configured (no user on context)', async () => {
+      const ctx = createContext(mastra);
+
+      await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+      });
+
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('agent-owned-by-alice');
+    });
+
+    it('still works when storage is not configured', async () => {
+      const mastraNoStorage = createMockMastra({
+        storage: null,
+        channels: { slack: slackChannel },
+        registeredAgentIds: ['agent-owned-by-alice'],
+      });
+      const ctx = asAuthenticatedUser(createContext(mastraNoStorage), 'mallory');
+
+      await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+      });
+
+      expect(slackChannel.disconnect).toHaveBeenCalledWith('agent-owned-by-alice');
+    });
+
     it('returns 404 when the agent does not exist in the runtime registry', async () => {
       const ctx = asAuthenticatedUser(createContext(mastra), 'alice');
 
-      await expect(
-        DISCONNECT_CHANNEL_ROUTE.handler({
-          ...ctx,
-          platform: 'slack',
-          agentId: 'no-such-agent',
-        }),
-      ).rejects.toBeInstanceOf(HTTPException);
+      const error = await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'no-such-agent',
+      }).catch(e => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(404);
+      expect(slackChannel.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('does not call channel.disconnect when ownership check rejects (no leaked side effects)', async () => {
+      const ctx = asAuthenticatedUser(createContext(mastra), 'mallory');
+
+      await DISCONNECT_CHANNEL_ROUTE.handler({
+        ...ctx,
+        platform: 'slack',
+        agentId: 'agent-owned-by-alice',
+      }).catch(() => {});
+
       expect(slackChannel.disconnect).not.toHaveBeenCalled();
     });
   });

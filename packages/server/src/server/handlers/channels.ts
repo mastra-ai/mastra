@@ -100,8 +100,8 @@ export const LIST_CHANNEL_PLATFORMS_ROUTE = createRoute({
   handler: async ({ mastra }) => {
     assertChannelsAvailable();
     try {
-      const channels = (mastra as any).channels ?? {};
-      return Object.values(channels).map((channel: any) => {
+      const channels = Object.values(mastra.channels ?? {});
+      return channels.map(channel => {
         if (channel.getInfo) {
           return channel.getInfo();
         }
