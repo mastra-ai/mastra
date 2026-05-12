@@ -4526,6 +4526,15 @@
       "docUrl": "https://portal.neuralwatt.com/docs",
       "gateway": "models.dev"
     },
+    "sarvam": {
+      "url": "https://api.sarvam.ai/v1",
+      "apiKeyEnvVar": "SARVAM_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Sarvam AI",
+      "models": ["sarvam-105b", "sarvam-30b"],
+      "docUrl": "https://docs.sarvam.ai/api-reference-docs/getting-started/models",
+      "gateway": "models.dev"
+    },
     "togetherai": {
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
@@ -8626,6 +8635,7 @@
       "qwen3.6-35b-fast",
       "zai-org/GLM-5.1-FP8"
     ],
+    "sarvam": ["sarvam-105b", "sarvam-30b"],
     "togetherai": [
       "MiniMaxAI/MiniMax-M2.5",
       "MiniMaxAI/MiniMax-M2.7",
