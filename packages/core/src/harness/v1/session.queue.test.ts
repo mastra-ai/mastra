@@ -243,7 +243,10 @@ describe('Session.queue() — drains after message()', () => {
 
     expect(manual.text).toBe('manual');
     expect(queued.text).toBe('queued');
-    expect(agent.streamCalls.map(c => c.messages)).toEqual(['manual call', 'queued call']);
+    expect(agent.streamCalls.map(c => (c.messages as { contents?: unknown })?.contents ?? c.messages)).toEqual([
+      'manual call',
+      'queued call',
+    ]);
   });
 });
 

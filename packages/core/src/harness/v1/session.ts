@@ -903,6 +903,28 @@ export class Session {
       }
     }
 
+    // Signal-routed path: every non-structured message goes through
+    // `agent.sendSignal()`. On an idle thread the agent starts a fresh run
+    // with `agent.stream(signal, streamOptions)` and registers the output
+    // with the thread stream runtime; we look it up by `runId` to drain
+    // events. On an active same-agent run the signal drains mid-flight
+    // into the running execution loop — no new turn boundary, the existing
+    // drain on that run continues to emit events.
+    const signal = agent.sendSignal(
+      { type: 'user-message', contents: opts.content as never },
+      {
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
+      },
+    );
+
+    // Look up the output the runtime registered when it invoked
+    // `agent.stream(signal, streamOptions)` for the wake path. For active
+    // delivery the runId already pointed at an in-flight run whose output
+    // is already registered — same lookup works.
+    const out = agent.getRunOutput(signal.runId) as MastraModelOutput<unknown> | undefined;
+
     // Streaming path: hand the live MastraModelOutput back. We drain the
     // stream ourselves to emit harness events; the caller's
     // `getFullOutput()` is independent (each `fullStream` call returns a
@@ -911,24 +933,22 @@ export class Session {
     // until the drain settles so `isRunning()` stays true while the model
     // is still producing chunks.
     if (opts.stream === true) {
-      try {
-        const out = await agent.stream(opts.content, baseExecOptions);
-        const drain = this._drainStreamToEvents(out as MastraModelOutput<unknown>);
-        void drain.finally(() => this._endTurn(turnAbortController));
-        return out as MastraModelOutput<unknown>;
-      } catch (err) {
-        // agent.stream() itself rejected before we had a stream to drain —
-        // make sure the turn marker doesn't leak.
+      if (!out) {
         this._endTurn(turnAbortController);
-        throw err;
+        throw new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
       }
+      const drain = this._drainStreamToEvents(out);
+      void drain.finally(() => this._endTurn(turnAbortController));
+      return out;
     }
 
     // Default path: drain the stream for events, then resolve via
     // getFullOutput to surface the bundled result.
     try {
-      const out = await agent.stream(opts.content, baseExecOptions);
-      await this._drainStreamToEvents(out as MastraModelOutput<unknown>);
+      if (!out) {
+        throw new HarnessConfigError('message()', 'agent did not register a run for the dispatched signal');
+      }
+      await this._drainStreamToEvents(out);
       const full = await out.getFullOutput();
       this._recordTurnCompletion(full);
       await this._maybeCaptureSuspend(full);

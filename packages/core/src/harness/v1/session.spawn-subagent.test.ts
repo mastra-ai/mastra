@@ -58,28 +58,31 @@ class FakeAgent extends Agent<any, any, any> {
     super({ id: name, name, instructions: 'fake', model: 'openai/gpt-4o-mini' as any });
   }
 
-  async stream(_messages: any, _options?: any): Promise<any> {
+  async stream(_messages: any, options?: any): Promise<any> {
     const chunks = this.chunks;
-    const fullOutput = this.fullOutput;
+    const fullOutput = { ...this.fullOutput, runId: options?.runId ?? this.fullOutput.runId };
     const fullStream = (async function* () {
       for (const chunk of chunks) yield chunk;
     })();
-    return {
+    const out = {
       getFullOutput: async () => fullOutput,
       fullStream,
       text: Promise.resolve(fullOutput.text),
       finishReason: Promise.resolve(fullOutput.finishReason),
       usage: Promise.resolve(fullOutput.usage),
       runId: fullOutput.runId,
+      _waitUntilFinished: () => Promise.resolve(),
     } as unknown as MastraModelOutput;
+    this._internalRegisterStreamRun(out, (options ?? {}) as any);
+    return out;
   }
 
   async generate(_messages: any, _options?: any): Promise<any> {
     return this.fullOutput;
   }
 
-  async resumeStream(_resumeData: any, _opts?: any): Promise<any> {
-    return this.stream(undefined);
+  async resumeStream(_resumeData: any, options?: any): Promise<any> {
+    return this.stream(undefined, options);
   }
 }
 

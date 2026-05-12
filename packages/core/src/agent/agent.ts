@@ -5968,6 +5968,30 @@ export class Agent<
   }
 
   /**
+   * @internal Test-only hook for duck-typed agents (e.g. harness v1 MockAgent) that
+   * override `stream()` without going through the real execution loop. Production
+   * `Agent.stream()` registers its output via the same runtime path (§thread-stream-runtime).
+   * Without this hook, signal-routed `subscribeToThread` consumers never see chunks
+   * from test agents. Do not use outside of test mocks.
+   */
+  _internalRegisterStreamRun<OUTPUT = TOutput>(
+    output: MastraModelOutput<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT>,
+  ): void {
+    this.#getThreadStreamRuntime().registerRun(this as Agent<any, any, any, any>, output, streamOptions);
+  }
+
+  /**
+   * Look up the `MastraModelOutput` for a run registered with the thread stream
+   * runtime. Returns `undefined` if the run has finished and been cleared.
+   * Signal-routed callers (e.g. harness v1 `Session.message()`) use this after
+   * `sendSignal()` returns a `runId` to drain events from the run's output.
+   */
+  getRunOutput<OUTPUT = TOutput>(runId: string): MastraModelOutput<OUTPUT> | undefined {
+    return this.#getThreadStreamRuntime().getRunOutput<OUTPUT>(runId);
+  }
+
+  /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async subscribeToThread<OUTPUT = TOutput>(

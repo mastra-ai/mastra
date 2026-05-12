@@ -139,7 +139,23 @@ export class MockAgent extends Agent<any, any, any> {
 
   async stream(messages: any, options?: any): Promise<any> {
     this.streamCalls.push({ type: 'stream', messages, options });
-    return this.buildOutput(this.consumeRun(), options?.abortSignal);
+    // Honour the runtime-allocated runId when the agent layer passes one
+    // (e.g. sendSignal idle-wake). Real Agent.stream() does the same — the
+    // runId on the resulting MastraModelOutput matches what the runtime
+    // reserved before invoking stream(). Tests that script a specific
+    // runId via `defaultOutput`/`addRun` only "win" when the caller did
+    // not pass an explicit runId.
+    const spec = this.consumeRun();
+    if (options?.runId) {
+      spec.runId = options.runId;
+    }
+    const out = this.buildOutput(spec, options?.abortSignal);
+    // Register with the thread stream runtime so subscribeToThread / sendSignal
+    // consumers see this run's chunks. Real Agent.stream() does the same at the
+    // tail of its execution loop; MockAgent overrides stream() without calling
+    // super, so we register explicitly here.
+    this._internalRegisterStreamRun(out, (options ?? {}) as any);
+    return out;
   }
 
   async generate(messages: any, options?: any): Promise<any> {
@@ -150,7 +166,13 @@ export class MockAgent extends Agent<any, any, any> {
 
   async resumeStream(resumeData: any, options?: any): Promise<any> {
     this.resumeCalls.push({ resumeData, options });
-    return this.buildOutput(this.consumeRun(), options?.abortSignal);
+    const spec = this.consumeRun();
+    if (options?.runId) {
+      spec.runId = options.runId;
+    }
+    const out = this.buildOutput(spec, options?.abortSignal);
+    this._internalRegisterStreamRun(out, (options ?? {}) as any);
+    return out;
   }
 
   // -------------------------------------------------------------------------
@@ -206,8 +228,25 @@ export class MockAgent extends Agent<any, any, any> {
     };
 
     const chunks = merged.chunks ?? [];
+    let finishedResolve!: () => void;
+    const finishedPromise = new Promise<void>(resolve => {
+      finishedResolve = resolve;
+    });
+    let status: 'running' | 'finished' = 'running';
     const fullStream = (async function* () {
       for (const chunk of chunks) yield chunk;
+      // Emit a synthetic finish chunk so subscription drain loops see a run
+      // boundary. Real MastraModelOutput emits 'finish' / 'error' / 'abort' /
+      // 'tool-call-suspended' at the tail of fullStream; MockAgent stages
+      // arbitrary chunks but tests rarely include a terminal one.
+      yield {
+        type: spec.suspendPayload ? 'tool-call-suspended' : 'finish',
+        runId: merged.runId,
+        ...(spec.suspendPayload ? { payload: spec.suspendPayload } : {}),
+        finishReason: merged.finishReason,
+      } as any;
+      status = 'finished';
+      finishedResolve();
     })();
 
     // Wire abort → onAbort handler so tests can observe propagation.
@@ -264,14 +303,27 @@ export class MockAgent extends Agent<any, any, any> {
       return fullOutput;
     };
 
+    const wrappedGetFullOutput = async () => {
+      const result = await getFullOutput();
+      status = 'finished';
+      finishedResolve();
+      return result;
+    };
+
     return {
       runId: merged.runId,
-      getFullOutput,
+      getFullOutput: wrappedGetFullOutput,
       fullStream,
       text: Promise.resolve(fullOutput.text),
       finishReason: Promise.resolve(fullOutput.finishReason),
       usage: Promise.resolve(fullOutput.usage),
       object: Promise.resolve(fullOutput.object),
+      get status() {
+        return status;
+      },
+      // Thread-stream-runtime calls this to know when to drop the run record
+      // from #threadRunsById and drain pending signals.
+      _waitUntilFinished: () => finishedPromise,
     } as unknown as MastraModelOutput;
   }
 }

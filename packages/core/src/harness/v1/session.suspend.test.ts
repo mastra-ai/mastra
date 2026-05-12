@@ -64,7 +64,8 @@ class FakeAgent extends Agent<any, any, any> {
     this.runs.push({ runId: 'fake-run', text: 'ok', ...spec });
   }
 
-  private buildOutput(spec: RunSpec): MastraModelOutput {
+  private buildOutput(spec: RunSpec, runIdOverride?: string): MastraModelOutput {
+    const runId = runIdOverride ?? spec.runId;
     const fullOutput = {
       text: spec.text ?? '',
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -86,22 +87,25 @@ class FakeAgent extends Agent<any, any, any> {
       tripwire: undefined,
       traceId: undefined,
       spanId: undefined,
-      runId: spec.runId,
+      runId,
       suspendPayload: spec.suspendPayload,
       messages: [],
       rememberedMessages: [],
     };
     return {
-      runId: spec.runId,
+      runId,
       getFullOutput: async () => fullOutput,
+      _waitUntilFinished: () => Promise.resolve(),
     } as unknown as MastraModelOutput;
   }
 
-  async stream(_messages: any, _options?: any): Promise<any> {
-    this.streamCalls.push({ messages: _messages, options: _options });
+  async stream(_messages: any, options?: any): Promise<any> {
+    this.streamCalls.push({ messages: _messages, options });
     const spec = this.runs.shift();
     if (!spec) throw new Error('FakeAgent: no run enqueued for stream()');
-    return this.buildOutput(spec);
+    const out = this.buildOutput(spec, options?.runId);
+    this._internalRegisterStreamRun(out, (options ?? {}) as any);
+    return out;
   }
 
   async generate(_messages: any, _options?: any): Promise<any> {
@@ -115,7 +119,9 @@ class FakeAgent extends Agent<any, any, any> {
     this.resumeCalls.push({ resumeData, options });
     const spec = this.runs.shift();
     if (!spec) throw new Error('FakeAgent: no run enqueued for resumeStream()');
-    return this.buildOutput(spec);
+    const out = this.buildOutput(spec, options?.runId);
+    this._internalRegisterStreamRun(out, (options ?? {}) as any);
+    return out;
   }
 }
 
@@ -152,7 +158,11 @@ describe('Session — suspend capture on message()', () => {
     const pending = session.getRecord().pendingResume;
     expect(pending).toBeDefined();
     expect(pending!.kind).toBe('tool-approval');
-    expect(pending!.runId).toBe('run-A');
+    // Signal-routed message() stamps the runtime-allocated runId on the
+    // resulting MastraModelOutput; pending capture mirrors it. The test's
+    // enqueued `runId: 'run-A'` is overridden in the same way real
+    // Agent.stream() honours options.runId.
+    expect(pending!.runId).toBe(result.runId);
     expect(pending!.toolCallId).toBe('tc-1');
     expect(pending!.toolName).toBe('shell');
     expect(pending!.payload).toEqual({ input: { cmd: 'rm -rf /' } });
@@ -260,9 +270,9 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
       suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
     });
     const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
-    await session.message({ content: 'go' });
+    const first = await session.message({ content: 'go' });
 
-    agent.enqueueRun({ finishReason: 'stop', runId: 'run-A', text: 'done' });
+    agent.enqueueRun({ finishReason: 'stop', runId: first.runId, text: 'done' });
 
     const result = await session.respondToToolApproval({ approved: true });
 
@@ -270,7 +280,7 @@ describe('Session — respondToToolApproval / Suspension / Question / PlanApprov
     expect(result.finishReason).toBe('stop');
     expect(agent.resumeCalls).toHaveLength(1);
     expect(agent.resumeCalls[0]!.resumeData).toEqual({ approved: true });
-    expect(agent.resumeCalls[0]!.options).toMatchObject({ runId: 'run-A', toolCallId: 'tc-1' });
+    expect(agent.resumeCalls[0]!.options).toMatchObject({ runId: first.runId, toolCallId: 'tc-1' });
     expect(agent.resumeCalls[0]!.options.abortSignal).toBeInstanceOf(AbortSignal);
     expect(session.getRecord().pendingResume).toBeUndefined();
     expect(session.getDisplayState().pending).toBeNull();

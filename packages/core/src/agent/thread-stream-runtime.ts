@@ -114,6 +114,18 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  /**
+   * Returns the `MastraModelOutput` for a registered run, or `undefined` if the
+   * run has finished and been cleared. Used by signal-routed callers (e.g.
+   * harness v1 `Session.message()`) that send a signal — getting back a
+   * `runId` — and then need the matching output to drain events or await
+   * completion. Real subscribers should prefer `subscribeToThread` instead.
+   */
+  getRunOutput<OUTPUT = unknown>(runId: string): MastraModelOutput<OUTPUT> | undefined {
+    const record = this.#threadRunsById.get(runId);
+    return record?.output as MastraModelOutput<OUTPUT> | undefined;
+  }
+
   abortThread(options: AgentSubscribeToThreadOptions): boolean {
     const key = this.#threadKey(options.resourceId, options.threadId);
     const activeRunId = this.#activeThreadRunIds.get(key);
