@@ -16,6 +16,7 @@ import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
+import type { GoalState } from '../goal-manager.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 
 import type { SlashCommandContext } from './types.js';
@@ -245,13 +246,14 @@ async function startGoal(
   }
 }
 
-function createGoalReminderSignal(goal: { objective: string; maxTurns: number; judgeModelId: string }) {
+function createGoalReminderSignal(goal: GoalState) {
   return {
     type: 'system-reminder' as const,
     contents: goal.objective,
     attributes: { type: 'goal' },
     metadata: {
-      goalMaxTurns: goal.maxTurns,
+      goalId: goal.id,
+      maxTurns: goal.maxTurns,
       judgeModelId: goal.judgeModelId,
     },
   };

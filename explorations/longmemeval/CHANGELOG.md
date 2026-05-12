@@ -1,5 +1,12 @@
 # @mastra/longmemeval
 
+## 1.0.38-alpha.15
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.33.0-alpha.14
+
 ## 1.0.38-alpha.14
 
 ### Patch Changes

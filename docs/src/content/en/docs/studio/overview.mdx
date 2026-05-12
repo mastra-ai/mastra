@@ -43,6 +43,8 @@ Chat with your agent directly, dynamically switch [models](/models), and tweak s
 
 When you interact with your agent, you can follow each step of its reasoning, view tool call outputs, and [observe](#observability) traces and logs to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
 
+While an agent response is streaming, you can send a follow-up message in the same thread. Studio shows the message as pending until the stream confirms it, then continues the response below that follow-up. Other Studio tabs that have the same thread open can observe the active stream.
+
 Use [Editor](/docs/editor/overview) to let non-technical team members iterate on agents, version every change, and run experiments without redeploying.
 
 ### Workflows

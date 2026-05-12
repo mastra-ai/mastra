@@ -18,6 +18,8 @@ interface CreateProjectArgs {
   mcp?: Editor;
   skills?: string[];
   template?: string | boolean;
+  observability?: boolean;
+  observabilityProject?: string;
 }
 
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
@@ -38,6 +40,8 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
           mcpServer: args.mcp,
           skills: args.skills,
           template: args.template,
+          observability: args.observability,
+          observabilityProject: args.observabilityProject,
         });
         return;
       }
@@ -52,6 +56,8 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
         mcpServer: args.mcp,
         skills: args.skills,
         template: args.template,
+        observability: args.observability,
+        observabilityProject: args.observabilityProject,
       });
     },
     origin,
