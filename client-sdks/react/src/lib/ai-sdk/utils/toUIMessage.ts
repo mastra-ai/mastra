@@ -10,6 +10,30 @@ type StreamChunk = {
   from: 'AGENT' | 'WORKFLOW';
 };
 
+export const markStreamingPartsDone = (message: MastraUIMessage): MastraUIMessage => ({
+  ...message,
+  parts: message.parts.map(part => {
+    if (
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      'state' in part &&
+      part.state === 'streaming' &&
+      (part.type === 'text' || part.type === 'reasoning')
+    ) {
+      return { ...part, state: 'done' as const };
+    }
+    return part;
+  }),
+});
+
+export const finishStreamingAssistantMessage = (conversation: MastraUIMessage[]) => {
+  const lastMessage = conversation[conversation.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+
+  return [...conversation.slice(0, -1), markStreamingPartsDone(lastMessage)];
+};
+
 // Helper function to map workflow stream chunks to watch result format
 // Based on the pattern from packages/playground-ui/src/domains/workflows/utils.ts
 
@@ -124,6 +148,94 @@ export const mapWorkflowStreamChunkToWatchResult = (
   return prev;
 };
 
+
+function signalContentsToUserMessages(contents: unknown, metadata: MastraUIMessageMetadata): MastraUIMessage[] {
+  if (typeof contents === 'string') {
+    return [
+      {
+        id: `signal-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', text: contents }],
+        metadata,
+      },
+    ];
+  }
+
+  if (Array.isArray(contents)) {
+    return contents.flatMap(content => signalContentsToUserMessages(content, metadata));
+  }
+
+  if (!contents || typeof contents !== 'object') {
+    return [];
+  }
+
+  const message = contents as { role?: unknown; content?: unknown };
+  if (message.role && message.role !== 'user') {
+    return [];
+  }
+
+  const content = message.content;
+  if (typeof content === 'string') {
+    return [
+      {
+        id: `signal-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', text: content }],
+        metadata,
+      },
+    ];
+  }
+
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const parts = content.flatMap((part): MastraUIMessage['parts'] => {
+    if (!part || typeof part !== 'object') return [];
+    const typedPart = part as Record<string, unknown>;
+
+    if (typedPart.type === 'text' && typeof typedPart.text === 'string') {
+      return [{ type: 'text', text: typedPart.text }];
+    }
+
+    if (typedPart.type === 'image') {
+      const image = typedPart.image;
+      return [
+        {
+          type: 'file',
+          mediaType: typeof typedPart.mimeType === 'string' ? typedPart.mimeType : 'image/*',
+          url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
+        },
+      ];
+    }
+
+    if (typedPart.type === 'file') {
+      const data = typedPart.data;
+      return [
+        {
+          type: 'file',
+          mediaType: typeof typedPart.mimeType === 'string' ? typedPart.mimeType : 'application/octet-stream',
+          url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
+          ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
+        },
+      ];
+    }
+
+    return [];
+  });
+
+  return parts.length
+    ? [
+        {
+          id: `signal-${Date.now()}`,
+          role: 'user',
+          parts,
+          metadata,
+        },
+      ]
+    : [];
+}
+
 export interface ToUIMessageArgs {
   chunk: ChunkType;
   conversation: MastraUIMessage[];
@@ -136,6 +248,26 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
   // Handle data-* chunks (custom data chunks from writer.custom())
   if (chunk.type.startsWith('data-')) {
+    if (chunk.type === 'data-user-message' && 'data' in chunk && chunk.data?.type === 'user-message') {
+      const signalId = chunk.data.id;
+      if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
+        return result;
+      }
+
+      const userMessages = signalContentsToUserMessages(chunk.data.contents, metadata);
+      if (!userMessages.length) return result;
+
+      const conversationWithFinishedAssistant = finishStreamingAssistantMessage(result);
+      const messageIdPrefix = typeof signalId === 'string' ? signalId : `signal-${chunk.runId}-${Date.now()}`;
+      return [
+        ...conversationWithFinishedAssistant,
+        ...userMessages.map((message, index) => ({
+          ...message,
+          id: index === 0 ? messageIdPrefix : `${messageIdPrefix}-${index}`,
+        })),
+      ];
+    }
+
     const dataPart = {
       type: chunk.type as `data-${string}`,
       data: 'data' in chunk ? chunk.data : undefined,
@@ -190,8 +322,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'start': {
       // Create a new assistant message
       // Use the server-provided messageId if available, otherwise fall back to generated ID
+      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (messageId && result.some(message => message.id === messageId)) return result;
+
       const newMessage: MastraUIMessage = {
-        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
+        id: messageId ?? `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,
@@ -205,6 +340,13 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      if (
+        chunk.payload.id &&
+        lastMessage?.role === 'assistant' &&
+        lastMessage.parts.some(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
+      ) {
+        return result;
+      }
 
       const newTextPart: MastraExtendedTextPart = {
         type: 'text',
