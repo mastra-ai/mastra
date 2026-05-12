@@ -2280,6 +2280,38 @@ export const API_ROUTE_METADATA = {
       "listProperty": "tags"
     }
   },
+  "GET /observability/discovery/root-span-keys": {
+    "method": "GET",
+    "path": "/observability/discovery/root-span-keys",
+    "pathParams": [],
+    "queryParams": [
+      "field",
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "keys"
+    }
+  },
+  "GET /observability/discovery/log-keys": {
+    "method": "GET",
+    "path": "/observability/discovery/log-keys",
+    "pathParams": [],
+    "queryParams": [
+      "field",
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "keys"
+    }
+  },
   "GET /logs/transports": {
     "method": "GET",
     "path": "/logs/transports",

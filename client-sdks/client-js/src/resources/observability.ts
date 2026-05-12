@@ -68,6 +68,10 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  GetRootSpanJsonKeysArgs,
+  GetRootSpanJsonKeysResponse,
+  GetLogJsonKeysArgs,
+  GetLogJsonKeysResponse,
 } from '@mastra/core/storage';
 import type { ClientOptions } from '../types';
 import { toQueryParams } from '../utils';
@@ -529,5 +533,21 @@ export class Observability extends BaseResource {
   getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
     const queryString = toQueryParams(params);
     return this.request(`/observability/discovery/tags${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Returns distinct top-level JSON keys present on root-span `metadata` or `attributes`.
+   */
+  getRootSpanJsonKeys(params: GetRootSpanJsonKeysArgs): Promise<GetRootSpanJsonKeysResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/root-span-keys${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Returns distinct top-level JSON keys present on log `metadata` or `data`.
+   */
+  getLogJsonKeys(params: GetLogJsonKeysArgs): Promise<GetLogJsonKeysResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/log-keys${queryString ? `?${queryString}` : ''}`);
   }
 }
