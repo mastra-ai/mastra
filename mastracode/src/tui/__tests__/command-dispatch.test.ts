@@ -245,6 +245,7 @@ describe('dispatchSlashCommand models routing', () => {
       getCurrentThreadId: vi.fn(() => 'thread-1'),
       pendingNewThread: false,
       allSlashCommandComponents: [],
+      messageComponentsById: new Map(),
       chatContainer: { addChild: vi.fn() },
       ui: { requestRender: vi.fn() },
       harness: {
@@ -259,6 +260,9 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
     expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
     expect(state.harness.createThread).not.toHaveBeenCalled();
+    expect(state.harness.sendMessage).toHaveBeenCalledWith({
+      content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
+    });
     expect(mocks.showError).not.toHaveBeenCalled();
   });
 
@@ -267,6 +271,7 @@ describe('dispatchSlashCommand models routing', () => {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
       pendingNewThread: true,
       allSlashCommandComponents: [],
+      messageComponentsById: new Map(),
       chatContainer: { addChild: vi.fn() },
       ui: { requestRender: vi.fn() },
       harness: {
@@ -279,7 +284,9 @@ describe('dispatchSlashCommand models routing', () => {
 
     expect(handled).toBe(true);
     expect(state.harness.createThread).toHaveBeenCalledTimes(1);
-    expect(state.harness.sendMessage).toHaveBeenCalledTimes(1);
+    expect(state.harness.sendMessage).toHaveBeenCalledWith({
+      content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
+    });
     expect(state.harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
       state.harness.sendMessage.mock.invocationCallOrder[0],
     );
@@ -304,6 +311,7 @@ describe('dispatchSlashCommand models routing', () => {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
       getCurrentThreadId: vi.fn(() => 'thread-1'),
       allSlashCommandComponents: [],
+      messageComponentsById: new Map(),
       chatContainer: { addChild: vi.fn() },
       ui: { requestRender: vi.fn() },
       harness: { sendMessage: vi.fn().mockResolvedValue(undefined) },
