@@ -48,7 +48,8 @@ Use stagehand tools to interact with pages:
 - stagehand_navigate to go to URLs
 - stagehand_act to perform actions described in natural language
 - stagehand_extract to get structured data from the page
-- stagehand_observe to find available actions on the page`,
+- stagehand_observe to find available actions on the page
+- stagehand_screenshot to visually inspect the page`,
 })
 ```
 
@@ -92,6 +93,29 @@ Returns a list of available actions:
   { "action": "Type in 'Email' field", "element": "input" },
   { "action": "Open 'Forgot Password' link", "element": "a" }
 ]
+```
+
+## Screenshots
+
+When the agent uses the `stagehand_screenshot` tool, it captures a PNG image of the current page and returns it as image content that vision-capable models can interpret directly.
+
+Use screenshots when you need to visually inspect the page — for example, evaluating images, layout, or colors. For text or structured data, use `stagehand_extract` or `stagehand_observe` instead.
+
+```typescript
+const browser = new StagehandBrowser({
+  headless: false,
+  model: 'openai/gpt-5.4',
+})
+```
+
+To disable the screenshot tool for models that do not support vision, use `excludeTools`:
+
+```typescript
+const browser = new StagehandBrowser({
+  headless: false,
+  model: 'openai/gpt-5.4',
+  excludeTools: ['stagehand_screenshot'],
+})
 ```
 
 ## Browserbase

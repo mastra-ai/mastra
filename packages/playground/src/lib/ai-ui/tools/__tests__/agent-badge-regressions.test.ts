@@ -62,6 +62,7 @@ describe('agent badge regressions', () => {
     expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
     expect(mockAgentBadge).toHaveBeenCalledWith(
       expect.objectContaining({
+        keepOpenForStreamingChildMessages: true,
         messages: fallbackMessages,
       }),
       undefined,

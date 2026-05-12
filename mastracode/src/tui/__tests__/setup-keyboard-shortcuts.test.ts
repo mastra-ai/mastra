@@ -37,6 +37,8 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
+import { showInfo } from '../display.js';
+import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
 
 function createState(isRunning: boolean) {
@@ -79,6 +81,11 @@ function createState(isRunning: boolean) {
     allSystemReminderComponents: [],
     allShellComponents: [],
     ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
+    goalManager: {
+      isActive: vi.fn(() => false),
+      pause: vi.fn(),
+      saveToThread: vi.fn(),
+    },
   } as any;
 
   return { state, editor, actions };
@@ -89,8 +96,11 @@ describe('setupKeyboardShortcuts', () => {
     autocompleteProviders.length = 0;
     const { state, editor } = createState(false);
     state.customSlashCommands = [
-      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '' },
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
       { name: 'ship', description: 'Ship release', template: '', sourcePath: '' },
+    ];
+    state.goalSkillCommands = [
+      { name: 'review', description: 'Review code', path: '/skills/review', metadata: { goal: true } },
     ];
     state.harness.listModes = vi.fn(() => ['default']);
 
@@ -102,10 +112,14 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
+    expect(commandNames).toContain('judge');
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
+    expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
-    expect(commandNames.slice(-2)).toEqual(['/deploy', '/ship']);
+    expect(commandNames).toContain('goal/deploy');
+    expect(commandNames).toContain('goal/review');
+    expect(commandNames.slice(-4)).toEqual(['/deploy', 'goal/deploy', '/ship', 'goal/review']);
   });
 
   it('submits immediately on Enter when the harness is idle', () => {
@@ -127,7 +141,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
-  it('queues follow-up input on Enter while the harness is running', () => {
+  it('submits through the editor handler on Enter while the harness is running', () => {
     const { state, editor, actions } = createState(true);
     const queueFollowUpMessage = vi.fn();
 
@@ -141,10 +155,93 @@ describe('setupKeyboardShortcuts', () => {
     expect(followUp).toBeDefined();
 
     expect(followUp?.()).toBe(true);
-    expect(editor.addToHistory).toHaveBeenCalledWith('/help');
+    expect(editor.onSubmit).toHaveBeenCalledWith('/help');
+    expect(queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(editor.addToHistory).not.toHaveBeenCalled();
+    expect(editor.setText).not.toHaveBeenCalled();
+  });
+
+  it('queues follow-ups with Ctrl+F while the harness is running', () => {
+    const { state, editor, actions } = createState(true);
+    const queueFollowUpMessage = vi.fn();
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage,
+    });
+
+    const queueFollowUp = actions.get('queueFollowUp');
+    expect(queueFollowUp).toBeDefined();
+
+    expect(queueFollowUp?.()).toBe(true);
     expect(queueFollowUpMessage).toHaveBeenCalledWith('/help');
+    expect(editor.addToHistory).toHaveBeenCalledWith('/help');
     expect(editor.setText).toHaveBeenCalledWith('');
     expect(editor.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('blocks Ctrl+F queueing while the goal judge is evaluating', () => {
+    vi.mocked(showInfo).mockClear();
+    const { state, editor, actions } = createState(true);
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5' };
+    const queueFollowUpMessage = vi.fn();
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage,
+    });
+
+    const queueFollowUp = actions.get('queueFollowUp');
+    expect(queueFollowUp?.()).toBe(true);
+    expect(editor.onSubmit).not.toHaveBeenCalled();
+    expect(editor.addToHistory).not.toHaveBeenCalled();
+    expect(editor.setText).not.toHaveBeenCalled();
+    expect(queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith(state, GOAL_JUDGE_INPUT_LOCK_MESSAGE);
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('blocks Enter submissions while the goal judge is evaluating', () => {
+    vi.mocked(showInfo).mockClear();
+    const { state, editor, actions } = createState(false);
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5' };
+    const queueFollowUpMessage = vi.fn();
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage,
+    });
+
+    const followUp = actions.get('followUp');
+    expect(followUp?.()).toBe(true);
+    expect(editor.onSubmit).not.toHaveBeenCalled();
+    expect(editor.addToHistory).not.toHaveBeenCalled();
+    expect(editor.setText).not.toHaveBeenCalled();
+    expect(queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith(state, GOAL_JUDGE_INPUT_LOCK_MESSAGE);
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('does not pause an active goal when clearing empty idle input', () => {
+    const { state, editor, actions } = createState(false);
+    editor.getText.mockReturnValue('');
+    state.goalManager.isActive.mockReturnValue(true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.goalManager.pause).not.toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
+    expect(state.ui.requestRender).toHaveBeenCalled();
   });
 
   it('toggles system reminder expansion with Ctrl+E', () => {

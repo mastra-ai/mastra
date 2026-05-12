@@ -717,6 +717,65 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
     });
+
+    describe('deleteThread', () => {
+      it('should delete a thread with agentId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { agentId: 'agent-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1?agentId=agent-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should delete a network thread with networkId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { networkId: 'network-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/network/threads/thread-1?networkId=network-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should throw when neither agentId nor networkId is provided', () => {
+        expect(() => client.deleteThread('thread-1', {} as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when opts is missing entirely', () => {
+        expect(() => client.deleteThread('thread-1', undefined as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when both agentId and networkId are provided', () => {
+        expect(() => client.deleteThread('thread-1', { agentId: 'agent-1', networkId: 'network-1' } as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('Background Tasks', () => {
@@ -801,6 +860,60 @@ describe('MastraClient', () => {
           expect.any(Object),
         );
         expect(result).toEqual(mockTask);
+      });
+    });
+  });
+
+  describe('Agent Builder Actions', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('getAgentBuilderActions should hit /agent-builder (no trailing slash)', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.getAgentBuilderActions();
+
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/api/agent-builder', expect.any(Object));
+    });
+  });
+
+  describe('Stored Skills', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('createStoredSkill should POST the required description and other fields', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.createStoredSkill({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/stored/skills');
+      expect(init.method).toBe('POST');
+      const body = JSON.parse(init.body);
+      expect(body).toMatchObject({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
       });
     });
   });

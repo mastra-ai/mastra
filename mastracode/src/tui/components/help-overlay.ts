@@ -49,6 +49,8 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
+    { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
+    { key: '/judge', description: 'Set goal judge defaults' },
   ];
 
   if (modes > 1) {
@@ -65,7 +67,8 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+C', description: 'Interrupt / clear input' },
     { key: 'Ctrl+C×2', description: 'Exit (double-tap)' },
     { key: 'Ctrl+D', description: 'Exit (when editor empty)' },
-    { key: 'Enter', description: 'Send message / queue follow-up' },
+    { key: 'Enter', description: 'Send message' },
+    { key: 'Ctrl+F', description: 'Queue follow-up' },
     { key: 'Ctrl+T', description: 'Toggle thinking blocks' },
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },

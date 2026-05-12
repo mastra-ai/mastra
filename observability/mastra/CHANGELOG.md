@@ -1,5 +1,141 @@
 # @mastra/observability
 
+## 1.12.0-alpha.4
+
+### Patch Changes
+
+- Support `MASTRA_PLATFORM_ACCESS_TOKEN` as the preferred environment variable for `MastraPlatformExporter`, while retaining `MASTRA_CLOUD_ACCESS_TOKEN` as a fallback for backward compatibility. ([#16500](https://github.com/mastra-ai/mastra/pull/16500))
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+
+## 1.12.0-alpha.3
+
+### Minor Changes
+
+- Renamed two built-in observability exporters to clearer names. The originals are still exported (now deprecated) and continue to work unchanged, including their existing exporter `name` strings and error IDs, so monitoring rules and dashboards keep matching until you migrate. ([#16223](https://github.com/mastra-ai/mastra/pull/16223))
+  - `CloudExporter` → `MastraPlatformExporter`
+  - `DefaultExporter` → `MastraStorageExporter`
+
+  **Before**
+
+  ```ts
+  import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+
+  new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  });
+  ```
+
+  **After**
+
+  ```ts
+  import {
+    Observability,
+    MastraStorageExporter,
+    MastraPlatformExporter,
+    SensitiveDataFilter,
+  } from '@mastra/observability';
+
+  new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`7ad5585`](https://github.com/mastra-ai/mastra/commit/7ad55856406f1de398dc713f6a9eaa78b2784bb6), [`210ea7a`](https://github.com/mastra-ai/mastra/commit/210ea7af559791b73a44fc9c12179908aaa3183f), [`83218c8`](https://github.com/mastra-ai/mastra/commit/83218c88b37773c9424fbe733b37be556e55e94d), [`265ec9f`](https://github.com/mastra-ai/mastra/commit/265ec9f887b5c81255c873a76ff7796f16e4f99b), [`6ce80bf`](https://github.com/mastra-ai/mastra/commit/6ce80bf4872a891e0bddf8b80561a80584efb14b), [`9268531`](https://github.com/mastra-ai/mastra/commit/9268531e7ec4be98beeba3b3ae8be0a7ea380662), [`13ead79`](https://github.com/mastra-ai/mastra/commit/13ead79149486b88144db7e11e6ff551caef5be1), [`bd36d8e`](https://github.com/mastra-ai/mastra/commit/bd36d8eb6de8c9a0310352649dbd4b06703c2299), [`8ac9141`](https://github.com/mastra-ai/mastra/commit/8ac9141439caa8fdd674944c4d84f29b3c730296)]:
+  - @mastra/core@1.33.0-alpha.10
+
+## 1.12.0-alpha.2
+
+### Patch Changes
+
+- Refreshed the embedded pricing data snapshot used for cost estimation in observability metrics with the latest provider rates. ([#16373](https://github.com/mastra-ai/mastra/pull/16373))
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4)]:
+  - @mastra/core@1.33.0-alpha.8
+
+## 1.12.0-alpha.1
+
+### Minor Changes
+
+- `DefaultExporter` now notifies custom exporters and connected integrations when it cannot persist observability events, such as unsupported storage or retries being exceeded. ([#16111](https://github.com/mastra-ai/mastra/pull/16111))
+
+- Added new `MODEL_INFERENCE` span type under `MODEL_STEP`, covering only the model provider call. Use it to measure model latency separately from input/output processors and tool executions. ([#16267](https://github.com/mastra-ai/mastra/pull/16267))
+
+### Patch Changes
+
+- Fixed cost estimation for OpenRouter models. The **Model Usage & Cost** panel now shows costs for OpenRouter `vendor/model` ids (e.g. `openai/gpt-5-mini-2025-08-07`, `xiaomi/mimo-v2-pro-20260318`) that previously rendered an empty cost column. ([#16206](https://github.com/mastra-ai/mastra/pull/16206))
+
+- Score events now include scorer names and target entity types. ([#16185](https://github.com/mastra-ai/mastra/pull/16185))
+
+- Fixed `MODEL_INFERENCE` span timing so it measures pure model latency. ([#16357](https://github.com/mastra-ai/mastra/pull/16357))
+
+- Updated dependencies [[`6742347`](https://github.com/mastra-ai/mastra/commit/6742347d71955d7639adc9ddf6ff8282de7ee3ba), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`62666c3`](https://github.com/mastra-ai/mastra/commit/62666c367eaeac3941ead454b1d38810cc855721), [`4af2160`](https://github.com/mastra-ai/mastra/commit/4af2160322f4718cac421930cce85641e9512389), [`136c959`](https://github.com/mastra-ai/mastra/commit/136c9592fb0eeb0cd212f28629d8a29b7557a2fc), [`4df7cc7`](https://github.com/mastra-ai/mastra/commit/4df7cc79342fd065fe7fdeef93c094db14b12bcd), [`aca3121`](https://github.com/mastra-ai/mastra/commit/aca31211233dac25459f140ea4fcfb3a5af64c18), [`9cdf38e`](https://github.com/mastra-ai/mastra/commit/9cdf38e58506e1109c8b38f97cd7770978a4218e), [`990851e`](https://github.com/mastra-ai/mastra/commit/990851edcb0e30be5c2c18b6532f1a876cc2d335), [`6068a6c`](https://github.com/mastra-ai/mastra/commit/6068a6c42950fad3ebfc92346417896ba60803d2), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`e2a079c`](https://github.com/mastra-ai/mastra/commit/e2a079cc3755b1895f7bd5dc36e9be81b11c7c22), [`534a456`](https://github.com/mastra-ai/mastra/commit/534a456a25e4df1e5407e7e632f4cb3b1fa14f9d), [`36bae07`](https://github.com/mastra-ai/mastra/commit/36bae07c0e70b1b3006f2fd20830e8883dcbd066)]:
+  - @mastra/core@1.33.0-alpha.7
+
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- Apply `SensitiveDataFilter` by default ([#16234](https://github.com/mastra-ai/mastra/pull/16234))
+
+  The `Observability` registry now auto-applies a `SensitiveDataFilter` span output processor to every configured instance, so secrets (API keys, tokens, passwords, etc.) are redacted before they reach exporters such as the Mastra cloud exporter. This protects against accidentally exporting sensitive data when the filter was not added manually.
+
+  A new top-level `sensitiveDataFilter` option on the `Observability` registry config controls this behavior:
+  - `true` (default): apply `SensitiveDataFilter` with default options.
+  - `false`: opt out of auto-applied filtering.
+  - a `SensitiveDataFilterOptions` object: customize the filter (sensitive fields, redaction token, redaction style).
+
+  If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values are not modified.
+
+  **Before:**
+
+  ```typescript
+  import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+
+  new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  });
+  ```
+
+  **After:**
+
+  ```typescript
+  import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
+
+  new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+      },
+    },
+    // Optional: customize or disable the auto-applied filter.
+    // sensitiveDataFilter: false,
+    // sensitiveDataFilter: { sensitiveFields: ['myCustomSecret'] },
+  });
+  ```
+
 ## 1.11.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 ---
 title: "OpenTelemetry exporter | Tracing | Observability"
-description: "Send traces to any OpenTelemetry-compatible observability platform"
+description: "Send traces and logs to any OpenTelemetry-compatible observability platform"
 packages:
   - "@mastra/observability"
   - "@mastra/otel-exporter"
@@ -8,7 +8,7 @@ packages:
 
 # OpenTelemetry exporter
 
-The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
+The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
 :::info Looking for bidirectional OTEL integration?
 
@@ -361,6 +361,42 @@ new OtelExporter({
 })
 ```
 
+## Signals
+
+The exporter sends two OpenTelemetry signals:
+
+- Traces: Mastra spans, exported via `BatchSpanProcessor`.
+- Logs: Mastra log events, exported via `BatchLogRecordProcessor`. Logs that carry `traceId` and `spanId` are correlated with traces using both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes, so backends like Datadog, Grafana, and Honeycomb can join logs to traces automatically.
+
+Both signals are enabled by default and share the same provider configuration. The log endpoint is derived from the trace endpoint by replacing the `/v1/traces` suffix with `/v1/logs`.
+
+To disable a signal, set the `signals` option:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    /* ... */
+  },
+  signals: {
+    traces: true, // default
+    logs: false, // disable log export
+  },
+})
+```
+
+Log export requires installing the matching OTLP log exporter package for your protocol:
+
+```bash npm2yarn
+# HTTP/JSON
+npm install @opentelemetry/exporter-logs-otlp-http
+# HTTP/Protobuf
+npm install @opentelemetry/exporter-logs-otlp-proto
+# gRPC
+npm install @opentelemetry/exporter-logs-otlp-grpc @grpc/grpc-js
+```
+
+If the matching log exporter package is not installed, log export is silently disabled and traces continue to work.
+
 ## Configuration options
 
 ### Complete Configuration
@@ -372,9 +408,15 @@ new OtelExporter({
     // Use one of: dash0, signoz, newrelic, traceloop, laminar, custom
   },
 
+  // Per-signal toggles. Both default to true.
+  signals: {
+    traces: true,
+    logs: true,
+  },
+
   // Export configuration
   timeout: 30000, // Export timeout in milliseconds
-  batchSize: 100, // Number of spans per batch
+  batchSize: 100, // Number of spans/logs per batch
 
   // Debug options
   logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'

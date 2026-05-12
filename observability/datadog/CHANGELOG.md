@@ -1,5 +1,59 @@
 # @mastra/datadog
 
+## 1.2.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`8781d45`](https://github.com/mastra-ai/mastra/commit/8781d452895df792b54eac8e4bdbc3559affa308), [`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/observability@1.12.0-alpha.4
+  - @mastra/core@1.33.0-alpha.15
+
+## 1.2.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`7ad5585`](https://github.com/mastra-ai/mastra/commit/7ad55856406f1de398dc713f6a9eaa78b2784bb6), [`210ea7a`](https://github.com/mastra-ai/mastra/commit/210ea7af559791b73a44fc9c12179908aaa3183f), [`83218c8`](https://github.com/mastra-ai/mastra/commit/83218c88b37773c9424fbe733b37be556e55e94d), [`265ec9f`](https://github.com/mastra-ai/mastra/commit/265ec9f887b5c81255c873a76ff7796f16e4f99b), [`6ce80bf`](https://github.com/mastra-ai/mastra/commit/6ce80bf4872a891e0bddf8b80561a80584efb14b), [`9268531`](https://github.com/mastra-ai/mastra/commit/9268531e7ec4be98beeba3b3ae8be0a7ea380662), [`13ead79`](https://github.com/mastra-ai/mastra/commit/13ead79149486b88144db7e11e6ff551caef5be1), [`50f5884`](https://github.com/mastra-ai/mastra/commit/50f5884b412dc05924a4c306c05eef7fb95a4aa1), [`bd36d8e`](https://github.com/mastra-ai/mastra/commit/bd36d8eb6de8c9a0310352649dbd4b06703c2299), [`8ac9141`](https://github.com/mastra-ai/mastra/commit/8ac9141439caa8fdd674944c4d84f29b3c730296)]:
+  - @mastra/core@1.33.0-alpha.10
+  - @mastra/observability@1.12.0-alpha.3
+
+## 1.2.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`7c275a8`](https://github.com/mastra-ai/mastra/commit/7c275a810595e1a6c41ccc39720531ab65734700), [`890b24c`](https://github.com/mastra-ai/mastra/commit/890b24cc7d32ed6aa4dfe253e54dc6bf4099f690), [`0f48ebf`](https://github.com/mastra-ai/mastra/commit/0f48ebfc7ac7897b2092a189f45751924cf56d1c), [`f180e49`](https://github.com/mastra-ai/mastra/commit/f180e4990e71b04c9a475b523584071712f0048f), [`9260e01`](https://github.com/mastra-ai/mastra/commit/9260e015276fb1b500f7878ee452b47476bf1583), [`2f6c54e`](https://github.com/mastra-ai/mastra/commit/2f6c54e17c041cac1def54baaa6b771647836414), [`e06a159`](https://github.com/mastra-ai/mastra/commit/e06a1598ca07a6c3778aefc2a2d288363c6294ff), [`db34bc6`](https://github.com/mastra-ai/mastra/commit/db34bc6fb36cf125bda0c46be4d3fdc774b70cc4), [`33767a0`](https://github.com/mastra-ai/mastra/commit/33767a0e3762beeb33dab03b1608b6d5f405fc94)]:
+  - @mastra/core@1.33.0-alpha.8
+  - @mastra/observability@1.12.0-alpha.2
+
+## 1.2.0-alpha.2
+
+### Minor Changes
+
+- Mastra Eval results are now forwarded to Datadog. ([#16185](https://github.com/mastra-ai/mastra/pull/16185))
+
+- Mapped `MODEL_INFERENCE` spans to Datadog's `llm` kind (with token usage and model/provider attached) and `MODEL_STEP` to `workflow`. Falls back to the previous mapping when paired with an older `@mastra/core` that does not emit `MODEL_INFERENCE`. ([#16363](https://github.com/mastra-ai/mastra/pull/16363))
+
+### Patch Changes
+
+- Updated dependencies [[`6742347`](https://github.com/mastra-ai/mastra/commit/6742347d71955d7639adc9ddf6ff8282de7ee3ba), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`62666c3`](https://github.com/mastra-ai/mastra/commit/62666c367eaeac3941ead454b1d38810cc855721), [`4af2160`](https://github.com/mastra-ai/mastra/commit/4af2160322f4718cac421930cce85641e9512389), [`b2fd6be`](https://github.com/mastra-ai/mastra/commit/b2fd6beef989f5e463c9a33d8a6c20ac1800e011), [`136c959`](https://github.com/mastra-ai/mastra/commit/136c9592fb0eeb0cd212f28629d8a29b7557a2fc), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`4df7cc7`](https://github.com/mastra-ai/mastra/commit/4df7cc79342fd065fe7fdeef93c094db14b12bcd), [`aca3121`](https://github.com/mastra-ai/mastra/commit/aca31211233dac25459f140ea4fcfb3a5af64c18), [`7b0ad1f`](https://github.com/mastra-ai/mastra/commit/7b0ad1f5c53dc118c6da12ae82ae2587037dc2b8), [`9cdf38e`](https://github.com/mastra-ai/mastra/commit/9cdf38e58506e1109c8b38f97cd7770978a4218e), [`990851e`](https://github.com/mastra-ai/mastra/commit/990851edcb0e30be5c2c18b6532f1a876cc2d335), [`6068a6c`](https://github.com/mastra-ai/mastra/commit/6068a6c42950fad3ebfc92346417896ba60803d2), [`00106be`](https://github.com/mastra-ai/mastra/commit/00106bede59b81e5b0e9cd6aad8d3b5dbc336387), [`e2a079c`](https://github.com/mastra-ai/mastra/commit/e2a079cc3755b1895f7bd5dc36e9be81b11c7c22), [`534a456`](https://github.com/mastra-ai/mastra/commit/534a456a25e4df1e5407e7e632f4cb3b1fa14f9d), [`36bae07`](https://github.com/mastra-ai/mastra/commit/36bae07c0e70b1b3006f2fd20830e8883dcbd066)]:
+  - @mastra/core@1.33.0-alpha.7
+  - @mastra/observability@1.12.0-alpha.1
+
+## 1.1.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`00ef282`](https://github.com/mastra-ai/mastra/commit/00ef2826034d006b984b3f19cd33ba0bba14d6c6)]:
+  - @mastra/observability@1.12.0-alpha.0
+
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Fixed double-encoded JSON on span input in Datadog. ([#16256](https://github.com/mastra-ai/mastra/pull/16256))
+
+- Updated dependencies [[`dccd8f1`](https://github.com/mastra-ai/mastra/commit/dccd8f1f8b8f1ad203b77556207e5529567c616d)]:
+  - @mastra/core@1.33.0-alpha.1
+
 ## 1.1.0
 
 ### Minor Changes

@@ -104,17 +104,22 @@ function cleanup(monorepoDir, resetChanges = false) {
 
 function stripWorkspaceTrustPolicy(monorepoDir) {
   const workspacePath = join(monorepoDir, 'pnpm-workspace.yaml');
-  const trustPolicySettings = ['blockExoticSubdeps', 'trustPolicy', 'trustPolicyIgnoreAfter'];
+  const localRegistryIncompatibleSettings = [
+    'blockExoticSubdeps',
+    'trustPolicy',
+    'trustPolicyIgnoreAfter',
+    'minimumReleaseAge',
+  ];
 
   try {
     const content = readFileSync(workspacePath, 'utf8');
     const nextContent = content
       .split('\n')
-      .filter(line => !trustPolicySettings.some(setting => line.startsWith(`${setting}:`)))
+      .filter(line => !localRegistryIncompatibleSettings.some(setting => line.startsWith(`${setting}:`)))
       .join('\n');
 
     if (nextContent !== content) {
-      console.log('Removing pnpm trust-policy settings for local registry tests');
+      console.log('Removing pnpm registry policy settings for local registry tests');
       writeFileSync(workspacePath, nextContent);
     }
   } catch (error) {
@@ -127,7 +132,7 @@ function stripWorkspaceTrustPolicy(monorepoDir) {
 /**
  *
  * @param {string} monorepoDir
- * @param {typeof import('globby').globby} glob
+ * @param {typeof import('tinyglobby').glob} glob
  * @param {string} tag
  * @returns
  */
@@ -153,6 +158,10 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
           ...process.env,
           ...gitIdentityEnv,
           HUSKY: '0',
+          GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'Mastra CI',
+          GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'ci@mastra.ai',
+          GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'Mastra CI',
+          GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'ci@mastra.ai',
         },
       });
       shelvedChanges = true;
