@@ -43,6 +43,7 @@ describe('lintProject', () => {
       join(tmpDir, 'package.json'),
       JSON.stringify({ name: 'test', dependencies: { '@mastra/core': '1.0.0' } }),
     );
+    writeFileSync(join(tmpDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { moduleResolution: 'bundler' } }));
 
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code})`);
@@ -69,6 +70,25 @@ describe('lintProject', () => {
     await expect(lintProject({ root: tmpDir })).resolves.toBeUndefined();
 
     expect(runBuildMock).not.toHaveBeenCalled();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('passes with zero issues when preflight finds no issues', async () => {
+    writeBundle(`export default {};`);
+    writeEnv('OTHER=value\n');
+
+    await expect(lintProject({ root: tmpDir, preflight: true, skipBuild: true })).resolves.toBeUndefined();
+
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('builds before preflight unless --skip-build is set, even when output exists', async () => {
+    writeBundle(`export default {};`);
+    writeEnv('OTHER=value\n');
+
+    await expect(lintProject({ root: tmpDir, preflight: true })).resolves.toBeUndefined();
+
+    expect(runBuildMock).toHaveBeenCalledWith(tmpDir, { debug: undefined });
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
@@ -103,6 +123,21 @@ describe('lintProject', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.warningCount).toBeGreaterThan(0);
     expect(parsed.issues[0]).toMatchObject({ code: 'MISSING_ENV_VAR', scope: 'bundle' });
+  });
+
+  it('exits 1 when no env file is resolvable for preflight', async () => {
+    writeBundle(`export default {};`);
+
+    await expect(lintProject({ root: tmpDir, preflight: true, skipBuild: true, json: true })).rejects.toThrow(
+      'process.exit(1)',
+    );
+
+    const calls = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    const jsonOutput = calls.find((c: string) => c.trim().startsWith('{'));
+    expect(jsonOutput).toBeDefined();
+    const parsed = JSON.parse(jsonOutput!);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toContain('No env file found');
   });
 
   it('emits project-phase issues as structured JSON', async () => {

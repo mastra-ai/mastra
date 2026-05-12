@@ -31,6 +31,7 @@ export const lintProject = async (args: {
         skipBuild: args.skipBuild,
         envFile: args.envFile,
         strict: args.strict,
+        json,
         debug: args.debug,
       });
 

@@ -18,6 +18,7 @@ export type LintIssueSeverity = 'error' | 'warning';
 
 export type LintIssueCode =
   | 'MISSING_MASTRA_CORE'
+  | 'MISSING_TSCONFIG'
   | 'INVALID_TSCONFIG'
   | 'NEXT_MISSING_SERVER_EXTERNAL_PACKAGES'
   | 'MISSING_ENV_VAR'

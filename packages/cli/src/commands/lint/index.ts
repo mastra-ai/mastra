@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { getDeployer } from '@mastra/deployer';
 import pc from 'picocolors';
@@ -32,6 +32,7 @@ export interface LintOptions {
   skipBuild?: boolean;
   envFile?: string;
   strict?: boolean;
+  json?: boolean;
   debug?: boolean;
 }
 
@@ -96,11 +97,7 @@ function createLintResult(issues: LintIssue[], error?: string): LintResult {
 
 export async function lint(options: LintOptions): Promise<LintResult> {
   const rootDir = options.root || process.cwd();
-  const mastraDir = options.dir
-    ? options.dir.startsWith('/')
-      ? options.dir
-      : join(rootDir, options.dir)
-    : join(rootDir, 'src', 'mastra');
+  const mastraDir = options.dir ? resolve(options.dir) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
 
   try {
@@ -139,14 +136,13 @@ export async function lint(options: LintOptions): Promise<LintResult> {
     const issues = [...projectIssues];
 
     if (options.preflight) {
-      const outputPath = join(rootDir, '.mastra', 'output');
-      if (!options.skipBuild && !existsSync(outputPath)) {
+      if (!options.skipBuild) {
         await runBuild(rootDir, { debug: options.debug });
       }
 
       const envVars = await readEnvVars(rootDir, {
         envFile: options.envFile,
-        autoAccept: true,
+        autoAccept: options.json ?? false,
       });
       const preflightIssues = await preflightBuildOutput(rootDir, envVars);
       issues.push(...preflightIssues.map(toLintIssue));

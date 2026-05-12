@@ -20,7 +20,15 @@ export const tsConfigRule: LintRule = {
   async run(context: LintContext): Promise<LintIssue[]> {
     const tsConfig = readTsConfig(context.rootDir);
     if (!tsConfig) {
-      return [];
+      return [
+        {
+          code: 'MISSING_TSCONFIG',
+          severity: 'warning',
+          scope: 'project',
+          message: 'No tsconfig.json found. Mastra projects should include a TypeScript config.',
+          fix: 'Add a tsconfig.json file. See https://mastra.ai/en/docs/getting-started/installation#initialize-typescript',
+        },
+      ];
     }
 
     const { module, moduleResolution } = tsConfig.compilerOptions || {};
