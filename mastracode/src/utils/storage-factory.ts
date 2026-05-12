@@ -25,7 +25,6 @@ function createFallbackLibSQL(): MastraCompositeStore {
   return new LibSQLStore({
     id: 'mastra-code-storage',
     url: `file:${getDatabasePath()}`,
-    autoInitDomains: ['memory'],
   });
 }
 
@@ -46,7 +45,6 @@ export async function createStorage(config: StorageConfig): Promise<StorageResul
       id: 'mastra-code-storage',
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
-      autoInitDomains: ['memory'],
     }),
     backend: 'libsql',
   };

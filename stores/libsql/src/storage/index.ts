@@ -81,11 +81,6 @@ export type LibSQLBaseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
-  /**
-   * Limits which domains are initialized by `init()`.
-   * When omitted, all domains are initialized.
-   */
-  autoInitDomains?: LibSQLStorageDomain[];
 };
 
 export type LibSQLConfig =
@@ -121,7 +116,6 @@ export class LibSQLStore extends MastraCompositeStore {
   private readonly initialBackoffMs: number;
   private readonly pragmasReady: Promise<void>;
   private readonly isLocalDb: boolean;
-  private readonly autoInitDomains?: ReadonlyArray<LibSQLStorageDomain>;
 
   stores: StorageDomains;
 
@@ -133,7 +127,6 @@ export class LibSQLStore extends MastraCompositeStore {
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
-    this.autoInitDomains = config.autoInitDomains;
 
     if ('url' in config) {
       // need to re-init every time for in memory dbs or the tables might not exist
@@ -220,27 +213,25 @@ export class LibSQLStore extends MastraCompositeStore {
   }
 
   private getDomainsToInit(): LibSQLStorageDomain[] {
-    return this.autoInitDomains
-      ? [...this.autoInitDomains]
-      : [
-          'memory',
-          'workflows',
-          'scores',
-          'observability',
-          'agents',
-          'datasets',
-          'experiments',
-          'promptBlocks',
-          'scorerDefinitions',
-          'mcpClients',
-          'mcpServers',
-          'workspaces',
-          'skills',
-          'blobs',
-          'backgroundTasks',
-          'schedules',
-          'channels',
-        ];
+    return [
+      'memory',
+      'workflows',
+      'scores',
+      'observability',
+      'agents',
+      'datasets',
+      'experiments',
+      'promptBlocks',
+      'scorerDefinitions',
+      'mcpClients',
+      'mcpServers',
+      'workspaces',
+      'skills',
+      'blobs',
+      'backgroundTasks',
+      'schedules',
+      'channels',
+    ];
   }
 
   private async initDomainsSequentially(): Promise<boolean> {

@@ -108,22 +108,6 @@ describe('LibSQLStore local performance initialization', () => {
     expect(executedSql).not.toContain('PRAGMA synchronous=OFF;');
   });
 
-  it('initializes only configured domains', async () => {
-    const { client, statements } = createMockClient();
-    mockCreateClient.mockReturnValueOnce(client as any);
-
-    const store = new LibSQLStore({
-      id: 'local-file-memory-only',
-      url: 'file:local-performance-memory-only.db',
-      autoInitDomains: ['memory'],
-    });
-    await store.init();
-
-    const executedSql = sqls(statements);
-    expect(executedSql.some(sql => /CREATE TABLE IF NOT EXISTS mastra_threads/i.test(sql))).toBe(true);
-    expect(executedSql.some(sql => /CREATE TABLE IF NOT EXISTS mastra_workflow_snapshot/i.test(sql))).toBe(false);
-  });
-
   it('creates message indexes for startup history reads', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);
@@ -131,7 +115,6 @@ describe('LibSQLStore local performance initialization', () => {
     const store = new LibSQLStore({
       id: 'local-file-message-indexes',
       url: 'file:local-performance-message-indexes.db',
-      autoInitDomains: ['memory'],
     });
     await store.init();
 
