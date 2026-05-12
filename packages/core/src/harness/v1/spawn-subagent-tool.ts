@@ -138,6 +138,13 @@ export function createSpawnSubagentTool(parent: Session) {
         subagentDepth: childDepth,
       });
 
+      // Workspace inheritance (§2.7 / §8). `'inherit'` (default) makes the
+      // child share the parent's workspace via a refcount on the same entry.
+      // `'fresh'` provisions a new per-session workspace; only valid under
+      // `kind: 'per-session'` (validated at harness construction).
+      const subagentWorkspaceMode = def.workspace ?? 'inherit';
+      child._subagentInheritWorkspace = subagentWorkspaceMode === 'inherit';
+
       // Bridge the child's per-turn events into the parent's subscriber
       // stream as `subagent_*`. `_emitSubagentEvent` stamps `parentId` and
       // `queuedItemId` automatically. Track inner tool names by call id so

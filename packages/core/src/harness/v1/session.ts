@@ -38,11 +38,12 @@ import type {
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 
 import { ASK_USER_TOOL_ID, SUBMIT_PLAN_TOOL_ID } from '../../tools/builtin';
+import type { Workspace } from '../../workspace';
 import { convertStoredMessageToHarnessMessage } from '../_shared/message-conversion';
 import type { StoredMessageRow } from '../_shared/message-conversion';
 import type { HarnessMessage } from '../types';
 
-import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError } from './errors';
+import { HarnessConfigError, HarnessQueueFullError, HarnessValidationError, HarnessWorkspaceLostError } from './errors';
 import { EventEmitter } from './events';
 import type {
   EmitInput,
@@ -306,6 +307,18 @@ export class Session {
    */
   private _flushChain: Promise<void> = Promise.resolve();
 
+  /** Cached workspace handle. Resolves lazily on first `getWorkspace()` call. */
+  private _workspace?: Workspace;
+  /** Dedup promise so concurrent `getWorkspace()` calls share one provision attempt. */
+  private _workspaceResolving?: Promise<Workspace>;
+  /**
+   * True when a non-resumable per-session workspace was found in storage on
+   * rehydrate. Set by `_publish` via {@link _markWorkspaceLost}. The first
+   * `getWorkspace()` call throws {@link HarnessWorkspaceLostError}; callers
+   * can drop the marker and reprovision by calling `clearWorkspaceLost()`.
+   */
+  private _workspaceLost = false;
+
   /** @internal — constructed by the Harness, not directly. */
   constructor(internals: SessionInternals) {
     this.id = internals.record.id;
@@ -545,6 +558,100 @@ export class Session {
   }
 
   // -------------------------------------------------------------------------
+  // Workspace — §2.7 / §4.2.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Resolve this session's workspace. Returns `undefined` when the harness
+   * has no workspace configured. Caches the result for the lifetime of the
+   * Session (the workspace is released on `close()` per the ownership model).
+   *
+   * Throws {@link HarnessWorkspaceLostError} when the session's
+   * `per-session` workspace was provisioned by a non-resumable provider
+   * and a process restart has dropped the underlying state. Callers can
+   * decide whether to surface the error or call `clearWorkspaceLost()` and
+   * try again with a fresh workspace.
+   */
+  async getWorkspace(): Promise<Workspace | undefined> {
+    this._assertLive('getWorkspace()');
+    if (this._workspace) return this._workspace;
+    if (this._workspaceResolving) return this._workspaceResolving;
+
+    const kind = this._harness._workspaceKind;
+    if (!kind) return undefined;
+
+    if (this._workspaceLost) {
+      throw new HarnessWorkspaceLostError(this.id, this._harness._workspaceRegistry.providerId ?? 'unknown');
+    }
+
+    const resolve = async (): Promise<Workspace> => {
+      if (kind === 'shared') {
+        return this._harness._workspaceRegistry.acquireShared();
+      }
+      if (kind === 'per-resource') {
+        return this._harness._workspaceRegistry.acquirePerResource({ resourceId: this.resourceId });
+      }
+      // kind === 'per-session'
+      // Subagent sessions with `workspace: 'inherit'` reuse the parent's entry.
+      // The spawn tool flips `_subagentFreshWorkspace` for the `fresh` case so
+      // we don't accidentally inherit when a fresh workspace is requested.
+      if (this.parentSessionId && this._subagentInheritWorkspace) {
+        return this._harness._workspaceRegistry.inheritPerSession({
+          parentSessionId: this.parentSessionId,
+          childSessionId: this.id,
+          resourceId: this.resourceId,
+        });
+      }
+      const storedProviderId = this._record.workspace?.providerId;
+      const storedState = this._record.workspace?.state;
+      return this._harness._workspaceRegistry.acquirePerSession({
+        resourceId: this.resourceId,
+        sessionId: this.id,
+        ...(this.parentSessionId ? { parentSessionId: this.parentSessionId } : {}),
+        ...(storedProviderId ? { storedProviderId } : {}),
+        ...(storedState !== undefined ? { storedState } : {}),
+        onStateUpdate: async state => {
+          await this._persistWorkspaceState(state);
+        },
+      });
+    };
+
+    this._workspaceResolving = resolve();
+    try {
+      this._workspace = await this._workspaceResolving;
+      return this._workspace;
+    } finally {
+      this._workspaceResolving = undefined;
+    }
+  }
+
+  /**
+   * @internal — used by the harness during hydration when the stored record
+   * carries workspace state but the configured provider is non-resumable.
+   */
+  _markWorkspaceLost(): void {
+    this._workspaceLost = true;
+  }
+
+  /**
+   * @internal — set by the spawn-subagent tool flow to indicate the child
+   * session should inherit its parent's workspace rather than provisioning
+   * a fresh one. `undefined` for top-level sessions; defaults to `true` for
+   * subagent sessions unless the spawn definition opts into `'fresh'`.
+   */
+  _subagentInheritWorkspace?: boolean;
+
+  /** @internal — writes the latest opaque workspace state into the session record. */
+  private async _persistWorkspaceState(state: unknown): Promise<void> {
+    const providerId = this._harness._workspaceRegistry.providerId;
+    if (!providerId) return;
+    await this._flushUpdate(record => ({
+      ...record,
+      workspace: { providerId, state },
+    }));
+  }
+
+  // -------------------------------------------------------------------------
   // message() — §4.2.
   //
   // Always-accept signal-driven entry point. Three return shapes:
@@ -589,7 +696,7 @@ export class Session {
     // both paths converge on a single signal handed to the agent.
     const turnAbortController = this._beginTurn(opts.abortSignal);
     const turnAbortSignal = turnAbortController.signal;
-    const requestContext = this._buildRequestContext({
+    const requestContext = await this._buildRequestContext({
       modeId: effectiveModeId,
       abortSignal: turnAbortSignal,
     });
@@ -1929,7 +2036,7 @@ export class Session {
     // Queued turns run under a session-owned AbortController so
     // `session.abort()` can cancel an in-flight queued run too.
     const turnAbortController = this._beginTurn(undefined);
-    const requestContext = this._buildRequestContext({
+    const requestContext = await this._buildRequestContext({
       modeId: effectiveModeId,
       abortSignal: turnAbortController.signal,
     });
@@ -2075,9 +2182,20 @@ export class Session {
    * of the session. Functional `setState` updates serialize through the
    * same `_flushUpdate` chain that backs `Session.setState`.
    */
-  private _buildRequestContext(turn: { modeId: string; abortSignal: AbortSignal }): RequestContext {
+  private async _buildRequestContext(turn: { modeId: string; abortSignal: AbortSignal }): Promise<RequestContext> {
     const session = this;
     const stateSnapshot = (this._record.state ?? {}) as unknown;
+    // Resolve the workspace eagerly so tools see a populated `ctx.workspace`
+    // without each tool re-awaiting. Errors here surface as the turn's
+    // failure; workspace_error is still emitted via the registry.
+    let workspace: Workspace | undefined;
+    try {
+      workspace = await this.getWorkspace();
+    } catch {
+      // Leave undefined — tools that need a workspace will get a null slot.
+      // The registry has already emitted workspace_error so subscribers know.
+      workspace = undefined;
+    }
     const harnessSlot: HarnessRequestContext<unknown> = {
       harnessId: this._harness.ownerId,
       sessionId: this.id,
@@ -2105,6 +2223,7 @@ export class Session {
       source: (this._record.subagentDepth ?? 0) > 0 ? 'subagent' : 'parent',
       parentSessionId: this._record.parentSessionId,
       getSubagentModel: () => null,
+      ...(workspace ? { workspace } : {}),
     };
     return new RequestContext([['harness', harnessSlot]]);
   }

@@ -13,9 +13,12 @@ import type { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
 import type { ToolsInput } from '../../agent/types';
 import type { Mastra } from '../../mastra';
+import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage/base';
 import type { HarnessStorage, SessionRecord as StoredSessionRecord } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
+import type { Workspace } from '../../workspace';
+import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
 
 // ---------------------------------------------------------------------------
 // HarnessMode (§4.2).
@@ -235,11 +238,53 @@ export interface HarnessConfigCommon {
     defaultMaxTurns?: number;
   };
 
-  // Remaining fields (workspace, skills, files, intervals,
-  // observationalMemory) land here as we wire them up.
+  /**
+   * Workspace configuration (§2.7). Selects one of three ownership models —
+   * `shared` (one workspace for the whole harness), `per-resource` (one per
+   * `resourceId`, refcounted across that user's sessions), or `per-session`
+   * (one per session, persisted in `SessionRecord.workspace`).
+   *
+   * `shared` accepts either a pre-built `Workspace` or a factory matching the
+   * legacy harness signature `({ requestContext }) => Workspace`. `per-resource`
+   * accepts the factory shorthand or a full `WorkspaceProvider`. `per-session`
+   * requires the full `WorkspaceProvider` shape with `resumable: true` —
+   * factory shorthands resolve to non-resumable providers and are rejected
+   * at startup with `HarnessConfigError`.
+   *
+   * Provisioning is lazy by default; pass `eager: true` to provision on
+   * `init()` / session create.
+   */
+  workspace?: HarnessWorkspaceConfig;
+
+  // Remaining fields (skills, files, intervals, observationalMemory) land here
+  // as we wire them up.
 
   [key: string]: unknown;
 }
+
+/**
+ * Discriminated union of workspace configurations (§2.7).
+ *
+ * - `shared`: one workspace for every session.
+ * - `per-resource`: one workspace per resource, refcounted.
+ * - `per-session`: one workspace per session, persisted across restarts.
+ */
+export type HarnessWorkspaceConfig =
+  | {
+      kind: 'shared';
+      workspace: Workspace | ((ctx: { requestContext: RequestContext }) => Workspace | Promise<Workspace>);
+      eager?: boolean;
+    }
+  | {
+      kind: 'per-resource';
+      provider: WorkspaceProvider | ((ctx: WorkspaceProviderContext) => Workspace | Promise<Workspace>);
+      eager?: boolean;
+    }
+  | {
+      kind: 'per-session';
+      provider: WorkspaceProvider;
+      eager?: boolean;
+    };
 
 /**
  * Subagent definition (§9). Declares one entry in
@@ -714,10 +759,11 @@ export interface HarnessRequestContext<TState = unknown> {
   getSubagentModel: (params?: { agentType?: string }) => string | null;
 
   /**
-   * Workspace handle. Only present when the harness is configured with a
-   * workspace. Tools should null-check before use.
+   * Workspace handle (§6.1). Only present when the harness is configured
+   * with a workspace and the session has resolved (or can lazily resolve)
+   * one. Tools should null-check before use.
    */
-  workspace?: unknown;
+  workspace?: Workspace;
 }
 
 // ---------------------------------------------------------------------------

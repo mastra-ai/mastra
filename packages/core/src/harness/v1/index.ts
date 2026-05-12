@@ -41,6 +41,8 @@ export type {
   ToolEndEvent,
   ToolStartEvent,
   ToolUpdateEvent,
+  WorkspaceErrorEvent,
+  WorkspaceStatusChangedEvent,
 } from './events';
 
 export {
@@ -53,7 +55,14 @@ export {
   HarnessSubagentDepthExceededError,
   HarnessThreadNotFoundError,
   HarnessValidationError,
+  HarnessWorkspaceInUseError,
+  HarnessWorkspaceLostError,
+  HarnessWorkspaceProviderMismatchError,
+  HarnessWorkspaceProvisioningError,
 } from './errors';
+
+export { nonDurableProvider } from './workspace-provider';
+export type { WorkspaceOwnershipKind, WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
 
 /**
  * `HarnessMessage` and `HarnessMessageContent` are stable cross-version
@@ -77,6 +86,7 @@ export type {
   GoalOptions,
   HarnessConfig,
   HarnessMode,
+  HarnessWorkspaceConfig,
   ListMessagesOptions,
   SessionListOptions,
   SessionLoadByIdOptions,

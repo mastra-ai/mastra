@@ -24,6 +24,10 @@ export interface HarnessTestSetupOptions {
   sessions?: HarnessConfig['sessions'];
   /** Optional goal-loop defaults. */
   goals?: HarnessConfig['goals'];
+  /** Optional workspace config (§2.7). */
+  workspace?: HarnessConfig['workspace'];
+  /** Optional subagent registry. */
+  subagents?: HarnessConfig['subagents'];
 }
 
 export interface HarnessTestSetup {
@@ -48,6 +52,8 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     defaultModeId: opts.defaultModeId ?? modes[0]!.id,
     sessions: { storage, ...(opts.sessions ?? {}) },
     ...(opts.goals ? { goals: opts.goals } : {}),
+    ...(opts.workspace ? { workspace: opts.workspace } : {}),
+    ...(opts.subagents ? { subagents: opts.subagents } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;
   return { harness, agent: firstAgent, agents, storage };

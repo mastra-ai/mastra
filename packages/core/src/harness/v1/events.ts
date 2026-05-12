@@ -436,6 +436,32 @@ export interface GoalClearedEvent extends HarnessEventBase {
   goalId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Workspace events (§2.7 / §10.2).
+//
+// Emitted when a workspace transitions through lifecycle states (initial
+// resolve, ready, destroying, destroyed) and when the provider's
+// create/resume hook throws. `sessionId` and `resourceId` are populated
+// for `per-session` / `per-resource` ownership; `shared` workspaces emit
+// at the harness level with both fields absent.
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceStatusChangedEvent extends HarnessEventBase {
+  type: 'workspace_status_changed';
+  sessionId?: string;
+  resourceId?: string;
+  providerId?: string;
+  status: 'initializing' | 'ready' | 'destroying' | 'destroyed' | 'lost' | 'error';
+}
+
+export interface WorkspaceErrorEvent extends HarnessEventBase {
+  type: 'workspace_error';
+  sessionId?: string;
+  resourceId?: string;
+  providerId?: string;
+  error: { name: string; message: string };
+}
+
 export type HarnessEvent =
   | SessionCreatedEvent
   | SessionClosedEvent
@@ -475,6 +501,8 @@ export type HarnessEvent =
   | GoalPausedEvent
   | GoalResumedEvent
   | GoalClearedEvent
+  | WorkspaceStatusChangedEvent
+  | WorkspaceErrorEvent
   | CustomEvent;
 
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;

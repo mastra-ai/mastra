@@ -33,6 +33,8 @@ import {
 } from '../../storage/domains/harness';
 
 import { InMemoryStore } from '../../storage/mock';
+import type { Workspace } from '../../workspace';
+
 import {
   HarnessConfigError,
   HarnessSessionClosedError,
@@ -40,6 +42,7 @@ import {
   HarnessSessionNotFoundError,
   HarnessStorageError,
   HarnessThreadNotFoundError,
+  HarnessWorkspaceProviderMismatchError,
 } from './errors';
 import { EventEmitter } from './events';
 import type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from './events';
@@ -65,6 +68,7 @@ import type {
   ThreadRenameOptions,
   ThreadSelectOrCreateOptions,
 } from './types';
+import { WorkspaceRegistry } from './workspace-registry';
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
@@ -98,6 +102,10 @@ export class Harness {
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
+  /** Workspace registry — owns lifecycle across `shared`/`per-resource`/`per-session`. */
+  readonly _workspaceRegistry: WorkspaceRegistry;
+  /** Snapshot of the workspace kind for fast read paths. `undefined` when not configured. */
+  readonly _workspaceKind?: 'shared' | 'per-resource' | 'per-session';
 
   private _shutdown = false;
 
@@ -142,6 +150,36 @@ export class Harness {
       ...(goalsCfg?.defaultJudgeModel !== undefined ? { defaultJudgeModel: goalsCfg.defaultJudgeModel } : {}),
       defaultMaxTurns: goalsCfg?.defaultMaxTurns ?? DEFAULT_GOAL_MAX_TURNS,
     };
+
+    // Workspace (§2.7). Three ownership models; registry handles lifecycle.
+    // Cross-checks against the subagent registry happen below.
+    this._workspaceKind = config.workspace?.kind;
+    this._workspaceRegistry = new WorkspaceRegistry({
+      config: config.workspace,
+      emitter: this._emitter,
+    });
+
+    // Eager provisioning for `kind: 'shared'`. Per-resource and per-session
+    // are eagerly provisioned at session creation when `eager: true`
+    // (handled in Session._resolve / Session._construct).
+    if (config.workspace?.kind === 'shared' && config.workspace.eager) {
+      void this._workspaceRegistry.acquireShared().catch(() => {
+        // Errors surface through the workspace_error event; swallow here.
+      });
+    }
+
+    // Subagent `workspace: 'fresh'` is only valid under `per-session`. Validate
+    // at config time so misconfigurations don't reach the runtime spawn path.
+    if (this._workspaceKind !== 'per-session') {
+      for (const [agentType, def] of subagentTypes) {
+        if (def.workspace === 'fresh') {
+          throw new HarnessConfigError(
+            `subagents.types["${agentType}"].workspace`,
+            `"fresh" requires harness workspace kind "per-session" (current: "${this._workspaceKind ?? 'unconfigured'}")`,
+          );
+        }
+      }
+    }
 
     // Validate mode shape (uniqueness, tools/additionalTools mutual
     // exclusion, transitionsTo resolution) up front. Agent-existence
@@ -296,6 +334,40 @@ export class Harness {
   /** @internal — listener count for tests. */
   _internalListenerCount(): number {
     return this._emitter.listenerCount;
+  }
+
+  // -------------------------------------------------------------------------
+  // Workspace — §2.7 / §4.1.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Returns the shared workspace when the harness is configured with
+   * `kind: 'shared'`. For `per-resource` and `per-session`, returns
+   * `undefined` — those models don't have a meaningful harness-level
+   * workspace. Tools should always go through `session.getWorkspace()`.
+   *
+   * The shared workspace materialises lazily on first call (or eagerly
+   * during `init()` when `eager: true`).
+   */
+  async getWorkspace(): Promise<Workspace | undefined> {
+    if (this._workspaceKind !== 'shared') return undefined;
+    return this._workspaceRegistry.acquireShared();
+  }
+
+  /**
+   * Tear down the workspace bound to a given resource. Only valid under
+   * `kind: 'per-resource'`. Throws `HarnessWorkspaceInUseError` if any
+   * sessions are still holding the workspace; callers are expected to
+   * close them first.
+   */
+  async destroyResourceWorkspace(opts: { resourceId: string }): Promise<void> {
+    if (this._workspaceKind !== 'per-resource') {
+      throw new HarnessConfigError(
+        'workspace.kind',
+        `destroyResourceWorkspace requires kind: "per-resource" (current: "${this._workspaceKind ?? 'unconfigured'}")`,
+      );
+    }
+    await this._workspaceRegistry.destroyResourceWorkspace(opts);
   }
 
   /** @internal — emit a harness-level event. Used by tests and helpers. */
@@ -619,6 +691,23 @@ export class Harness {
   }
 
   private _publish(storage: HarnessStorage, record: SessionRecord): Session {
+    // Workspace provider validation (§2.7). If the stored record carries a
+    // workspace state blob, the configured provider must match. Mismatch is
+    // a hard error — refuse to hand the record to the wrong implementation.
+    // Non-resumable providers can never restore from stored state; flag the
+    // session as "lost" so the first getWorkspace() call surfaces the error.
+    let workspaceLost = false;
+    if (record.workspace?.providerId && this._workspaceKind === 'per-session') {
+      const configured = this._workspaceRegistry.providerId;
+      if (configured && configured !== record.workspace.providerId) {
+        throw new HarnessWorkspaceProviderMismatchError(record.id, configured, record.workspace.providerId);
+      }
+      if (!this._workspaceRegistry.resumable) {
+        // Provider can't resume — first getWorkspace() throws HarnessWorkspaceLostError.
+        workspaceLost = true;
+      }
+    }
+
     const session = new Session({
       harness: this,
       storage,
@@ -626,6 +715,7 @@ export class Harness {
       record,
       leaseExpiresAt: record.leaseExpiresAt ?? Date.now() + this._leaseTtlMs,
     });
+    if (workspaceLost) session._markWorkspaceLost();
     this._liveSessions.set(record.id, session);
 
     // Bridge the session's events onto the harness-level emitter so a single
@@ -751,6 +841,18 @@ export class Harness {
       // will TTL out either way.
     }
 
+    // Release the session's workspace under the configured ownership model.
+    // `shared` is owned by the harness; nothing to release here.
+    try {
+      if (this._workspaceKind === 'per-session') {
+        await this._workspaceRegistry.releasePerSession({ sessionId: session.id });
+      } else if (this._workspaceKind === 'per-resource') {
+        await this._workspaceRegistry.releasePerResource({ resourceId: record.resourceId });
+      }
+    } catch {
+      // Best-effort — registry surfaces errors via workspace_error events.
+    }
+
     session._markClosed(closed);
 
     // Emit session_closed BEFORE we tear down the per-session bridge so
@@ -834,6 +936,13 @@ export class Harness {
       }
     }
     this._liveSessions.clear();
+
+    // Tear down every provisioned workspace (shared + per-resource + per-session).
+    try {
+      await this._workspaceRegistry.shutdown();
+    } catch {
+      // Best-effort: errors surface through the workspace_error event.
+    }
   }
 
   // -------------------------------------------------------------------------

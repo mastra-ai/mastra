@@ -179,3 +179,73 @@ export class HarnessEventSerializationError extends Error {
     );
   }
 }
+
+/**
+ * Stored `SessionRecord.workspace.providerId` does not match the harness's
+ * configured workspace provider. Common when redeploying with a different
+ * provider. The harness refuses to rehydrate the record rather than hand it
+ * to the wrong implementation. See §2.7.
+ */
+export class HarnessWorkspaceProviderMismatchError extends Error {
+  readonly name = 'HarnessWorkspaceProviderMismatchError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly expectedProviderId: string,
+    public readonly storedProviderId: string,
+  ) {
+    super(
+      `Workspace provider mismatch for session "${sessionId}": stored "${storedProviderId}", configured "${expectedProviderId}"`,
+    );
+  }
+}
+
+/**
+ * A `per-session` workspace backed by a non-resumable provider could not be
+ * recovered after a process restart. The next tool call provisions a fresh
+ * workspace; pending tool calls captured by the previous process are
+ * surfaced with this error so callers can decide what to do. See §2.7.
+ */
+export class HarnessWorkspaceLostError extends Error {
+  readonly name = 'HarnessWorkspaceLostError';
+  constructor(
+    public readonly sessionId: string,
+    public readonly providerId: string,
+    public readonly reason: 'non-resumable-restart' | 'missing-state' = 'non-resumable-restart',
+  ) {
+    super(`Workspace for session "${sessionId}" (provider "${providerId}") was lost: ${reason}`);
+  }
+}
+
+/**
+ * `provider.create` / `provider.resume` threw. Wraps the underlying cause and
+ * marks the failure with the originating session/resource ids.
+ */
+export class HarnessWorkspaceProvisioningError extends Error {
+  readonly name = 'HarnessWorkspaceProvisioningError';
+  constructor(
+    public readonly providerId: string,
+    public readonly cause: unknown,
+    public readonly sessionId?: string,
+    public readonly resourceId?: string,
+  ) {
+    super(
+      `Failed to provision workspace via provider "${providerId}": ` +
+        (cause instanceof Error ? cause.message : String(cause)),
+    );
+  }
+}
+
+/**
+ * `harness.destroyResourceWorkspace({ resourceId })` was called while sessions
+ * still hold the workspace (refcount > 0). Callers are expected to close those
+ * sessions first.
+ */
+export class HarnessWorkspaceInUseError extends Error {
+  readonly name = 'HarnessWorkspaceInUseError';
+  constructor(
+    public readonly resourceId: string,
+    public readonly refCount: number,
+  ) {
+    super(`Workspace for resource "${resourceId}" is in use (refCount: ${refCount})`);
+  }
+}
