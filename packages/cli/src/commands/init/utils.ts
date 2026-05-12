@@ -479,7 +479,7 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';` : ''}
@@ -505,8 +505,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -609,6 +609,42 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
   await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
 };
+
+/**
+ * Append Mastra Observability credentials to the project's `.env` file.
+ *
+ * The generated `src/mastra/index.ts` template already registers a
+ * `MastraPlatformExporter` which no-ops unless `MASTRA_PLATFORM_ACCESS_TOKEN`
+ * is set, so enabling Observability is a pure env-var concern from the
+ * scaffolder's side.
+ *
+ * When called with no token, writes empty placeholders so the user can paste
+ * a key minted manually from the dashboard.
+ */
+export const writeObservabilityEnv = async ({
+  token,
+  projectId,
+  endpoint,
+}: { token?: string; projectId?: string; endpoint?: string } = {}) => {
+  const envFilePath = path.join(process.cwd(), '.env');
+  const lines = [
+    '',
+    '# Mastra Observability — https://projects.mastra.ai',
+    '# Access token and project id wired up automatically when you ran',
+    '# `mastra init` / `create-mastra` with Observability enabled.',
+    `MASTRA_PLATFORM_ACCESS_TOKEN=${token ?? ''}`,
+    `MASTRA_PROJECT_ID=${projectId ?? ''}`,
+  ];
+  // Only emit the traces endpoint when caller provided one (e.g. local dev or
+  // staging). In production the MastraPlatformExporter falls back to its
+  // built-in https://observability.mastra.ai default and per-project URLs are
+  // derived from MASTRA_PROJECT_ID.
+  if (endpoint) {
+    lines.push(`MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=${endpoint}`);
+  }
+  lines.push('');
+  await fs.appendFile(envFilePath, lines.join('\n'));
+};
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
     .trim()
@@ -661,6 +697,7 @@ interface InteractivePromptArgs {
     gitInit?: boolean;
     skills?: boolean;
     mcpServer?: boolean;
+    observability?: boolean;
   };
 }
 
@@ -711,6 +748,21 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           });
         }
         return undefined;
+      },
+      observability: async () => {
+        if (skip?.observability) return undefined;
+
+        const choice = await p.select({
+          message: 'Enable Mastra Observability? (will open auth flow)',
+          options: [
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
+          ],
+          initialValue: 'yes',
+        });
+
+        if (p.isCancel(choice)) return undefined;
+        return choice === 'yes';
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
@@ -931,6 +983,20 @@ export const checkForPkgJson = async () => {
     );
 
     process.exit(1);
+  }
+};
+
+/**
+ * Read the `name` field from the project's `package.json`, returning `undefined`
+ * if the file is missing or unparseable.
+ */
+export const readPackageName = async (): Promise<string | undefined> => {
+  try {
+    const raw = await fs.readFile(path.join(process.cwd(), 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { name?: unknown };
+    return typeof parsed.name === 'string' && parsed.name.trim().length > 0 ? parsed.name : undefined;
+  } catch {
+    return undefined;
   }
 };
 

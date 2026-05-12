@@ -150,7 +150,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             resumeSteps: params.resume.steps,
             prevResult: { status: 'success', output: prevResult?.payload },
             resumeData: params.resume.resumePayload,
-            requestContext: Object.fromEntries(params.requestContext.entries()),
+            requestContext: params.requestContext.toJSON(),
             format: params.format,
             perStep: params.perStep,
             initialState: resumeState,
@@ -172,7 +172,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             stepResults: params.timeTravel.stepResults,
             timeTravel: params.timeTravel,
             prevResult: { status: 'success', output: prevResult?.payload },
-            requestContext: Object.fromEntries(params.requestContext.entries()),
+            requestContext: params.requestContext.toJSON(),
             format: params.format,
             perStep: params.perStep,
           },
@@ -185,7 +185,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             workflowId: params.workflowId,
             runId: params.runId,
             prevResult: { status: 'success', output: params.input },
-            requestContext: Object.fromEntries(params.requestContext.entries()),
+            requestContext: params.requestContext.toJSON(),
             format: params.format,
             perStep: params.perStep,
             initialState: params.initialState,
@@ -209,10 +209,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Strip __state from stepResults at top level
     const { __state: _removedState, ...stepResultsWithoutTopLevelState } = resultData.stepResults ?? {};
 
-    // Recursively clean each step result to remove internal properties (__state, nestedRunId)
-    // This handles both object and array step results (e.g., forEach outputs)
+    // Recursively clean each step result to remove internal properties (__state, nestedRunId).
+    // This handles both object and array step results (e.g., forEach outputs).
+    // `skipped` entries are internal bookkeeping for un-taken conditional branches (used to
+    // know when every branch has reported in) — the default engine never surfaces them, so
+    // they're dropped from the user-facing step results too.
     const cleanStepResults: Record<string, any> = {};
     for (const [stepId, stepResult] of Object.entries(stepResultsWithoutTopLevelState)) {
+      if ((stepResult as any)?.status === 'skipped') {
+        continue;
+      }
       cleanStepResults[stepId] = cleanStepResult(stepResult);
     }
 

@@ -40,7 +40,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
             <PanelSeparator />
           </>
         )}
-        <Panel id="main-slot" className="grid overflow-y-auto relative bg-surface1 py-4">
+        <Panel id="main-slot" className="grid overflow-y-auto relative bg-surface1">
           {children}
         </Panel>
         {rightSlot && (

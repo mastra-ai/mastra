@@ -3,20 +3,18 @@
  */
 import { PassThrough } from 'node:stream';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
-import type { Mastra } from '@mastra/core/mastra';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Mastra } from '@mastra/core/mastra';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from './index';
 
-class TestServerAdapter extends MastraServer<Record<string, never>, unknown, unknown> {
-  async stream() {}
-  async getParams() {
-    return { urlParams: {}, queryParams: {}, body: undefined };
-  }
-  async sendResponse() {}
-  async registerRoute() {}
-  registerContextMiddleware() {}
-  registerAuthMiddleware() {}
-  registerHttpLoggingMiddleware() {}
+class TestMastraServer extends MastraServer<any, any, any> {
+  stream = vi.fn();
+  getParams = vi.fn();
+  sendResponse = vi.fn();
+  registerRoute = vi.fn();
+  registerContextMiddleware = vi.fn();
+  registerAuthMiddleware = vi.fn();
+  registerHttpLoggingMiddleware = vi.fn();
 
   // Exposes the protected bridge for focused unit coverage.
   async writeResponse(response: Response, nodeRes: any, signal?: AbortSignal) {
@@ -25,7 +23,7 @@ class TestServerAdapter extends MastraServer<Record<string, never>, unknown, unk
 }
 
 function createTestAdapter() {
-  return new TestServerAdapter({
+  return new TestMastraServer({
     app: {},
     mastra: {
       getServer: () => undefined,
@@ -341,5 +339,80 @@ describe('custom route response bridge', () => {
         controller.signal,
       ),
     ).rejects.toBe(upstreamError);
+  });
+});
+
+describe('EE license validation', () => {
+  let originalNodeEnv: string | undefined;
+  let originalMastraDev: string | undefined;
+  let originalLicense: string | undefined;
+
+  beforeEach(() => {
+    originalNodeEnv = process.env['NODE_ENV'];
+    originalMastraDev = process.env['MASTRA_DEV'];
+    originalLicense = process.env['MASTRA_EE_LICENSE'];
+    delete process.env['MASTRA_DEV'];
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    if (originalNodeEnv !== undefined) process.env['NODE_ENV'] = originalNodeEnv;
+    else delete process.env['NODE_ENV'];
+    if (originalMastraDev !== undefined) process.env['MASTRA_DEV'] = originalMastraDev;
+    else delete process.env['MASTRA_DEV'];
+    if (originalLicense !== undefined) process.env['MASTRA_EE_LICENSE'] = originalLicense;
+    else delete process.env['MASTRA_EE_LICENSE'];
+    vi.resetModules();
+  });
+
+  it('should reject FGA in production without a valid EE license', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['MASTRA_EE_LICENSE'];
+
+    const mastra = new Mastra({
+      server: {
+        fga: createMockFGAProvider(),
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateEELicense()).rejects.toThrow('FGA is configured but no valid EE license was found');
+  });
+
+  it('should allow FGA in production with a valid EE license', async () => {
+    process.env['NODE_ENV'] = 'production';
+    process.env['MASTRA_EE_LICENSE'] = 'a'.repeat(32);
+
+    const mastra = new Mastra({
+      server: {
+        fga: createMockFGAProvider(),
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateEELicense()).resolves.toBeUndefined();
+  });
+
+  it('should mention both configured EE authorization features when both are unlicensed', async () => {
+    process.env['NODE_ENV'] = 'production';
+    delete process.env['MASTRA_EE_LICENSE'];
+
+    const mastra = new Mastra({
+      server: {
+        rbac: {
+          getRoles: vi.fn(),
+          getPermissions: vi.fn(),
+          hasPermission: vi.fn(),
+          hasAllPermissions: vi.fn(),
+          hasAnyPermission: vi.fn(),
+        },
+        fga: createMockFGAProvider(),
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateEELicense()).rejects.toThrow(
+      'RBAC and FGA are configured but no valid EE license was found',
+    );
   });
 });

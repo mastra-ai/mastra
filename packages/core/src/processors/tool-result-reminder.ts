@@ -2,8 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
-import type { DataChunkType } from '../stream/types';
+import { signalToXmlMarkup } from '../agent/signals';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
@@ -19,16 +18,6 @@ type ReminderMetadataValue = {
 type ReminderMessageMetadata = {
   systemReminder?: ReminderMetadataValue;
   dynamicAgentsMdReminder?: ReminderMetadataValue;
-};
-
-type SystemReminderChunk = DataChunkType & {
-  type: 'data-system-reminder';
-  data: {
-    message: string;
-    reminderType: string;
-    path: string;
-  };
-  transient: true;
 };
 
 type TextPartLike = {
@@ -99,14 +88,6 @@ function findInstructionFileForPath(
   return undefined;
 }
 
-function escapeXml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-}
-
-function escapeXmlAttribute(value: string): string {
-  return escapeXml(value).replaceAll('"', '&quot;');
-}
-
 function getMessageText(message: MastraDBMessage): string {
   const parts = isRecord(message.content) ? message.content.parts : undefined;
   if (!Array.isArray(parts)) {
@@ -162,32 +143,19 @@ function extractReminderPathFromMetadata(message: MastraDBMessage): string | und
     ? metadata.systemReminder
     : isRecord(metadata[LEGACY_REMINDER_METADATA_KEY])
       ? metadata[LEGACY_REMINDER_METADATA_KEY]
-      : undefined;
-
-  if (!reminderMetadata) {
-    return undefined;
-  }
+      : isRecord(metadata.signal) && isRecord(metadata.signal.attributes)
+        ? metadata.signal.attributes
+        : metadata;
 
   return typeof reminderMetadata.path === 'string' ? reminderMetadata.path : undefined;
 }
 
-function createReminderMessage(reminderMarkup: string, instructionPath: string): MastraDBMessage {
-  const content: MastraMessageContentV2 = {
-    format: 2,
-    parts: [{ type: 'text', text: reminderMarkup }],
-    metadata: getReminderMetadata(instructionPath),
-  };
-
-  return {
-    id: crypto.randomUUID(),
-    role: 'user',
-    content,
-    createdAt: new Date(),
-  };
-}
-
 function getReminderMarkup(reminderText: string, instructionPath: string): string {
-  return `<system-reminder type="${REMINDER_TYPE}" path="${escapeXmlAttribute(instructionPath)}">${escapeXml(reminderText)}</system-reminder>`;
+  return signalToXmlMarkup({
+    type: 'system-reminder',
+    contents: reminderText,
+    attributes: { type: REMINDER_TYPE, path: instructionPath },
+  });
 }
 
 function truncateToTokenLimit(content: string, maxTokens: number): string {
@@ -292,7 +260,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, rotateResponseMessageId } = args;
+    const { messageList } = args;
     const messages = messageList.get.all.db();
     const currentStepResponseMessages = getCurrentStepResponseMessages(messageList);
     const completedToolCalls = getCompletedToolCalls(currentStepResponseMessages);
@@ -312,21 +280,13 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       return messageList;
     }
 
-    if (args.writer) {
-      const chunk: SystemReminderChunk = {
-        type: 'data-system-reminder',
-        data: {
-          message: reminderText,
-          reminderType: REMINDER_TYPE,
-          path: instructionPath,
-        },
-        transient: true,
-      };
-      await args.writer.custom(chunk);
-    }
+    await args.sendSignal?.({
+      type: 'system-reminder',
+      contents: reminderText,
+      attributes: { type: REMINDER_TYPE, path: instructionPath },
+      metadata: getReminderMetadata(instructionPath).systemReminder,
+    });
 
-    messageList.add(createReminderMessage(reminderMarkup, instructionPath), 'user');
-    rotateResponseMessageId?.();
     return messageList;
   }
 
@@ -393,7 +353,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     const reminderPath = extractReminderPath(reminderMarkup);
 
     return messages.some(message => {
-      if (message.role !== 'user') {
+      if (message.role !== 'user' && message.role !== 'signal') {
         return false;
       }
 

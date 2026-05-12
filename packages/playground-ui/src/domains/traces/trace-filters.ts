@@ -35,6 +35,9 @@ export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
 export const TRACE_LIST_MODE_PARAM = 'listMode';
+/** Branch-mode only: identifies the anchor span that defines the displayed subtree.
+ *  Stable across intra-panel span navigation (which only changes `spanId`). */
+export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
 export const TRACE_LIST_MODE_VALUES = new Set(['traces', 'branches'] as const);
 export type TraceListMode = 'traces' | 'branches';
 export const TRACE_DATE_PRESET_PARAM = 'datePreset';

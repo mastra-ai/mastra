@@ -208,6 +208,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/databricks',
+          label: 'Databricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
         },
@@ -230,6 +235,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/fastrouter',
           label: 'FastRouter',
+        },
+        {
+          type: 'doc',
+          id: 'providers/firepass',
+          label: 'Fireworks (Firepass)',
         },
         {
           type: 'doc',
@@ -305,11 +315,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
-        },
-        {
-          type: 'doc',
-          id: 'providers/kiro',
-          label: 'Kiro',
         },
         {
           type: 'doc',
@@ -485,6 +490,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
         },
         {
           type: 'doc',

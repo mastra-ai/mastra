@@ -47,7 +47,7 @@ You can control which log levels reach observability storage independently from 
 ```typescript {12-15} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { PinoLogger } from '@mastra/loggers'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   logger: new PinoLogger({ name: 'Mastra', level: 'debug' }),
@@ -55,7 +55,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-app',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
         logging: {
           enabled: true, // set to false to disable log forwarding
           level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'

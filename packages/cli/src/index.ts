@@ -17,6 +17,7 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { verifyProject } from './commands/actions/verify-project';
 import { registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
@@ -34,6 +35,9 @@ import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+import { buildWorker } from './commands/worker/build';
+import { devWorker } from './commands/worker/dev';
+import { startWorker } from './commands/worker/start';
 
 function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
   return (...args: any[]) => {
@@ -101,6 +105,12 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(createProject);
 
 program
@@ -121,6 +131,12 @@ program
     '-m, --mcp <editor>',
     'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
     parseMcp,
+  )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
   )
   .action(initProject);
 
@@ -169,6 +185,66 @@ program
   .action(buildProject);
 
 program
+  .command('verify')
+  .description('Validate that your Mastra project is ready to deploy (no upload)')
+  .option('-d, --dir <path>', 'Path to your Mastra project directory')
+  .option('--env-file <file>', 'Env file to validate against (for example: .env.production)')
+  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--strict', 'Treat warnings as errors (exit 1 on any issue)')
+  .option('--json', 'Emit machine-readable JSON output (for CI)')
+  .option('--debug', 'Enable debug logs', false)
+  .action(wrapAction(verifyProject));
+
+const workerCommand = program.command('worker').description('Build and run standalone Mastra worker bundles');
+
+workerCommand
+  .command('build')
+  .description('Bundle a worker artifact (defaults to .mastra/output/index.mjs)')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option(
+    '-o, --output-dir <path>',
+    'Output directory for the worker bundle. Defaults to .mastra/output (overwrites the server bundle if both are built in the same project — fine for split deploys). Pass a different path (relative or absolute) to redirect the worker bundle and leave the server bundle alone.',
+  )
+  .option('--debug', 'Enable debug logs', false)
+  .action((opts: { dir?: string; root?: string; tools?: string; outputDir?: string; debug: boolean }) => {
+    return buildWorker(opts);
+  });
+
+workerCommand
+  .command('start [name]')
+  .description(
+    'Start the built worker (defaults to .mastra/output/index.mjs). [name] sets MASTRA_WORKERS for the spawned process.',
+  )
+  .option('-d, --dir <path>', 'Path to your built worker output directory (default: .mastra/output)')
+  .option('-e, --env <env>', 'Custom env file to load')
+  .action((name: string | undefined, opts: { dir?: string; env?: string }) => {
+    return startWorker({ name, ...opts });
+  });
+
+workerCommand
+  .command('dev [name]')
+  .description('Build and start a worker in one step. [name] sets MASTRA_WORKERS for the spawned process.')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option(
+    '-o, --output-dir <path>',
+    'Output directory for the worker bundle. Defaults to .mastra/output. Pass a different path to keep server and worker bundles side by side.',
+  )
+  .option('-e, --env <env>', 'Custom env file to load')
+  .option('--debug', 'Enable debug logs', false)
+  .action(
+    (
+      name: string | undefined,
+      opts: { dir?: string; root?: string; tools?: string; outputDir?: string; env?: string; debug: boolean },
+    ) => {
+      return devWorker({ name, ...opts });
+    },
+  );
+
+program
   .command('start')
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
@@ -200,6 +276,7 @@ const deployCommand = studioCommand
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(deployAction));
 
@@ -285,6 +362,7 @@ const serverDeployCommand = serverCommand
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and deploy the existing .mastra/output directory')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(serverDeployAction));
 

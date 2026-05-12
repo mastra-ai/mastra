@@ -241,6 +241,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
 
       const requestContext = server.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      server.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => ctx.get(name),
+      });
 
       // Set context in state object
       ctx.state.requestContext = requestContext;
@@ -266,9 +270,21 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   private getRouteDispatcherGroup(app: Koa): RouteDispatcherGroup {
-    const activeGroup = this.activeRouteDispatchers.get(app);
-    if (activeGroup && app.middleware.length === activeGroup.stackLengthAfterRegistration) {
-      return activeGroup;
+    // The dispatcher-reuse optimization needs to observe app.middleware.length
+    // to detect when other middleware was registered between our route
+    // registrations (in which case we must start a new dispatcher group to
+    // preserve middleware ordering). Subclasses may pass an app-like object
+    // (e.g., a koa-router or a mounted sub-app) that only exposes `use` and
+    // has no `middleware` array. In that case, skip reuse and register a fresh
+    // dispatcher per call — equivalent to the pre-1.5.0 per-route behavior.
+    const middlewareStack = (app as { middleware?: unknown }).middleware;
+    const supportsReuse = Array.isArray(middlewareStack);
+
+    if (supportsReuse) {
+      const activeGroup = this.activeRouteDispatchers.get(app);
+      if (activeGroup && middlewareStack.length === activeGroup.stackLengthAfterRegistration) {
+        return activeGroup;
+      }
     }
 
     const group: RouteDispatcherGroup = {
@@ -276,8 +292,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       stackLengthAfterRegistration: 0,
     };
     app.use(this.createRouteDispatcherMiddleware(group));
-    group.stackLengthAfterRegistration = app.middleware.length;
-    this.activeRouteDispatchers.set(app, group);
+
+    if (supportsReuse) {
+      group.stackLengthAfterRegistration = (app as { middleware: unknown[] }).middleware.length;
+      this.activeRouteDispatchers.set(app, group);
+    }
+
     return group;
   }
 
