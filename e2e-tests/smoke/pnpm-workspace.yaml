@@ -1,4 +1,0 @@
-# Shadow the repo root workspace config so the Mastra CLI bundler's pnpm install
-# does not inherit `minimumReleaseAge: 1440` from the monorepo. Smoke tests
-# specifically need to install fresh alpha packages immediately after publish.
-minimumReleaseAge: 0
