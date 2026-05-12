@@ -643,6 +643,7 @@ export class SlackProvider implements ChannelProvider {
     const displayName = installation.name || agent?.name || installation.agentId;
 
     const adapter = createSlackAdapter({
+      ...this.#channelConfig.adapter,
       botToken: installation.botToken,
       botUserId: installation.botUserId,
       signingSecret: installation.signingSecret,
@@ -729,8 +730,11 @@ export class SlackProvider implements ChannelProvider {
    * SlackProvider owns the AgentChannels lifecycle for platform-managed agents.
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
+    const { adapterConfig, ...channels } = this.#channelConfig.channels ?? {};
+    const slackEntry = adapterConfig ? { adapter, ...adapterConfig } : adapter;
     const agentChannels = new AgentChannels({
-      adapters: { slack: adapter },
+      ...channels,
+      adapters: { slack: slackEntry },
       userName: agent.name,
     });
     agent.setChannels(agentChannels);
@@ -1211,6 +1215,7 @@ export class SlackProvider implements ChannelProvider {
       const agent = this.#mastra?.getAgentById(pending.agentId);
       const displayName = installation.name || agent?.name || pending.agentId;
       const adapter = createSlackAdapter({
+        ...this.#channelConfig.adapter,
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,
@@ -1312,6 +1317,7 @@ export class SlackProvider implements ChannelProvider {
     const currentAdapter =
       this.#adapters.get(installation.id) ??
       createSlackAdapter({
+        ...this.#channelConfig.adapter,
         botToken: installation.botToken,
         botUserId: installation.botUserId,
         signingSecret: installation.signingSecret,

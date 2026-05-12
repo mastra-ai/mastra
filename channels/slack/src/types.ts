@@ -1,5 +1,57 @@
+import type { ChannelAdapterConfig, ChannelConfig, ChannelHandlers } from '@mastra/core/channels';
 import type { ChannelsStorage } from '@mastra/core/storage';
+import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
+
+/**
+ * Adapter-level options forwarded to every `createSlackAdapter()` call this
+ * provider makes. Credentials and identity that come from the installation
+ * (`botToken`, `botUserId`, `signingSecret`, `userName`, `clientId`,
+ * `clientSecret`) are managed by the provider and intentionally not overridable
+ * here.
+ */
+export type SlackProviderAdapterOptions = Pick<
+  SlackAdapterConfig,
+  | 'apiUrl'
+  | 'appToken'
+  | 'encryptionKey'
+  | 'installationKeyPrefix'
+  | 'logger'
+  | 'mode'
+  | 'socketForwardingSecret'
+  | 'webhookVerifier'
+>;
+
+/**
+ * Per-adapter overrides forwarded to the SlackAdapter entry inside
+ * `AgentChannels.adapters`. The actual `adapter` instance is created by the
+ * provider, so it isn't included here.
+ */
+export type SlackProviderAdapterConfig = Omit<ChannelAdapterConfig, 'adapter'>;
+
+/**
+ * `AgentChannels` options forwarded to every agent connected via this provider.
+ * `adapters` and `userName` are managed by the provider and intentionally not
+ * overridable here.
+ *
+ * Set `adapterConfig` to tweak per-adapter behavior like `cards`,
+ * `formatToolCall`, and `formatError`.
+ */
+export interface SlackProviderChannelsOptions
+  extends Pick<ChannelConfig, 'inlineMedia' | 'inlineLinks' | 'state' | 'threadContext' | 'tools' | 'chatOptions'> {
+  /**
+   * Override built-in event handlers (e.g. `onDirectMessage`, `onMention`).
+   * @see ChannelHandlers
+   */
+  handlers?: ChannelHandlers;
+
+  /**
+   * Per-adapter overrides applied to the Slack adapter entry — equivalent to
+   * passing `{ adapter, ...adapterConfig }` to `AgentChannels.adapters.slack`
+   * when wiring it up manually.
+   */
+  adapterConfig?: SlackProviderAdapterConfig;
+}
 
 // =============================================================================
 // Global Configuration (Mastra-level)
@@ -64,6 +116,51 @@ export interface SlackProviderConfig {
    * Use a 32+ character random string. Can be set via MASTRA_ENCRYPTION_KEY env var.
    */
   encryptionKey?: string;
+
+  /**
+   * Options forwarded to `createSlackAdapter()` for every installation managed
+   * by this provider. Use this for advanced SlackAdapter configuration such as
+   * switching to `mode: 'socket'`, supplying a custom logger, or overriding the
+   * webhook verifier.
+   *
+   * Provider-managed fields (`botToken`, `botUserId`, `signingSecret`,
+   * `userName`, `clientId`, `clientSecret`) come from each installation and are
+   * not overridable here.
+   *
+   * @example
+   * ```ts
+   * new SlackProvider({
+   *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+   *   adapter: { mode: 'socket', appToken: process.env.SLACK_APP_TOKEN },
+   * });
+   * ```
+   */
+  adapter?: SlackProviderAdapterOptions;
+
+  /**
+   * Options forwarded to `AgentChannels` for every agent connected via this
+   * provider. Use this to override the built-in `handlers`, customize
+   * `inlineMedia` / `inlineLinks`, or tweak per-adapter rendering through
+   * `adapterConfig`.
+   *
+   * @example
+   * ```ts
+   * new SlackProvider({
+   *   refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+   *   channels: {
+   *     handlers: {
+   *       onDirectMessage: async (thread, message, defaultHandler) => {
+   *         console.log('DM:', message.text);
+   *         await defaultHandler(thread, message);
+   *       },
+   *     },
+   *     inlineMedia: ['image/*', 'video/*'],
+   *     adapterConfig: { cards: false },
+   *   },
+   * });
+   * ```
+   */
+  channels?: SlackProviderChannelsOptions;
 }
 
 // =============================================================================
