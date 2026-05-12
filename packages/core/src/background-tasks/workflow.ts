@@ -44,9 +44,22 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         return { result: undefined };
       }
 
+      // Resolve the executor. Two paths:
+      //   1. Per-task `TaskContext` registered on the producer (in-process).
+      //      Carries closure-captured state (e.g. agent memory hooks) and
+      //      wins when present.
+      //   2. Static executor registered by tool name. Used by remote workers
+      //      that received the dispatch via PubSub and don't have access to
+      //      the producer's per-task closure.
       const ctx = manager.taskContexts.get(taskId);
-      if (!ctx?.executor) {
-        const errorInfo = { message: 'No executor registered for this task' };
+      const executor = ctx?.executor ?? manager.getStaticExecutor(task.toolName);
+      if (!executor) {
+        const errorInfo = {
+          message:
+            `No executor registered for tool "${task.toolName}". ` +
+            `Register the tool on Mastra (so workers can resolve it cross-process) ` +
+            `or run the task in the same process as the producer.`,
+        };
         await storage.updateTask(taskId, { status: 'failed', error: errorInfo, completedAt: new Date() });
         const failedTask = await storage.getTask(taskId);
         if (failedTask) {
@@ -54,7 +67,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           await manager.publishLifecycleEvent('task.failed', failedTask);
         }
         manager.deregisterTaskContext(taskId);
-        throw new Error('No executor registered');
+        throw new Error(errorInfo.message);
       }
 
       // Throttled progress publisher.
@@ -125,7 +138,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         };
 
         try {
-          const result = await ctx.executor.execute(task.args, {
+          const result = await executor.execute(task.args, {
             abortSignal: abortController.signal,
             onProgress,
             suspend: wrappedSuspend,

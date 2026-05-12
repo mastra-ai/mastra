@@ -48,8 +48,8 @@ import { DuckDBStore } from '@mastra/duckdb'
 import { MastraCompositeStore } from '@mastra/core/storage'
 import {
   Observability,
-  DefaultExporter,
-  CloudExporter,
+  MastraStorageExporter,
+  MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability'
 
@@ -69,8 +69,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -85,9 +85,9 @@ This enables tracing, log forwarding, and metrics. Mastra also supports external
 
 ## Storage
 
-Not all storage backends support every signal. Traces and logs work with most backends, but metrics require an OLAP-capable store like DuckDB (development) or ClickHouse (production). For the full compatibility list, see [storage provider support](/docs/observability/tracing/exporters/default#storage-provider-support).
+Not all storage backends support every signal. Traces and logs work with most backends, but metrics require an OLAP-capable store like DuckDB (development) or ClickHouse (production). For the full compatibility list, see [storage provider support](/docs/observability/tracing/exporters/mastra-storage#storage-provider-support).
 
-For production environments with high traffic, use composite storage to route the observability domain to a dedicated backend. See [production recommendations](/docs/observability/tracing/exporters/default#production-recommendations) for details.
+For production environments with high traffic, use composite storage to route the observability domain to a dedicated backend. See [production recommendations](/docs/observability/tracing/exporters/mastra-storage#production-recommendations) for details.
 
 ## Next steps
 

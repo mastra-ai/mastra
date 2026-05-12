@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "1.0.34-alpha.1",
+  "version": "1.0.34-alpha.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -42,8 +42,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "ignore": "^7.0.5",
-    "semver": "^7.7.4",
-    "swpm": "^2.6.0"
+    "semver": "^7.7.4"
   },
   "devDependencies": {
     "@internal/ai-sdk-v5": "workspace:*",
@@ -54,7 +53,7 @@
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai-v5": "npm:ai@5.0.183",
+    "ai-v5": "npm:ai@5.0.185",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

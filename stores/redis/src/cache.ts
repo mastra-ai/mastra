@@ -87,11 +87,13 @@ export class RedisServerCache extends MastraServerCache {
     return this.deserialize(value);
   }
 
-  async set(key: string, value: unknown): Promise<void> {
+  async set(key: string, value: unknown, ttlMs?: number): Promise<void> {
     const fullKey = this.getKey(key);
     const serialized = this.serialize(value);
-    if (this.ttlSeconds > 0) {
-      await this.setWithExpiry(this.client, fullKey, serialized, this.ttlSeconds);
+    const overrideSeconds = ttlMs !== undefined ? Math.max(1, Math.ceil(ttlMs / 1000)) : undefined;
+    const effectiveSeconds = overrideSeconds ?? this.ttlSeconds;
+    if (effectiveSeconds > 0) {
+      await this.setWithExpiry(this.client, fullKey, serialized, effectiveSeconds);
     } else {
       await this.client.set(fullKey, serialized);
     }

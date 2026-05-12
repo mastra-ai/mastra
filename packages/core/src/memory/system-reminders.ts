@@ -15,11 +15,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isSystemReminderMessage(message: MastraDBMessage): boolean {
-  if (message.role !== 'user' || !isRecord(message.content)) {
+  if (!isRecord(message.content)) {
     return false;
   }
 
   const metadata = message.content.metadata;
+  if (message.role === 'signal') {
+    return isRecord(metadata) && isRecord(metadata.signal) && metadata.signal.type === 'system-reminder';
+  }
+
+  if (message.role !== 'user') {
+    return false;
+  }
+
   if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
     return true;
   }
