@@ -37,6 +37,7 @@ export const init = async ({
   observability,
   observabilityProject,
   observabilityMode = 'pick',
+  observabilityToken,
 }: {
   directory?: string;
   components: Component[];
@@ -49,6 +50,7 @@ export const init = async ({
   initGit?: boolean;
   observability?: boolean;
   observabilityProject?: string;
+  observabilityToken?: string;
   /**
    * `'create'` skips the picker and always provisions a new platform project
    * named after the local one (used by `create-mastra`). `'pick'` shows the
@@ -202,6 +204,7 @@ export const init = async ({
           defaultProjectName,
           observabilityProject,
           mode: observabilityMode,
+          token: observabilityToken,
         });
         await writeObservabilityEnv({
           token: result.token,
