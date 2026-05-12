@@ -81,6 +81,7 @@ import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
+import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
 import * as tracingOps from './tracing';
 
@@ -195,6 +196,23 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       preferred: 'event-sourced',
       supported: ['event-sourced'],
     };
+  }
+
+  override getListCapabilities() {
+    if (!deltaPollingFeatureEnabled()) {
+      return undefined;
+    }
+
+    return {
+      delta: {
+        traces: true,
+        branches: true,
+        logs: true,
+        metrics: true,
+        scores: true,
+        feedback: true,
+      },
+    } as const;
   }
 
   // Tracing

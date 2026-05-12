@@ -112,6 +112,10 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return this.delegate?.tracingStrategy ?? this.observabilityStrategy;
   }
 
+  getListCapabilities(): ReturnType<ObservabilityStoreImpl['getListCapabilities']> {
+    return this.delegate?.getListCapabilities?.();
+  }
+
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
     const delegate = await this.loadDelegate();
     if (!delegate) {

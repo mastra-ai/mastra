@@ -18,10 +18,17 @@ import type {
   BatchDeleteTracesArgs,
   SpanRecord,
 } from '@mastra/core/storage';
-import { BRANCH_SPAN_TYPES, toTraceSpans } from '@mastra/core/storage';
+import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
+import {
+  assertDeltaPollingEnabled,
+  decodeLiveCursor,
+  deltaPollingFeatureEnabled,
+  encodeLiveCursor,
+  normalizeCursorId,
+} from './polling';
 
 // ============================================================================
 // Columns & Reconstruction
@@ -610,12 +617,82 @@ export async function getTraceLight(db: DuckDBConnection, args: GetTraceArgs): P
  * inside the prefilter CTE so reconstruction runs on at most `perPage` rows.
  */
 export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'startedAt', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listTracesArgsSchema.parse(args);
+  const filterRecord = (filters ?? {}) as Record<string, unknown>;
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
-  const { prefilter, postAgg, hasChildError } = partitionAnchorFilters(filters as Record<string, unknown>);
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getTraceLiveCursor(db, filters);
+    if (after === undefined) {
+      return {
+        spans: [],
+        delta: { limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const afterCursorId = decodeLiveCursor(after);
+    const { prefilter, postAgg, hasChildError } = partitionAnchorFilters(filterRecord);
+    const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
+    const prefilterParts = [
+      `eventType = 'start'`,
+      `parentSpanId IS NULL`,
+      `cursorId IS NOT NULL`,
+      `cursorId > CAST(? AS BIGINT)`,
+    ];
+    if (prefilterClause) prefilterParts.push(prefilterClause.replace(/^WHERE\s+/i, ''));
+    const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
+
+    const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
+    const postAggParts: string[] = [];
+    if (postAggClause) postAggParts.push(postAggClause.replace(/^WHERE\s+/i, ''));
+    const childErrorClause = buildHasChildErrorClause(hasChildError, 'root_spans');
+    if (childErrorClause) postAggParts.push(childErrorClause);
+    const postAggWhere = postAggParts.length > 0 ? `WHERE ${postAggParts.join(' AND ')}` : '';
+
+    const outerAlias = 'outer_root';
+    const dataSql = `
+      WITH candidate_roots AS (
+        SELECT traceId, spanId, cursorId
+        FROM span_events AS ${outerAlias}
+        ${prefilterWhere}
+      ),
+      root_spans AS (
+        SELECT reconstructed.*, candidate_roots.cursorId AS anchorCursorId
+        FROM (
+          ${SPAN_RECONSTRUCT_SELECT}
+          WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_roots)
+          GROUP BY traceId, spanId
+        ) AS reconstructed
+        INNER JOIN candidate_roots USING (traceId, spanId)
+      )
+      SELECT * FROM root_spans ${postAggWhere} ORDER BY anchorCursorId ASC LIMIT ?
+    `;
+    const rows = await db.query<Record<string, unknown>>(dataSql, [
+      afterCursorId.toString(),
+      ...prefilterParams,
+      ...postAggParams,
+      limit + 1,
+    ]);
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: normalizeCursorId(row.anchorCursorId),
+      span: rowToSpanRecord(row),
+    }));
+
+    return {
+      spans: toTraceSpans(visibleRows.map(row => row.span)),
+      delta: { limit, hasMore: rows.length > limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
+    };
+  }
+
+  const { prefilter, postAgg, hasChildError } = partitionAnchorFilters(filterRecord);
 
   // Stage 1 — cheap prefilter against raw span_events (start-row only).
   const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
@@ -671,6 +748,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
       spans: toTraceSpans(spans),
+      ...(deltaPollingFeatureEnabled() ? { liveCursor: await getTraceLiveCursor(db, filters) } : {}),
     };
   }
 
@@ -715,6 +793,7 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     spans: toTraceSpans(spans),
+    ...(deltaPollingFeatureEnabled() ? { liveCursor: await getTraceLiveCursor(db, filters) } : {}),
   };
 }
 
@@ -767,26 +846,102 @@ export async function getSpans(db: DuckDBConnection, args: GetSpansArgs): Promis
  * inside the prefilter so reconstruction runs on at most `perPage` rows.
  */
 export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs): Promise<ListBranchesResponse> {
-  const filters = args.filters ?? {};
-  const page = Number(args.pagination?.page ?? 0);
-  const perPage = Number(args.pagination?.perPage ?? 10);
-  const orderBy = { field: args.orderBy?.field ?? 'startedAt', direction: args.orderBy?.direction ?? 'DESC' } as const;
+  const { mode, filters, pagination, orderBy, after, limit } = listBranchesArgsSchema.parse(args);
+  const filterRecord = (filters ?? {}) as Record<string, unknown>;
+  const page = Number(pagination.page);
+  const perPage = Number(pagination.perPage);
 
   // Caller-supplied spanType narrows further; if it's not a branch type, the
   // intersection with BRANCH_SPAN_TYPES is empty and we short-circuit (instead
   // of silently widening to all branches or leaking the non-branch type
   // through).
-  const userSpanType = (filters as Record<string, unknown>).spanType;
+  const userSpanType = filterRecord.spanType;
   if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
+    if (mode === 'delta') {
+      assertDeltaPollingEnabled();
+      return {
+        branches: [],
+        delta: { limit, hasMore: false },
+        liveCursor: null,
+      };
+    }
+
     return {
       pagination: { total: 0, page, perPage, hasMore: false },
       branches: [],
+      ...(deltaPollingFeatureEnabled() ? { liveCursor: null } : {}),
+    };
+  }
+
+  if (mode === 'delta') {
+    assertDeltaPollingEnabled();
+
+    const currentLiveCursor = await getBranchLiveCursor(db, filters);
+    if (after === undefined) {
+      return {
+        branches: [],
+        delta: { limit, hasMore: false },
+        liveCursor: currentLiveCursor,
+      };
+    }
+
+    const afterCursorId = decodeLiveCursor(after);
+    const { spanType: _spanType, ...rest } = filterRecord;
+    const { prefilter, postAgg, hasChildError: _hasChildError } = partitionAnchorFilters(rest);
+    const { clause: prefilterClause, params: prefilterFilterParams } = buildWhereClause(prefilter);
+    const prefilterParts = [`eventType = 'start'`, `cursorId IS NOT NULL`, `cursorId > CAST(? AS BIGINT)`];
+    let spanTypeParams: unknown[];
+    if (typeof userSpanType === 'string') {
+      prefilterParts.push(`spanType = ?`);
+      spanTypeParams = [userSpanType];
+    } else {
+      prefilterParts.push(`spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS})`);
+      spanTypeParams = [...BRANCH_SPAN_TYPES];
+    }
+    if (prefilterClause) prefilterParts.push(prefilterClause.replace(/^WHERE\s+/i, ''));
+    const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
+    const prefilterParams = [afterCursorId.toString(), ...spanTypeParams, ...prefilterFilterParams];
+
+    const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
+    const postAggWhere = postAggClause ? postAggClause : '';
+
+    const outerAlias = 'outer_anchor';
+    const dataSql = `
+      WITH candidate_anchors AS (
+        SELECT traceId, spanId, cursorId
+        FROM span_events AS ${outerAlias}
+        ${prefilterWhere}
+      ),
+      branch_anchors AS (
+        SELECT reconstructed.*, candidate_anchors.cursorId AS anchorCursorId
+        FROM (
+          ${SPAN_RECONSTRUCT_SELECT}
+          WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_anchors)
+          GROUP BY traceId, spanId
+        ) AS reconstructed
+        INNER JOIN candidate_anchors USING (traceId, spanId)
+      )
+      SELECT * FROM branch_anchors ${postAggWhere} ORDER BY anchorCursorId ASC LIMIT ?
+    `;
+    const rows = await db.query<Record<string, unknown>>(dataSql, [...prefilterParams, ...postAggParams, limit + 1]);
+    const visibleRows = rows.slice(0, limit).map(row => ({
+      cursorId: normalizeCursorId(row.anchorCursorId),
+      branch: rowToSpanRecord(row),
+    }));
+
+    return {
+      branches: toTraceSpans(visibleRows.map(row => row.branch)),
+      delta: { limit, hasMore: rows.length > limit },
+      liveCursor:
+        visibleRows.length > 0
+          ? encodeLiveCursor(visibleRows[visibleRows.length - 1]?.cursorId ?? null)
+          : currentLiveCursor,
     };
   }
 
   // `spanType` is consumed inline below (not via PREFILTER_KEYS) so we always
   // emit the IN-list / equality form regardless of the caller's input.
-  const { spanType: _spanType, ...rest } = filters as Record<string, unknown>;
+  const { spanType: _spanType, ...rest } = filterRecord;
   const { prefilter, postAgg, hasChildError: _hasChildError } = partitionAnchorFilters(rest);
 
   // Stage 1 — cheap prefilter against raw span_events (start-row only).
@@ -860,6 +1015,7 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
     return {
       pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
       branches: toTraceSpans(spans),
+      ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
     };
   }
 
@@ -906,5 +1062,108 @@ export async function listBranches(db: DuckDBConnection, args: ListBranchesArgs)
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     branches: toTraceSpans(spans),
+    ...(deltaPollingFeatureEnabled() ? { liveCursor: await getBranchLiveCursor(db, filters) } : {}),
   };
+}
+
+async function getTraceLiveCursor(db: DuckDBConnection, filters: ListTracesArgs['filters']): Promise<string | null> {
+  const { prefilter, postAgg, hasChildError } = partitionAnchorFilters((filters ?? {}) as Record<string, unknown>);
+  const { clause: prefilterClause, params: prefilterParams } = buildWhereClause(prefilter);
+  const prefilterParts = [`eventType = 'start'`, `parentSpanId IS NULL`, `cursorId IS NOT NULL`];
+  if (prefilterClause) prefilterParts.push(prefilterClause.replace(/^WHERE\s+/i, ''));
+  const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
+  const outerAlias = 'outer_root';
+
+  const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
+  const postAggParts: string[] = [];
+  if (postAggClause) postAggParts.push(postAggClause.replace(/^WHERE\s+/i, ''));
+  const childErrorClause = buildHasChildErrorClause(hasChildError, 'root_spans');
+  if (childErrorClause) postAggParts.push(childErrorClause);
+  const postAggWhere = postAggParts.length > 0 ? `WHERE ${postAggParts.join(' AND ')}` : '';
+
+  if (postAggWhere === '') {
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT max(cursorId) AS cursorId FROM span_events AS ${outerAlias} ${prefilterWhere}`,
+      prefilterParams,
+    );
+    return encodeLiveCursor(rows[0]?.cursorId);
+  }
+
+  const cteSql = `
+    WITH candidate_roots AS (
+      SELECT traceId, spanId, cursorId
+      FROM span_events AS ${outerAlias}
+      ${prefilterWhere}
+    ),
+    root_spans AS (
+      SELECT reconstructed.*, candidate_roots.cursorId AS anchorCursorId
+      FROM (
+        ${SPAN_RECONSTRUCT_SELECT}
+        WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_roots)
+        GROUP BY traceId, spanId
+      ) AS reconstructed
+      INNER JOIN candidate_roots USING (traceId, spanId)
+    )
+  `;
+  const rows = await db.query<Record<string, unknown>>(
+    `${cteSql} SELECT max(anchorCursorId) AS cursorId FROM root_spans ${postAggWhere}`,
+    [...prefilterParams, ...postAggParams],
+  );
+  return encodeLiveCursor(rows[0]?.cursorId);
+}
+
+async function getBranchLiveCursor(db: DuckDBConnection, filters: ListBranchesArgs['filters']): Promise<string | null> {
+  const filterRecord = (filters ?? {}) as Record<string, unknown>;
+  const userSpanType = filterRecord.spanType;
+  if (typeof userSpanType === 'string' && !(BRANCH_SPAN_TYPES as readonly string[]).includes(userSpanType)) {
+    return null;
+  }
+
+  const { spanType: _spanType, ...rest } = filterRecord;
+  const { prefilter, postAgg } = partitionAnchorFilters(rest);
+  const { clause: prefilterClause, params: prefilterFilterParams } = buildWhereClause(prefilter);
+  const prefilterParts = [`eventType = 'start'`, `cursorId IS NOT NULL`];
+  let spanTypeParams: unknown[];
+  if (typeof userSpanType === 'string') {
+    prefilterParts.push(`spanType = ?`);
+    spanTypeParams = [userSpanType];
+  } else {
+    prefilterParts.push(`spanType IN (${BRANCH_SPAN_TYPE_PLACEHOLDERS})`);
+    spanTypeParams = [...BRANCH_SPAN_TYPES];
+  }
+  if (prefilterClause) prefilterParts.push(prefilterClause.replace(/^WHERE\s+/i, ''));
+  const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
+  const prefilterParams = [...spanTypeParams, ...prefilterFilterParams];
+  const outerAlias = 'outer_anchor';
+
+  const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
+  if (!postAggClause) {
+    const rows = await db.query<Record<string, unknown>>(
+      `SELECT max(cursorId) AS cursorId FROM span_events AS ${outerAlias} ${prefilterWhere}`,
+      prefilterParams,
+    );
+    return encodeLiveCursor(rows[0]?.cursorId);
+  }
+
+  const cteSql = `
+    WITH candidate_anchors AS (
+      SELECT traceId, spanId, cursorId
+      FROM span_events AS ${outerAlias}
+      ${prefilterWhere}
+    ),
+    branch_anchors AS (
+      SELECT reconstructed.*, candidate_anchors.cursorId AS anchorCursorId
+      FROM (
+        ${SPAN_RECONSTRUCT_SELECT}
+        WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_anchors)
+        GROUP BY traceId, spanId
+      ) AS reconstructed
+      INNER JOIN candidate_anchors USING (traceId, spanId)
+    )
+  `;
+  const rows = await db.query<Record<string, unknown>>(
+    `${cteSql} SELECT max(anchorCursorId) AS cursorId FROM branch_anchors ${postAggClause}`,
+    [...prefilterParams, ...postAggParams],
+  );
+  return encodeLiveCursor(rows[0]?.cursorId);
 }
