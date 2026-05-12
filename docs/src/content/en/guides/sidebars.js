@@ -147,9 +147,8 @@ const sidebars = {
           label: 'Inngest',
         },
         {
-          type: 'doc',
-          id: 'deployment/mastra-platform',
-          label: 'Mastra platform',
+          type: 'html',
+          value: '<a class="menu__link" href="/docs/mastra-platform/server"><span>Mastra platform</span></a>',
         },
         {
           type: 'doc',

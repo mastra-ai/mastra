@@ -736,6 +736,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/configuration',
           label: 'Configuration',
         },
