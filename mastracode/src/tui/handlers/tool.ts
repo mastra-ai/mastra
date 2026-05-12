@@ -425,10 +425,7 @@ export function handleToolEnd(
  * When modelOutput contains media parts (e.g. screenshots), includes them as
  * image content so the TUI can render them inline.
  */
-export function buildToolResultContent(
-  result: unknown,
-  modelOutput?: unknown,
-): ToolResult['content'] {
+export function buildToolResultContent(result: unknown, modelOutput?: unknown): ToolResult['content'] {
   const content: ToolResult['content'] = [];
   let hasImageParts = false;
 
