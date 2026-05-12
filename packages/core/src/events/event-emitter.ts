@@ -30,9 +30,10 @@ export class EventEmitterPubSub extends PubSub {
   }
 
   /**
-   * `EventEmitterPubSub` is strictly in-process — the buffer's durability
-   * matches the rest of the process, so an in-memory `AckHandleBuffer` is
-   * not a durability lie. Batching is native here.
+   * `EventEmitterPubSub` is strictly in-process, so the `AckHandleBuffer`
+   * queue it uses for batching shares the same lifetime as everything
+   * else here. Nothing more durable is promised, and nothing less is
+   * needed.
    */
   override get supportsNativeBatching(): boolean {
     return true;

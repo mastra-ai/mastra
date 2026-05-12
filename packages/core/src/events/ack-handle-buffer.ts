@@ -9,13 +9,15 @@ interface Entry {
 }
 
 /**
- * Buffer used by adapters whose underlying transport already provides
- * durability for unacked events (Redis Streams PEL, GCP outstanding pool,
- * or — for `EventEmitterPubSub` — the process itself).
+ * In-process queue used by `EventEmitterPubSub` to turn its
+ * one-event-per-emit stream into batched callback invocations.
+ * Owns a `BatchPolicy` that decides when to flush (size, time,
+ * quiet-period) and holds (event, ack, nack) triples in publish
+ * order until that decision fires.
  *
- * Holds (event, ack, nack) triples between policy decisions; invokes the
- * subscriber callback once per delivered event, in publish order, when
- * `BatchPolicy` says it's time to flush.
+ * Extracted from `EventEmitterPubSub` only so the batching state
+ * machine can be tested in isolation. Not a public extension point.
+ * State is per-process; the queue dies with the process.
  */
 export class AckHandleBuffer {
   private readonly policy: BatchPolicy;
