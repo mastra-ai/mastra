@@ -99,7 +99,7 @@ Providers can implement `validatePermissions()` to validate the full set of perm
 
 ### Route policy coverage
 
-By default, HTTP route FGA checks are opt-in. A route is checked only when it has route-level `fga` metadata, or when the provider supplies metadata with `resolveRouteFGA()`.
+Mastra includes route-level FGA metadata for built-in resource routes, including agents, workflows, tools, MCP tools, memory threads, responses, and conversations. A route is checked when it has route-level `fga` metadata, when Mastra can derive built-in metadata for that route, or when the provider supplies metadata with `resolveRouteFGA()`.
 
 To deny protected routes that do not resolve FGA metadata, set `requireForProtectedRoutes` on the provider object:
 
@@ -147,7 +147,7 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | Tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
 | Thread/memory access | `memory:read`, `memory:write`, `memory:delete` | `{ type: 'thread', id: threadId }` |
 | MCP tool execution | `tools:execute` | `{ type: 'tool', id: toolName }` |
-| HTTP routes (opt-in) | Configured per route | Configured per route |
+| HTTP resource routes | Configured per route | Configured per route |
 
 All checks are **no-ops when FGA is not configured**, maintaining backward compatibility.
 

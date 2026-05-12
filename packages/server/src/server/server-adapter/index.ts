@@ -127,6 +127,89 @@ function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
   );
 }
 
+function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
+  if (!isProtectedFGARoute(route)) {
+    return null;
+  }
+
+  const permission = getEffectivePermission(route) as MastraFGAPermissionInput | null;
+  if (!permission) {
+    return null;
+  }
+
+  const path = route.path;
+  if (path.startsWith('/agents/:agentId')) {
+    return { resourceType: 'agent', resourceIdParam: 'agentId', permission };
+  }
+
+  if (path.startsWith('/workflows/:workflowId')) {
+    return { resourceType: 'workflow', resourceIdParam: 'workflowId', permission };
+  }
+
+  if (path.startsWith('/tools/:toolId')) {
+    return { resourceType: 'tool', resourceIdParam: 'toolId', permission };
+  }
+
+  if (path.startsWith('/mcp/:serverId/tools/:toolId')) {
+    return {
+      resourceType: 'tool',
+      resourceId: ({ serverId, toolId }) => JSON.stringify([String(serverId), String(toolId)]),
+      permission,
+    };
+  }
+
+  if (path.startsWith('/mcp/:serverId')) {
+    return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
+  }
+
+  if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
+    return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
+  }
+
+  if (path === '/memory/threads' || path === '/memory/network/threads') {
+    return {
+      resourceType: 'thread',
+      resourceId: ({ threadId, resourceId }) => {
+        if (typeof threadId === 'string') return threadId;
+        return typeof resourceId === 'string' ? resourceId : undefined;
+      },
+      permission,
+    };
+  }
+
+  if (path === '/memory/save-messages' || path === '/memory/network/save-messages') {
+    return {
+      resourceType: 'thread',
+      resourceId: ({ messages }) => {
+        if (!Array.isArray(messages)) return undefined;
+        const threadId = messages.find(
+          message => message && typeof message === 'object' && 'threadId' in message,
+        )?.threadId;
+        return typeof threadId === 'string' ? threadId : undefined;
+      },
+      permission,
+    };
+  }
+
+  if (path === '/v1/responses') {
+    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
+  }
+
+  if (path.startsWith('/v1/responses/:responseId')) {
+    return { resourceType: 'response', resourceIdParam: 'responseId', permission };
+  }
+
+  if (path === '/v1/conversations') {
+    return { resourceType: 'agent', resourceIdParam: 'agent_id', permission };
+  }
+
+  if (path.startsWith('/v1/conversations/:conversationId')) {
+    return { resourceType: 'conversation', resourceIdParam: 'conversationId', permission };
+  }
+
+  return null;
+}
+
 async function resolveRouteFGAConfig(
   fgaProvider: IFGAProvider,
   route: ServerRoute,
@@ -137,11 +220,16 @@ async function resolveRouteFGAConfig(
     return route.fga;
   }
 
-  return fgaProvider.resolveRouteFGA?.({
+  const resolvedConfig = await fgaProvider.resolveRouteFGA?.({
     route: getFGARouteInfo(route),
     params,
     requestContext,
   });
+  if (resolvedConfig) {
+    return resolvedConfig;
+  }
+
+  return getBuiltInRouteFGAConfig(route);
 }
 
 function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
@@ -608,7 +696,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const auditMode = fgaProvider.auditProtectedRoutes ?? (fgaProvider.requireForProtectedRoutes ? 'warn' : false);
     if (!auditMode || fgaProvider.resolveRouteFGA) return;
 
-    const missingRoutes = routes.filter(route => isProtectedFGARoute(route) && !route.fga);
+    const missingRoutes = routes.filter(
+      route => isProtectedFGARoute(route) && !route.fga && !getBuiltInRouteFGAConfig(route),
+    );
 
     if (missingRoutes.length === 0) return;
 

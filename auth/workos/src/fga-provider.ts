@@ -27,6 +27,10 @@ import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from
 
 const FILTER_ACCESSIBLE_CHECK_CONCURRENCY = 5;
 
+function isWorkOSResourceNotFoundError(error: any): boolean {
+  return error?.status === 404 || error?.code === 'entity_not_found';
+}
+
 export class WorkOSFGAResourceNotFoundError extends Error {
   readonly status = 404;
   readonly resourceType: string;
@@ -138,8 +142,8 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       const result = await this.workos.authorization.check(checkOptions);
       return result.authorized;
     } catch (error: any) {
-      if (error?.status === 404 || error?.code === 'entity_not_found') {
-        throw new WorkOSFGAResourceNotFoundError(params.resource.type, params.resource.id);
+      if (isWorkOSResourceNotFoundError(error)) {
+        return false;
       }
       throw error;
     }
@@ -161,8 +165,8 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       }
     } catch (error: any) {
       if (error instanceof FGADeniedError) throw error;
-      if (error?.status === 404 || error?.code === 'entity_not_found') {
-        throw new WorkOSFGAResourceNotFoundError(params.resource.type, params.resource.id);
+      if (isWorkOSResourceNotFoundError(error)) {
+        throw new FGADeniedError(user, params.resource, params.permission);
       }
       throw error;
     }

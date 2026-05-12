@@ -42,6 +42,7 @@ vi.mock('@mastra/core/auth/ee', () => ({
   },
 }));
 
+import { FGADeniedError } from '@mastra/core/auth/ee';
 import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
 // Access the shared mock (set during vi.mock factory execution)
@@ -107,6 +108,17 @@ describe('MastraFGAWorkos', () => {
 
     it('should return false when unauthorized', async () => {
       mockAuthorization.check.mockResolvedValue({ authorized: false });
+
+      const result = await fga.check(testUser, {
+        resource: { type: 'agent', id: 'agent-1' },
+        permission: 'agents:execute',
+      });
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false when WorkOS reports the resource is missing', async () => {
+      mockAuthorization.check.mockRejectedValue({ code: 'entity_not_found' });
 
       const result = await fga.check(testUser, {
         resource: { type: 'agent', id: 'agent-1' },
@@ -324,6 +336,17 @@ describe('MastraFGAWorkos', () => {
           permission: 'agents:execute',
         }),
       ).rejects.toThrow('FGA denied');
+    });
+
+    it('should throw FGADeniedError when WorkOS reports the resource is missing', async () => {
+      mockAuthorization.check.mockRejectedValue({ status: 404, code: 'entity_not_found' });
+
+      await expect(
+        fga.require(testUser, {
+          resource: { type: 'agent', id: 'agent-1' },
+          permission: 'agents:execute',
+        }),
+      ).rejects.toBeInstanceOf(FGADeniedError);
     });
   });
 

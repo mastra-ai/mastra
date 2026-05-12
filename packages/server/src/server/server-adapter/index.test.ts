@@ -111,6 +111,83 @@ describe('FGA Middleware - checkRouteFGA', () => {
     );
   });
 
+  it('should derive built-in FGA metadata for protected workflow execution routes', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const route = {
+      method: 'POST',
+      path: '/workflows/:workflowId/start',
+      requiresAuth: true,
+    } as any;
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(mastra, route, requestContext as any, { workflowId: 'workflow-1' });
+
+    expect(result).toBeNull();
+    expect(fgaProvider.check).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      {
+        resource: { type: 'workflow', id: 'workflow-1' },
+        permission: 'workflows:execute',
+        context: { resourceId: 'workflow-1', requestContext },
+      },
+    );
+  });
+
+  it('should derive built-in FGA metadata for response and conversation resource routes', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/v1/responses/:responseId',
+          requiresAuth: true,
+          requiresPermission: 'agents:read',
+        } as any,
+        requestContext as any,
+        { responseId: 'resp-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'DELETE',
+          path: '/v1/conversations/:conversationId',
+          requiresAuth: true,
+          requiresPermission: 'agents:delete',
+        } as any,
+        requestContext as any,
+        { conversationId: 'conv-1' },
+      ),
+    ).resolves.toBeNull();
+
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      1,
+      { id: 'user-1' },
+      {
+        resource: { type: 'response', id: 'resp-1' },
+        permission: 'agents:read',
+        context: { resourceId: 'resp-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      2,
+      { id: 'user-1' },
+      {
+        resource: { type: 'conversation', id: 'conv-1' },
+        permission: 'agents:delete',
+        context: { resourceId: 'conv-1', requestContext },
+      },
+    );
+  });
+
   it('should return null when FGA check passes', async () => {
     const fgaProvider = createMockFGAProvider(true);
     const mastra = { getServer: () => ({ fga: fgaProvider }) };
