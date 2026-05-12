@@ -572,6 +572,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/playai', label: 'PlayAI' },
         { type: 'doc', id: 'voice/sarvam', label: 'Sarvam' },
         { type: 'doc', id: 'voice/speechify', label: 'Speechify' },
+        { type: 'doc', id: 'voice/xai-realtime', label: 'xAI Realtime' },
         { type: 'doc', id: 'voice/voice.addInstructions', label: '.addInstructions()' },
         { type: 'doc', id: 'voice/voice.addTools', label: '.addTools()' },
         { type: 'doc', id: 'voice/voice.answer', label: '.answer()' },
