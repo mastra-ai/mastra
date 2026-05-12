@@ -35,6 +35,12 @@ export interface TraceDataPanelViewProps {
   /** When both are provided, renders an "Open trace page" button. */
   LinkComponent?: LinkComponent;
   traceHref?: string;
+  /**
+   * Span treated as the displayed root of the timeline. Required for branch
+   * subtrees from `getBranch` where the anchor has a real parent that's outside
+   * `spans`. When omitted, the span with no parent is used (trace case).
+   */
+  anchorSpanId?: string;
 }
 
 export function TraceDataPanelView({
@@ -54,6 +60,7 @@ export function TraceDataPanelView({
   timelineChartWidth = 'default',
   LinkComponent,
   traceHref,
+  anchorSpanId,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -93,7 +100,7 @@ export function TraceDataPanelView({
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedSpanId]);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? [], anchorSpanId), [spans, anchorSpanId]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -103,7 +110,10 @@ export function TraceDataPanelView({
     }
   }, [hierarchicalSpans]);
 
-  const rootSpan = useMemo(() => spans?.find(s => s.parentSpanId == null), [spans]);
+  const rootSpan = useMemo(
+    () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
+    [spans, anchorSpanId],
+  );
 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;

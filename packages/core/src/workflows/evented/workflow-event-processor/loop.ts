@@ -60,91 +60,52 @@ export async function processWorkflowLoop(
     iterationCount,
   });
 
+  // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
+  // resume metadata. Otherwise the body would keep receiving the same resumeData on every
+  // iteration (and e.g. never re-suspend).
+  const loopAgainData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps: [] as string[],
+    stepResults,
+    prevResult: stepResult,
+    resumeData: undefined,
+    activeSteps,
+    requestContext,
+    retryCount,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+  const loopEndData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps,
+    stepResults,
+    prevResult: stepResult,
+    resumeData,
+    activeSteps,
+    requestContext,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+
   if (step.loopType === 'dountil') {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          state: currentState,
-          outputOptions,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     }
   } else {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     }
   }
 }

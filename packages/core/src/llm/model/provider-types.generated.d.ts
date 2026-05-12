@@ -1473,6 +1473,7 @@ export type ProviderModelsMap = {
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly 'novita-ai': readonly [
+    'Sao10K/L3-8B-Stheno-v3.2',
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
     'baidu/ernie-4.5-21B-a3b-thinking',
@@ -1503,6 +1504,7 @@ export type ProviderModelsMap = {
     'google/gemma-4-31b-it',
     'gryphe/mythomax-l2-13b',
     'inclusionai/ling-2.6-1t',
+    'inclusionai/ling-2.6-flash',
     'kwaipilot/kat-coder-pro',
     'meta-llama/llama-3-70b-instruct',
     'meta-llama/llama-3-8b-instruct',
@@ -1556,8 +1558,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-27b',
     'qwen/qwen3.5-35b-a3b',
     'qwen/qwen3.5-397b-a17b',
-    'qwen/qwen3.6-27b',
-    'sao10k/L3-8B-Stheno-v3.2',
     'sao10k/l3-70b-euryale-v2.1',
     'sao10k/l3-8b-lunaris',
     'sao10k/l31-70b-euryale-v2.2',
@@ -3811,6 +3811,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b-fast',
     'zai-org/GLM-5.1-FP8',
   ];
+  readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly togetherai: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'MiniMaxAI/MiniMax-M2.7',
