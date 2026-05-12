@@ -9,6 +9,11 @@ on:
       base_ref:
         required: true
         type: string
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
 
 permissions: {}
 
