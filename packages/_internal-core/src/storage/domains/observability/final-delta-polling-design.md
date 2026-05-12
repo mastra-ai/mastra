@@ -44,12 +44,12 @@ Page mode:
 - accepts normal filters
 - accepts pagination
 - accepts orderBy
-- may return `liveCursor`
+- when the delta polling feature is available, returns `liveCursor`
 
 Delta mode:
 
 - accepts the same filters as page mode
-- accepts `after`
+- accepts optional `after`
 - accepts `limit`
 - does not accept pagination
 - does not accept orderBy
@@ -65,6 +65,10 @@ Validation must reject mixed page/delta params and should return all validation 
 If the client changes filters, it should treat that as a new query and obtain a new `liveCursor`.
 
 We do not add a filter hash in v1.
+
+Clients should pass the full filter set on every request, independent of page vs delta mode.
+
+The server/store does not verify that the client reused the same filters that originally produced a given `liveCursor`.
 
 ## Public Cursor Contract
 
@@ -88,7 +92,7 @@ Page responses:
 
 - normal list payload
 - normal pagination metadata
-- optional `liveCursor`
+- when the delta polling feature is available, `liveCursor`
 
 Delta responses:
 
@@ -97,6 +101,19 @@ Delta responses:
 - `liveCursor`
 
 `liveCursor` in page mode is a snapshot watermark for the filtered query, not a cursor for the visible page rows.
+
+`mode=delta` with omitted `after` means:
+
+- do not backfill old rows
+- return an empty result set
+- return `delta: { limit, hasMore: false }`
+- return `liveCursor` representing “start polling from now” for that filtered query
+
+`mode=delta` with `after` means:
+
+- return only rows after `after`
+- when rows are returned, `liveCursor` is the cursor of the last returned row, not the latest filtered watermark
+- when no rows are returned, `liveCursor` is the current filtered watermark
 
 ## Endpoint Semantics
 
@@ -217,15 +234,15 @@ Use explicit local cursor bookkeeping.
 
 Shared external behavior must match ClickHouse and DuckDB.
 
+Implementation shape:
+
+- use a monotonic local cursor counter
+- for logs / metrics / scores / feedback, assign one cursor per inserted row
+- for traces, assign one cursor when a trace first becomes listable
+- for branches, assign one cursor when a branch row first becomes listable
+- later updates must not create new trace/branch delta rows
+
 ## Capability Gating
-
-There are two separate gates:
-
-### Existing new-observability route gate
-
-Keep the existing `observability:v1.13.2` gate for new observability routes that already depend on newer core support.
-
-This protects page-mode compatibility when newer `@mastra/server` runs against older `@mastra/core`.
 
 ### Delta feature gate
 
@@ -234,6 +251,8 @@ Additive feature:
 - `observability-delta-polling`
 
 This gate applies specifically to delta polling behavior.
+
+Page-mode `liveCursor` behavior should only be active when this feature exists.
 
 Additionally, the active store must explicitly advertise per-endpoint delta support through runtime capabilities.
 
