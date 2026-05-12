@@ -163,58 +163,103 @@ The public `LiveCursor` remains opaque, but internally ClickHouse will use:
 
 - `cursorId UInt64`
 
+In TypeScript and at the API boundary, treat ClickHouse cursor ids as decimal
+strings:
+
+- row values read from ClickHouse should be handled as `string`
+- `after` should be passed around in TS as `string`
+- `liveCursor` should be encoded from a string cursor id
+
+Do not represent ClickHouse cursor ids as JavaScript `number`, because `UInt64`
+cannot be represented safely with JS number precision.
+
+When querying ClickHouse, bind the decimal string back into a `UInt64`
+parameter and let ClickHouse perform the numeric comparison and ordering.
+
 #### Trace and branch polling
 
-Use lightweight DB-driven cursor tables:
+Use dedicated delta tables populated by materialized views from the existing
+list-returning sources:
 
-- one for trace list polling
-- one for branch list polling
+- traces: delta table populated from the trace list MV
+- branches: delta table populated from the branch list MV
 
-These tables should be populated by materialized views, not by application-side second writes.
+These tables should be DB-derived only. Do not use application-side second
+writes.
 
-Reason:
+Trace delta rows should store a lean locator tuple:
 
-- preserves DB-driven derivation from the authoritative base write path
-- avoids app-managed cursor bookkeeping
-- avoids partial-failure gaps between data insert and cursor insert
+- `cursorId`
+- `ingestedAt`
+- `startedAt`
+- `traceId`
+- `dedupeKey`
 
-Trace delta source:
+Branch delta rows should store a lean locator tuple:
 
-- list-trace cursor table
-- one row when a trace first becomes listable
+- `cursorId`
+- `ingestedAt`
+- `spanType`
+- `startedAt`
+- `traceId`
+- `spanId`
+- `dedupeKey`
 
-Branch delta source:
-
-- list-branch cursor table
-- one row when a branch first becomes listable
-
-These tables are narrow append-only polling indexes, not full snapshots.
+These tables are append-only polling indexes, not full snapshots.
 
 #### Other signals
 
-Logs, metrics, scores, and feedback should also use DB-generated cursor ids for delta polling.
+Logs, metrics, scores, and feedback should each use a dedicated delta table
+populated by a materialized view from the corresponding primary table.
 
-We should prefer DB-driven cursor derivation for ClickHouse here too, rather than app-managed second writes.
+Each signal delta row should store a lean locator tuple:
 
-If that requires dedicated cursor tables or materialized views per signal, that is acceptable.
+- logs: `cursorId`, `ingestedAt`, `timestamp`, `logId`
+- metrics: `cursorId`, `ingestedAt`, `name`, `timestamp`, `metricId`
+- scores: `cursorId`, `ingestedAt`, `traceId`, `timestamp`, `scoreId`
+- feedback: `cursorId`, `ingestedAt`, `traceId`, `timestamp`, `feedbackId`
+
+These locator tuples exist to support cheap join-back into the primary
+list-returning source without broad scans. Do not duplicate arbitrary user
+filter fields into the delta tables.
 
 #### `ingestedAt`
 
-Do not add `ingestedAt` to general ClickHouse signal/event tables as cursor infrastructure.
+Use `ingestedAt` on delta tables only.
 
-If we keep any ingestion-time column in ClickHouse, it should be only where explicitly useful for:
+`ingestedAt` is:
 
-- debugging
-- retention
-- operational inspection
+- a DB-owned delta ingestion timestamp
+- used for partitioning and TTL
+- not part of the public cursor contract
 
-It is not part of the cursor contract.
+Do not add `ingestedAt` to the general ClickHouse signal/event tables as cursor
+infrastructure.
 
 #### Table ordering
 
-Do not distort `ReplacingMergeTree` identity just to optimize polling.
+Do not distort the primary table or primary list-MV `ReplacingMergeTree`
+identity just to optimize polling.
 
-For trace/branch polling, prefer dedicated cursor tables or polling-oriented derived tables over changing the primary replacing identity of the main tables.
+Delta tables should use:
+
+- `PARTITION BY toDate(ingestedAt)`
+- `ORDER BY` including `cursorId`
+- short retention, roughly `1` to `2` days via TTL on `ingestedAt`
+
+The delta table `ORDER BY` should lead with `cursorId` and can then include the
+rest of the locator tuple as needed.
+
+#### Read-path rules
+
+Delta queries should:
+
+- narrow first by `cursorId > after` in the delta table
+- join back to the primary list-returning MV/table using the stored locator tuple
+- apply normal filters after that join-back
+
+Do not duplicate the full general-purpose list filtering logic into the delta
+tables themselves.
 
 ### DuckDB
 
