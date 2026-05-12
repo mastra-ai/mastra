@@ -1,5 +1,16 @@
 # @mastra/libsql
 
+## 1.10.1-alpha.3
+
+### Patch Changes
+
+- Improved local LibSQL startup performance by applying conservative local SQLite performance settings before initialization, exposing local PRAGMA overrides, and reducing schema initialization contention. ([#16513](https://github.com/mastra-ai/mastra/pull/16513))
+
+- Added LibSQL indexes for thread message history queries to speed up recent-message and observational-memory loading. ([#16513](https://github.com/mastra-ai/mastra/pull/16513))
+
+- Updated dependencies [[`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd)]:
+  - @mastra/core@1.33.0-alpha.17
+
 ## 1.10.1-alpha.2
 
 ### Patch Changes

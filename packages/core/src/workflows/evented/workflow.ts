@@ -2145,11 +2145,6 @@ export class EventedRun<
     }
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-
-    console.dir(
-      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
-      { depth: null },
-    );
     // Start with the snapshot's request context (old values)
     const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();

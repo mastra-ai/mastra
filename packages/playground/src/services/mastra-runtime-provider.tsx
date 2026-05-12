@@ -8,7 +8,7 @@ import { fileToBase64 } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
@@ -16,6 +16,7 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
+import { ThreadRuntimeStateProvider } from '@/lib/ai-ui/thread-runtime-state';
 import type { ChatProps } from '@/types';
 
 const handleFinishReason = (finishReason: string) => {
@@ -418,11 +419,25 @@ export function MastraRuntimeProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraUIMessage[]>([]);
+  const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
+  const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
+  const threadSignalsUnsupportedRef = useRef(false);
+
+  const addPendingSignal = useCallback((signalId: string, preview: string) => {
+    setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
+  }, []);
+
+  const removePendingSignal = useCallback((signalId: string) => {
+    setPendingSignals(prev => prev.filter(signal => signal.id !== signalId));
+  }, []);
 
   // Clear any persisted stream errors when switching threads or agents so they
   // don't leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
+    setPendingSignals([]);
+    threadSignalsUnsupportedRef.current = false;
+    setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
 
   useEffect(() => {
@@ -452,8 +467,16 @@ export function MastraRuntimeProvider({
     networkToolCallApprovals,
   } = useChat({
     agentId,
+    threadId,
     initialMessages,
     requestContext: chatRequestContext,
+    onSignalSent: addPendingSignal,
+    onSignalEcho: removePendingSignal,
+    onThreadSignalsUnsupported: () => {
+      threadSignalsUnsupportedRef.current = true;
+      setThreadSignalsUnsupported(true);
+      setPendingSignals([]);
+    },
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
@@ -712,6 +735,7 @@ export function MastraRuntimeProvider({
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
+    if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return;
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
     const attachments = await convertToAIAttachments(message.attachments);
@@ -1279,26 +1303,25 @@ export function MastraRuntimeProvider({
   };
 
   const onCancel = async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsLegacyRunning(false);
-      // Reset OM streaming state in case observation was in progress
-      resetObservationalMemoryStreamState();
-      cancelRun?.();
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setPendingSignals([]);
+    setIsLegacyRunning(false);
+    // Reset OM streaming state in case observation was in progress
+    resetObservationalMemoryStreamState();
+    cancelRun?.();
 
-      // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
-      if (threadId && isOMEnabled) {
-        baseClient
-          .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
-          .then(result => {
-            setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-            void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
-          })
-          .catch(() => {});
-      }
+    // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
+    if (threadId && isOMEnabled) {
+      baseClient
+        .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+        .then(result => {
+          setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+          setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+          void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+          void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+        })
+        .catch(() => {});
     }
   };
 
@@ -1335,22 +1358,32 @@ export function MastraRuntimeProvider({
   });
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      {isReady ? (
-        <ToolCallProvider
-          approveToolcall={approveToolCall}
-          declineToolcall={declineToolCall}
-          approveToolcallGenerate={approveToolCallGenerate}
-          declineToolcallGenerate={declineToolCallGenerate}
-          isRunning={isRunningStream}
-          toolCallApprovals={toolCallApprovals}
-          approveNetworkToolcall={approveNetworkToolCall}
-          declineNetworkToolcall={declineNetworkToolCall}
-          networkToolCallApprovals={networkToolCallApprovals}
-        >
-          {children}
-        </ToolCallProvider>
-      ) : null}
-    </AssistantRuntimeProvider>
+    <ThreadRuntimeStateProvider
+      value={{
+        isStreaming: isLegacyRunning || isRunningStream,
+        canSendWhileStreaming: isSupportedModel && !threadSignalsUnsupported,
+        cancelStream: onCancel,
+        pendingSignals,
+        hasPendingMessages: pendingSignals.length > 0,
+      }}
+    >
+      <AssistantRuntimeProvider runtime={runtime}>
+        {isReady ? (
+          <ToolCallProvider
+            approveToolcall={approveToolCall}
+            declineToolcall={declineToolCall}
+            approveToolcallGenerate={approveToolCallGenerate}
+            declineToolcallGenerate={declineToolCallGenerate}
+            isRunning={isRunningStream}
+            toolCallApprovals={toolCallApprovals}
+            approveNetworkToolcall={approveNetworkToolCall}
+            declineNetworkToolcall={declineNetworkToolCall}
+            networkToolCallApprovals={networkToolCallApprovals}
+          >
+            {children}
+          </ToolCallProvider>
+        ) : null}
+      </AssistantRuntimeProvider>
+    </ThreadRuntimeStateProvider>
   );
 }

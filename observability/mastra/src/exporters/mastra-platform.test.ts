@@ -845,6 +845,113 @@ describe('MastraPlatformExporter', () => {
       await authExporter.shutdown();
     });
 
+    it('should use MASTRA_CLOUD_ACCESS_TOKEN from the environment', async () => {
+      const envToken = createTestJWT({ teamId: 'cloud-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', envToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${envToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should use MASTRA_PLATFORM_ACCESS_TOKEN from the environment', async () => {
+      const envToken = createTestJWT({ teamId: 'platform-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', envToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${envToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should prefer MASTRA_PLATFORM_ACCESS_TOKEN over MASTRA_CLOUD_ACCESS_TOKEN', async () => {
+      const cloudToken = createTestJWT({ teamId: 'cloud-env-token', projectId: 'auth-project' });
+      const platformToken = createTestJWT({ teamId: 'platform-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', cloudToken);
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', platformToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${platformToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should fall back to MASTRA_CLOUD_ACCESS_TOKEN when MASTRA_PLATFORM_ACCESS_TOKEN is empty', async () => {
+      const cloudToken = createTestJWT({ teamId: 'cloud-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', cloudToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${cloudToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should handle multiple spans in batch', async () => {
       const exportedSpans = [
         { ...mockSpan, id: 'span-1' },

@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.12.0-alpha.4
+
+### Patch Changes
+
+- Support `MASTRA_PLATFORM_ACCESS_TOKEN` as the preferred environment variable for `MastraPlatformExporter`, while retaining `MASTRA_CLOUD_ACCESS_TOKEN` as a fallback for backward compatibility. ([#16500](https://github.com/mastra-ai/mastra/pull/16500))
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+
 ## 1.12.0-alpha.3
 
 ### Minor Changes

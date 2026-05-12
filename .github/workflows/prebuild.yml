@@ -45,11 +45,10 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rw
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
-      pull-requests: read
-      statuses: write
+      contents: read
 
     steps:
       - name: Checkout repo
@@ -58,18 +57,32 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
 
-      - name: Setup custom action
-        continue-on-error: true
-        uses: ./.github/workflows/shared-actions/set-pr-status
-        with:
-          status: 'pending'
-          context: 'Full Test Suite'
-          description: 'Waiting for build to complete'
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+  test-suite:
+    name: Unit and E2E Tests
+    needs: [changes, prebuild]
+    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    uses: ./.github/workflows/test-suite.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      base_ref: ${{ github.event.pull_request.base.ref }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

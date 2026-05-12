@@ -480,9 +480,41 @@ mastra auth tokens revoke <token-id>
 
 ## `mastra lint`
 
-The `mastra lint` command validates the structure and code of your Mastra project to ensure it follows best practices and is error-free.
+The `mastra lint` command validates the structure and code of your Mastra project.
+
+By default, `mastra lint` runs project checks against your source files and configuration. Use `--preflight` to also run bundle checks against `.mastra/output` before deployment.
+
+```bash
+mastra lint --preflight
+```
 
 It accepts [common flags][common-flags].
+
+### Flags
+
+#### `--preflight`
+
+Runs deployment preflight checks against the built Mastra output. This builds the project before checking it unless you also pass `--skip-build`.
+
+#### `--skip-build`
+
+Skips the build step and reuses the existing `.mastra/output` directory. This flag only applies when `--preflight` is set.
+
+#### `--env-file <file>`
+
+Uses the specified environment file for preflight validation. This flag only applies when `--preflight` is set.
+
+#### `--strict`
+
+Treats warnings as errors.
+
+#### `--json`
+
+Emits machine-readable JSON output.
+
+#### `--debug`
+
+Enables debug logs.
 
 ## `mastra scorers`
 

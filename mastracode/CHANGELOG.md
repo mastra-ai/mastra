@@ -1,5 +1,70 @@
 # mastracode
 
+## 0.18.0-alpha.19
+
+### Patch Changes
+
+- Improved Mastra Code startup time by loading only the most recent thread messages during initial render, using app-specific local LibSQL PRAGMA tuning, and deferring browser setup, gateway sync, and update checks until after first render. ([#16513](https://github.com/mastra-ai/mastra/pull/16513))
+
+- Updated dependencies [[`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd), [`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd), [`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd)]:
+  - @mastra/libsql@1.10.1-alpha.3
+  - @mastra/core@1.33.0-alpha.17
+
+## 0.18.0-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7), [`bd977e6`](https://github.com/mastra-ai/mastra/commit/bd977e6056fe9bdfb0925f6796b2141f65db3e36)]:
+  - @mastra/core@1.33.0-alpha.16
+  - @mastra/pg@1.10.1-alpha.2
+
+## 0.18.0-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [[`8781d45`](https://github.com/mastra-ai/mastra/commit/8781d452895df792b54eac8e4bdbc3559affa308), [`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/observability@1.12.0-alpha.4
+  - @mastra/core@1.33.0-alpha.15
+
+## 0.18.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.33.0-alpha.14
+
+## 0.18.0-alpha.15
+
+### Minor Changes
+
+- Added signal-based follow-up support for Mastra Code. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+  Text submitted while an agent run is active now continues the current thread, shows as pending until the signal echo confirms it, and avoids duplicate stream rendering by following thread output through one subscription owner.
+
+  For example, pressing `Ctrl+F` while the agent is streaming queues the editor contents as a follow-up signal instead of waiting for the run to finish:
+
+  ```ts
+  const signal = harness.sendSignal({ content: 'one more constraint: keep the fix minimal' });
+  await signal.accepted;
+  ```
+
+### Patch Changes
+
+- Fixed goal reminders in MastraCode to continue through signals without duplicating prompts. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+
+## 0.18.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`f14f5ec`](https://github.com/mastra-ai/mastra/commit/f14f5ecb6befa49ca19dd854b980955a001fcff1), [`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`bae381b`](https://github.com/mastra-ai/mastra/commit/bae381b57cdb8d161340642b47d892de0706d464), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/stagehand@0.2.2-alpha.0
+  - @mastra/agent-browser@0.2.2-alpha.0
+  - @mastra/core@1.33.0-alpha.12
+  - @mastra/memory@1.18.0-alpha.4
+
 ## 0.18.0-alpha.13
 
 ### Patch Changes
