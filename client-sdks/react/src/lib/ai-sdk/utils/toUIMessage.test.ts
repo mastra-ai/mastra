@@ -645,6 +645,88 @@ describe('toUIMessage', () => {
       ]);
     });
 
+    it('should finish the active assistant message before appending a user-message signal echo', () => {
+      const chunk: ChunkType = {
+        type: 'data-user-message',
+        data: {
+          id: 'signal-1',
+          type: 'user-message',
+          contents: 'interrupting signal',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'partial answer', state: 'streaming', textId: 'text-1' } as MastraExtendedTextPart,
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(2);
+      expect(result[0].parts[0]).toMatchObject({ type: 'text', text: 'partial answer', state: 'done' });
+      expect(result[1]).toMatchObject({
+        id: 'signal-1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'interrupting signal' }],
+      });
+    });
+
+    it('should ignore duplicate start chunks for an existing assistant message', () => {
+      const chunk: ChunkType = {
+        type: 'start',
+        payload: { messageId: 'assistant-1' },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'already streamed', state: 'done', textId: 'text-1' } as MastraExtendedTextPart,
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toEqual(conversation);
+    });
+
+    it('should ignore duplicate text-start chunks for the current assistant text part', () => {
+      const chunk: ChunkType = {
+        type: 'text-start',
+        payload: { id: 'text-1' },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'already streamed', state: 'streaming', textId: 'text-1' } as MastraExtendedTextPart,
+          ],
+          metadata: baseMetadata,
+        },
+      ];
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toEqual(conversation);
+    });
+
     it('should handle text-start chunk by adding new text part', () => {
       const chunk: ChunkType = {
         type: 'text-start',

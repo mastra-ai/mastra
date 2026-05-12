@@ -269,9 +269,10 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       const userMessages = signalContentsToUserMessages(chunk.data.contents, metadata);
       if (!userMessages.length) return result;
 
+      const conversationWithFinishedAssistant = finishStreamingAssistantMessage(result);
       const messageIdPrefix = typeof signalId === 'string' ? signalId : `signal-${chunk.runId}-${Date.now()}`;
       return [
-        ...result,
+        ...conversationWithFinishedAssistant,
         ...userMessages.map((message, index) => ({
           ...message,
           id: index === 0 ? messageIdPrefix : `${messageIdPrefix}-${index}`,
@@ -333,8 +334,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'start': {
       // Create a new assistant message
       // Use the server-provided messageId if available, otherwise fall back to generated ID
+      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (messageId && result.some(message => message.id === messageId)) return result;
+
       const newMessage: MastraUIMessage = {
-        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
+        id: messageId ?? `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,
@@ -346,6 +350,13 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'text-start': {
       const lastMessage = result[result.length - 1];
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      if (
+        chunk.payload.id &&
+        lastMessage?.role === 'assistant' &&
+        lastMessage.parts.some(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
+      ) {
+        return result;
+      }
 
       const newTextPart: MastraExtendedTextPart = {
         type: 'text',
