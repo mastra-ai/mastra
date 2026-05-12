@@ -4,6 +4,7 @@ import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form
 import { Navigate, useParams } from 'react-router';
 import { AutosaveIndicator } from '@/domains/agent-builder/components/agent-builder-edit/autosave-indicator';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
+import { DeleteSkillPanelButton } from '@/domains/agent-builder/components/skill-builder-edit/delete-skill-action';
 import { SkillBuilderMobileMenu } from '@/domains/agent-builder/components/skill-builder-edit/skill-builder-mobile-menu';
 import { SkillWorkspaceLayout } from '@/domains/agent-builder/components/skill-builder-edit/skill-workspace-layout';
 import { VisibilitySelect } from '@/domains/agent-builder/components/skill-builder-edit/visibility-select';
@@ -37,7 +38,7 @@ export default function AgentBuilderSkillsEdit() {
   }
 
   if (!canWrite || !isOwner) {
-    return <Navigate to="/agent-builder/skills" replace />;
+    return <Navigate to={`/agent-builder/skills/${id}/view`} replace />;
   }
 
   return <AgentBuilderSkillEditPage id={id!} storedSkill={storedSkill} initialUserMessage={initialUserMessage} />;
@@ -138,8 +139,11 @@ const AgentBuilderSkillEditReady = ({ id, initialUserMessage }: ReadyProps) => {
           <VisibilitySelectConnected skillId={id} />
         </div>
       }
-      mobileExtra={<SkillBuilderMobileMenu skillId={id} showSetVisibility />}
+      mobileExtra={
+        <SkillBuilderMobileMenu skillId={id} skillName={name || 'Untitled skill'} showSetVisibility showDelete />
+      }
       showForm={showForm}
+      deleteAction={<DeleteSkillPanelButton skillId={id} skillName={name || 'Untitled skill'} />}
       chat={
         <SkillChatComposer
           sessionKey={sessionKey}

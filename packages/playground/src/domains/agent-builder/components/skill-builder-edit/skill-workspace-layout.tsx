@@ -19,6 +19,8 @@ interface SkillWorkspaceLayoutProps {
   showForm?: boolean;
   chat: ReactNode;
   form: ReactNode;
+  /** Optional destructive action rendered at the bottom of the configure panel. */
+  deleteAction?: ReactNode;
 }
 
 export const SkillWorkspaceLayout = ({
@@ -29,6 +31,7 @@ export const SkillWorkspaceLayout = ({
   showForm = true,
   chat,
   form,
+  deleteAction,
 }: SkillWorkspaceLayoutProps) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
@@ -144,11 +147,16 @@ export const SkillWorkspaceLayout = ({
           >
             <div
               className={cn(
-                'skill-panel-slide-in h-full min-h-0 overflow-hidden',
+                'skill-panel-slide-in flex h-full min-h-0 flex-col overflow-hidden',
                 'md:rounded-3xl md:border md:border-border1 md:bg-surface2',
               )}
             >
-              {form}
+              <div className="min-h-0 flex-1 overflow-hidden">{form}</div>
+              {deleteAction && (
+                <div className="border-t border-border1 px-4 pb-4 pt-4 md:px-6" data-testid="skill-edit-delete-action">
+                  {deleteAction}
+                </div>
+              )}
             </div>
           </div>
         )}

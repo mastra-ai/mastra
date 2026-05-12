@@ -2,6 +2,7 @@ import { Button, DropdownMenu } from '@mastra/playground-ui';
 import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
+import { DeleteSkillMenuItem } from './delete-skill-action';
 import { useVisibilityChange } from './use-visibility-change';
 import type { Visibility } from './visibility-select';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
@@ -10,6 +11,10 @@ export interface SkillBuilderMobileMenuProps {
   skillId: string;
   /** When true, includes the Add/Remove from library item. Owner-only. */
   showSetVisibility?: boolean;
+  /** When true, includes the Delete skill item. Owner-only. */
+  showDelete?: boolean;
+  /** Current skill name, shown in the delete confirmation dialog. */
+  skillName?: string;
   /** Disables all actions (e.g. during streaming). */
   disabled?: boolean;
 }
@@ -17,9 +22,11 @@ export interface SkillBuilderMobileMenuProps {
 export function SkillBuilderMobileMenu({
   skillId,
   showSetVisibility = false,
+  showDelete = false,
+  skillName = '',
   disabled = false,
 }: SkillBuilderMobileMenuProps) {
-  if (!showSetVisibility) return null;
+  if (!showSetVisibility && !showDelete) return null;
 
   return (
     <div className="lg:hidden" data-testid="skill-builder-mobile-menu">
@@ -30,7 +37,9 @@ export function SkillBuilderMobileMenu({
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
-          <VisibilityMenuItem skillId={skillId} disabled={disabled} />
+          {showSetVisibility && <VisibilityMenuItem skillId={skillId} disabled={disabled} />}
+          {showSetVisibility && showDelete && <DropdownMenu.Separator />}
+          {showDelete && <DeleteSkillMenuItem skillId={skillId} skillName={skillName} disabled={disabled} />}
         </DropdownMenu.Content>
       </DropdownMenu>
     </div>
