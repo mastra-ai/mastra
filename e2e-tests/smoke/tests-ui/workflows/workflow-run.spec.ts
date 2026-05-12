@@ -58,11 +58,11 @@ test.describe('Workflow Execution', () => {
     // Verify initial layout
     await expect(page.locator('h2')).toHaveText('sequential-steps');
     await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Run' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeVisible();
 
     // Fill input and run
     await page.getByRole('textbox', { name: 'Name' }).fill('Smoke Test');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for all steps to succeed by checking the last step
     const lastNode = page.locator('[data-workflow-node]').last();
@@ -91,7 +91,7 @@ test.describe('Workflow Execution', () => {
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
     await page.keyboard.press(`${modifier}+a`);
     await page.keyboard.type('{"name":"JSON Test"}');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for the last step to succeed
     const lastNode = page.locator('[data-workflow-node]').last();
@@ -103,7 +103,7 @@ test.describe('Workflow Execution', () => {
     await expect(page.locator('h2')).toHaveText('branch-workflow');
 
     await page.getByRole('spinbutton', { name: 'Value' }).fill('5');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for the taken branch to succeed and the skipped branch to stay idle
     await expect(page.getByRole('button', { name: 'Handle-positive' })).toBeVisible({ timeout: 10_000 });
@@ -119,7 +119,7 @@ test.describe('Workflow Execution', () => {
     await page.goto('/workflows/branch-workflow/graph');
 
     await page.getByRole('spinbutton', { name: 'Value' }).fill('-3');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for the taken branch to succeed and the skipped branch to stay idle
     await expect(page.getByRole('button', { name: 'Handle-negative' })).toBeVisible({ timeout: 10_000 });
@@ -136,7 +136,7 @@ test.describe('Workflow Execution', () => {
     await expect(page.locator('h2')).toHaveText('parallel-workflow');
 
     await page.getByRole('spinbutton', { name: 'Value' }).fill('5');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for at least 3 nodes to render before checking statuses
     await expect(page.locator('[data-workflow-node]')).toHaveCount(3, { timeout: 10_000 });
@@ -172,7 +172,7 @@ test.describe('Workflow Execution', () => {
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
     await page.keyboard.press(`${modifier}+a`);
     await page.keyboard.type('{"items":["hello","world"]}');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for the last step to succeed
     const lastNode = page.locator('[data-workflow-node]').last();
@@ -187,7 +187,7 @@ test.describe('Workflow Execution', () => {
     await expect(page.locator('h2')).toHaveText('retry-workflow');
 
     await page.getByRole('textbox', { name: 'Message' }).fill('retry-test');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // The flaky step fails twice then succeeds on the 3rd attempt
     const lastNode = page.locator('[data-workflow-node]').last();
@@ -201,7 +201,7 @@ test.describe('Workflow Execution', () => {
     await page.goto('/workflows/branch-workflow/graph');
 
     await page.getByRole('spinbutton', { name: 'Value' }).fill('10');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for handle-positive to complete — the step button appears when it succeeds
     await expect(page.getByRole('button', { name: 'Handle-positive' })).toBeVisible({ timeout: 10_000 });
@@ -218,7 +218,7 @@ test.describe('Workflow Execution', () => {
     await expect(page.locator('h2')).toHaveText('failure-workflow');
 
     await page.getByRole('textbox', { name: 'Input' }).fill('test');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for the step to fail
     await expect(page.locator('[data-workflow-step-status="failed"]').first()).toBeVisible({ timeout: 10_000 });
@@ -238,7 +238,7 @@ test.describe('Workflow Execution', () => {
 
     // Run a workflow to create a run entry
     await page.getByRole('textbox', { name: 'Name' }).fill('history-run');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
     const lastNode = page.locator('[data-workflow-node]').last();
     await expect(lastNode).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 10_000 });
 
@@ -278,7 +278,7 @@ test.describe('Workflow Execution', () => {
 
     // Fill input and run
     await page.getByRole('textbox', { name: 'Item' }).fill('test-item');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
 
     // Wait for suspended state: check for the suspend payload text
     await expect(page.getByText('Please approve: test-item')).toBeVisible({ timeout: 20_000 });
