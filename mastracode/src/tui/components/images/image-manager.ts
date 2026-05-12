@@ -23,50 +23,28 @@
  *
  * Strategy
  * --------
- * Only ever keep ONE active inline image at a time, but never change the
- * row count of any image component:
+ * Keep at most one active inline image, with two orthogonal reasons to
+ * fall back to a placeholder presentation that occupies the same rows:
  *
- *   - Each `InlineImageComponent` registers with the manager on
- *     construction. A new registration becomes active and the previous
- *     placement is deleted from the terminal.
- *   - Components query `isPlaceholder(self)` each frame and pick
- *     between drawing the kitty/iTerm2 escape or showing a fixed-size
- *     "(image)" placeholder that uses the same row count. Toggling
- *     never reflows the chat.
- *   - When an overlay opens we proactively delete the placement so its
- *     graphics layer doesn't bleed through the popup. When it closes the
- *     line-stream emits the kitty escape again and the diff renderer
- *     re-places the image.
+ *   - The image is no longer the active one (a newer image registered).
+ *   - Rendering is currently *suppressed* — set by external callers when
+ *     a popup is open, or any other future reason to hide the image.
  *
- * The manager owns no rendering of its own. Components ask it a single
- * question every frame:
+ * Components ask `isPlaceholder(self)` each frame; it's a pure read of
+ * those two pieces of state. The manager doesn't know what an overlay is.
  *
- *   - `isPlaceholder(component)` — should I render the muted "(image)"
- *     placeholder instead of the kitty/iTerm2 escape this frame?
- *
- * Returns true when the component isn't the most recent active image OR
- * when an overlay is currently up. The manager handles overlay-transition
- * side effects (delete the placement on open, force a full redraw on
- * open/close) internally.
+ * External callers drive the suppression flag via `suppress()` /
+ * `unsuppress()`. Those setters are where the side effects live: deleting
+ * the kitty placement so a popup isn't punched through, and forcing a
+ * full pi-tui redraw so popup glyphs don't ghost on image-bearing rows.
+ * Today the only caller is the overlay watcher in `state.ts`, but the
+ * seam is shape-correct for adding other "hide the image" reasons later
+ * (image scrolled off-screen, user-toggled, etc.) without touching the
+ * manager.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { deleteKittyImage } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
-
-const DEBUG_OVERLAY = process.env.MC_DEBUG_OVERLAY === '1';
-function markOverlay(event: 'open' | 'close'): void {
-  if (!DEBUG_OVERLAY) return;
-  try {
-    const dir = '/tmp/tui';
-    fs.mkdirSync(dir, { recursive: true });
-    const ts = Date.now();
-    fs.writeFileSync(path.join(dir, `overlay-${event}-${ts}.marker`), `${event}\n`);
-  } catch {
-    // best-effort
-  }
-}
 
 /**
  * Marker interface for components the manager tracks. The manager doesn't
@@ -82,8 +60,8 @@ interface Registration {
 class ImageManager {
   private ui: TUI | null = null;
   private active: Registration | null = null;
-  /** Tracks last-seen overlay state so we can act on transitions. */
-  private overlayActive = false;
+  /** External flag set via `suppress()` / `unsuppress()`. */
+  private suppressed = false;
 
   attachTui(ui: TUI): void {
     this.ui = ui;
@@ -93,8 +71,8 @@ class ImageManager {
    * Register a new image as the active inline image. Any previously-active
    * placement is deleted from the terminal. The previous component keeps
    * rendering (at the same row count) but will now see
-   * `isActive(self) === false` and switch to its placeholder presentation
-   * on its next render.
+   * `isPlaceholder(self) === true` and switch to its placeholder
+   * presentation on its next render.
    */
   register(owner: ImageOwner, kittyImageId?: number): void {
     if (this.active && this.active.owner !== owner) {
@@ -112,52 +90,38 @@ class ImageManager {
   }
 
   /**
-   * Single per-frame predicate for inline image components.
-   *
-   * Returns true when the component should render its muted "(image)"
-   * placeholder instead of the kitty/iTerm2 escape — either because it is
-   * no longer the active image (a newer one took over) or because an
-   * overlay is currently up.
-   *
-   * As a side effect, also detects overlay open/close transitions and
-   * runs the cleanup work that has to happen at those edges (delete the
-   * kitty placement so the popup isn't punched through; force a full
-   * viewport redraw so popup glyphs don't ghost on image-bearing rows).
-   * Components don't need to know about overlays — they just ask this.
+   * Pure predicate. Returns true when the component should render its
+   * muted "(image)" placeholder instead of the kitty/iTerm2 escape —
+   * either because it isn't the active image, or because rendering is
+   * currently suppressed.
    */
   isPlaceholder(owner: ImageOwner): boolean {
-    const overlayUp = this.pollOverlayTransition();
-    return overlayUp || this.active?.owner !== owner;
+    return this.suppressed || this.active?.owner !== owner;
   }
 
   /**
-   * Drive the overlay transition state machine. Returns the current
-   * overlay state. Called from `isPlaceholder` once per component per
-   * frame; the transition branches only execute on actual edges so
-   * repeated calls within a frame are cheap.
+   * Tell the manager to fall back to placeholder rendering. Idempotent.
+   * On the leading edge (false -> true) deletes the active kitty
+   * placement so it doesn't bleed through whatever's covering the image,
+   * and forces a full pi-tui redraw so the graphics layer is wiped.
    */
-  private pollOverlayTransition(): boolean {
-    if (!this.ui) return false;
-    const overlayUp = this.ui.hasOverlay();
-    if (overlayUp !== this.overlayActive) {
-      this.overlayActive = overlayUp;
-      if (overlayUp) {
-        markOverlay('open');
-        // Overlay just opened: erase the placement so popup cells are
-        // genuinely empty (pi-tui's compositeLineAt won't paint over
-        // image-bearing lines, so we have to clear the graphics layer
-        // ourselves).
-        if (this.active) this.deletePlacement(this.active);
-        this.forceFullRedraw();
-      } else {
-        markOverlay('close');
-        // Overlay just closed: wipe any stale popup glyphs from the
-        // viewport and re-emit the kitty escape so the diff renderer
-        // re-places the image.
-        this.forceFullRedraw();
-      }
-    }
-    return overlayUp;
+  suppress(): void {
+    if (this.suppressed) return;
+    this.suppressed = true;
+    if (this.active) this.deletePlacement(this.active);
+    this.forceFullRedraw();
+  }
+
+  /**
+   * Resume normal image rendering. Idempotent. On the trailing edge
+   * (true -> false) forces a full pi-tui redraw so the next frame
+   * re-emits the kitty escape and any leftover glyphs from whatever
+   * was covering the image are repainted.
+   */
+  unsuppress(): void {
+    if (!this.suppressed) return;
+    this.suppressed = false;
+    this.forceFullRedraw();
   }
 
   /**

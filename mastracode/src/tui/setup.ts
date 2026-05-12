@@ -12,6 +12,7 @@ import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { renderBanner } from './components/banner.js';
+import { OverlayWatcherComponent } from './components/images/index.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -224,6 +225,11 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   }
   hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
   const instructions = `  ${hintParts.join(sep)}`;
+
+  // Zero-row component that toggles the image manager's suppress flag
+  // based on pi-tui's overlay state once per frame. Must be added before
+  // any inline image can appear.
+  state.ui.addChild(new OverlayWatcherComponent(state.ui));
 
   state.ui.addChild(new Spacer(1));
   state.ui.addChild(new Text(banner, 1, 0));

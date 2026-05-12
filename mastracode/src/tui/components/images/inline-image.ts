@@ -19,11 +19,11 @@
  * "Placeholder" vs "drawn" is decided per-frame by a single call to
  * `imageManager.isPlaceholder(self)`. The manager returns true when this
  * is no longer the most recent inline image (a newer screenshot took
- * over — we do not stack kitty placements) or when an overlay is
- * currently visible (pi-tui's compositor cannot paint over image-bearing
- * lines, so the manager hides ours and writes a delete-by-id to clear
- * the graphics layer underneath the overlay; when the overlay closes the
- * next render re-emits the escape and the diff renderer re-places it).
+ * over — we do not stack kitty placements) or when rendering has been
+ * externally suppressed (e.g. an overlay is up; pi-tui's compositor
+ * cannot paint over image-bearing lines, so the watcher tells the
+ * manager to hide ours and write a delete-by-id to clear the graphics
+ * layer; the next frame after the overlay closes re-emits the escape).
  *
  * Why a custom component (not Text)
  * ---------------------------------
