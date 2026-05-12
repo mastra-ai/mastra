@@ -1,7 +1,22 @@
 import EventEmitter from 'node:events';
+import type { IMastraLogger } from '../logger';
+import { AckHandleBuffer } from './ack-handle-buffer';
 import { PubSub } from './pubsub';
 import type { PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
+
+export interface EventEmitterPubSubOptions {
+  /**
+   * Optional logger for surfacing batched-delivery errors. Falls back to
+   * `console.error` when not provided.
+   */
+  logger?: IMastraLogger;
+}
+
+// Reused for the fan-out delivery path where ack/nack are no-ops: the process
+// is the broker, there is no transport-level redelivery to negotiate. Hoisted
+// to module scope so we don't allocate two new closures per emitted event.
+const NOOP_ACK = async (): Promise<void> => {};
 
 export class EventEmitterPubSub extends PubSub {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
@@ -12,6 +27,15 @@ export class EventEmitterPubSub extends PubSub {
   // declare `['push']` only and skip the worker.
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['pull', 'push'];
+  }
+
+  /**
+   * `EventEmitterPubSub` is strictly in-process — the buffer's durability
+   * matches the rest of the process, so an in-memory `AckHandleBuffer` is
+   * not a durability lie. Batching is native here.
+   */
+  override get supportsNativeBatching(): boolean {
+    return true;
   }
 
   private emitter: EventEmitter;
@@ -34,9 +58,30 @@ export class EventEmitterPubSub extends PubSub {
   // a distinct wrapper per topic.
   private fanoutWrappers: Map<string, Map<EventCallback, (event: Event) => void>> = new Map();
 
-  constructor(existingEmitter?: EventEmitter) {
+  // topic → (original callback → buffer). Present only for subscribers that
+  // opt into batching via `options.batch`. The buffer is the destination of
+  // the emitter listener; it invokes the user cb according to its policy.
+  private batchBuffers: Map<string, Map<EventCallback, AckHandleBuffer>> = new Map();
+
+  private readonly logger?: IMastraLogger;
+
+  constructor(existingEmitter?: EventEmitter, options: EventEmitterPubSubOptions = {}) {
     super();
     this.emitter = existingEmitter ?? new EventEmitter();
+    this.logger = options.logger;
+  }
+
+  /**
+   * Debug-hostile silent failures are the default for emitter listeners.
+   * Surface buffer-side errors on a single channel so they're at least visible.
+   */
+  private logBufferError(topic: string, err: unknown, ctx: { phase: 'cb' | 'ack-dropped' }): void {
+    const message = `[EventEmitterPubSub] batched ${ctx.phase} failed for ${topic}`;
+    if (this.logger) {
+      this.logger.error(message, err);
+    } else {
+      console.error(message, err);
+    }
   }
 
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
@@ -51,15 +96,45 @@ export class EventEmitterPubSub extends PubSub {
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    if (options?.batch) {
+      // Batched path: insert an AckHandleBuffer between the emitter and cb.
+      // ack/nack are no-ops at this layer — the process is the broker.
+      const buffer = new AckHandleBuffer(cb, options.batch, undefined, (err, ctx) => {
+        this.logBufferError(topic, err, ctx);
+      });
+      let byCb = this.batchBuffers.get(topic);
+      if (!byCb) {
+        byCb = new Map();
+        this.batchBuffers.set(topic, byCb);
+      }
+      byCb.set(cb, buffer);
+
+      if (options.group) {
+        // Group path: the group's member list keeps the original `cb` so
+        // `unsubscribe(topic, cb)` and round-robin tracking work unchanged.
+        // `deliverToGroup` checks `batchBuffers` and routes through the
+        // buffer when present.
+        this.subscribeWithGroup(topic, cb, options.group);
+      } else {
+        const wrapper = (event: Event) => {
+          void buffer.push(event, NOOP_ACK, NOOP_ACK);
+        };
+        let byCbFanout = this.fanoutWrappers.get(topic);
+        if (!byCbFanout) {
+          byCbFanout = new Map();
+          this.fanoutWrappers.set(topic, byCbFanout);
+        }
+        byCbFanout.set(cb, wrapper);
+        this.emitter.on(topic, wrapper);
+      }
+      return;
+    }
+
     if (options?.group) {
       this.subscribeWithGroup(topic, cb, options.group);
     } else {
       const wrapper = (event: Event) => {
-        cb(
-          event,
-          async () => {},
-          async () => {},
-        );
+        cb(event, NOOP_ACK, NOOP_ACK);
       };
       let byCb = this.fanoutWrappers.get(topic);
       if (!byCb) {
@@ -72,6 +147,17 @@ export class EventEmitterPubSub extends PubSub {
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    // Tear down a batching buffer for this (topic, cb) pair, if one was set
+    // up by `subscribe`. Done first so any in-flight emitter dispatches
+    // ignore further events into a disposed buffer.
+    const byCbBuffers = this.batchBuffers.get(topic);
+    const buffer = byCbBuffers?.get(cb);
+    if (buffer && byCbBuffers) {
+      buffer.dispose();
+      byCbBuffers.delete(cb);
+      if (byCbBuffers.size === 0) this.batchBuffers.delete(topic);
+    }
+
     // Check if this callback is in any group for this topic
     for (const [group, topicMap] of this.groups) {
       const members = topicMap.get(topic);
@@ -111,8 +197,42 @@ export class EventEmitterPubSub extends PubSub {
   }
 
   async flush(): Promise<void> {
-    // Wait for any pending nack redeliveries to fire
-    if (this.pendingNacks.size > 0) {
+    // A batched cb can nack mid-delivery, which schedules a redelivery via
+    // setTimeout(0). The redelivered event lands back in `batchBuffers`
+    // (the buffer is the group member's destination) and may sit there
+    // below maxSize/maxWaitMs thresholds. So we loop: drain buffers, wait
+    // for pending nacks to fire, then check whether either side produced
+    // more work. Stable-state termination requires both to be empty at the
+    // top of a single iteration.
+    while (true) {
+      const drains: { topic: string; promise: Promise<void> }[] = [];
+      for (const [topic, byCb] of this.batchBuffers.entries()) {
+        for (const buffer of byCb.values()) {
+          drains.push({ topic, promise: buffer.flush() });
+        }
+      }
+      if (drains.length > 0) {
+        // allSettled — a single throwing buffer should not block the rest from
+        // flushing during shutdown. Rejections that propagate this far skipped
+        // the per-event try/catch in AckHandleBuffer (e.g. a throwing coalesce)
+        // and must be surfaced or they vanish at shutdown.
+        const results = await Promise.allSettled(drains.map(d => d.promise));
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i]!;
+          if (result.status === 'rejected') {
+            this.logBufferError(drains[i]!.topic, result.reason, { phase: 'cb' });
+          }
+        }
+      }
+
+      if (this.pendingNacks.size === 0) {
+        // Nothing scheduled — and the drain above either did nothing or
+        // produced no new pending nacks, so we're stable.
+        return;
+      }
+
+      // Wait for the currently-scheduled nacks to fire. Each redelivery
+      // may land in a buffer; loop and re-drain.
       await new Promise<void>(resolve => {
         const check = () => {
           if (this.pendingNacks.size === 0) {
@@ -136,6 +256,14 @@ export class EventEmitterPubSub extends PubSub {
     }
     this.pendingNacks.clear();
     this.deliveryAttempts.clear();
+
+    // Dispose every batching buffer so timers are cleared.
+    for (const byCb of this.batchBuffers.values()) {
+      for (const buffer of byCb.values()) {
+        buffer.dispose();
+      }
+    }
+    this.batchBuffers.clear();
 
     this.emitter.removeAllListeners();
     this.groups.clear();
@@ -202,6 +330,13 @@ export class EventEmitterPubSub extends PubSub {
       this.pendingNacks.add(handle);
     };
 
-    currentMembers[idx]!(eventWithAttempt, ack, nack);
+    const member = currentMembers[idx]!;
+    // If this member opted into batching, route through its buffer.
+    const buffer = this.batchBuffers.get(topic)?.get(member);
+    if (buffer) {
+      void buffer.push(eventWithAttempt, ack, nack);
+    } else {
+      member(eventWithAttempt, ack, nack);
+    }
   }
 }
