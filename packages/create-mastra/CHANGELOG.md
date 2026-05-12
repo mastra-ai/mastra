@@ -1,5 +1,33 @@
 # create-mastra
 
+## 1.9.0-alpha.18
+
+## 1.9.0-alpha.17
+
+## 1.9.0-alpha.16
+
+## 1.9.0-alpha.15
+
+### Minor Changes
+
+- Add "Enable Mastra Observability? (will open auth flow)" prompt to `create-mastra` and `mastra init`. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+  When the user opts in, the CLI runs the interactive browser login flow (if not already authenticated), lets them pick an existing project or create a new one, mints a fresh organization access token, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` + `MASTRA_PROJECT_ID` to `.env`. The generated project already registers a `MastraPlatformExporter`, so no additional setup is needed to start sending traces.
+
+  `MASTRA_PLATFORM_ACCESS_TOKEN` replaces `MASTRA_CLOUD_ACCESS_TOKEN`. The old name is still read by the exporter for backwards compatibility but is deprecated.
+
+  If provisioning fails (e.g., the platform is unreachable), the command falls back to writing placeholder env vars with instructions.
+
+  Both commands also accept `--observability` / `--no-observability` flags for non-interactive use, and `--observability-project <name>` to bypass the project picker.
+
+### Patch Changes
+
+- Mastra Observability provisioning now creates new platform projects as observability-only (no Studio or Server runtime attached). The first `mastra studio deploy` or `mastra server deploy` flips the matching runtime flag, so projects are no longer mislabelled as Studio in the platform UI before any deploy has happened. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+## 1.9.0-alpha.14
+
+## 1.9.0-alpha.13
+
 ## 1.9.0-alpha.12
 
 ## 1.9.0-alpha.11

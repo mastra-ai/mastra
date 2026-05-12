@@ -1,17 +1,15 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import {
-  AlertDialog,
-  Skeleton,
-  ThreadDeleteButton,
-  ThreadItem,
-  ThreadLink,
-  ThreadList,
-  Threads,
-  Txt,
-  Icon,
-} from '@mastra/playground-ui';
+import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import {
+  ThreadList,
+  ThreadListEmpty,
+  ThreadListItem,
+  ThreadListItems,
+  ThreadListNewItem,
+  ThreadListSeparator,
+} from '@/components/thread-list';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -29,7 +27,6 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
 
-  // Check if user can delete threads (memory:delete permission)
   const canDeleteThread = canDelete('memory');
 
   if (isLoading) {
@@ -40,47 +37,44 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
   return (
-    <div className="overflow-y-auto h-full w-full">
-      <Threads>
-        <ThreadList>
-          <ThreadItem>
-            <ThreadLink as={Link} to={newThreadLink}>
-              <span className="text-accent1 flex items-center gap-4">
-                <Icon className="bg-surface4 rounded-lg" size="lg">
-                  <Plus />
-                </Icon>
-                New Chat
-              </span>
-            </ThreadLink>
-          </ThreadItem>
+    <>
+      <ThreadList>
+        <ThreadListNewItem as={Link} to={newThreadLink}>
+          <Icon>
+            <Plus />
+          </Icon>
+          New Chat
+        </ThreadListNewItem>
+        <ThreadListSeparator />
 
-          {threads.length === 0 && (
-            <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">
-              Your conversations will appear here once you start chatting!
-            </Txt>
-          )}
+        {threads.length === 0 ? (
+          <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
+        ) : (
+          <ThreadListItems>
+            {threads.map(thread => {
+              const isActive = thread.id === threadId;
 
-          {threads.map(thread => {
-            const isActive = thread.id === threadId;
+              const threadLink =
+                resourceType === 'agent'
+                  ? paths.agentThreadLink(resourceId, thread.id)
+                  : paths.networkThreadLink(resourceId, thread.id);
 
-            const threadLink =
-              resourceType === 'agent'
-                ? paths.agentThreadLink(resourceId, thread.id)
-                : paths.networkThreadLink(resourceId, thread.id);
-
-            return (
-              <ThreadItem isActive={isActive} key={thread.id}>
-                <ThreadLink as={Link} to={threadLink}>
-                  <ThreadTitle title={thread.title} id={thread.id} />
-                  <span>{formatDay(thread.createdAt)}</span>
-                </ThreadLink>
-
-                {canDeleteThread && <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />}
-              </ThreadItem>
-            );
-          })}
-        </ThreadList>
-      </Threads>
+              return (
+                <ThreadListItem
+                  key={thread.id}
+                  as={Link}
+                  to={threadLink}
+                  isActive={isActive}
+                  onDelete={canDeleteThread ? () => setDeleteId(thread.id) : undefined}
+                  deleteLabel="delete thread"
+                >
+                  <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
+                </ThreadListItem>
+              );
+            })}
+          </ThreadListItems>
+        )}
+      </ThreadList>
 
       <DeleteThreadDialog
         open={!!deleteId}
@@ -91,7 +85,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
           }
         }}
       />
-    </div>
+    </>
   );
 };
 
@@ -137,16 +131,12 @@ function isDefaultThreadName(name: string): boolean {
   return defaultPattern.test(name);
 }
 
-function ThreadTitle({ title, id }: { title?: string; id?: string }) {
-  if (!title) {
-    return null;
+function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; createdAt?: Date }) {
+  if (!title || isDefaultThreadName(title)) {
+    return <span>{createdAt ? formatDay(createdAt) : `Thread ${id ? id.substring(id.length - 5) : ''}`}</span>;
   }
 
-  if (isDefaultThreadName(title)) {
-    return <span className="text-neutral3">Thread {id ? id.substring(id.length - 5) : null}</span>;
-  }
-
-  return <span className="truncate max-w-56 text-neutral3">{title}</span>;
+  return <span className="truncate">{title}</span>;
 }
 
 const formatDay = (date: Date) => {

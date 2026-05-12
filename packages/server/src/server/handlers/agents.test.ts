@@ -1235,6 +1235,7 @@ describe('Agent Routes Authorization', () => {
         threadId: 'subscribe-thread-from-context',
       });
       let capturedTarget: any;
+      const abort = vi.fn(() => true);
       const unsubscribe = vi.fn();
       const chunk = {
         type: 'text-delta',
@@ -1247,10 +1248,11 @@ describe('Agent Routes Authorization', () => {
         capturedTarget = target;
         return {
           activeRunId: () => null,
-          abort: () => false,
+          abort,
           unsubscribe,
           stream: (async function* () {
             yield chunk;
+            await new Promise(() => {});
           })(),
         } as any;
       });
@@ -1267,8 +1269,11 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
       const reader = stream.getReader();
       await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
+      expect(abort).not.toHaveBeenCalled();
+      expect(unsubscribe).not.toHaveBeenCalled();
       await reader.cancel();
-      expect(unsubscribe).toHaveBeenCalled();
+      expect(abort).toHaveBeenCalledTimes(1);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

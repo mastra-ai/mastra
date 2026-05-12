@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.10.1-alpha.2
+
+### Patch Changes
+
+- Fixed `@mastra/pg` listing endpoints (agents, MCP clients, MCP servers, prompt blocks, scorer definitions, skills, and workspaces) so a single row with a malformed value no longer returns HTTP 500 and hides every other record in the Mastra Editor. Listings now tolerate the bad row and return the rest. ([#16233](https://github.com/mastra-ai/mastra/pull/16233))
+
+  Fixes #16224.
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7)]:
+  - @mastra/core@1.33.0-alpha.16
+
 ## 1.10.1-alpha.1
 
 ### Patch Changes

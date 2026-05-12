@@ -16,6 +16,7 @@ import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
+import type { GoalState } from '../goal-manager.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 
 import type { SlashCommandContext } from './types.js';
@@ -232,19 +233,30 @@ async function startGoal(
   }
   await goalManager.saveToThread(state);
 
-  ctx.addUserMessage(createGoalReminderMessage(goal.id, objective, goal.maxTurns, judgeModelId));
-
   if (options.trigger === 'none') {
     return;
   }
 
   try {
-    await state.harness.sendMessage({ content: createGoalReminderXml(objective) });
+    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function createGoalReminderSignal(goal: GoalState) {
+  return {
+    type: 'system-reminder' as const,
+    contents: goal.objective,
+    attributes: { type: 'goal' },
+    metadata: {
+      goalId: goal.id,
+      maxTurns: goal.maxTurns,
+      judgeModelId: goal.judgeModelId,
+    },
+  };
 }
 
 export function createGoalReminderMessage(

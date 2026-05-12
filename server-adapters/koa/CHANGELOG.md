@@ -1,5 +1,75 @@
 # @mastra/koa
 
+## 1.5.2-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [[`4999667`](https://github.com/mastra-ai/mastra/commit/49996678b68356cad7f088430009690406c50fbd)]:
+  - @mastra/core@1.33.0-alpha.17
+  - @mastra/server@1.33.0-alpha.17
+
+## 1.5.2-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`cc189cc`](https://github.com/mastra-ai/mastra/commit/cc189cc0128eb7af233476b5e421ec6888bffde7), [`1c989ea`](https://github.com/mastra-ai/mastra/commit/1c989ea0fcc3e8b6c25a64a5e423875706903420)]:
+  - @mastra/core@1.33.0-alpha.16
+  - @mastra/server@1.33.0-alpha.16
+
+## 1.5.2-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+  - @mastra/server@1.33.0-alpha.15
+
+## 1.5.2-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`05dab92`](https://github.com/mastra-ai/mastra/commit/05dab92b3373306a4791c3a035a3100dd9a76b7f)]:
+  - @mastra/server@1.33.0-alpha.14
+  - @mastra/core@1.33.0-alpha.14
+
+## 1.5.2-alpha.13
+
+### Patch Changes
+
+- Fixed `TypeError: Cannot read properties of undefined (reading 'length')` thrown during `MastraServer.init()` when a subclass forwards a non-Koa app-like object (for example a `koa-router` instance, a mounted sub-app, or a custom wrapper) to `super.registerRoute(app, route, opts)`. The dispatcher-reuse optimization introduced in 1.5.0 now requires the target to expose an `app.middleware` array; otherwise it falls back to registering a fresh dispatcher per route via `app.use`, matching the pre-1.5.0 per-route behavior. ([#16484](https://github.com/mastra-ai/mastra/pull/16484))
+
+  **Example (subclass that previously crashed):**
+
+  ```ts
+  import { MastraServer } from '@mastra/koa';
+  import Router from 'koa-router';
+
+  class CustomKoaMastraServer extends MastraServer {
+    private router = new Router();
+
+    async registerCustomApiRoutes() {
+      const routes = this.mastra.getServer()?.apiRoutes ?? [];
+      for (const route of routes) {
+        // The router has no `middleware` array — this used to throw at init.
+        await super.registerRoute(this.router as any, route, { prefix: this.prefix });
+      }
+      this.app.use(this.router.routes());
+    }
+  }
+  ```
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+  - @mastra/server@1.33.0-alpha.13
+
+## 1.5.2-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+  - @mastra/server@1.33.0-alpha.12
+
 ## 1.5.2-alpha.11
 
 ### Patch Changes

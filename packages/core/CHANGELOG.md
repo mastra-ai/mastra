@@ -1,5 +1,137 @@
 # @mastra/core
 
+## 1.33.0-alpha.17
+
+### Patch Changes
+
+- Added support for attaching a browser instance to the harness after initialization so consumers can defer browser creation until it is needed: ([#16513](https://github.com/mastra-ai/mastra/pull/16513))
+
+  ```ts
+  const harness = new Harness({ agent, mastra });
+  await harness.init();
+  harness.setBrowser(browser);
+  ```
+
+## 1.33.0-alpha.16
+
+### Patch Changes
+
+- Fixed two bugs that affected scheduled workflows. ([#16510](https://github.com/mastra-ai/mastra/pull/16510))
+
+  **Scheduled workflow with mismatched `id` could not be dispatched ([#16471](https://github.com/mastra-ai/mastra/issues/16471))**
+
+  When a workflow's `id` differed from the key it was registered under, the scheduler published events the event processor could not resolve, causing the run to fail with "Workflow not found." The dispatcher now looks up workflows by `.id` first (falling back to the registration key), so the following now works as expected:
+
+  ```ts
+  const workflow = createWorkflow({ id: 'daily-report', schedule: { cron: '0 9 * * *' } });
+  new Mastra({ workflows: { dailyReport: workflow } });
+  ```
+
+  **Deleted scheduled workflows caused infinite event redelivery**
+
+  Removing a scheduled workflow from code used to leave its schedule row in storage. The scheduler kept firing for the missing workflow and the event processor kept telling the transport to redeliver the event forever. On boot, Mastra now cleans up declarative schedule rows (those it wrote itself, prefixed with `wf_`) for workflows that are no longer registered. User-created schedules made via the schedules API are left untouched. The event processor also handles in-flight events for missing workflows by emitting a single terminal `workflow.fail` instead of looping.
+
+## 1.33.0-alpha.15
+
+### Minor Changes
+
+- Added experimental support for using remote A2A agents as Mastra subagents. ([#16348](https://github.com/mastra-ai/mastra/pull/16348))
+
+  **What changed**
+  - Mastra agents can register remote A2A endpoints through `A2AAgent` and delegate to them like other subagents.
+  - Remote A2A subagents support `generate`, `resumeGenerate`, `stream`, and `resumeStream` so parent agents can use them in normal subagent flows.
+  - Agent Cards can be cached and verified with pluggable verification hooks before remote execution begins.
+  - Browser environments can import shared A2A types and errors from `@mastra/core/a2a/client`.
+
+  **Example**
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { A2AAgent } from '@mastra/core/a2a';
+
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Use the remote billing specialist for billing questions.',
+    model: 'openai/gpt-4o-mini',
+    agents: {
+      billingSpecialist: new A2AAgent({
+        url: 'https://billing.example.com/.well-known/agent-card.json',
+      }),
+    },
+  });
+
+  const result = await agent.generate('Can you check the latest invoice status?');
+  ```
+
+  **Why**
+  This lets Mastra agents compose with remote A2A agents without exposing those integrations as plain tools or depending directly on the client SDK.
+
+## 1.33.0-alpha.14
+
+## 1.33.0-alpha.13
+
+### Minor Changes
+
+- Improved Harness support for Agent thread signals. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+  Harness thread subscriptions now own stream processing for followed runs, echo user-message signal data with stable IDs, and support idle signal starts without delaying optimistic rendering.
+
+- Improved foreach workflow execution to keep concurrency slots filled as iterations finish. ([#12860](https://github.com/mastra-ai/mastra/pull/12860))
+
+### Patch Changes
+
+- - Fixed `foreach` state update and `foreach` bail in evented workflows ([#16436](https://github.com/mastra-ai/mastra/pull/16436))
+  - Fixed suspend-resume in evented-workflows legacy stream.
+
+- Fixed goal reminders in MastraCode to continue through signals without duplicating prompts. ([#16231](https://github.com/mastra-ai/mastra/pull/16231))
+
+- Fixed suspend and resume for evented workflows that use parallel steps, `.branch()`, `dountil`/`dowhile` loops, and nested workflows — previously these only worked reliably for simple linear flows. ([#16476](https://github.com/mastra-ai/mastra/pull/16476))
+
+  **Parallel & `.branch()` steps** — when more than one branch suspends at the same time (e.g. each branch waits on its own approval), every suspended branch can now be resumed, the workflow stays suspended until all of them have been resumed, and the branch outputs are merged correctly. Before, only the last branch to suspend was resumable, and resuming one branch could prematurely complete the run.
+
+  **`dountil` / `dowhile` loops** — a loop body that calls `suspend()` now suspends the workflow instead of crashing the run. And after a resume, subsequent loop iterations run fresh instead of re-receiving the resume data — which previously made loops either run forever or skip their own suspend logic.
+
+  **Nested workflows** — resuming a suspended step inside a nested workflow now gives it the correct input (the output of the step right before it, not the nested workflow's own input), so it produces correct results, even when workflows are nested several levels deep. The suspended-step path returned in a workflow result is also correct now, so you can pass it straight back into `resume({ step })`.
+
+## 1.33.0-alpha.12
+
+### Minor Changes
+
+- Added Agent signals for sending contextual messages into agent thread loops and subscribing to thread activity. ([#16229](https://github.com/mastra-ai/mastra/pull/16229))
+
+  Call `agent.sendSignal()` to inject context into a running agent loop. When the thread is idle, that same signal becomes the prompt that starts the next loop by default. Use `ifActive.behavior` and `ifIdle.behavior` to deliver, persist, discard, or wake from a signal.
+
+  Use `agent.subscribeToThread()` to follow the raw stream chunks for a memory thread, observe signal echoes with stable IDs, and abort the active stream for that thread.
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+
+  void (async () => {
+    for await (const part of subscription.stream) {
+      if (part.type === 'finish') {
+        subscription.unsubscribe();
+      }
+    }
+  })();
+
+  agent.sendSignal({ type: 'user-message', contents: 'Use the latest answer' }, { resourceId, threadId });
+  ```
+
+- Added processor `sendSignal` support and routed built-in system reminders through signal messages. ([#16438](https://github.com/mastra-ai/mastra/pull/16438))
+
+### Patch Changes
+
+- A tool's `toModelOutput` result is now computed before the `tool-result` chunk is emitted, so it travels with the chunk on `providerMetadata.mastra.modelOutput`. Previously `toModelOutput` only ran later when the message list was updated, meaning live stream consumers couldn't see it without re-running the tool. ([#16457](https://github.com/mastra-ai/mastra/pull/16457))
+
+  The harness now forwards that `providerMetadata` on `tool_result` content (both streaming and replayed history) and on `tool_end` events, so UIs can render rich tool output (e.g. screenshot images) inline.
+
+  ```ts
+  harness.on('tool_end', event => {
+    const modelOutput = event.providerMetadata?.mastra?.modelOutput;
+    // e.g. { type: 'content', value: [{ type: 'image-data', mediaType: 'image/png', data: '...' }] }
+  });
+  ```
+
 ## 1.33.0-alpha.11
 
 ### Patch Changes

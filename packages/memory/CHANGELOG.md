@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.18.0-alpha.4
+
+### Patch Changes
+
+- Auto-recover from transient transport errors (e.g. undici `terminated`, `fetch failed`, `UND_ERR_*`, 5xx, 429) in the OM observer and reflector LLM calls. Adds an internal retry wrapper with exponential backoff (1s, 2s, 4s, 8s, 16s, 32s, 64s, 120s — per-attempt delay capped at 2 minutes, ~4 minute total budget per call) so a single network blip from any provider no longer kills the actor turn during long-running sessions. Non-transient errors (auth, validation, etc.) and user-initiated aborts still fail fast. No public API changes. ([#16454](https://github.com/mastra-ai/mastra/pull/16454))
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+
 ## 1.18.0-alpha.3
 
 ### Patch Changes

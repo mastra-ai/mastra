@@ -1130,6 +1130,33 @@ export type ProviderModelsMap = {
     'qwen3.5-plus',
     'qwen3.6-plus',
   ];
+  readonly databricks: readonly [
+    'databricks-claude-haiku-4-5',
+    'databricks-claude-opus-4-1',
+    'databricks-claude-opus-4-5',
+    'databricks-claude-opus-4-6',
+    'databricks-claude-opus-4-7',
+    'databricks-claude-sonnet-4',
+    'databricks-claude-sonnet-4-5',
+    'databricks-claude-sonnet-4-6',
+    'databricks-gemini-2-5-flash',
+    'databricks-gemini-2-5-pro',
+    'databricks-gemini-3-1-flash-lite',
+    'databricks-gemini-3-1-pro',
+    'databricks-gemini-3-flash',
+    'databricks-gemini-3-pro',
+    'databricks-gpt-5',
+    'databricks-gpt-5-1',
+    'databricks-gpt-5-2',
+    'databricks-gpt-5-4',
+    'databricks-gpt-5-4-mini',
+    'databricks-gpt-5-4-nano',
+    'databricks-gpt-5-5',
+    'databricks-gpt-5-mini',
+    'databricks-gpt-5-nano',
+    'databricks-gpt-oss-120b',
+    'databricks-gpt-oss-20b',
+  ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
     'Qwen/Qwen2.5-VL-32B-Instruct',
@@ -1446,6 +1473,7 @@ export type ProviderModelsMap = {
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly 'novita-ai': readonly [
+    'Sao10K/L3-8B-Stheno-v3.2',
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
     'baidu/ernie-4.5-21B-a3b-thinking',
@@ -1476,6 +1504,7 @@ export type ProviderModelsMap = {
     'google/gemma-4-31b-it',
     'gryphe/mythomax-l2-13b',
     'inclusionai/ling-2.6-1t',
+    'inclusionai/ling-2.6-flash',
     'kwaipilot/kat-coder-pro',
     'meta-llama/llama-3-70b-instruct',
     'meta-llama/llama-3-8b-instruct',
@@ -1529,8 +1558,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-27b',
     'qwen/qwen3.5-35b-a3b',
     'qwen/qwen3.5-397b-a17b',
-    'qwen/qwen3.6-27b',
-    'sao10k/L3-8B-Stheno-v3.2',
     'sao10k/l3-70b-euryale-v2.1',
     'sao10k/l3-8b-lunaris',
     'sao10k/l31-70b-euryale-v2.2',
@@ -2467,7 +2494,7 @@ export type ProviderModelsMap = {
     'gpt-oss:20b',
     'kimi-k2-thinking',
     'kimi-k2.5',
-    'kimi-k2.6:cloud',
+    'kimi-k2.6',
     'kimi-k2:1t',
     'minimax-m2',
     'minimax-m2.1',
@@ -3784,6 +3811,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b-fast',
     'zai-org/GLM-5.1-FP8',
   ];
+  readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly togetherai: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'MiniMaxAI/MiniMax-M2.7',

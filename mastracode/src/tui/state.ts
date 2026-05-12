@@ -33,6 +33,11 @@ import type { UserMessageComponent } from './components/user-message.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+
+export interface PendingSignalMessage {
+  component: Component;
+  text: string;
+}
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -157,6 +162,8 @@ export interface TUIState {
   pendingQueuedActions: Array<'message' | 'slash'>;
   /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
+  /** Pending signal messages waiting for the stream echo */
+  pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
@@ -269,6 +276,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     followUpComponents: [],
+    pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
 

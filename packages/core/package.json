@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.33.0-alpha.11",
+  "version": "1.33.0-alpha.17",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -29,6 +29,16 @@
       "require": {
         "types": "./dist/a2a/index.d.ts",
         "default": "./dist/a2a/index.cjs"
+      }
+    },
+    "./a2a/client": {
+      "import": {
+        "types": "./dist/a2a/client.d.ts",
+        "default": "./dist/a2a/client.js"
+      },
+      "require": {
+        "types": "./dist/a2a/client.d.ts",
+        "default": "./dist/a2a/client.cjs"
       }
     },
     "./agent": {
@@ -735,6 +745,7 @@
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
+    "fastq": "^1.19.1",
     "gray-matter": "^4.0.3",
     "hono": "^4.12.8",
     "hono-openapi": "^1.3.0",
