@@ -851,7 +851,7 @@ export async function executeForeach(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const { step, opts } = entry;
-  const results: StepResult<any, any, any, any>[] = [];
+  const results: any[] = [];
   const concurrency = opts.concurrency;
   const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
@@ -897,12 +897,11 @@ export async function executeForeach(
   const resumeIndex =
     prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
 
-  const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput || []) as StepResult<
-    any,
-    any,
-    any,
-    any
-  >[];
+  type ForeachStepResult = StepResult<any, any, any, any>;
+  type PersistedForeachStepResult = ForeachStepResult & { suspendPayload?: any };
+
+  const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
+    []) as PersistedForeachStepResult[];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
 
@@ -914,8 +913,8 @@ export async function executeForeach(
   // next item as soon as any slot frees up, keeping `concurrency` items running
   // at all times instead of waiting for an entire batch to finish.
   type ForeachTask = { item: any; k: number; resumeToUse: typeof resume };
-  let errorResult: StepResult<any, any, any, any> | null = null;
-  let canceledResult: StepResult<any, any, any, any> | null = null;
+  let errorResult: StepFailure<any, any, any, any> | null = null;
+  let canceledResult: ForeachStepResult | null = null;
   let inFlight = 0;
   let resolveCompletion: (() => void) | undefined;
 
@@ -972,23 +971,17 @@ export async function executeForeach(
     });
 
   /** Handle a non-success result (suspended or failed). Kills the queue so remaining items are skipped. */
-  const handleNonSuccessResult = async (result: StepResult<any, any, any, any>, k: number) => {
-    const resultAny = result as any;
-    const execResults = {
-      status: resultAny.status,
-      error: resultAny.error,
-      suspendPayload: resultAny.suspendPayload,
-      suspendedAt: resultAny.suspendedAt,
-      endedAt: resultAny.endedAt,
-      output: resultAny.output,
-    };
-
-    if (execResults.status === 'suspended') {
+  const handleNonSuccessResult = async (result: ForeachStepResult, k: number) => {
+    if (result.status === 'suspended') {
       if (!foreachIndexObj[k]) {
-        foreachIndexObj[k] = execResults;
+        foreachIndexObj[k] = {
+          status: result.status,
+          suspendPayload: result.suspendPayload,
+          suspendedAt: result.suspendedAt,
+        };
       }
       await emitIterationProgress(k, 'suspended');
-    } else {
+    } else if (result.status === 'failed') {
       completedCount++;
       await emitIterationProgress(k, 'failed');
       if (!errorResult) {
@@ -1000,12 +993,14 @@ export async function executeForeach(
   };
 
   /** Handle a successful iteration result. */
-  const handleSuccessResult = async (result: StepResult<any, any, any, any>, k: number) => {
+  const handleSuccessResult = async (result: Extract<ForeachStepResult, { status: 'success' }>, k: number) => {
     completedCount++;
-    await emitIterationProgress(k, 'success', (result as any)?.output);
+    await emitIterationProgress(k, 'success', result.output);
 
-    const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k)!;
-    delete resumeLabels[indexResumeLabel];
+    const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k);
+    if (indexResumeLabel !== undefined) {
+      delete resumeLabels[indexResumeLabel];
+    }
   };
 
   const worker = async (task: ForeachTask, cb: DoneCallback) => {
@@ -1042,15 +1037,15 @@ export async function executeForeach(
         await handleSuccessResult(result, k);
       }
 
-      if ((result as any)?.output !== undefined) {
-        results[k] = (result as any).output;
+      if (result.status === 'success' && result.output !== undefined) {
+        results[k] = result.output;
       }
 
       // Preserve `suspendPayload` for iterations that are still suspended so
       // their resume context (e.g. an agent's `__streamState`) survives the
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
-      prevForeachOutput[k] = result?.status === 'suspended' ? result : ({ ...result, suspendPayload: {} } as any);
+      prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
     } catch (err) {
       if (!errorResult) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
@@ -1060,7 +1055,7 @@ export async function executeForeach(
           payload: undefined,
           startedAt: Date.now(),
           endedAt: Date.now(),
-        } as unknown as StepResult<any, any, any, any>;
+        };
       }
       killQueue();
     }
@@ -1081,20 +1076,25 @@ export async function executeForeach(
     ) {
       if (prevItemResult?.status === 'success') {
         // Already succeeded in a previous run – clean up resume label
-        const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k)!;
-        delete resumeLabels[indexResumeLabel];
+        const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k);
+        if (indexResumeLabel !== undefined) {
+          delete resumeLabels[indexResumeLabel];
+        }
       } else {
         // Still suspended from a previous run – track it for the suspend result
-        const { status, error, suspendPayload, suspendedAt, endedAt, output } = prevItemResult as any;
-        foreachIndexObj[k] = { status, error, suspendPayload, suspendedAt, endedAt, output };
+        foreachIndexObj[k] = {
+          status: prevItemResult.status,
+          suspendPayload: prevItemResult.suspendPayload,
+          suspendedAt: prevItemResult.suspendedAt,
+        };
       }
 
-      if ((prevItemResult as any)?.output) {
-        results[k] = (prevItemResult as any)?.output;
+      if (prevItemResult.status === 'success' && prevItemResult.output !== undefined) {
+        results[k] = prevItemResult.output;
       }
       // Preserve suspendPayload for still-suspended items (same as worker logic)
       prevForeachOutput[k] =
-        prevItemResult?.status === 'suspended' ? prevItemResult : ({ ...prevItemResult, suspendPayload: {} } as any);
+        prevItemResult.status === 'suspended' ? prevItemResult : { ...prevItemResult, suspendPayload: {} };
       continue;
     }
 
@@ -1152,14 +1152,20 @@ export async function executeForeach(
   }
 
   // Handle error result first (matches previous behavior of returning on first error)
-  if (errorResult) {
-    const { status, error, suspendPayload, suspendedAt, endedAt, output } = errorResult as any;
-    const execResults = { status, error, suspendPayload, suspendedAt, endedAt, output };
+  const finalErrorResult = errorResult as StepFailure<any, any, any, any> | null;
+  if (finalErrorResult) {
+    const execResults = {
+      status: finalErrorResult.status,
+      error: finalErrorResult.error,
+      suspendPayload: finalErrorResult.suspendPayload,
+      suspendedAt: finalErrorResult.suspendedAt,
+      endedAt: finalErrorResult.endedAt,
+    };
 
     await engine.errorChildSpan({
       span: loopSpan,
       operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.error`,
-      errorOptions: { error: (errorResult as any).error },
+      errorOptions: { error: finalErrorResult.error },
     });
 
     await pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -1186,7 +1192,7 @@ export async function executeForeach(
       },
     });
 
-    return errorResult;
+    return finalErrorResult;
   }
 
   // Handle suspended items
