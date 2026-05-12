@@ -3,11 +3,7 @@ import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 
 type Span = Parameters<typeof formatHierarchicalSpans>[0][number];
 
-function span(
-  spanId: string,
-  parentSpanId: string | null,
-  overrides: Partial<Span> = {},
-): Span {
+function span(spanId: string, parentSpanId: string | null, overrides: Partial<Span> = {}): Span {
   return {
     spanId,
     name: spanId,
@@ -34,12 +30,7 @@ describe('formatHierarchicalSpans', () => {
     });
 
     it('nests descendants under the correct parent across multiple levels', () => {
-      const result = formatHierarchicalSpans([
-        span('root', null),
-        span('a', 'root'),
-        span('b', 'a'),
-        span('c', 'b'),
-      ]);
+      const result = formatHierarchicalSpans([span('root', null), span('a', 'root'), span('b', 'a'), span('c', 'b')]);
       expect(result).toHaveLength(1);
       const a = result[0].spans![0];
       expect(a.id).toBe('a');
@@ -49,10 +40,7 @@ describe('formatHierarchicalSpans', () => {
     });
 
     it('surfaces orphans (parent not present in spans) as additional roots', () => {
-      const result = formatHierarchicalSpans([
-        span('root', null),
-        span('orphan', 'parent-not-in-list'),
-      ]);
+      const result = formatHierarchicalSpans([span('root', null), span('orphan', 'parent-not-in-list')]);
       expect(result.map(r => r.id).sort()).toEqual(['orphan', 'root']);
     });
   });
@@ -73,12 +61,7 @@ describe('formatHierarchicalSpans', () => {
 
     it('nests descendants of the anchor under it (multi-level subtree)', () => {
       const result = formatHierarchicalSpans(
-        [
-          span('anchor', 'outside-parent'),
-          span('a', 'anchor'),
-          span('b', 'a'),
-          span('c', 'a'),
-        ],
+        [span('anchor', 'outside-parent'), span('a', 'anchor'), span('b', 'a'), span('c', 'a')],
         'anchor',
       );
       const anchorRoot = result[0];

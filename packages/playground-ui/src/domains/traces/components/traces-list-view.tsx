@@ -190,8 +190,7 @@ export function TracesListView({
 
             const trace = item.trace;
             const isFeatured =
-              trace.traceId === featuredTraceId &&
-              (featuredSpanId == null || trace.spanId === featuredSpanId);
+              trace.traceId === featuredTraceId && (featuredSpanId == null || trace.spanId === featuredSpanId);
             const displayDate = trace.startedAt ?? trace.createdAt;
             const entityName =
               trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
