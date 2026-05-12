@@ -63,7 +63,7 @@ describe('WorkflowScheduler', () => {
 
     const triggers = await store.listTriggers(created.id);
     expect(triggers).toHaveLength(1);
-    expect(triggers[0]!.status).toBe('published');
+    expect(triggers[0]!.outcome).toBe('published');
   });
 
   it('skips paused schedules', async () => {
@@ -163,7 +163,7 @@ describe('WorkflowScheduler', () => {
 
     const triggers = await store.listTriggers('sched-fail');
     expect(triggers).toHaveLength(1);
-    expect(triggers[0]!.status).toBe('failed');
+    expect(triggers[0]!.outcome).toBe('failed');
     expect(triggers[0]!.error).toBe('boom');
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]![1]).toEqual({ scheduleId: 'sched-fail' });

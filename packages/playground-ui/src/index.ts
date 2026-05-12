@@ -1,8 +1,5 @@
 import './index.css';
 
-// DS Components - Threads
-export * from './ds/components/Threads';
-
 // DS Components - Existing
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
@@ -25,6 +22,7 @@ export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
+export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
 export * from './ds/components/Dialog';
@@ -33,6 +31,7 @@ export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
 export * from './ds/components/Input';
+export * from './ds/components/InputGroup';
 export * from './ds/components/Kbd';
 export * from './ds/components/Label';
 export * from './ds/components/MarkdownRenderer';
@@ -63,13 +62,14 @@ export * from './ds/components/Sections';
 // DS Components - Migrated Complex Elements
 export * from './ds/components/DateTimePicker';
 export * from './ds/components/EntryList';
-export * from './ds/components/FormFields';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
+export * from './ds/components/SectionCard';
 export * from './ds/components/SelectElement';
+export * from './ds/components/SettingsRow';
 export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';

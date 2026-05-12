@@ -23,6 +23,7 @@ describe('getMastraRoutePath', () => {
 
   it('keeps unprefixed matching when no prefix is configured', () => {
     expect(getMastraRoutePath('/agents', '')).toBe('/agents');
+    expect(getMastraRoutePath('/agents', '/')).toBe('/agents');
     expect(getMastraRoutePath('/agents', undefined)).toBe('/agents');
   });
 });

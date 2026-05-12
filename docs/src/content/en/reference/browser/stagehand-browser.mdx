@@ -146,12 +146,19 @@ Use stagehand_extract to get data from pages.`,
     description: 'Configuration for streaming browser frames to Studio.',
     isOptional: true,
   },
+  {
+    name: 'excludeTools',
+    type: 'StagehandToolName[]',
+    description:
+      'Tool names to exclude from the browser toolset. Use this to disable specific tools for models that do not support certain capabilities, such as vision.',
+    isOptional: true,
+  },
 ]}
 />
 
 ## Tools
 
-`StagehandBrowser` provides 6 AI-powered tools for browser automation:
+`StagehandBrowser` provides 7 AI-powered tools for browser automation:
 
 | Tool | Description |
 | - | - |
@@ -160,7 +167,16 @@ Use stagehand_extract to get data from pages.`,
 | `stagehand_observe` | Discover actionable elements on a page |
 | `stagehand_navigate` | Navigate to a URL |
 | `stagehand_tabs` | Manage browser tabs |
+| `stagehand_screenshot` | Capture a screenshot as PNG (viewport by default; set `fullPage: true` for full page) |
 | `stagehand_close` | Close the browser |
+
+To exclude specific tools, pass `excludeTools` in the constructor:
+
+```typescript
+const browser = new StagehandBrowser({
+  excludeTools: ['stagehand_screenshot'],
+})
+```
 
 ## Tool reference
 
@@ -311,6 +327,22 @@ Manage browser tabs.
 // Close tab by index (or current if omitted)
 { "action": "close", "index": 1 }
 ```
+
+### `stagehand_screenshot`
+
+Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `stagehand_observe` or `stagehand_extract` when you only need text or structured data.
+
+```text
+// Viewport only (default)
+{}
+
+// Full scrollable page
+{ "fullPage": true }
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `fullPage` | `boolean` | Capture the full scrollable page instead of just the viewport (optional, default: false) |
 
 ### `stagehand_close`
 

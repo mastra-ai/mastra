@@ -798,6 +798,132 @@ describe('E2BSandbox Mount Configuration', () => {
       expect(s3fsMountCall[0]).not.toContain('test-bucket:/workspace/data/');
     }
   });
+
+  it('S3 mount passes region to s3fs as endpoint option', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'ap-northeast-1',
+        endpoint: 'https://example.supabase.co/storage/v1/s3',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-region');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-region') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0]).toContain('endpoint=ap-northeast-1');
+    }
+  });
+
+  it('S3 mount throws when s3fs returns 0 but mountpoint check fails', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    // Override the default mock to make `mountpoint -q` fail (simulating
+    // s3fs daemon dying after fork — the parent returns 0 but no mount attached).
+    mockSandbox.commands.run.mockImplementation((cmd: string) => {
+      if (cmd.includes('which s3fs')) {
+        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+      }
+      if (cmd.includes('id -u')) {
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      }
+      if (cmd.startsWith('mountpoint -q')) {
+        return Promise.resolve({ exitCode: 32, stdout: '', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+
+    const mockFilesystem = {
+      id: 'test-s3-silent-fail',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-silent');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not a mountpoint/);
+  });
+
+  it('S3 mount rejects invalid region before invoking s3fs', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-bad-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us east 1; rm -rf /',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-bad-region');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid region/);
+    expect(
+      mockSandbox.commands.run.mock.calls.some(
+        (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-bad-region'),
+      ),
+    ).toBe(false);
+  });
+
+  it('S3 mount rejects missing region (undefined) before invoking s3fs', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-no-region',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: undefined,
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-no-region');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid region/);
+    expect(
+      mockSandbox.commands.run.mock.calls.some(
+        (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-no-region'),
+      ),
+    ).toBe(false);
+  });
 });
 
 /**

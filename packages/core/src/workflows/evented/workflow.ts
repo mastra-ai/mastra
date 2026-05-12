@@ -37,7 +37,7 @@ import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
 // Direct import (bypassing the index) avoids a cycle: the index does a
-// side-effect import of `./evented`, so going through it from here would
+// registration import of `./evented`, so going through it from here would
 // re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
 import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
@@ -1557,6 +1557,15 @@ export class EventedWorkflow<
     resourceId?: string;
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+    if (this.stepFlow.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     const runIdToUse = options?.runId || randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -1732,7 +1741,7 @@ export class EventedRun<
         status: 'running',
         value: {},
         context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
         suspendedPaths: {},
@@ -1815,7 +1824,7 @@ export class EventedRun<
         status: 'running',
         value: {},
         context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
         suspendedPaths: {},
@@ -1840,7 +1849,7 @@ export class EventedRun<
         workflowId: this.workflowId,
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         initialState: initialStateToUse,
         perStep,
       },
@@ -2136,11 +2145,6 @@ export class EventedRun<
     }
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-
-    console.dir(
-      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
-      { depth: null },
-    );
     // Start with the snapshot's request context (old values)
     const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();

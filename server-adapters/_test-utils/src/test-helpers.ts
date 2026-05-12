@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
@@ -231,6 +231,24 @@ export function mockAgentMethods(agent: Agent) {
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
 
+  vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
+    const createdSignal = createSignal(signal);
+    return {
+      accepted: true,
+      runId: target?.runId ?? 'test-run',
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+    stream: (async function* () {
+      yield { type: 'text-delta', textDelta: 'test' };
+    })(),
+    activeRunId: () => 'test-run',
+    abort: vi.fn(() => true),
+    unsubscribe: vi.fn(),
+  } as any);
+
   // Mock getVoice to return the voice object that the handler expects
   const mockVoice = createMockVoice();
 
@@ -413,7 +431,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Create real MCP servers with tools
+  // Create real MCP servers with tools and app resources
   const mcpServer1 = new MCPServer({
     name: 'Test Server 1',
     version: '1.0.0',
@@ -421,6 +439,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     tools: {
       getWeather: weatherTool,
       calculate: calculatorTool,
+    },
+    appResources: {
+      'ui://test/app': {
+        name: 'Test App',
+        html: '<html><body>Test</body></html>',
+      },
     },
   });
 
@@ -430,6 +454,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     description: 'Test MCP Server 2',
     tools: {
       failingTool: failingTool,
+    },
+    appResources: {
+      'ui://test/app2': {
+        name: 'Test App 2',
+        html: '<html><body>Test 2</body></html>',
+      },
     },
   });
 

@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/observability/tracing/exporters/cloud",
+      "destination": "/docs/observability/tracing/exporters/mastra-platform",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/default",
+      "destination": "/docs/observability/tracing/exporters/mastra-storage",
+      "permanent": true
+    },
+    {
       "source": "/docs/getting-started/start",
       "destination": "/docs",
       "permanent": true
