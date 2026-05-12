@@ -104,17 +104,22 @@ function cleanup(monorepoDir, resetChanges = false) {
 
 function stripWorkspaceTrustPolicy(monorepoDir) {
   const workspacePath = join(monorepoDir, 'pnpm-workspace.yaml');
-  const trustPolicySettings = ['blockExoticSubdeps', 'trustPolicy', 'trustPolicyIgnoreAfter'];
+  const localRegistryIncompatibleSettings = [
+    'blockExoticSubdeps',
+    'trustPolicy',
+    'trustPolicyIgnoreAfter',
+    'minimumReleaseAge',
+  ];
 
   try {
     const content = readFileSync(workspacePath, 'utf8');
     const nextContent = content
       .split('\n')
-      .filter(line => !trustPolicySettings.some(setting => line.startsWith(`${setting}:`)))
+      .filter(line => !localRegistryIncompatibleSettings.some(setting => line.startsWith(`${setting}:`)))
       .join('\n');
 
     if (nextContent !== content) {
-      console.log('Removing pnpm trust-policy settings for local registry tests');
+      console.log('Removing pnpm registry policy settings for local registry tests');
       writeFileSync(workspacePath, nextContent);
     }
   } catch (error) {
