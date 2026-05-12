@@ -118,8 +118,9 @@ cat /tmp/publish-empty.json | jq .
 - [ ] Returns 400 with a validation error on `skillPath`
 
 ```bash
-# Provide an in-tree skillPath for the example app
-ALLOWED_BASE="$(pwd)/examples/agent/src/mastra/public"
+# Provide an in-tree skillPath for the scaffolded project. The allowed base is
+# resolved from the server's cwd (the scaffolded project's src/mastra/public dir).
+ALLOWED_BASE="${SKILLS_BASE_DIR:-$HOME/mastra-builder-smoke-tests/builder-smoke/src/mastra/public}"
 ls "$ALLOWED_BASE" 2>/dev/null
 SKILL_PATH="$ALLOWED_BASE/skills/$SKILL_ID"
 
@@ -144,26 +145,26 @@ curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID          
 
 The publish flow is the path that materializes `SKILL.md` (and any `references/`, `scripts/`, `assets/` subdirs) on disk. Verify by inspecting filesystem state before and after a successful publish.
 
-The relevant field on the GET response is `tree` (a directory tree under the skill's base dir), not `files`.
+The relevant field on the GET response is `files: FileNode[]` (each node has `name`, `type`, `content?`, `children?`). See `storedSkillSchema` in `packages/server/src/server/schemas/stored-skills.ts`.
 
-### F1. Tree on plain create
+### F1. Files on plain create
 
 ```bash
-curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.tree'
+curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
 ```
 
-- [ ] Record the value. Expected: `null` on plain create (no filesystem materialization until publish).
+- [ ] Record the value. Expected: absent or empty on plain create (no filesystem materialization until publish).
 
-### F2. Tree after publish (when applicable)
+### F2. Files after publish (when applicable)
 
 For any skill that was successfully published in step 7:
 
 ```bash
-curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.tree.entries'
+curl -s "$BASE/stored/skills/$SKILL_ID" | jq '.files'
 ```
 
-- [ ] `tree.entries` is populated and includes a `SKILL.md` entry
-- [ ] `instructions` is not duplicated inside the tree entry contents
+- [ ] `files` is populated and includes a `SKILL.md` entry (`name: "SKILL.md", type: "file"`)
+- [ ] `instructions` is not duplicated inside the file node's `content`
 
 ### F3. Auto-publish on visibility flip
 
@@ -190,5 +191,5 @@ See `references/registry.md` for the install flow.
 - [ ] Create + list a second skill
 - [ ] Publish: empty body validation, in-tree `skillPath` behavior
 - [ ] Delete returns 200; follow-up GET returns 404
-- [ ] Inspect `tree` field before and after publish
+- [ ] Inspect `files` field before and after publish
 - [ ] (Optional) Duplicate-name handling

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Poll the examples/agent dev server until /api/agents responds 200.
+# Poll the scaffolded smoke-test dev server until /api/agents responds 200.
 # Uses /api/agents (not /) because the SPA shell can 200 before the API mounts.
 # Detects port-bump (mastra dev increments past :4111 if busy) and reports it.
 #

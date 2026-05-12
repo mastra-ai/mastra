@@ -2,9 +2,9 @@
 
 When the Agent Builder is enabled, `applyBuilderDefaults()` fills in workspace, memory, browser, and model on stored-agent create — but only for fields the caller did **not** explicitly set. Explicit `null` is preserved as "no default" (opt-out).
 
-Reference: `packages/core/src/agent-builder/ee/apply-builder-defaults.ts` and `examples/agent/src/mastra/index.ts` (the `builder.configuration.agent` block).
+Reference: `packages/core/src/agent-builder/ee/apply-builder-defaults.ts` and the scaffolded project's `src/mastra/index.ts` (the `builder.configuration.agent` block).
 
-## Source-of-truth: builder config in `examples/agent`
+## Source-of-truth: builder config in the scaffolded project
 
 ```ts
 builder: {

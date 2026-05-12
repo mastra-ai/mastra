@@ -15,11 +15,11 @@ curl -s "$BASE/editor/builder/settings" | jq '.features // .agent.features'
 ```
 
 - [ ] `tools`, `agents`, `workflows`, `skills`, `model`, `browser`, `stars` all `true`
-      (matches `examples/agent` config)
+      (matches the scaffolded project's builder config)
 
 ### 2. Tool picker reflects registered tools
 
-Open an agent in Builder (`/agent-builder/agents/<id>`), open the Tools picker.
+Open an agent in Builder (`/agent-builder/agents/<id>/view` or `/edit`), open the Tools picker.
 
 - [ ] All non-internal tools registered on `mastra.tools` are visible
 - [ ] Internal/system tools (e.g., `_internal_*`) are hidden

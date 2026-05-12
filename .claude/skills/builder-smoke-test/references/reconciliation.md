@@ -4,7 +4,7 @@ Test the config-driven workspace lifecycle managed by `ensureBuilderWorkspaces()
 
 ## Smoke-test scope
 
-The smoke-test agent only runs **Step 1** (fresh-startup persistence — already covered by Setup) and **Step 5** (non-builder workspaces untouched after restart). Steps 2, 3, 4, and 6 require editing `examples/agent/src/mastra/index.ts`, restarting the dev server multiple times, and reverting changes — they don't fit a single smoke-test run and are kept here as a manual checklist for code changes to `ensureBuilderWorkspaces()` (`packages/editor/src/editor-workspace-reconciliation.test.ts` covers most of this at unit level).
+The smoke-test agent only runs **Step 1** (fresh-startup persistence — already covered by Setup) and **Step 5** (non-builder workspaces untouched after restart). Steps 2, 3, 4, and 6 require editing the scaffolded project's `src/mastra/index.ts`, restarting the dev server multiple times, and reverting changes — they don't fit a single smoke-test run and are kept here as a manual checklist for code changes to `ensureBuilderWorkspaces()` (`packages/editor/src/editor-workspace-reconciliation.test.ts` covers most of this at unit level).
 
 When the agent is invoked without `--test reconciliation`, mark steps 2/3/4/6 as `⏭️ out-of-scope (manual)` in the report. Run them by hand if you touched reconciliation code.
 
@@ -39,7 +39,7 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq .
 
 - [ ] Workspace exists with `metadata.source: "builder"`
 - [ ] `runtimeRegistered` is `true`
-- [ ] Filesystem and sandbox config match what's in `examples/agent/src/mastra/index.ts`
+- [ ] Filesystem and sandbox config match what's in the scaffolded project's `src/mastra/index.ts`
 
 ### 2. Idempotent Restart (No-Op) — manual only
 
@@ -49,7 +49,7 @@ Restart the server without changing any config. Record the workspace's `updatedA
 # Before restart
 curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{updatedAt, resolvedVersionId}'
 
-# Restart server (Ctrl+C, pnpm mastra:dev)
+# Restart server (Ctrl+C, then re-run mastra dev from $PROJECT_DIR)
 # After restart
 curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{updatedAt, resolvedVersionId}'
 ```
@@ -60,7 +60,7 @@ curl -s $BASE/stored/workspaces/$WORKSPACE_ID | jq '{updatedAt, resolvedVersionI
 
 ### 3. Config Drift Detection — manual only
 
-Change the workspace config in `examples/agent/src/mastra/index.ts`. For example, change the `basePath`:
+Change the workspace config in the scaffolded project's `src/mastra/index.ts`. For example, change the `basePath`:
 
 ```typescript
 // Before

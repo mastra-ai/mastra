@@ -6,14 +6,14 @@ requires WorkOS env vars; every other section runs auth-off.
 ## Mode toggle
 
 The skill defines two states and switches between them by editing
-`examples/agent/.env`. There is **no** global on/off flag in code — auth on
+`$PROJECT_DIR/.env` (the scaffolded project). There is **no** global on/off flag in code — auth on
 is "AUTH_PROVIDER plus WorkOS creds present in `.env`," auth off is "those
 lines absent or commented." `mastra dev` reads `.env` once at boot, so any
 change requires a server restart.
 
-### auth off (Prompts 1–6 default)
+### auth off (Prompt 1 default)
 
-`examples/agent/.env` must have `AUTH_PROVIDER` commented or absent. The
+`$PROJECT_DIR/.env` must have `AUTH_PROVIDER` commented or absent. The
 three `WORKOS_*` vars may stay in `.env` — they're inert without
 `AUTH_PROVIDER`. Confirm with:
 
@@ -21,9 +21,9 @@ three `WORKOS_*` vars may stay in `.env` — they're inert without
 bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect off
 ```
 
-### auth on (Prompt 7)
+### auth on (Prompts 2–3)
 
-`examples/agent/.env` must have all four:
+`$PROJECT_DIR/.env` must have all four:
 
 ```
 AUTH_PROVIDER=workos
@@ -97,9 +97,9 @@ curl -s -X POST $BASE/stored/skills \
 
 ### 3. Auth ON → Auth OFF — switch mode
 
-1. Comment out the `AUTH_PROVIDER=workos` line in `examples/agent/.env` (one
+1. Comment out the `AUTH_PROVIDER=workos` line in `$PROJECT_DIR/.env` (one
    `#` at the start of the line).
-2. Restart `pnpm mastra:dev`.
+2. Restart the dev server (kill the existing `mastra dev` process, then re-run from `$PROJECT_DIR`).
 3. Re-run preflight with the new expectation:
 
    ```bash
@@ -168,9 +168,10 @@ Background on the fine-grained authorization layer — only relevant if an
 auth-on run surfaces an `FGADeniedError`.
 
 - `MastraFGAWorkos` is the WorkOS-backed FGA provider. It's constructed
-  in `examples/agent/src/mastra/auth/workos.ts` and resolves per-resource
-  permissions ("can user X `:read` agent Y") against the WorkOS
-  organization named by `WORKOS_ORGANIZATION_ID`.
+  in the scaffolded project's `src/mastra/auth.ts` (via `initWorkOS()` from
+  `@mastra/auth-workos`) and resolves per-resource permissions ("can user X
+  `:read` agent Y") against the WorkOS organization named by
+  `WORKOS_ORGANIZATION_ID`.
 - FGA fires only when (a) a route declares an `fga` block in its metadata
   AND (b) the server has an FGA provider configured (which, in this
   example, means `AUTH_PROVIDER=workos`). There is no separate enable/

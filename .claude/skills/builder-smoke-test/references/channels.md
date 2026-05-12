@@ -4,7 +4,7 @@
 
 ## Source-of-truth
 
-In `examples/agent`:
+In the scaffolded project's `src/mastra/index.ts`:
 
 ```ts
 channels: {
@@ -28,7 +28,7 @@ curl -s "$BASE/editor/builder/infrastructure" | jq '.channels'
 
 ### 2. Slack with env vars
 
-Set `SLACK_*` env vars in `examples/agent/.env`, restart.
+Set `SLACK_*` env vars in `$PROJECT_DIR/.env`, restart the dev server.
 
 ```bash
 curl -s "$BASE/editor/builder/infrastructure" | jq '.channels.slack // .channels[] | select(.id==\"slack\")'

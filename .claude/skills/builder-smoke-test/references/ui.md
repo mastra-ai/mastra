@@ -8,9 +8,10 @@ The steps below are split into two tiers. Run **Core** for every UI pass.
 Run **Extended** only when the prompt explicitly asks for full UI coverage
 or when a code change touches one of those surfaces.
 
-- **Core** (steps 1–7): shell loads, skills list, create-skill dialog,
-  agent detail page, skills section, star toggle, visibility badges.
-- **Extended** (steps 8–14): model dropdown, workspace dropdown, Library
+- **Core** (steps 1–8): shell loads, skills list, skills create starter,
+  skill edit page, agent list, agent view page, star toggle, role
+  impersonation menu (admin/owner only).
+- **Extended** (steps 9–14): model dropdown, workspace dropdown, Library
   - Copy flow, registry button gating, origin badges, mobile bottom-bar
     parity, scrollable list layout.
 
@@ -22,7 +23,7 @@ If you skip a step, mark it ⏭️ in the result table with a one-line reason
 - Browser tool available
 - Server running on `localhost:4111`
 - Create at least one agent and one skill via API before UI testing (or use existing ones)
-- Seeded public skills exist in `examples/agent/src/mastra/public/mastra.db` (used by the Library page)
+- Seeded public skills exist under the scaffolded project's public dir (used by the Library page)
 
 ## Steps
 
@@ -31,85 +32,94 @@ If you skip a step, mark it ⏭️ in the result table with a one-line reason
 Navigate to `http://localhost:4111/agent-builder`.
 
 - [ ] Page loads without error
-- [ ] Sidebar visible with navigation links
-- [ ] "Skills" link visible in sidebar (features.skills = true)
-- [ ] Agent list or default view renders
+- [ ] Sidebar visible: `My agents`, `Skills`, `Favorites`, `Library` (main nav)
+- [ ] `Infrastructure` is pinned at the bottom of the sidebar, visually separated from the main group
+- [ ] No `Workspaces` entry in the sidebar (single-workspace layout)
 
 ### 2. Skills List Page _(Core)_
 
 Navigate to `http://localhost:4111/agent-builder/skills`.
 
-- [ ] Page loads
-- [ ] Skills list renders (or empty state if no skills exist)
-- [ ] Each skill shows:
-  - [ ] Name
-  - [ ] Description (if set)
-  - [ ] Visibility badge ("Public" or "Private")
-  - [ ] Star icon/button
-- [ ] Skills are NOT clickable (no detail page exists yet)
+- [ ] Header reads `My skills` with subtext `Skills you've created`
+- [ ] Filter input present
+- [ ] `+ New skill` button top-right
+- [ ] Each skill row shows name, description (if set), and a star button
+- [ ] Clicking a row navigates to `/agent-builder/skills/<id>/edit` (NOT an inline detail panel)
 
 ### 3. Create Skill via UI _(Core)_
 
-Click the "New Skill" or "Create" button on the skills page.
+Click `+ New skill`. You should land on `/agent-builder/skills/create`.
 
-- [ ] Dialog/form opens
-- [ ] Name field present and editable
-- [ ] Description field present
-- [ ] Workspace dropdown shows builder workspace (auto-selected)
-- [ ] Visibility selector present (defaults to Private)
-- [ ] Save/Create button present
-- [ ] Fill in name: "UI Smoke Skill", description: "Created via UI smoke test"
-- [ ] Change visibility to Public
-- [ ] Click Create/Save
-- [ ] Skill appears in the list with "Public" badge
+- [ ] Full-page starter renders with the prompt `What skill do you want to build?`
+- [ ] Four example prompt cards are visible (e.g. Code reviewer, Doc summarizer, Onboarding tutor, Research notes — log any drift in labels)
+- [ ] Chat input is present at the bottom
+- [ ] Submitting a prompt creates a skill via the API and navigates to `/agent-builder/skills/<new-id>/edit` with the prompt forwarded to the chat composer
+- [ ] No manual create dialog / no Name+Description form here — the flow is AI-first
 
-**Known issue**: The Create button's `disabled` state may not update properly when typing via browser automation. If the button stays disabled, try clicking into the name field, clearing it, and retyping.
+### 4. Skill Edit Page _(Core)_
 
-### 4. Agent Detail Page _(Core)_
+You should be on `/agent-builder/skills/<id>/edit` from step 3 (or by clicking a row on the list).
 
-Navigate to an existing stored agent's detail page: `http://localhost:4111/agent-builder/agents/<agentId>`.
+- [ ] Header: back arrow, skill name. The page is a split workspace.
+- [ ] Left panel: chat composer (`Refine your skill` / `Ask the agent to refine...`) with a `Send` button
+- [ ] Right panel: skill details form — Name, Description, Instructions
+- [ ] No explicit Save button visible — saving is autosaved (look for a saving/saved indicator near the form)
+- [ ] `Delete skill` button is reachable somewhere on the page (typically bottom-right of the details panel). If you cannot find it, log that as drift.
+- [ ] Visibility selector: not visible under `--auth off` (server forces public). Under `--auth on`, log whether the selector is rendered and where.
 
-If no stored agent exists, create one via API first.
+### 5. Agent List Page _(Core)_
 
-- [ ] Agent detail page loads
-- [ ] Agent name displayed
-- [ ] Model displayed (provider and model ID)
-- [ ] Instructions displayed
-- [ ] Visibility shown
-- [ ] Skills section visible (shows attached skills or empty state)
-- [ ] Chat panel visible on the right
+Navigate to `http://localhost:4111/agent-builder` (or `/agents`).
 
-### 5. Agent Skills Section _(Core)_
+- [ ] Header reads `My agents` with subtext `Agents you've created`
+- [ ] Filter input and `+ New agent` button top-right
+- [ ] Each agent row shows name, description (if set), and a star button
+- [ ] Clicking a row navigates to `/agent-builder/agents/<id>/view` (NOT `/edit`). Skills list rows go to `/edit`; agents list rows go to `/view`. This asymmetry is intentional — log it if it's reversed.
 
-On the agent detail page:
+### 6. Agent View Page _(Core)_
 
-- [ ] Skills section shows count (e.g., "Skills 0/1" or "Skills 1/2")
-- [ ] Toggle/expand panel shows attached skills
-- [ ] Skills can be toggled on/off (if skill management UI exists)
+You should be on `/agent-builder/agents/<id>/view`.
 
-### 6. Star Interaction (UI) _(Core)_
+- [ ] `View mode` pill badge near the header
+- [ ] Header: back arrow, agent name, refresh button
+- [ ] Top-right: `Publish to...` dropdown and avatar
+- [ ] Center: agent name + description and a row of starter prompt cards (e.g. What can you do? / Show available tools / Suggest a task / Run a self-check)
+- [ ] Bottom: `Message your agent...` chat input — agents are runnable from view
+
+### 7. Star Interaction (UI) _(Core)_
 
 On the skills list page:
 
 - [ ] Click a star icon on a skill
 - [ ] Star toggles to filled/active state
-- [ ] Click again to unstar
-- [ ] Star toggles back to outline/inactive
+- [ ] Click again to unstar; star toggles back to outline/inactive
 
-On the agent list (if star icons exist there):
+On the agents list page:
 
 - [ ] Same toggle behavior
 
-### 7. Visibility Badge Correctness _(Core)_
+### 8. Role impersonation _(Core, admin/owner only)_
 
-- [ ] Private entities show "Private" badge
-- [ ] Public entities show "Public" badge
-- [ ] Runtime agents (if any) show "Runtime" badge
-- [ ] Badges are visually distinct (different colors/styles)
+UI-only feature wired through `role-impersonation-context.tsx`. Frontend state, no backend role-override header. Only run this subset when the live user is `admin` or `owner` (otherwise the menu is hidden).
 
-### 8. Model Dropdown (Agent Create/Edit) _(Extended)_
+Open the user menu → `View as role` (or equivalent picker — confirm exact label in the live UI and log it if it differs):
 
-Navigate to the agent create or edit page.
+- [ ] Picker offers `admin`, `member`, `viewer`
+- [ ] Selecting `viewer`:
+  - [ ] Impersonation banner appears at the top of the page indicating the active role
+  - [ ] Sidebar collapses to viewer-allowed entries (no Create/Edit affordances)
+  - [ ] Create buttons (e.g. `New skill`, `New agent`) disappear or render disabled
+  - [ ] Direct navigation to a write-only route (e.g. `/agent-builder/skills/create`) is blocked at the UI layer
+- [ ] Selecting `member`:
+  - [ ] Banner updates to show member
+  - [ ] Read + execute affordances visible; create/edit hidden
+- [ ] `Exit impersonation` (or equivalent) restores the original admin UI
+
+> **Important:** impersonation is UI-only. The API still answers per the _real_ logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
+
+### 9. Model Dropdown (Agent Create/Edit) _(Extended)_
+
+Navigate to an agent edit page.
 
 - [ ] Model dropdown is visible
 - [ ] Shows only allowed providers (from builder model policy)
@@ -119,77 +129,56 @@ Navigate to the agent create or edit page.
 Example verification:
 
 - If builder config allows `{ provider: 'openai' }` (wildcard), all OpenAI models should appear
-- If builder config allows `{ provider: 'anthropic', modelId: 'claude-opus-4-7' }`, only that specific model should appear
+- If builder config allows `{ provider: 'anthropic', name: 'claude-opus-4-7' }`, only that specific model should appear
 
-### 9. Workspace Dropdown (Skill Create) _(Extended)_
+### 10. Workspace dropdown (Skill Edit, Advanced mode) _(Extended)_
 
-In the skill creation dialog:
+On the skill edit page, look for an `Advanced mode` toggle. If present:
 
-- [ ] Workspace dropdown shows available workspaces
-- [ ] Builder workspace is auto-selected
-- [ ] Archived workspaces do NOT appear in dropdown
-- [ ] User-created workspaces (if any) also appear
+- [ ] Toggling Advanced mode reveals a Workspace dropdown plus a file tree (SKILL.md, references/, scripts/, assets/)
+- [ ] Builder workspace is the auto-selected option
 
-### 10. Library page (public skills you don't own) _(Extended)_
+If no Advanced mode toggle exists in the running build, log it as drift and skip.
+
+### 11. Library page (public skills you don't own) _(Extended)_
 
 Navigate to `http://localhost:4111/agent-builder/library`.
 
-- [ ] Page loads; shows public stored skills authored by other users
-- [ ] Seeded public skills appear: `web-design-guidelines`, `api-design-principles`, `vercel-react-best-practices`, `postgres-query-tuning`
-- [ ] Click a skill → read-only detail dialog opens
-- [ ] "Copy" button visible (replaces Edit for non-owners on public skills)
-- [ ] Click "Copy" → name prompt dialog appears with default `<name>-copy`
-- [ ] Submit → toast confirms; new private skill appears in your skills list
-- [ ] Copied skill shows "copied" origin badge in the list
+- [ ] Header: `Library / Agents shared with the team library`
+- [ ] Agents/Skills tab toggle is present
+- [ ] On the Skills tab, seeded public skills appear (e.g. `web-design-guidelines`, `api-design-principles`, `vercel-react-best-practices`, `postgres-query-tuning` — log any drift)
+- [ ] Under `--auth on`, clicking a row you don't own should navigate to `/agent-builder/skills/<id>/view` (read-only). Under `--auth off` everyone is treated as owner so the navigation lands on `/edit` instead — log which path you observed.
+- [ ] Under `--auth on`, a `Copy to my skills` action is available on the view page; submitting it creates a private copy with origin badge `copied`
 
-### 11. Registry Browse button gating _(Extended)_
+### 12. Registry Browse button gating _(Extended)_
 
 Still on `/agent-builder/skills`:
 
-- [ ] If `builder.registries.skillsSh.enabled = false`: "Browse registry" button is hidden in both empty-state and top-area
-- [ ] If `enabled = true`: button reads "Browse registry" (generic), opens registry dialog
+- [ ] If `builder.registries.skillsSh.enabled = false`: `Browse registry` button is hidden in both empty-state and top-area
+- [ ] If `enabled = true`: button reads `Browse registry` (generic), opens registry dialog
 
 (Full registry flow is covered in `references/registry.md`.)
 
-### 12. Origin badge on skills list _(Extended)_
+### 13. Origin badge on skills list _(Extended)_
 
-- [ ] Skills installed from skills.sh show a skills.sh badge
-- [ ] Skills copied from the library show a "copied" badge with tooltip "Copied from <source>"
+- [ ] Skills installed from skills.sh show a `skills.sh` badge
+- [ ] Skills copied from the library show a `copied` badge with tooltip `Copied from <source>`
 - [ ] Skills you authored directly show no origin badge
 
-### 13. Mobile bottom-bar parity _(Extended)_
+### 14. Mobile bottom-bar parity _(Extended)_
 
 Resize browser to mobile width (or use the device toggle).
 
-- [ ] Bottom-bar shows the same primary entries as the desktop sidebar (Agents, Skills, Library, Workspaces, Infra for admin)
-- [ ] Tapping each navigates to the matching route (`/agent-builder`, `/agent-builder/skills`, `/agent-builder/library`, `/agent-builder/workspaces`, `/agent-builder/infrastructure`) and the corresponding tab is active
+- [ ] Bottom-bar shows the same primary entries as the desktop sidebar (Agents, Skills, Favorites, Library, plus Infrastructure for admins)
+- [ ] Tapping each navigates to the matching route and the corresponding tab is active
 
-### 14. Scrollable lists (#16252, #16253) _(Extended)_
+### 15. Scrollable lists (#16252, #16253) _(Extended)_
 
 On Agents and Skills list pages:
 
 - [ ] Long lists scroll independently of the rest of the layout
-- [ ] Column does not collapse when the detail pane slides in
-- [ ] Detail pane animates in cleanly (no layout jump)
-
-### 15. Role impersonation _(Core, admin/owner only)_
-
-UI-only feature wired through `role-impersonation-context.tsx`. Frontend state, no backend role-override header. Only run this subset when the live user is `admin` or `owner` (otherwise the menu is hidden).
-
-Open the user menu → "View as role" (or equivalent picker — confirm exact label in the live UI and log it if it differs):
-
-- [ ] Picker offers `admin`, `member`, `viewer`
-- [ ] Selecting `viewer`:
-  - [ ] Impersonation banner appears at the top of the page indicating the active role
-  - [ ] Sidebar collapses to viewer-allowed entries (no Create/Edit affordances)
-  - [ ] Create buttons (e.g. "New skill", "New agent") disappear or render disabled
-  - [ ] Direct navigation to a write-only route (e.g. `/agent-builder/skills/new`) is blocked at the UI layer
-- [ ] Selecting `member`:
-  - [ ] Banner updates to show member
-  - [ ] Read + execute affordances visible; create/edit hidden
-- [ ] "Exit impersonation" (or equivalent) restores the original admin UI
-
-> **Important:** impersonation is UI-only. The API still answers per the _real_ logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
+- [ ] Column does not collapse when a detail pane (if any) slides in
+- [ ] Navigation between list and detail/edit pages animates cleanly (no layout jump)
 
 ### Cleanup
 
@@ -203,12 +192,13 @@ curl -s $BASE/stored/skills | jq '.skills[] | select(.name == "UI Smoke Skill") 
 
 ## Checklist
 
-- [ ] Agent Builder shell loads
-- [ ] Skills list page renders with correct data
-- [ ] Create skill via UI dialog
-- [ ] Agent detail page shows all fields
-- [ ] Skills section on agent page
-- [ ] Star toggle works in UI
-- [ ] Visibility badges render: `Private` (lock icon) for private records, `Public` for public records, `Runtime` for code-defined agents/skills
+- [ ] Agent Builder shell loads with correct sidebar
+- [ ] Skills list page renders; rows navigate to `/skills/<id>/edit`
+- [ ] Skills create flow is full-page AI-first starter at `/skills/create`
+- [ ] Skill edit page is a chat+form split workspace; Delete skill action present
+- [ ] Agents list page renders; rows navigate to `/agents/<id>/view`
+- [ ] Agent view page renders View mode badge + chat input + starter prompts
+- [ ] Star toggle works on skills and agents lists
+- [ ] Role impersonation menu works (admin/owner only)
 - [ ] Model dropdown respects builder policy
-- [ ] Workspace dropdown shows correct options
+- [ ] Workspace dropdown / Advanced mode behaves per running build

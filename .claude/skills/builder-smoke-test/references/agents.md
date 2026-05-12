@@ -2,7 +2,7 @@
 
 Test stored agent create, read, update, delete, skill attachment, and model configuration.
 
-The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid under the example's admin policy, which allows any `openai` model via wildcard plus exactly `anthropic/claude-opus-4-7` (see `examples/agent/src/mastra/index.ts` → `models.allowed`). If you've changed the policy, swap these for something allowed.
+The model values used below (`openai/gpt-4o-mini`, `openai/gpt-4o`) are valid under the scaffolded project's admin policy, which allows any `openai` model via wildcard plus exactly `anthropic/claude-opus-4-7` (see the scaffolded project's `src/mastra/index.ts` → `models.allowed`). If you've changed the policy, swap these for something allowed.
 
 > **Server schema reminder:** `model` is `{ provider, name }` — **not** `{ provider, modelId }`. The schema lives in `packages/server/src/server/schemas/stored-agents.ts`. Posting `modelId` returns `400 model: Invalid input`.
 
@@ -147,11 +147,11 @@ curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/agents/$AGENT_ID          
 curl -s -o /dev/null -w "%{http_code}\n" $BASE/stored/skills/$SKILL_ID            # → 404
 ```
 
-## Delete from edit / view (#16199)
+## Delete from view / edit (#16199)
 
-Open the agent in the Builder detail page (`/agent-builder/agents/$AGENT_ID`). The exact route segment may include `/view` or similar — navigate from the Builder agents list rather than typing the URL directly to avoid assuming the route shape:
+From the agents list, clicking a row navigates to `/agent-builder/agents/$AGENT_ID/view`. Owners can switch to `/edit` from there.
 
-- [ ] "Delete agent" affordance is reachable from the edit/view header (kebab menu or similar)
+- [ ] `Delete agent` affordance is reachable from the view or edit page (kebab menu, panel button, or similar). Log which surface exposes it.
 - [ ] Clicking opens a confirm dialog
 - [ ] Confirming deletes the agent and navigates back to the agents list
 - [ ] Subsequent `GET /stored/agents/$AGENT_ID` returns 404

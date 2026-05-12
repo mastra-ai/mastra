@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Reset examples/agent fixtures:
+# Reset the scaffolded smoke-test project fixtures:
 #   1. Stop any dev server on :4111
-#   2. Wipe examples/agent/mastra.db (and -wal / -shm)
-#   3. Restore the seeded public skills DB from examples/agent/src/mastra/public/mastra.db
-#      (used by the Library page for non-owned public skills)
+#   2. Wipe $PROJECT_DIR/mastra.db (and -wal / -shm)
 #
-# Usage: bash fixtures-reset.sh
+# Usage:
+#   bash fixtures-reset.sh
 #
-# Run from repo root.
+# Honors $PROJECT_DIR if set; defaults to ~/mastra-builder-smoke-tests/builder-smoke.
 set -euo pipefail
 
-if [ ! -d "examples/agent" ]; then
-  echo "✗ Run from repo root (examples/agent not found)" >&2
+PROJECT_DIR="${PROJECT_DIR:-${HOME}/mastra-builder-smoke-tests/builder-smoke}"
+
+if [ ! -d "${PROJECT_DIR}" ]; then
+  echo "✗ Scaffolded project not found at ${PROJECT_DIR}" >&2
+  echo "  Run scripts/scaffold.sh (or preflight.sh) first." >&2
   exit 1
 fi
 
@@ -22,7 +24,6 @@ if command -v lsof >/dev/null 2>&1; then
     echo "  killing PIDs: ${PIDS}"
     kill ${PIDS} 2>/dev/null || true
     sleep 1
-    # force kill any survivors
     REMAIN=$(lsof -ti :4111 || true)
     if [ -n "${REMAIN}" ]; then
       kill -9 ${REMAIN} 2>/dev/null || true
@@ -30,23 +31,12 @@ if command -v lsof >/dev/null 2>&1; then
   fi
 fi
 
-echo "→ Wiping examples/agent/mastra.db (and WAL/SHM) ..."
-for f in examples/agent/mastra.db examples/agent/mastra.db-wal examples/agent/mastra.db-shm; do
+echo "→ Wiping ${PROJECT_DIR}/mastra.db (and WAL/SHM) ..."
+for f in "${PROJECT_DIR}/mastra.db" "${PROJECT_DIR}/mastra.db-wal" "${PROJECT_DIR}/mastra.db-shm"; do
   if [ -f "${f}" ]; then
     rm -f "${f}"
     echo "  removed ${f}"
   fi
 done
 
-# The seed DB lives under examples/agent/src/mastra/public/mastra.db and is
-# loaded by the Mastra storage layer at startup. It is committed to the repo,
-# so we don't need to recreate it — we just confirm it exists.
-SEED="examples/agent/src/mastra/public/mastra.db"
-if [ -f "${SEED}" ]; then
-  echo "✓ Seed DB present at ${SEED} (Library will load public skills on next startup)"
-else
-  echo "⚠ Seed DB missing at ${SEED}" >&2
-  echo "  Library page will be empty until a user creates a public skill." >&2
-fi
-
-echo "✓ Fixtures reset. Start the dev server with: (cd examples/agent && pnpm dev)"
+echo "✓ Fixtures reset. Start the dev server with: (cd ${PROJECT_DIR} && pnpm dev) — or restart via the smoke-test preflight."

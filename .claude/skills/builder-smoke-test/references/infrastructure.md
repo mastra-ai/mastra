@@ -51,7 +51,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "$SESSION" "$BASE/editor/builder/inf
 curl -s -H "$SESSION" "$BASE/editor/builder/infrastructure" | jq '.browser'
 ```
 
-- [ ] `provider` is `"stagehand"` (matches inline config in `examples/agent`)
+- [ ] `provider` is `"stagehand"` (matches inline config in the scaffolded project's `src/mastra/index.ts`)
 - [ ] `type` is `"inline"` (matches `browser: { type: 'inline', config: ... }`)
 - [ ] `registered` is `true`
 - [ ] `availableProviders` is a non-empty array
@@ -68,7 +68,7 @@ curl -s -H "$SESSION" "$BASE/editor/builder/infrastructure" | jq '.workspace'
 - [ ] `filesystemProvider` and `sandboxProvider` populated
 - [ ] `config` is an array of `{key, value}` pairs
 
-If you uncomment the inline workspace block in `examples/agent/src/mastra/index.ts` and restart:
+If you change the inline workspace block in the scaffolded project's `src/mastra/index.ts` and restart:
 
 - [ ] `type` flips to `"inline"`
 
