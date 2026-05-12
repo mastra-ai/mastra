@@ -19,12 +19,16 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   await writeFile(join(newPath, '.npmrc'), 'minimum-release-age=0\n');
 
   const installArgs = pkgManager === 'pnpm' ? ['install', '--config.minimum-release-age=0'] : ['install'];
+  const env = {
+    ...process.env,
+    npm_config_minimum_release_age: '0',
+  };
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
   await execa(pkgManager, installArgs, {
     cwd: newPath,
     stdio: 'inherit',
-    env: process.env,
+    env,
   });
 }
