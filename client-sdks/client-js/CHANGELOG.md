@@ -1,5 +1,21 @@
 # @mastra/client-js
 
+## 1.18.0-alpha.15
+
+### Minor Changes
+
+- Added client, React, and Studio support for Agent signals in threaded chat. Threaded user messages now send through Agent signals, stream output is consumed from the thread subscription, echoed user messages are deduped by signal ID, file and image message contents are preserved, Studio can send follow-ups while a response is streaming, Studio subscribes to open threads so additional tabs can observe active streams, and the Studio stop button aborts the active thread subscription. React chat also falls back to legacy threaded streaming when it connects to a server or core version that does not support signal routes yet. ([#16338](https://github.com/mastra-ai/mastra/pull/16338))
+
+  ```ts
+  const { sendMessage } = useChat({ agentId, resourceId, threadId });
+  await sendMessage({ message: 'Follow up while streaming', threadId });
+  ```
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.33.0-alpha.14
+
 ## 1.18.0-alpha.14
 
 ### Patch Changes

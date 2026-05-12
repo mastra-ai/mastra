@@ -67,20 +67,25 @@ describe('Harness signal history rendering', () => {
   it('emits agent_end when a system-reminder signal starts an idle run', async () => {
     const { harness } = await createHarnessWithThread();
     const events: Array<{ type: string; reason?: string }> = [];
-    harness.subscribe(event => {
+    const unsubscribe = harness.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
 
-    const signal = harness.sendSignal({
-      type: 'system-reminder',
-      contents: 'keep going',
-      attributes: { type: 'goal' },
-    });
-    await signal.accepted;
+    try {
+      const signal = harness.sendSignal({
+        type: 'system-reminder',
+        contents: 'keep going',
+        attributes: { type: 'goal' },
+      });
+      await signal.accepted;
 
-    await vi.waitFor(() => {
-      expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
-    });
+      await vi.waitFor(() => {
+        expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
+      });
+    } finally {
+      unsubscribe();
+      await harness.destroy();
+    }
   });
 
   it('renders persisted system-reminder signals as system reminder content', async () => {
