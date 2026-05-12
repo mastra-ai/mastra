@@ -222,4 +222,3 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     lsp: lspConfig,
   });
 }
-
