@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
@@ -96,6 +97,51 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean {
+  return route.requiresAuth === true;
+}
+
+function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
+  return `${route.method} ${route.path}`;
+}
+
+function getFGAProvider(mastra: any): IFGAProvider | undefined {
+  return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
+}
+
+function getFGARouteInfo(route: ServerRoute): FGARouteInfo {
+  return {
+    path: route.path,
+    method: route.method,
+    requiresAuth: route.requiresAuth,
+    requiresPermission: route.requiresPermission,
+    fga: route.fga,
+  };
+}
+
+function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
+  return [getEffectivePermission(route), route.fga?.permission].filter(
+    (permission): permission is MastraFGAPermissionInput => Boolean(permission),
+  );
+}
+
+async function resolveRouteFGAConfig(
+  fgaProvider: IFGAProvider,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<FGARouteConfig | null | undefined> {
+  if (route.fga) {
+    return route.fga;
+  }
+
+  return fgaProvider.resolveRouteFGA?.({
+    route: getFGARouteInfo(route),
+    params,
+    requestContext,
+  });
 }
 
 function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
@@ -500,6 +546,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateFGAPolicyCoverage();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
   }
@@ -537,6 +584,47 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
+  }
+
+  /**
+   * Validate route-level FGA policy coverage when an FGA provider opts into
+   * startup checks.
+   */
+  async validateFGAPolicyCoverage(): Promise<void> {
+    const serverConfig = this.mastra.getServer();
+    const fgaProvider = serverConfig?.fga;
+    if (!fgaProvider) return;
+
+    const customRoutes = (this.customApiRoutes ?? serverConfig?.apiRoutes ?? []).filter(
+      route => !route._mastraInternal,
+    );
+    const routes = [...SERVER_ROUTES, ...customRoutes] as ServerRoute[];
+
+    if (fgaProvider.validatePermissions) {
+      const permissions = [...new Set(routes.flatMap(route => getRoutePermissions(route)))];
+      await fgaProvider.validatePermissions(permissions);
+    }
+
+    const auditMode = fgaProvider.auditProtectedRoutes ?? (fgaProvider.requireForProtectedRoutes ? 'warn' : false);
+    if (!auditMode || fgaProvider.resolveRouteFGA) return;
+
+    const missingRoutes = routes.filter(route => isProtectedFGARoute(route) && !route.fga);
+
+    if (missingRoutes.length === 0) return;
+
+    const routeList = missingRoutes.map(route => formatRoute(route as ServerRoute));
+    const message =
+      `[mastra/auth-ee] FGA is configured but ${missingRoutes.length} protected route` +
+      `${missingRoutes.length === 1 ? ' is' : 's are'} missing FGA metadata: ${routeList.join(', ')}`;
+
+    if (auditMode === 'error') {
+      throw new Error(message);
+    }
+
+    this.mastra.getLogger()?.warn(message, {
+      routes: routeList,
+      count: missingRoutes.length,
+    });
   }
 
   /**
@@ -856,11 +944,20 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
-  const fgaConfig = route.fga;
-  if (!fgaConfig) return null;
-
-  const fgaProvider = mastra?.getServer?.()?.fga;
+  const fgaProvider = getFGAProvider(mastra);
   if (!fgaProvider) return null;
+
+  const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);
+  if (!fgaConfig) {
+    if (fgaProvider.requireForProtectedRoutes && isProtectedFGARoute(route)) {
+      return {
+        status: 403,
+        error: 'Forbidden',
+        message: 'FGA authorization denied: route FGA metadata is required',
+      };
+    }
+    return null;
+  }
 
   const user = requestContext?.get('user');
   if (!user) {

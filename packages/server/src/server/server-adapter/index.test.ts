@@ -58,6 +58,59 @@ describe('FGA Middleware - checkRouteFGA', () => {
     expect(result).toBeNull();
   });
 
+  it('should deny protected routes without FGA metadata when requireForProtectedRoutes is enabled', async () => {
+    const fgaProvider = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const route = { method: 'GET', path: '/agents', requiresAuth: true } as any;
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(mastra, route, requestContext as any, {});
+
+    expect(result).toMatchObject({
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is required',
+    });
+    expect(fgaProvider.check).not.toHaveBeenCalled();
+  });
+
+  it('should use a global route FGA resolver when route metadata is absent', async () => {
+    const resolveRouteFGA = vi.fn().mockReturnValue({
+      resourceType: 'agent',
+      resourceId: 'agent-1',
+      permission: 'agents:read',
+    });
+    const fgaProvider = { ...createMockFGAProvider(true), requireForProtectedRoutes: true, resolveRouteFGA };
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const route = { method: 'GET', path: '/agents/:agentId', requiresAuth: true } as any;
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(mastra, route, requestContext as any, { agentId: 'agent-1' });
+
+    expect(result).toBeNull();
+    expect(resolveRouteFGA).toHaveBeenCalledWith({
+      route: {
+        path: '/agents/:agentId',
+        method: 'GET',
+        requiresAuth: true,
+        requiresPermission: undefined,
+        fga: undefined,
+      },
+      params: { agentId: 'agent-1' },
+      requestContext,
+    });
+    expect(fgaProvider.check).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      {
+        resource: { type: 'agent', id: 'agent-1' },
+        permission: 'agents:read',
+        context: { resourceId: 'agent-1', requestContext },
+      },
+    );
+  });
+
   it('should return null when FGA check passes', async () => {
     const fgaProvider = createMockFGAProvider(true);
     const mastra = { getServer: () => ({ fga: fgaProvider }) };
@@ -267,5 +320,63 @@ describe('EE license validation', () => {
     await expect(adapter.validateEELicense()).rejects.toThrow(
       'RBAC and FGA are configured but no valid EE license was found',
     );
+  });
+});
+
+describe('FGA policy coverage validation', () => {
+  it('should call provider permission validation with permissions Mastra can emit', async () => {
+    const validatePermissions = vi.fn();
+    const mastra = new Mastra({
+      server: {
+        fga: {
+          ...createMockFGAProvider(),
+          validatePermissions,
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.validateFGAPolicyCoverage();
+
+    expect(validatePermissions).toHaveBeenCalledTimes(1);
+    expect(validatePermissions.mock.calls[0]?.[0]).toContain('agents:create');
+    expect(validatePermissions.mock.calls[0]?.[0]).toContain('agents:read');
+    expect(validatePermissions.mock.calls[0]?.[0]).toContain('workflows:execute');
+  });
+
+  it('should warn about protected routes without FGA metadata when fail-closed mode is enabled', async () => {
+    const mastra = new Mastra({
+      server: {
+        fga: {
+          ...createMockFGAProvider(),
+          requireForProtectedRoutes: true,
+        },
+      },
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn').mockImplementation(() => {});
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.validateFGAPolicyCoverage();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('FGA is configured but'),
+      expect.objectContaining({
+        routes: expect.arrayContaining(['GET /agents']),
+      }),
+    );
+  });
+
+  it('should throw on missing FGA metadata when auditProtectedRoutes is error', async () => {
+    const mastra = new Mastra({
+      server: {
+        fga: {
+          ...createMockFGAProvider(),
+          auditProtectedRoutes: 'error',
+        },
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.validateFGAPolicyCoverage()).rejects.toThrow('protected routes are missing FGA metadata');
   });
 });

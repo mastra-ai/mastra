@@ -95,6 +95,47 @@ permissionMapping: {
 
 If no mapping exists for a permission, the original string is passed through.
 
+Providers can implement `validatePermissions()` to validate the full set of permissions Mastra may emit at startup. Use this when a provider requires every Mastra permission to have an explicit provider permission slug.
+
+### Route policy coverage
+
+By default, HTTP route FGA checks are opt-in. A route is checked only when it has route-level `fga` metadata, or when the provider supplies metadata with `resolveRouteFGA()`.
+
+To deny protected routes that do not resolve FGA metadata, set `requireForProtectedRoutes` on the provider object:
+
+```typescript prettier: false
+import type { IFGAProvider } from '@mastra/core/auth/ee';
+
+const fga: IFGAProvider = Object.assign(new MastraFGAWorkos({
+  /* ... */
+}), {
+  requireForProtectedRoutes: true,
+  auditProtectedRoutes: 'warn' as const,
+});
+```
+
+Set `auditProtectedRoutes: 'error'` to fail startup when protected routes are missing built-in FGA metadata. If `requireForProtectedRoutes` is enabled, Mastra logs this audit as a warning by default.
+
+Use `resolveRouteFGA()` when route-level metadata is too static for your app. The resolver receives the route, parsed params, and request context, then returns the resource type, resource ID, and permission for the check:
+
+```typescript prettier: false
+const fga: IFGAProvider = Object.assign(new MastraFGAWorkos({
+  /* ... */
+}), {
+  requireForProtectedRoutes: true,
+  resolveRouteFGA: ({ route, params, requestContext }) => {
+    const teamId = requestContext?.get('teamId');
+    if (!teamId) return null;
+
+    return {
+      resourceType: 'team',
+      resourceId: String(teamId),
+      permission: route.requiresPermission,
+    };
+  },
+});
+```
+
 ## Enforcement points
 
 When an FGA provider is configured, Mastra automatically checks authorization at these lifecycle points:
