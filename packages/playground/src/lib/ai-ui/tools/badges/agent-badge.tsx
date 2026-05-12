@@ -32,6 +32,7 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
+  keepOpenForStreamingChildMessages?: boolean;
 }
 
 export const AgentBadge = ({
@@ -44,6 +45,8 @@ export const AgentBadge = ({
   isNetwork,
   suspendPayload,
   toolCalled: toolCalledProp,
+  isComplete = false,
+  keepOpenForStreamingChildMessages = false,
 }: AgentBadgeProps) => {
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
@@ -77,6 +80,8 @@ export const AgentBadge = ({
     toolCalled = toolCalledProp ?? allChildToolsComplete;
   }
 
+  const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
@@ -89,7 +94,7 @@ export const AgentBadge = ({
       data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
-      initialCollapsed={false}
+      initialCollapsed={shouldCollapseContent}
       extraInfo={
         metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
