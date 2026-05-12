@@ -15,23 +15,23 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 
 **Do not skip sections unless you hit an actual blocker.** "Seemed complex" or "I'll come back to it" are not valid reasons. Attempt every step — only stop when you literally cannot proceed. Report what you tried and what blocked you.
 
-| #   | Section                | Reference                        | When required                                                               |
-| --- | ---------------------- | -------------------------------- | --------------------------------------------------------------------------- |
-| 1   | **Setup**              | `references/setup.md`            | Always                                                                      |
-| 2   | **Workspace**          | `references/workspace.md`        | `--test workspace` or full                                                  |
-| 3   | **Reconciliation**     | `references/reconciliation.md`   | Steps 1 + 5 only; steps 2/3/4/6 are out of smoke-test scope (see below)     |
-| 4   | **Defaults**           | `references/defaults.md`         | `--test defaults` or full                                                   |
-| 5   | **Model Policy**       | `references/model-policy.md`     | `--test model-policy` or full                                               |
-| 6   | **Skills**             | `references/skills.md`           | `--test skills` or full                                                     |
-| 7   | **Registry**           | `references/registry.md`         | `--test registry` or full                                                   |
-| 8   | **Agents**             | `references/agents.md`           | `--test agents` or full                                                     |
-| 9   | **Picker Allowlists**  | `references/picker-allowlist.md` | `--test pickers` or full                                                    |
-| 10  | **Stars**              | `references/stars.md`            | `--test stars` or full                                                      |
-| 11  | **Permissions / RBAC** | `references/permissions.md`      | `--test permissions` or full                                                |
-| 12  | **Infrastructure**     | `references/infrastructure.md`   | `--test infrastructure` or full                                             |
-| 13  | **Channels**           | `references/channels.md`         | `--test channels` or full                                                   |
-| 14  | **UI**                 | `references/ui.md`               | `--test ui` or full                                                         |
-| 15  | **Auth**               | `references/auth.md`             | `--test auth` or `--auth on`                                                |
+| #   | Section                | Reference                        | When required                                                           |
+| --- | ---------------------- | -------------------------------- | ----------------------------------------------------------------------- |
+| 1   | **Setup**              | `references/setup.md`            | Always                                                                  |
+| 2   | **Workspace**          | `references/workspace.md`        | `--test workspace` or full                                              |
+| 3   | **Reconciliation**     | `references/reconciliation.md`   | Steps 1 + 5 only; steps 2/3/4/6 are out of smoke-test scope (see below) |
+| 4   | **Defaults**           | `references/defaults.md`         | `--test defaults` or full                                               |
+| 5   | **Model Policy**       | `references/model-policy.md`     | `--test model-policy` or full                                           |
+| 6   | **Skills**             | `references/skills.md`           | `--test skills` or full                                                 |
+| 7   | **Registry**           | `references/registry.md`         | `--test registry` or full                                               |
+| 8   | **Agents**             | `references/agents.md`           | `--test agents` or full                                                 |
+| 9   | **Picker Allowlists**  | `references/picker-allowlist.md` | `--test pickers` or full                                                |
+| 10  | **Stars**              | `references/stars.md`            | `--test stars` or full                                                  |
+| 11  | **Permissions / RBAC** | `references/permissions.md`      | `--test permissions` or full                                            |
+| 12  | **Infrastructure**     | `references/infrastructure.md`   | `--test infrastructure` or full                                         |
+| 13  | **Channels**           | `references/channels.md`         | `--test channels` or full                                               |
+| 14  | **UI**                 | `references/ui.md`               | `--test ui` or full                                                     |
+| 15  | **Auth**               | `references/auth.md`             | `--test auth` or `--auth on`                                            |
 
 ### Execution flow
 
@@ -99,15 +99,15 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 ## Parameters
 
-| Parameter          | Description                                                                                                | Default        |
-| ------------------ | ---------------------------------------------------------------------------------------------------------- | -------------- |
-| `--test`           | Comma-separated section names (see table above).                                                           | (all sections) |
-| `--scope`          | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.    | (none)         |
-| `--auth`           | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set. | `auto`         |
+| Parameter          | Description                                                                                                                                                                                                                                                                                           | Default        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `--test`           | Comma-separated section names (see table above).                                                                                                                                                                                                                                                      | (all sections) |
+| `--scope`          | Named group of sections (`rbac`, `skills`, `agents`, `infra`, `ui`, `quick`). Combinable with `--test`.                                                                                                                                                                                               | (none)         |
+| `--auth`           | `on`, `off`, or `auto`. `auto` enables the Auth section iff `WORKOS_CLIENT_ID` + `WORKOS_API_KEY` are set.                                                                                                                                                                                            | `auto`         |
 | `--role`           | Expected role of the logged-in user under `--auth on`: `owner`, `admin`, `member`, or `viewer`. Setup asserts the live `/api/auth/me` roles match; on mismatch the run stops and the user is told to either change their WorkOS role or re-run with the correct `--role`. Ignored under `--auth off`. | `admin`        |
-| `--fixtures-reset` | Stop the dev server, wipe `examples/agent/mastra.db`, restart, restore the seeded public skills.           | `false`        |
-| `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                 | `false`        |
-| `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                         | `false`        |
+| `--fixtures-reset` | Stop the dev server, wipe `examples/agent/mastra.db`, restart, restore the seeded public skills.                                                                                                                                                                                                      | `false`        |
+| `--clean`          | Delete test entities (smoke-test workspaces / agents / skills) at the end of each section.                                                                                                                                                                                                            | `false`        |
+| `--skip-browser`   | Run only API/`curl` checks. UI section is skipped.                                                                                                                                                                                                                                                    | `false`        |
 
 If `--auth auto` and no WorkOS env vars are present, the Auth section is auto-skipped and reported as `⏭️ Skipped (no WORKOS_* env vars)`.
 
@@ -179,12 +179,12 @@ in a state the user didn't ask for.
 
 All four scripts under `.claude/skills/builder-smoke-test/scripts/` are designed to be invoked **from the repo root** (the directory with `pnpm-workspace.yaml`). They resolve `examples/agent/` and `examples/agent/.env` relative to that root.
 
-| Script              | Run from                  | Notes                                                                            |
-| ------------------- | ------------------------- | -------------------------------------------------------------------------------- |
-| `preflight.sh`      | repo root                 | Will exit `not-in-mastra-repo` if `pnpm-workspace.yaml` isn't in the current cwd. |
-| `auth-detect.sh`    | repo root                 | Reads `examples/agent/.env` only.                                                |
-| `wait-for-server.sh` | repo root or anywhere     | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                     |
-| `fixtures-reset.sh` | repo root                 | Touches `examples/agent/mastra.db` + reseeds. Requires the dev server stopped.   |
+| Script               | Run from              | Notes                                                                             |
+| -------------------- | --------------------- | --------------------------------------------------------------------------------- |
+| `preflight.sh`       | repo root             | Will exit `not-in-mastra-repo` if `pnpm-workspace.yaml` isn't in the current cwd. |
+| `auth-detect.sh`     | repo root             | Reads `examples/agent/.env` only.                                                 |
+| `wait-for-server.sh` | repo root or anywhere | Hits `http://localhost:4111/api/agents`. cwd doesn't matter.                      |
+| `fixtures-reset.sh`  | repo root             | Touches `examples/agent/mastra.db` + reseeds. Requires the dev server stopped.    |
 
 Invoke them as `bash .claude/skills/builder-smoke-test/scripts/<name>.sh` from the repo root. Don't `cd` into `scripts/` first — relative path resolution will break.
 
@@ -218,13 +218,13 @@ bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on
 
 Preflight is **detect-only**. It checks three things (repo shape, `examples/agent/node_modules`, `OPENAI_API_KEY` reachability) and optionally compares the auth mode (delegated to `scripts/auth-detect.sh`) against `--expect off|on`. It never edits `.env`, never sources rc files, never copies values around. Each failure prints a stable error code; this table tells the agent what to do.
 
-| Error code | What it means | What the agent should do |
-| --- | --- | --- |
-| `not-in-mastra-repo` | Wrong cwd — no `pnpm-workspace.yaml` + `examples/agent/` at the repo root resolved from this script | `cd` into the user's mastra worktree (the dir with `pnpm-workspace.yaml`) and re-run. |
-| `examples-agent-not-installed` | `examples/agent/node_modules` missing | Run `cd examples/agent && pnpm i --ignore-workspace`. Don't `pnpm i` from the repo root for this example — it uses `link:` overrides. |
-| `openai-key-missing` | Neither shell nor `.env` has `OPENAI_API_KEY`; server will crash inside `OpenAIVoice` at module load | Try the rc-sourcing fallback below first. If that doesn't surface a key, ask the user to add it to `examples/agent/.env` or dictate the value. |
-| `mode-mismatch` | `--expect` value disagrees with what `auth-detect.sh` reports for `examples/agent/.env` | Show the user the detected vs expected mode. Ask them to toggle `AUTH_PROVIDER` in `.env` (or do it for them if they say so). Restart `mastra dev` and re-run preflight. |
-| `bad-expect-value` | `--expect` got something other than `off` or `on` | Fix the invocation. |
+| Error code                     | What it means                                                                                        | What the agent should do                                                                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `not-in-mastra-repo`           | Wrong cwd — no `pnpm-workspace.yaml` + `examples/agent/` at the repo root resolved from this script  | `cd` into the user's mastra worktree (the dir with `pnpm-workspace.yaml`) and re-run.                                                                                    |
+| `examples-agent-not-installed` | `examples/agent/node_modules` missing                                                                | Run `cd examples/agent && pnpm i --ignore-workspace`. Don't `pnpm i` from the repo root for this example — it uses `link:` overrides.                                    |
+| `openai-key-missing`           | Neither shell nor `.env` has `OPENAI_API_KEY`; server will crash inside `OpenAIVoice` at module load | Try the rc-sourcing fallback below first. If that doesn't surface a key, ask the user to add it to `examples/agent/.env` or dictate the value.                           |
+| `mode-mismatch`                | `--expect` value disagrees with what `auth-detect.sh` reports for `examples/agent/.env`              | Show the user the detected vs expected mode. Ask them to toggle `AUTH_PROVIDER` in `.env` (or do it for them if they say so). Restart `mastra dev` and re-run preflight. |
+| `bad-expect-value`             | `--expect` got something other than `off` or `on`                                                    | Fix the invocation.                                                                                                                                                      |
 
 **Default behavior:**
 
@@ -289,24 +289,24 @@ This table lists the surfaces an agent will hit and where to look for the
 authoritative request/response shape. Don't copy curl blocks from here —
 run the per-section commands in `references/<section>.md`.
 
-| Surface             | Endpoint                                                                      |
-| ------------------- | ----------------------------------------------------------------------------- |
-| Builder settings    | `GET /editor/builder/settings`                                                |
-| Builder infra       | `GET /editor/builder/infrastructure`                                          |
-| Registries (list)   | `GET /editor/builder/registries`                                              |
-| Registry search     | `GET /editor/builder/registries/:registryId/search?q=…`                       |
-| Registry popular    | `GET /editor/builder/registries/:registryId/popular`                          |
-| Registry preview    | `GET /editor/builder/registries/:registryId/preview?repository=…&skillName=…` |
-| Registry install    | `POST /editor/builder/registries/:registryId/install`                         |
-| Workspace CRUD      | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                              |
-| Agent CRUD          | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                                  |
-| Agent star          | `PUT / DELETE /stored/agents/:id/star`                                        |
-| Agent avatar        | `POST /stored/agents/:id/avatar` (owner-only)                                 |
-| Skill CRUD          | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                                  |
-| Skill publish       | `POST /stored/skills/:id/publish`                                             |
-| Skill star          | `PUT / DELETE /stored/skills/:id/star`                                        |
-| Auth me             | `GET /api/auth/me` (returns logged-in user + roles + permissions)             |
-| Auth refresh        | `POST /auth/refresh`                                                          |
+| Surface           | Endpoint                                                                      |
+| ----------------- | ----------------------------------------------------------------------------- |
+| Builder settings  | `GET /editor/builder/settings`                                                |
+| Builder infra     | `GET /editor/builder/infrastructure`                                          |
+| Registries (list) | `GET /editor/builder/registries`                                              |
+| Registry search   | `GET /editor/builder/registries/:registryId/search?q=…`                       |
+| Registry popular  | `GET /editor/builder/registries/:registryId/popular`                          |
+| Registry preview  | `GET /editor/builder/registries/:registryId/preview?repository=…&skillName=…` |
+| Registry install  | `POST /editor/builder/registries/:registryId/install`                         |
+| Workspace CRUD    | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                              |
+| Agent CRUD        | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                                  |
+| Agent star        | `PUT / DELETE /stored/agents/:id/star`                                        |
+| Agent avatar      | `POST /stored/agents/:id/avatar` (owner-only)                                 |
+| Skill CRUD        | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                                  |
+| Skill publish     | `POST /stored/skills/:id/publish`                                             |
+| Skill star        | `PUT / DELETE /stored/skills/:id/star`                                        |
+| Auth me           | `GET /api/auth/me` (returns logged-in user + roles + permissions)             |
+| Auth refresh      | `POST /auth/refresh`                                                          |
 
 ## Builder Studio routes
 

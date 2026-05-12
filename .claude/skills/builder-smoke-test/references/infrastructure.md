@@ -19,6 +19,7 @@ Schema (`packages/server/src/server/schemas/editor-builder.ts` → `infrastructu
 ```
 
 Notes:
+
 - `channels.providers` is filtered server-side to providers that report `isConfigured: true`.
 - `browser.config` and `workspace.config` are arrays of `{key, value}` pairs. Unset values are emitted as `null` (not omitted), so the UI can render "Provider default" / "Not set".
 - `registries` is an **object** keyed by registry id (currently only `skillsSh`), not an array. Each value is `{ enabled }`.

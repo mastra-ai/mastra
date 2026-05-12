@@ -37,6 +37,7 @@ curl -s -X POST $BASE/stored/agents \
 - [ ] `id` is present; record it as `AGENT_ID=<id>`
 
 Notes (don't assert under `--auth off`):
+
 - `visibility` will be `"public"` regardless of request (see auth-on path).
 - `authorId` will be `null` (no caller).
 - `starCount` will be `null` (no enrichment without a caller).

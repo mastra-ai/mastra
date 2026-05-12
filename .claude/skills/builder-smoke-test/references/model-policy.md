@@ -2,7 +2,7 @@
 
 The builder's `configuration.agent.models.allowed` array constrains which models can be used. The `models.default` entry seeds new agents. Studio + Agent Builder dropdowns must respect the allowlist.
 
-> **Two shapes, same concept.** Builder *config* (TypeScript, `examples/agent/src/mastra/index.ts`) uses `{ provider, modelId }`. Stored-agents *API* (`POST /stored/agents`, schema in `packages/server/src/server/schemas/stored-agents.ts`) uses `{ provider, name }`. When you POST to create an agent, use `name`. When you read the policy from the settings endpoint or the TS source, you'll see `modelId`.
+> **Two shapes, same concept.** Builder _config_ (TypeScript, `examples/agent/src/mastra/index.ts`) uses `{ provider, modelId }`. Stored-agents _API_ (`POST /stored/agents`, schema in `packages/server/src/server/schemas/stored-agents.ts`) uses `{ provider, name }`. When you POST to create an agent, use `name`. When you read the policy from the settings endpoint or the TS source, you'll see `modelId`.
 
 ## Source-of-truth
 

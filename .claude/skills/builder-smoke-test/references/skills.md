@@ -8,16 +8,16 @@ Test stored skill create, read, update, delete, visibility, publish, and filesys
 
 ## Endpoints
 
-| Endpoint                                  | Method | Purpose                                |
-| ----------------------------------------- | ------ | -------------------------------------- |
-| `/stored/skills`                          | POST   | Create a stored skill                  |
-| `/stored/skills`                          | GET    | List stored skills (paginated)         |
-| `/stored/skills/:id`                      | GET    | Read a single stored skill             |
-| `/stored/skills/:id`                      | PATCH  | Update fields on a stored skill        |
-| `/stored/skills/:id`                      | DELETE | Delete a stored skill                  |
-| `/stored/skills/:id/publish`              | POST   | Publish a skill from a filesystem path |
-| `/stored/skills/:id/star`                 | PUT    | Star (see `references/stars.md`)       |
-| `/stored/skills/:id/star`                 | DELETE | Unstar (see `references/stars.md`)     |
+| Endpoint                     | Method | Purpose                                |
+| ---------------------------- | ------ | -------------------------------------- |
+| `/stored/skills`             | POST   | Create a stored skill                  |
+| `/stored/skills`             | GET    | List stored skills (paginated)         |
+| `/stored/skills/:id`         | GET    | Read a single stored skill             |
+| `/stored/skills/:id`         | PATCH  | Update fields on a stored skill        |
+| `/stored/skills/:id`         | DELETE | Delete a stored skill                  |
+| `/stored/skills/:id/publish` | POST   | Publish a skill from a filesystem path |
+| `/stored/skills/:id/star`    | PUT    | Star (see `references/stars.md`)       |
+| `/stored/skills/:id/star`    | DELETE | Unstar (see `references/stars.md`)     |
 
 The full schema definitions live in `packages/server/src/server/schemas/stored-skills.ts`. Treat that file as the source of truth for request and response shapes.
 

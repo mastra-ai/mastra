@@ -11,8 +11,8 @@ or when a code change touches one of those surfaces.
 - **Core** (steps 1–7): shell loads, skills list, create-skill dialog,
   agent detail page, skills section, star toggle, visibility badges.
 - **Extended** (steps 8–14): model dropdown, workspace dropdown, Library
-  + Copy flow, registry button gating, origin badges, mobile bottom-bar
-  parity, scrollable list layout.
+  - Copy flow, registry button gating, origin badges, mobile bottom-bar
+    parity, scrollable list layout.
 
 If you skip a step, mark it ⏭️ in the result table with a one-line reason
 (e.g. "extended tier not requested").
@@ -26,7 +26,7 @@ If you skip a step, mark it ⏭️ in the result table with a one-line reason
 
 ## Steps
 
-### 1. Agent Builder Shell *(Core)*
+### 1. Agent Builder Shell _(Core)_
 
 Navigate to `http://localhost:4111/agent-builder`.
 
@@ -35,7 +35,7 @@ Navigate to `http://localhost:4111/agent-builder`.
 - [ ] "Skills" link visible in sidebar (features.skills = true)
 - [ ] Agent list or default view renders
 
-### 2. Skills List Page *(Core)*
+### 2. Skills List Page _(Core)_
 
 Navigate to `http://localhost:4111/agent-builder/skills`.
 
@@ -48,7 +48,7 @@ Navigate to `http://localhost:4111/agent-builder/skills`.
   - [ ] Star icon/button
 - [ ] Skills are NOT clickable (no detail page exists yet)
 
-### 3. Create Skill via UI *(Core)*
+### 3. Create Skill via UI _(Core)_
 
 Click the "New Skill" or "Create" button on the skills page.
 
@@ -65,7 +65,7 @@ Click the "New Skill" or "Create" button on the skills page.
 
 **Known issue**: The Create button's `disabled` state may not update properly when typing via browser automation. If the button stays disabled, try clicking into the name field, clearing it, and retyping.
 
-### 4. Agent Detail Page *(Core)*
+### 4. Agent Detail Page _(Core)_
 
 Navigate to an existing stored agent's detail page: `http://localhost:4111/agent-builder/agents/<agentId>`.
 
@@ -79,7 +79,7 @@ If no stored agent exists, create one via API first.
 - [ ] Skills section visible (shows attached skills or empty state)
 - [ ] Chat panel visible on the right
 
-### 5. Agent Skills Section *(Core)*
+### 5. Agent Skills Section _(Core)_
 
 On the agent detail page:
 
@@ -87,7 +87,7 @@ On the agent detail page:
 - [ ] Toggle/expand panel shows attached skills
 - [ ] Skills can be toggled on/off (if skill management UI exists)
 
-### 6. Star Interaction (UI) *(Core)*
+### 6. Star Interaction (UI) _(Core)_
 
 On the skills list page:
 
@@ -100,14 +100,14 @@ On the agent list (if star icons exist there):
 
 - [ ] Same toggle behavior
 
-### 7. Visibility Badge Correctness *(Core)*
+### 7. Visibility Badge Correctness _(Core)_
 
 - [ ] Private entities show "Private" badge
 - [ ] Public entities show "Public" badge
 - [ ] Runtime agents (if any) show "Runtime" badge
 - [ ] Badges are visually distinct (different colors/styles)
 
-### 8. Model Dropdown (Agent Create/Edit) *(Extended)*
+### 8. Model Dropdown (Agent Create/Edit) _(Extended)_
 
 Navigate to the agent create or edit page.
 
@@ -121,7 +121,7 @@ Example verification:
 - If builder config allows `{ provider: 'openai' }` (wildcard), all OpenAI models should appear
 - If builder config allows `{ provider: 'anthropic', modelId: 'claude-opus-4-7' }`, only that specific model should appear
 
-### 9. Workspace Dropdown (Skill Create) *(Extended)*
+### 9. Workspace Dropdown (Skill Create) _(Extended)_
 
 In the skill creation dialog:
 
@@ -130,7 +130,7 @@ In the skill creation dialog:
 - [ ] Archived workspaces do NOT appear in dropdown
 - [ ] User-created workspaces (if any) also appear
 
-### 10. Library page (public skills you don't own) *(Extended)*
+### 10. Library page (public skills you don't own) _(Extended)_
 
 Navigate to `http://localhost:4111/agent-builder/library`.
 
@@ -142,7 +142,7 @@ Navigate to `http://localhost:4111/agent-builder/library`.
 - [ ] Submit → toast confirms; new private skill appears in your skills list
 - [ ] Copied skill shows "copied" origin badge in the list
 
-### 11. Registry Browse button gating *(Extended)*
+### 11. Registry Browse button gating _(Extended)_
 
 Still on `/agent-builder/skills`:
 
@@ -151,20 +151,20 @@ Still on `/agent-builder/skills`:
 
 (Full registry flow is covered in `references/registry.md`.)
 
-### 12. Origin badge on skills list *(Extended)*
+### 12. Origin badge on skills list _(Extended)_
 
 - [ ] Skills installed from skills.sh show a skills.sh badge
 - [ ] Skills copied from the library show a "copied" badge with tooltip "Copied from <source>"
 - [ ] Skills you authored directly show no origin badge
 
-### 13. Mobile bottom-bar parity *(Extended)*
+### 13. Mobile bottom-bar parity _(Extended)_
 
 Resize browser to mobile width (or use the device toggle).
 
 - [ ] Bottom-bar shows the same primary entries as the desktop sidebar (Agents, Skills, Library, Workspaces, Infra for admin)
 - [ ] Tapping each navigates to the matching route (`/agent-builder`, `/agent-builder/skills`, `/agent-builder/library`, `/agent-builder/workspaces`, `/agent-builder/infrastructure`) and the corresponding tab is active
 
-### 14. Scrollable lists (#16252, #16253) *(Extended)*
+### 14. Scrollable lists (#16252, #16253) _(Extended)_
 
 On Agents and Skills list pages:
 
@@ -172,7 +172,7 @@ On Agents and Skills list pages:
 - [ ] Column does not collapse when the detail pane slides in
 - [ ] Detail pane animates in cleanly (no layout jump)
 
-### 15. Role impersonation *(Core, admin/owner only)*
+### 15. Role impersonation _(Core, admin/owner only)_
 
 UI-only feature wired through `role-impersonation-context.tsx`. Frontend state, no backend role-override header. Only run this subset when the live user is `admin` or `owner` (otherwise the menu is hidden).
 
@@ -189,7 +189,7 @@ Open the user menu → "View as role" (or equivalent picker — confirm exact la
   - [ ] Read + execute affordances visible; create/edit hidden
 - [ ] "Exit impersonation" (or equivalent) restores the original admin UI
 
-> **Important:** impersonation is UI-only. The API still answers per the *real* logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
+> **Important:** impersonation is UI-only. The API still answers per the _real_ logged-in role. If you `curl` the same endpoint while impersonating viewer, you'll still get the admin's response. That's expected — record it that way in the report, don't file it as a bug.
 
 ### Cleanup
 

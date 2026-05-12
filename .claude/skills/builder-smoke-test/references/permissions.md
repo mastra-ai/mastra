@@ -6,12 +6,12 @@ Verify role-based gating across Studio and Agent Builder. Covers route-level RBA
 
 Defined in `packages/core/src/auth/ee/defaults/roles.ts`:
 
-| Role     | Permission grants                                              |
-| -------- | -------------------------------------------------------------- |
-| `owner`  | `*` (everything, including delete)                             |
+| Role     | Permission grants                                                    |
+| -------- | -------------------------------------------------------------------- |
+| `owner`  | `*` (everything, including delete)                                   |
 | `admin`  | `*:read`, `*:write`, `*:execute`, `*:publish`, `*:share` (no delete) |
-| `member` | `*:read`, `*:execute`                                          |
-| `viewer` | `*:read`                                                       |
+| `member` | `*:read`, `*:execute`                                                |
+| `viewer` | `*:read`                                                             |
 
 Public stored skills/agents short-circuit read checks (see `authorship.ts`). Auth disabled bypasses role checks entirely.
 
@@ -22,6 +22,7 @@ Under `--auth on`, the smoke test runs as whichever role the **logged-in WorkOS 
 **There is no server-side "preview as role" header in this build.** The "View as role" feature in the UI is purely frontend state (see `references/ui.md` — Impersonation UI). It does not change what the API returns. To exercise role gating at the API layer, the logged-in user must actually have that role.
 
 If the user is logged in as `admin` and wants to test viewer behavior, they have two options:
+
 1. Change their WorkOS role to `viewer`, restart `mastra dev`, re-run with `--role viewer`.
 2. Run with `--role admin` and exercise the UI-only impersonation flow (covered in `references/ui.md`).
 
@@ -29,20 +30,20 @@ If the user is logged in as `admin` and wants to test viewer behavior, they have
 
 Pass criteria per role for representative endpoints. The agent uses this to set expected status codes per section when `--role` is non-admin.
 
-| Endpoint / action                          | owner | admin | member | viewer |
-| ------------------------------------------ | ----- | ----- | ------ | ------ |
-| `GET /stored/agents`                       | 200   | 200   | 200    | 200    |
-| `GET /stored/skills`                       | 200   | 200   | 200    | 200    |
-| `POST /stored/agents` (create)             | 200   | 200   | 403    | 403    |
-| `POST /stored/skills` (create)             | 200   | 200   | 403    | 403    |
-| `PATCH /stored/agents/:id` (own)           | 200   | 200   | 403    | 403    |
-| `PATCH /stored/agents/:id` (other's)       | 200   | 200   | 403    | 403    |
-| `DELETE /stored/agents/:id` (own)          | 200   | 403*  | 403    | 403    |
-| `PATCH /stored/skills/:id` `visibility`    | 200   | 200   | 403    | 403    |
-| `POST /stored/skills/:id/publish`          | 200   | 200   | 403    | 403    |
-| `POST /agents/:id/chat` (execute)          | 200   | 200   | 200    | 403    |
-| `GET /editor/builder/infrastructure`       | 200   | 200   | 403    | 403    |
-| `PUT /stored/agents/:id/star`              | 200   | 200   | 200    | 200    |
+| Endpoint / action                       | owner | admin | member | viewer |
+| --------------------------------------- | ----- | ----- | ------ | ------ |
+| `GET /stored/agents`                    | 200   | 200   | 200    | 200    |
+| `GET /stored/skills`                    | 200   | 200   | 200    | 200    |
+| `POST /stored/agents` (create)          | 200   | 200   | 403    | 403    |
+| `POST /stored/skills` (create)          | 200   | 200   | 403    | 403    |
+| `PATCH /stored/agents/:id` (own)        | 200   | 200   | 403    | 403    |
+| `PATCH /stored/agents/:id` (other's)    | 200   | 200   | 403    | 403    |
+| `DELETE /stored/agents/:id` (own)       | 200   | 403\* | 403    | 403    |
+| `PATCH /stored/skills/:id` `visibility` | 200   | 200   | 403    | 403    |
+| `POST /stored/skills/:id/publish`       | 200   | 200   | 403    | 403    |
+| `POST /agents/:id/chat` (execute)       | 200   | 200   | 200    | 403    |
+| `GET /editor/builder/infrastructure`    | 200   | 200   | 403    | 403    |
+| `PUT /stored/agents/:id/star`           | 200   | 200   | 200    | 200    |
 
 \* `admin` has no `*:delete` grant; deletes are gated to `owner` (or explicit `:delete` grant). If you see `admin` succeeding at DELETE, that's a real regression.
 
@@ -68,7 +69,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "$SESSION" "$BASE/stored/skills"
 
 - [ ] Both 200 regardless of role
 - [ ] Body is JSON; not HTML, not a stack trace
-- [ ] Private agents/skills owned by *other* users are absent from the list (unless caller is admin/owner)
+- [ ] Private agents/skills owned by _other_ users are absent from the list (unless caller is admin/owner)
 
 ### 3. Write gated by role
 
