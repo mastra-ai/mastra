@@ -147,9 +147,11 @@ class ImageManager {
       tuiInternals.previousLines = [];
       tuiInternals.previousWidth = 0;
       tuiInternals.previousHeight = 0;
-      // Clear the visible viewport + scrollback so leftover popup
-      // backgrounds painted last frame are wiped from the terminal.
-      this.ui.terminal.write('\x1b[2J\x1b[H\x1b[3J');
+      // Clear the visible viewport so leftover popup backgrounds painted
+      // last frame are wiped from the terminal. We intentionally do NOT
+      // send `\x1b[3J` (erase scrollback) — that would destroy the user's
+      // terminal history every time an overlay opens or closes.
+      this.ui.terminal.write('\x1b[2J\x1b[H');
       this.ui.requestRender();
     } catch {
       // best-effort
