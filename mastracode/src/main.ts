@@ -99,7 +99,7 @@ async function tuiMain(pipedInput?: string | null) {
       .then(browser => {
         if (!browser) return;
         harness.setBrowser(browser);
-        void harness.setState({ activeBrowserSettings: settings.browser } as any);
+        void harness.setState({ activeBrowserSettings: settings.browser } as any).catch(() => {});
       })
       .catch(() => {});
   }

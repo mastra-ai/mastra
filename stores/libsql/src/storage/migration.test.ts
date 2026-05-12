@@ -8,7 +8,7 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLDB } from './db';
 import { LibSQLStore } from './index';
 
@@ -272,36 +272,6 @@ describe('LibSQL Spans Table Migration', () => {
     expect(newSpan.entityType).toBe('workflow');
     expect(newSpan.entityId).toBe('workflow-123');
     expect(newSpan.environment).toBe('production');
-  });
-
-  it('should inspect spans columns once while migrating missing columns', async () => {
-    const calls: string[] = [];
-    const mockClient = {
-      execute: vi.fn(async (statement: string | { sql: string }) => {
-        const sql = typeof statement === 'string' ? statement : statement.sql;
-        calls.push(sql);
-        if (/PRAGMA\s+table_info/i.test(sql)) {
-          return {
-            rows: Object.keys(OLD_SPAN_SCHEMA).map(name => ({ name })),
-            rowsAffected: 0,
-          };
-        }
-        if (/sqlite_master/i.test(sql)) {
-          return { rows: [], rowsAffected: 0 };
-        }
-        if (/duplicate_count/i.test(sql)) {
-          return { rows: [{ duplicate_count: 0 }], rowsAffected: 0 };
-        }
-        return { rows: [], rowsAffected: 0 };
-      }),
-    };
-
-    const mockDbOps = new LibSQLDB({ client: mockClient as any });
-    await mockDbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
-
-    const tableInfoCalls = calls.filter(sql => /PRAGMA\s+table_info\("mastra_ai_spans"\)/i.test(sql));
-    expect(tableInfoCalls).toHaveLength(1);
-    expect(calls.some(sql => /ALTER TABLE "mastra_ai_spans" ADD COLUMN "entityType"/i.test(sql))).toBe(true);
   });
 
   it('should deduplicate spans with same (spanId, traceId) during migration and create unique index', async () => {

@@ -621,14 +621,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-            hasReplayedTaskState = true;
-            previousTasksAcc = applyTaskToolResult(
-              previousTasksAcc,
-              content.name,
-              content.args,
-              toolResult.result,
-              toolResult.isError,
-            );
+            const resultTasks = getTaskResultTasks(toolResult.result);
+            if (resultTasks) {
+              hasReplayedTaskState = true;
+              previousTasksAcc = assignTaskIds(resultTasks, previousTasksAcc);
+            }
           }
 
           // If this was submit_plan, show the plan with approval status
