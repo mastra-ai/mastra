@@ -16,12 +16,12 @@ import type {
   StorageListSkillsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
-import {
-  type SkillVersion,
-  type CreateSkillVersionInput,
-  type ListSkillVersionsInput,
-  type ListSkillVersionsOutput,
-  skillSnapshotFieldValuesEqual,
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
+import type {
+  SkillVersion,
+  CreateSkillVersionInput,
+  ListSkillVersionsInput,
+  ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';

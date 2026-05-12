@@ -17,12 +17,12 @@ import type {
   StorageListSkillsInput,
   StorageListSkillsOutput,
 } from '@mastra/core/storage';
-import {
-  type SkillVersion,
-  type CreateSkillVersionInput,
-  type ListSkillVersionsInput,
-  type ListSkillVersionsOutput,
-  skillSnapshotFieldValuesEqual,
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
+import type {
+  SkillVersion,
+  CreateSkillVersionInput,
+  ListSkillVersionsInput,
+  ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
