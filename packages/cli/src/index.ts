@@ -104,6 +104,12 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
+  )
   .action(createProject);
 
 program
@@ -124,6 +130,12 @@ program
     '-m, --mcp <editor>',
     'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
     parseMcp,
+  )
+  .option('--observability', 'Enable Mastra Observability (writes MASTRA_PLATFORM_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observability', 'Do not enable Mastra Observability')
+  .option(
+    '--observability-project <name>',
+    'Existing platform project name/slug to attach Observability to, or a name to create. Skips the interactive picker.',
   )
   .action(initProject);
 

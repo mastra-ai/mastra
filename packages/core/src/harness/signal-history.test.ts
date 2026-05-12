@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { getDummyResponseModel } from '../agent/__tests__/mock-model';
 import { signalToMastraDBMessage } from '../agent/signals';
@@ -62,6 +62,30 @@ describe('Harness signal history rendering', () => {
         { type: 'image', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
       ],
     });
+  });
+
+  it('emits agent_end when a system-reminder signal starts an idle run', async () => {
+    const { harness } = await createHarnessWithThread();
+    const events: Array<{ type: string; reason?: string }> = [];
+    const unsubscribe = harness.subscribe(event => {
+      events.push(event as { type: string; reason?: string });
+    });
+
+    try {
+      const signal = harness.sendSignal({
+        type: 'system-reminder',
+        contents: 'keep going',
+        attributes: { type: 'goal' },
+      });
+      await signal.accepted;
+
+      await vi.waitFor(() => {
+        expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
+      });
+    } finally {
+      unsubscribe();
+      await harness.destroy();
+    }
   });
 
   it('renders persisted system-reminder signals as system reminder content', async () => {
