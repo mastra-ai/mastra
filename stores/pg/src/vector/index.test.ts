@@ -355,6 +355,36 @@ describe('PgVector', () => {
           expect(stats.type).toBe('ivfflat');
           expect(stats.config.lists).toBe(100);
         });
+
+        it('should create btree indexes on specified metadata fields', async () => {
+          const metadataIdxTestIndex = 'test_metadata_idx';
+          try {
+            await vectorDB.deleteIndex({ indexName: metadataIdxTestIndex });
+          } catch {}
+
+          await vectorDB.createIndex({
+            indexName: metadataIdxTestIndex,
+            dimension: 3,
+            metadataIndexes: ['thread_id', 'resource_id'],
+          });
+
+          // Verify the metadata indexes were created (index names use _md_{hash}_idx pattern)
+          const client = await vectorDB.pool.connect();
+          try {
+            const result = await client.query(
+              `SELECT indexname FROM pg_indexes WHERE tablename = $1 AND indexname LIKE '%_md_%_idx'`,
+              [metadataIdxTestIndex],
+            );
+            const indexNames = result.rows.map((r: { indexname: string }) => r.indexname);
+            expect(indexNames).toHaveLength(2);
+            // Index names are deterministic hashes: test_metadata_idx_md_{hash}_idx
+            expect(indexNames).toContain(`${metadataIdxTestIndex}_md_57d95f6b_idx`);
+            expect(indexNames).toContain(`${metadataIdxTestIndex}_md_5a823b81_idx`);
+          } finally {
+            client.release();
+            await vectorDB.deleteIndex({ indexName: metadataIdxTestIndex });
+          }
+        });
       });
 
       describe('Index Recreation Logic', () => {
@@ -875,7 +905,127 @@ describe('PgVector', () => {
           expect(results[1]?.score).toBeGreaterThan(0.9);
         });
 
-        // NEW TEST: Reproduce the SET LOCAL bug
+        it('should place ORDER BY and LIMIT inside CTE when querying without filters', async () => {
+          const queries: string[] = [];
+          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
+          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
+            const client = await origConnect();
+            const origQuery = client.query.bind(client);
+            client.query = ((...args: any[]) => {
+              if (typeof args[0] === 'string') {
+                queries.push(args[0]);
+              }
+              return (origQuery as any)(...args);
+            }) as any;
+            return client;
+          });
+
+          try {
+            await vectorDB.query({
+              indexName,
+              queryVector: [1, 0, 0],
+              topK: 2,
+            });
+
+            const cteQuery = queries.find(q => q.includes('vector_scores'));
+            expect(cteQuery).toBeDefined();
+
+            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
+            expect(cteMatch).toBeTruthy();
+            const cteBody = cteMatch![1]!;
+            expect(cteBody).toContain('ORDER BY');
+            expect(cteBody).toContain('LIMIT');
+          } finally {
+            connectSpy.mockRestore();
+          }
+        });
+
+        it('should place ORDER BY and LIMIT outside CTE when querying with filters', async () => {
+          const queries: string[] = [];
+          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
+          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
+            const client = await origConnect();
+            const origQuery = client.query.bind(client);
+            client.query = ((...args: any[]) => {
+              if (typeof args[0] === 'string') {
+                queries.push(args[0]);
+              }
+              return (origQuery as any)(...args);
+            }) as any;
+            return client;
+          });
+
+          try {
+            await vectorDB.query({
+              indexName,
+              queryVector: [1, 0, 0],
+              topK: 2,
+              filter: { test: 'value' },
+            });
+
+            const cteQuery = queries.find(q => q.includes('vector_scores'));
+            expect(cteQuery).toBeDefined();
+
+            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
+            expect(cteMatch).toBeTruthy();
+            const cteBody = cteMatch![1]!;
+            expect(cteBody).not.toContain('ORDER BY');
+            expect(cteBody).not.toContain('LIMIT');
+          } finally {
+            connectSpy.mockRestore();
+          }
+        });
+
+        it('should place ORDER BY and LIMIT outside CTE when minScore is set', async () => {
+          const queries: string[] = [];
+          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
+          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
+            const client = await origConnect();
+            const origQuery = client.query.bind(client);
+            client.query = ((...args: any[]) => {
+              if (typeof args[0] === 'string') {
+                queries.push(args[0]);
+              }
+              return (origQuery as any)(...args);
+            }) as any;
+            return client;
+          });
+
+          try {
+            await vectorDB.query({
+              indexName,
+              queryVector: [1, 0, 0],
+              topK: 2,
+              minScore: 0.5,
+            });
+
+            const cteQuery = queries.find(q => q.includes('vector_scores'));
+            expect(cteQuery).toBeDefined();
+
+            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
+            expect(cteMatch).toBeTruthy();
+            const cteBody = cteMatch![1]!;
+            expect(cteBody).not.toContain('ORDER BY');
+            expect(cteBody).not.toContain('LIMIT');
+          } finally {
+            connectSpy.mockRestore();
+          }
+        });
+
+        it('should return all rows above minScore when topK is larger than matching rows', async () => {
+          // 3 vectors exist: [1,0,0] (score~1.0), [0.8,0.2,0] (score~0.97), [0,1,0] (score~0.0)
+          // With topK=3 and minScore=0.5, exactly 2 rows should pass the score filter
+          const results = await vectorDB.query({
+            indexName,
+            queryVector: [1, 0, 0],
+            topK: 3,
+            minScore: 0.5,
+          });
+          expect(results).toHaveLength(2);
+          expect(results.every(r => r.score > 0.5)).toBe(true);
+        });
+
+        // Reproduce the SET LOCAL bug
         it('should verify that ef_search parameter is actually being set (reproduces SET LOCAL bug)', async () => {
           const client = await vectorDB.pool.connect();
           try {
@@ -1007,6 +1157,43 @@ describe('PgVector', () => {
           expect(results).toHaveLength(2);
           expect(results[0]?.score).toBeCloseTo(1, 5);
           expect(results[1]?.score).toBeGreaterThan(0.9);
+        });
+
+        it('should place ORDER BY and LIMIT outside CTE for IVFFlat queries', async () => {
+          const queries: string[] = [];
+          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
+          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
+            const client = await origConnect();
+            const origQuery = client.query.bind(client);
+            client.query = ((...args: any[]) => {
+              if (typeof args[0] === 'string') {
+                queries.push(args[0]);
+              }
+              return (origQuery as any)(...args);
+            }) as any;
+            return client;
+          });
+
+          try {
+            await vectorDB.query({
+              indexName,
+              queryVector: [1, 0, 0],
+              topK: 2,
+            });
+
+            const cteQuery = queries.find(q => q.includes('vector_scores'));
+            expect(cteQuery).toBeDefined();
+
+            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
+            expect(cteMatch).toBeTruthy();
+            const cteBody = cteMatch![1]!;
+            // IVFFlat always uses slow path (ORDER BY/LIMIT outside CTE) because
+            // default probes=1 can miss vectors in other clusters
+            expect(cteBody).not.toContain('ORDER BY');
+            expect(cteBody).not.toContain('LIMIT');
+          } finally {
+            connectSpy.mockRestore();
+          }
         });
       });
     });

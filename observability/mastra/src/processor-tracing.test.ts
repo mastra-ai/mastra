@@ -13,7 +13,7 @@ import type {
   TracingContext,
 } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
-import { ProcessorStepSchema } from '@mastra/core/processors';
+import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -112,6 +112,10 @@ class ProcessorTestExporter implements ObservabilityExporter {
 
   getModelStepSpans() {
     return this.getSpansByType(SpanType.MODEL_STEP);
+  }
+
+  getModelInferenceSpans() {
+    return this.getSpansByType(SpanType.MODEL_INFERENCE);
   }
 
   getWorkflowStepSpans() {
@@ -385,12 +389,13 @@ function createProcessorWorkflow(id: string) {
 let testExporter: ProcessorTestExporter;
 let observability: Observability;
 
-function getBaseMastraConfig(exporter: ProcessorTestExporter) {
+function getBaseMastraConfig(exporter: ProcessorTestExporter, options: Record<string, unknown> = {}) {
   observability = new Observability({
     configs: {
       test: {
         serviceName: 'processor-tracing-tests',
         exporters: [exporter],
+        ...options,
       },
     },
   });
@@ -802,16 +807,19 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 1 step processor span
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       // Step processors only run during inputStep phase (per LLM call in agent loop)
       const inputStepSpans = processorSpans.filter(
@@ -828,15 +836,17 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Step processor span is child of MODEL_STEP span
+      // 3. Step processor span is child of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 4. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 4. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: input_step_processor → model_chunks
-      const firstChunkInStep = chunkSpansInStep[0];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
+      const firstChunkInInference = chunkSpansInInference[0];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
 
       testExporter.finalExpectations();
     });
@@ -873,16 +883,19 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 1 step processor span
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       const outputStepSpans = processorSpans.filter(
         s => s.name?.includes('output step processor') || s.entityType === EntityType.OUTPUT_STEP_PROCESSOR,
@@ -898,15 +911,17 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Step processor span is child of MODEL_STEP span
+      // 3. Step processor span is child of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 4. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 4. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: model_chunks → output_step_processor
-      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
-      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
+      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
       testExporter.finalExpectations();
     });
@@ -947,17 +962,20 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 4 processor spans
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
       expect(processorSpans.length).toBe(4);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       // Verify correct entity types for each phase
       const inputSpan = processorSpans.find(s => s.name === 'input processor: full-input');
@@ -978,22 +996,24 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 3. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 4. Step processors are children of MODEL_STEP span
+      // 4. Step processors are children of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 5. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 6. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER: input -> MODEL_GENERATION -> output
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
       // EXECUTION ORDER within MODEL_STEP: input_step → model_chunks → output_step
-      const firstChunkInStep = chunkSpansInStep[0];
-      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
-      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+      const firstChunkInInference = chunkSpansInInference[0];
+      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
+      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
       testExporter.finalExpectations();
     });
@@ -1136,6 +1156,147 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(processorSpan, mainAgentModelSpan);
       // Internal agent completes within processor span
       testExporter.expectStartedBefore(internalAgentSpan, mainAgentModelSpan);
+
+      testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // Mastra-Owned Processor Internal Span Hiding
+  // ==========================================================================
+
+  describe('Mastra-owned processors hide internal spans', () => {
+    /**
+     * Mastra-owned processors (Moderation, PII detector, etc.) build internal
+     * agents to do their work. Those agents create AGENT_RUN/MODEL_GENERATION
+     * spans, but users don't control that code, so those spans are marked
+     * internal and filtered from exported traces by default.
+     *
+     * The PROCESSOR_RUN span itself should still be visible.
+     */
+    function createModerationMockModel() {
+      // Always return a JSON body matching the moderation schema so the
+      // moderation processor's structured-output parse succeeds cleanly.
+      const moderationJson = JSON.stringify({ category_scores: null, reason: null });
+      return new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: moderationJson }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: moderationJson },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+    }
+
+    it("does not export the internal moderation agent's spans by default", async () => {
+      const model = createModerationMockModel();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      const processorSpans = testExporter.getProcessorSpans();
+
+      // Exactly one user-visible AGENT_RUN — the main agent. The internal
+      // 'content-moderator' agent run is internal and must not be exported.
+      expect(agentSpans.length).toBe(1);
+      expect(agentSpans[0]?.entityId).toBe('test-agent');
+      expect(agentSpans.some(s => s.entityId === 'content-moderator')).toBe(false);
+
+      // PROCESSOR_RUN is still visible.
+      expect(processorSpans.length).toBe(1);
+      expect(processorSpans[0]?.name).toBe('input processor: moderation');
+      expect(processorSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+
+      // Model spans created inside the moderation agent must not leak — this
+      // covers MODEL_GENERATION and its descendants (MODEL_STEP,
+      // MODEL_INFERENCE, MODEL_CHUNK), which inherit the agent's tracingPolicy
+      // via the model tracker.
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+      expect(modelSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+      // Only the main agent's MODEL_STEP/INFERENCE/CHUNK should be present;
+      // each must be a descendant of the main agent's MODEL_GENERATION.
+      const mainModelId = modelSpans[0]?.id;
+      const modelStepSpans = testExporter.getModelStepSpans();
+      expect(modelStepSpans.every(s => s.parentSpanId === mainModelId)).toBe(true);
+      const modelChunkSpans = testExporter.getModelChunkSpans();
+      // chunks parent to inference or step; just assert none belong to the
+      // moderation agent by walking up to the closest model_generation.
+      const visibleIds = new Set(testExporter.getAllSpans().map(s => s.id));
+      for (const chunk of modelChunkSpans) {
+        // every chunk's parent must be a visible span (no orphans into hidden
+        // inference/step spans).
+        expect(chunk.parentSpanId && visibleIds.has(chunk.parentSpanId)).toBe(true);
+      }
+
+      // No orphan spans: every non-root exported span's parentSpanId must
+      // resolve to another exported span. This guards against an internal
+      // ancestor being filtered without its visible descendants getting
+      // re-parented to the closest external ancestor.
+      const allSpans = testExporter.getAllSpans();
+      const exportedIds = new Set(allSpans.map(s => s.id));
+      const orphans = allSpans.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId));
+      expect(
+        orphans,
+        `Found orphan spans pointing at filtered parents: ${orphans
+          .map(s => `${s.type}/${s.name} -> ${s.parentSpanId}`)
+          .join(', ')}`,
+      ).toHaveLength(0);
+
+      testExporter.finalExpectations();
+    });
+
+    it("exports the internal moderation agent's spans when includeInternalSpans is true", async () => {
+      // Sanity check: the internal spans really are being created — they're
+      // just filtered. Flipping includeInternalSpans on must surface them
+      // again, otherwise the assertion above could pass trivially (e.g., if
+      // the moderation agent simply wasn't running).
+      const model = createModerationMockModel();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter, { includeInternalSpans: true }),
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      const moderationAgentSpan = agentSpans.find(s => s.entityId === 'content-moderator');
+
+      // With internal spans included, the moderation agent's AGENT_RUN
+      // appears, parented to the PROCESSOR_RUN span. The contrast with the
+      // previous test (where the same setup hides this span) is what proves
+      // the span is created internally and merely filtered by default.
+      expect(moderationAgentSpan).toBeDefined();
+
+      const processorSpan = testExporter.getProcessorSpans()[0];
+      expect(moderationAgentSpan?.parentSpanId).toBe(processorSpan?.id);
 
       testExporter.finalExpectations();
     });
@@ -1732,6 +1893,456 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
+
+      testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // Processor Override Span Update Tests
+  // ==========================================================================
+
+  describe('Processor Override Span Updates', () => {
+    /**
+     * When a processInputStep overrides the model, the MODEL_GENERATION span
+     * should reflect the new model and provider, not the original.
+     *
+     * Expected span structure:
+     * - test-agent AGENT_RUN (root)
+     *   - MODEL_GENERATION (attributes should reflect overridden model)
+     *     - MODEL_STEP
+     *       - input step processor: model-router PROCESSOR_RUN
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides model', async () => {
+      const originalModel = new MockLanguageModelV2({
+        provider: 'original-provider',
+        modelId: 'original-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from overridden model' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const overriddenModel = new MockLanguageModelV2({
+        provider: 'overridden-provider',
+        modelId: 'overridden-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from overridden model' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Overridden' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      class ModelOverrideProcessor implements Processor {
+        readonly id = 'model-router';
+        readonly name = 'Model Router';
+
+        async processInputStep(_args: {
+          messages: MastraDBMessage[];
+          messageList: MessageList;
+        }): Promise<{ model: typeof overriddenModel }> {
+          return { model: overriddenModel };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: originalModel,
+        inputProcessors: [new ModelOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      // MODEL_GENERATION span should reflect the overridden model, not the original
+      expect(modelSpan?.name).toBe("llm: 'overridden-model'");
+      expect(modelSpan?.attributes?.model).toBe('overridden-model');
+      expect(modelSpan?.attributes?.provider).toBe('overridden-provider');
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep overrides modelSettings, the MODEL_GENERATION span
+     * should reflect the new parameters.
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides modelSettings', async () => {
+      const model = createMockModel();
+
+      class ModelSettingsOverrideProcessor implements Processor {
+        readonly id = 'settings-override';
+        readonly name = 'Settings Override';
+
+        async processInputStep(_args: {
+          messages: MastraDBMessage[];
+          messageList: MessageList;
+        }): Promise<{ modelSettings: { temperature: number; maxOutputTokens: number } }> {
+          return {
+            modelSettings: {
+              temperature: 0.9,
+              maxOutputTokens: 4096,
+            },
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModelSettingsOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      // MODEL_GENERATION span parameters should reflect the overridden settings
+      expect(modelSpan?.attributes?.parameters).toMatchObject({
+        temperature: 0.9,
+        maxOutputTokens: 4096,
+      });
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep overrides both model and modelSettings, both
+     * should be reflected on the MODEL_GENERATION span.
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides both model and modelSettings', async () => {
+      const originalModel = new MockLanguageModelV2({
+        provider: 'original-provider',
+        modelId: 'original-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const overriddenModel = new MockLanguageModelV2({
+        provider: 'smart-provider',
+        modelId: 'smart-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Smart response' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Smart' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75 } },
+          ]),
+        }),
+      });
+
+      class FullOverrideProcessor implements Processor {
+        readonly id = 'full-override';
+        readonly name = 'Full Override';
+
+        async processInputStep(): Promise<{
+          model: typeof overriddenModel;
+          modelSettings: { temperature: number };
+        }> {
+          return {
+            model: overriddenModel,
+            modelSettings: { temperature: 0.1 },
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: originalModel,
+        inputProcessors: [new FullOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      expect(modelSpan?.name).toBe("llm: 'smart-model'");
+      expect(modelSpan?.attributes?.model).toBe('smart-model');
+      expect(modelSpan?.attributes?.provider).toBe('smart-provider');
+      expect(modelSpan?.attributes?.parameters).toMatchObject({
+        temperature: 0.1,
+      });
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep overrides activeTools, the AGENT_RUN span
+     * should reflect the new available tools.
+     */
+    it('should update AGENT_RUN span when processInputStep overrides activeTools', async () => {
+      const model = createMockModel();
+
+      class ActiveToolsOverrideProcessor implements Processor {
+        readonly id = 'tool-filter';
+        readonly name = 'Tool Filter';
+
+        async processInputStep(): Promise<{ activeTools: string[] }> {
+          return {
+            activeTools: ['search', 'calculate'],
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ActiveToolsOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      expect(agentSpans.length).toBe(1);
+
+      const agentSpan = agentSpans[0];
+      // AGENT_RUN span should reflect the overridden active tools
+      expect(agentSpan?.attributes?.availableTools).toEqual(['search', 'calculate']);
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep does NOT override model or settings,
+     * the MODEL_GENERATION span should retain the original values.
+     */
+    it('should NOT update MODEL_GENERATION span when processInputStep does not override model', async () => {
+      const model = new MockLanguageModelV2({
+        provider: 'test-provider',
+        modelId: 'test-model',
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      // This processor only modifies messages, not model
+      class MessageOnlyProcessor implements Processor {
+        readonly id = 'message-only';
+        readonly name = 'Message Only';
+
+        async processInputStep(args: { messages: MastraDBMessage[]; messageList: MessageList }): Promise<MessageList> {
+          return args.messageList;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new MessageOnlyProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      // Should retain original model info and name
+      expect(modelSpan?.name).toBe("llm: 'test-model'");
+      expect(modelSpan?.attributes?.model).toBe('test-model');
+      expect(modelSpan?.attributes?.provider).toBe('test-provider');
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When streaming with a processor that overrides the model,
+     * the MODEL_GENERATION span should reflect the overridden model.
+     */
+    it('should update MODEL_GENERATION span when processInputStep overrides model during stream()', async () => {
+      const originalModel = new MockLanguageModelV2({
+        provider: 'original-provider',
+        modelId: 'original-model',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Original' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      const overriddenModel = new MockLanguageModelV2({
+        provider: 'stream-provider',
+        modelId: 'stream-model',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Streamed' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 8, totalTokens: 23 } },
+          ]),
+        }),
+      });
+
+      class StreamModelOverrideProcessor implements Processor {
+        readonly id = 'stream-model-router';
+        readonly name = 'Stream Model Router';
+
+        async processInputStep(): Promise<{ model: typeof overriddenModel }> {
+          return { model: overriddenModel };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: originalModel,
+        inputProcessors: [new StreamModelOverrideProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      const result = await registeredAgent.stream('Hello');
+      // Consume the stream to ensure all spans are completed
+      for await (const _chunk of result.textStream) {
+        // consume
+      }
+
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+
+      const modelSpan = modelSpans[0];
+      expect(modelSpan?.name).toBe("llm: 'stream-model'");
+      expect(modelSpan?.attributes?.model).toBe('stream-model');
+      expect(modelSpan?.attributes?.provider).toBe('stream-provider');
+
+      testExporter.finalExpectations();
+    });
+
+    /**
+     * When a processInputStep explicitly returns an empty activeTools array,
+     * the AGENT_RUN span availableTools should be cleared to [].
+     */
+    it('should clear AGENT_RUN span availableTools when processInputStep returns activeTools: []', async () => {
+      const model = createMockModel();
+
+      class ActiveToolsClearProcessor implements Processor {
+        readonly id = 'tool-clear';
+        readonly name = 'Tool Clear';
+
+        async processInputStep(): Promise<{ activeTools: string[] }> {
+          return {
+            activeTools: [],
+          };
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ActiveToolsClearProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const registeredAgent = mastra.getAgent('agent');
+      await registeredAgent.generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      expect(agentSpans.length).toBe(1);
+
+      const agentSpan = agentSpans[0];
+      // AGENT_RUN span availableTools should be cleared to an empty array
+      expect(agentSpan?.attributes?.availableTools).toEqual([]);
 
       testExporter.finalExpectations();
     });

@@ -11,7 +11,7 @@ export default defineConfig({
           exclude: ['**/node_modules/**', '**/dist/**'],
           maxConcurrency: 1,
           fileParallelism: false,
-          isolate: false,
+          isolate: true,
         },
       },
     ],

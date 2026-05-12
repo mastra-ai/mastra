@@ -19,12 +19,6 @@ test('overall layout information', async ({ page }) => {
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 
-  // Thread history (with memory)
-  const newChatButton = await page.locator('a:has-text("New workflow run")');
-  await expect(newChatButton).toBeVisible();
-  await expect(newChatButton).toHaveAttribute('href', /workflows\/complexWorkflow/);
-  await expect(page.locator('text=Your run history will appear here once you run the workflow')).toBeVisible();
-
   // Information side panel
   await expect(page.locator('h2:has-text("complex-workflow")')).toBeVisible();
   await expect(page.locator('button:has-text("complexWorkflow")')).toBeVisible();
@@ -96,6 +90,26 @@ test('running the workflow (json) - long condition', async ({ page }) => {
 
   await runWorkflow(page);
   await checkLongPath(page);
+});
+
+test('running a workflow with an enum input uses the selected form value', async ({ page }) => {
+  // FEATURE: Workflow enum input forms
+  // USER STORY: As a Studio user, I want enum dropdown choices to update run input so workflows execute with my selection.
+  // BEHAVIOR UNDER TEST: Selecting a non-default enum option persists in the form and reaches the workflow output.
+  await page.goto('/workflows/enumWorkflow/graph');
+
+  await page.getByRole('combobox', { name: 'Mode' }).click();
+  await page.getByRole('option', { name: 'b' }).click();
+
+  await expect(page.getByRole('combobox', { name: 'Mode' })).toContainText('b');
+
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const nodes = page.locator('[data-workflow-node]');
+  await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
+
+  await page.getByRole('button', { name: 'Open Workflow Execution (JSON)' }).click();
+  await expect(page.getByRole('dialog')).toContainText('"mode": "b"');
 });
 
 test('resuming a workflow', async ({ page }) => {

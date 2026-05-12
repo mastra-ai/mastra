@@ -352,6 +352,64 @@ describe('PosthogExporter', () => {
       );
     });
 
+    it('should format tool calls in output as PostHog-compatible content blocks', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        attributes: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          usage: { inputTokens: 50, outputTokens: 80 },
+        },
+        input: [{ role: 'user', content: 'What is the weather in Paris?' }],
+        output: {
+          text: '',
+          toolCalls: [
+            { type: 'tool-call', toolCallId: 'call_abc', toolName: 'get_weather', args: { city: 'Paris' } },
+            { type: 'tool-call', toolCallId: 'call_def', toolName: 'get_time', args: { timezone: 'CET' } },
+          ],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const props = mockCapture.mock.calls[0][0].properties;
+      expect(props.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'tool-call', id: 'call_abc', function: { name: 'get_weather', arguments: { city: 'Paris' } } },
+            { type: 'tool-call', id: 'call_def', function: { name: 'get_time', arguments: { timezone: 'CET' } } },
+          ],
+        },
+      ]);
+    });
+
+    it('should include both text and tool calls in output when present', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        attributes: { model: 'gpt-4o', provider: 'openai' },
+        output: {
+          text: 'Let me check the weather for you.',
+          toolCalls: [{ type: 'tool-call', toolCallId: 'call_123', toolName: 'get_weather', args: { city: 'Paris' } }],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const props = mockCapture.mock.calls[0][0].properties;
+      expect(props.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Let me check the weather for you.' },
+            { type: 'tool-call', id: 'call_123', function: { name: 'get_weather', arguments: { city: 'Paris' } } },
+          ],
+        },
+      ]);
+    });
+
     it('should handle minimal LLM attributes gracefully with defaults', async () => {
       // Use non-root span since root spans only send $ai_trace
       const generation = createSpan({
@@ -674,6 +732,71 @@ describe('PosthogExporter', () => {
           content: [{ type: 'text', text: 'What is 2+2?' }],
         },
       ]);
+    });
+
+    it('should unwrap {messages: [...]} wrapper from generation input', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: {
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'What is the weather?' },
+          ],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+      ]);
+    });
+
+    it('should extract text from generation output object without tool calls', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        output: {
+          text: 'The weather is sunny.',
+          files: [],
+          reasoning: [],
+          reasoningText: '',
+          sources: [],
+          warnings: [],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedOutput = mockCapture.mock.calls[0][0].properties.$ai_output_choices;
+      expect(capturedOutput).toEqual([
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
+        },
+      ]);
+    });
+
+    it('should handle empty messages array without stringifying', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: { messages: [] },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([]);
     });
   });
 

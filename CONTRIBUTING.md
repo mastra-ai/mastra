@@ -28,9 +28,11 @@ Be sure to include a title and clear description, as much relevant information a
 
 Follow the [Development Guide](./DEVELOPMENT.md) to learn how to set up this repository and run its tests. After successfully testing things locally, open a pull request with your changes.
 
-Ensure that the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
+**Required:** Your PR description must include a link to the issue(s) it addresses (e.g. with `Fixes #1234`, `Closes #1234`). PRs without linked issues may be closed.
 
-**Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and provide feedback or merge it.
+Also ensure that the PR description clearly describes the problem and solution.
+
+**Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and either provide feedback or merge it.
 
 ### Do you intend to add a new feature or change an existing one?
 
@@ -144,3 +146,26 @@ For complex reproductions, you may also need to:
 - **Network traces**: For integration issues, include relevant network request/response data
 
 A well-crafted minimal reproduction is the best way to get your issue resolved quickly.
+
+## Automated PR commands
+
+Mastra maintainers (organization members) can trigger automated CI commands by commenting on a pull request with `@dane-ai-mastra` followed by a command name.
+
+### Available commands
+
+| Command                       | Description                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| `@dane-ai-mastra fix-ci`      | Diagnoses and fixes GitHub Actions CI failures on the PR branch |
+| `@dane-ai-mastra fix-lint`    | Runs formatting/linting fixes and pushes a commit               |
+| `@dane-ai-mastra pr-comments` | Addresses PR review comments and CodeRabbit suggestions         |
+
+### How it works
+
+1. Comment on a PR with one of the commands above
+2. The bot reacts with 👀 to acknowledge the request
+3. The command runs in a GitHub Actions workflow with full repo access
+4. On success, the bot reacts with 🚀. On failure, it reacts with 😕 and posts an error comment.
+
+### Who can use it
+
+Only members of the Mastra GitHub organization can trigger these commands. Comments from non-members are ignored.

@@ -20,6 +20,7 @@ interface TestContext {
 export function createProcessManagementTests(getContext: () => TestContext): void {
   describe('Process Management', () => {
     let processes: SandboxProcessManager;
+    const { capabilities } = getContext();
 
     beforeAll(() => {
       const { sandbox } = getContext();
@@ -35,7 +36,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'spawns a process and returns a handle with pid',
         async () => {
           const handle = await processes.spawn('echo hello');
-          expect(handle.pid).toBeGreaterThan(0);
+          expect(handle.pid).toBeDefined();
+          expect(handle.pid.length).toBeGreaterThan(0);
           await handle.wait();
         },
         getContext().testTimeout,
@@ -77,12 +79,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsEnvVars)(
         'respects env option',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsEnvVars) return;
-
           const handle = await processes.spawn('echo $MY_VAR', {
             env: { MY_VAR: 'test_value' },
           });
@@ -265,12 +264,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
     });
 
     describe('sendStdin', () => {
-      it(
+      it.skipIf(!capabilities.supportsStdin)(
         'sends data to stdin',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsStdin) return;
-
           // Use head -1 to read one line then exit cleanly
           const handle = await processes.spawn('head -1');
           await handle.sendStdin('hello from stdin\n');
@@ -468,7 +464,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns undefined for unknown pid',
         async () => {
-          const retrieved = await processes.get(99999);
+          const retrieved = await processes.get('99999');
           expect(retrieved).toBeUndefined();
         },
         getContext().testTimeout,
@@ -538,7 +534,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns false for unknown pid',
         async () => {
-          const killed = await processes.kill(99999);
+          const killed = await processes.kill('99999');
           expect(killed).toBe(false);
         },
         getContext().testTimeout,
@@ -563,11 +559,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
     });
 
     describe('sandbox-level env', () => {
-      it(
+      it.skipIf(!capabilities.supportsEnvVars)(
         'spawned process inherits sandbox env',
         async () => {
-          const { capabilities, createSandbox } = getContext();
-          if (!capabilities.supportsEnvVars) return;
+          const { createSandbox } = getContext();
 
           const envSandbox = await createSandbox({ env: { SANDBOX_VAR: 'from-sandbox' } });
           await envSandbox._start();
@@ -586,11 +581,10 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsEnvVars)(
         'per-spawn env overrides sandbox env',
         async () => {
-          const { capabilities, createSandbox } = getContext();
-          if (!capabilities.supportsEnvVars) return;
+          const { createSandbox } = getContext();
 
           const envSandbox = await createSandbox({ env: { SANDBOX_VAR: 'original', EXTRA: 'kept' } });
           await envSandbox._start();
@@ -613,12 +607,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
     });
 
     describe('reader / writer streams', () => {
-      it(
+      it.skipIf(!capabilities.supportsStreaming)(
         'reader stream receives stdout data',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsStreaming) return;
-
           const handle = await processes.spawn('echo stream-test');
 
           const chunks: string[] = [];
@@ -635,12 +626,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsStreaming)(
         'reader stream ends when process exits',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsStreaming) return;
-
           const handle = await processes.spawn('echo done');
 
           // Must consume the stream (flowing mode) for 'end' to fire
@@ -658,13 +646,9 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsStreaming || !capabilities.supportsStdin)(
         'writer stream sends data to stdin',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsStreaming) return;
-          if (!capabilities.supportsStdin) return;
-
           const handle = await processes.spawn('head -1');
 
           await new Promise<void>((resolve, reject) => {

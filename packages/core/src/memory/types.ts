@@ -1,6 +1,4 @@
 import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodObject } from 'zod';
 
 import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { AgentConfig } from '../agent/types';
@@ -9,9 +7,11 @@ import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+import type { VectorFilter } from '../vector/filter/base';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -21,7 +21,7 @@ export type { MastraLanguageModel };
 export type MastraMessageV1 = {
   id: string;
   content: string | UserContent | AssistantContent | ToolContent;
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
@@ -55,8 +55,12 @@ export type ThreadOMMetadata = {
   currentTask?: string;
   /** Suggested response for continuing this thread's conversation */
   suggestedResponse?: string;
+  /** Observer-generated thread title */
+  threadTitle?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
+  /** Cursor pointing at the last observed message (for replay pruning fallback) */
+  lastObservedMessageCursor?: { createdAt: string; id: string };
   // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
 };
 
@@ -118,7 +122,7 @@ export function setThreadOMMetadata(
 export type MemoryRequestContext = {
   thread?: Partial<StorageThreadType> & { id: string };
   resourceId?: string;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
 };
 
 /**
@@ -189,7 +193,7 @@ type TemplateWorkingMemory = BaseWorkingMemory & {
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: ZodObject<any> | JSONSchema7;
+  schema: PublicSchema;
   template?: never;
 };
 
@@ -350,6 +354,21 @@ export type SemanticRecall = {
   indexConfig?: VectorIndexConfig;
 
   /**
+   * Metadata filter for semantic search queries.
+   * Allows filtering results by metadata fields using MongoDB-style query syntax.
+   * Works in combination with scope-based filtering (resource_id/thread_id).
+   *
+   * @example
+   * ```typescript
+   * filter: {
+   *   projectId: { $eq: 'project-a' },
+   *   category: { $in: ['work', 'personal'] }
+   * }
+   * ```
+   */
+  filter?: VectorFilter;
+
+  /**
    * Minimum similarity score threshold (0-1).
    * Messages below this threshold will be filtered out from semantic search results.
    *
@@ -377,6 +396,8 @@ export type SemanticRecall = {
  * Uses the same settings as Agent.generate() modelSettings (temperature, maxOutputTokens, topP, etc.).
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
+
+export type ObservationalMemoryActivationTTL = number | string | false;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -488,6 +509,20 @@ export interface ObservationalMemoryObservationConfig {
   bufferActivation?: number;
 
   /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable top-level `activateAfterIdle` for observations.
+   * If unset, top-level `activateAfterIdle` is used for observations.
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * If unset, top-level `activateOnProviderChange` is used for observations.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Token threshold above which synchronous (blocking) observation is forced.
    * When set, the system will never block for observation between `messageTokens`
    * and `blockAfter` — only async buffering and activation are used in that range.
@@ -524,6 +559,17 @@ export interface ObservationalMemoryObservationConfig {
   blockAfter?: number;
 
   /**
+   * Optional token budget for observer context.
+   * When set, the "Previous Observations" section is truncated from the end
+   * to keep the most recent observations within this budget, and pending
+   * buffered reflections replace the raw observations they summarized.
+   * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+   *
+   * @default undefined (disabled)
+   */
+  previousObserverTokens?: number | false;
+
+  /**
    * Custom instructions appended to the Observer agent's system prompt.
    * Use this to customize what the Observer focuses on or how it formats observations.
    *
@@ -535,6 +581,14 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   instruction?: string;
+
+  /**
+   * When enabled, the Observer suggests a short thread title based on the conversation.
+   * The title is updated on the thread whenever the Observer runs.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**
@@ -601,6 +655,20 @@ export interface ObservationalMemoryReflectionConfig {
    * @default 1.2 (120% of `observationTokens`) when `bufferActivation` is set.
    */
   blockAfter?: number;
+
+  /**
+   * Time before buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `false` to disable idle activation for reflections.
+   * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered reflections when the actor provider/model changes.
+   * Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to enable.
+   */
+  activateOnProviderChange?: boolean;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.
@@ -705,6 +773,31 @@ export interface ObservationalMemoryOptions {
   scope?: 'resource' | 'thread';
 
   /**
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observations activate regardless of whether the
+   * token threshold has been reached. Useful to align with prompt cache TTLs.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
+   * opt reflections into idle activation.
+   *
+   * @example 300_000
+   * @example "5m"
+   * @example "1hr"
+   */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /**
+   * Force-activate buffered observations when the actor provider/model changes.
+   * Useful when switching between models that do not share prompt caches.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateOnProviderChange`
+   * to opt reflections into provider-change activation.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Share the token budget between messages and observations.
    * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
@@ -715,6 +808,34 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity. These markers are persisted in memory and also emitted
+   * as inline reminder events for clients that want to render them specially.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * to raw message history. When enabled, observation groups keep `_range`
+   * metadata visible in context and a `recall` tool is registered so the actor
+   * can inspect raw messages behind a stored observation summary.
+   *
+   * - `true` — recall tool with cross-thread browsing by default
+   * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
+   * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
+   * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
+   *
+   * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
+   * Set to `'thread'` to restrict to the current thread only.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 }
 
 /**
@@ -743,7 +864,7 @@ export function isObservationalMemoryEnabled(
  *
  * @see https://mastra.ai/docs/memory/overview
  */
-export type MemoryConfig = {
+type BaseMemoryConfig = {
   /**
    * When true, prevents memory from saving new messages.
    * Useful for internal agents (like routing agents) that should read memory but not modify it.
@@ -873,6 +994,25 @@ export type MemoryConfig = {
       };
 
   /**
+   * Whether to filter out incomplete (suspended) tool calls when sending messages to the LLM.
+   * When true, tool calls in `input-available` state are stripped from the prompt,
+   * preventing the agent from seeing its own suspended tool calls in thread history.
+   *
+   * Set to false to allow the agent to see suspended tool calls in context.
+   * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
+   *
+   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
+   * Anthropic handles incomplete tool calls without issues.
+   *
+   * @default true
+   * @example
+   * ```typescript
+   * filterIncompleteToolCalls: false // Keep suspended tool calls visible in context
+   * ```
+   */
+  filterIncompleteToolCalls?: boolean;
+
+  /**
    * Thread management configuration.
    * @deprecated The `threads` object is deprecated. Use top-level `generateTitle` instead of `threads.generateTitle`.
    */
@@ -887,6 +1027,58 @@ export type MemoryConfig = {
           instructions?: DynamicArgument<string>;
         };
   };
+};
+
+export type MemoryConfigInternal = BaseMemoryConfig & {
+  /**
+   * Working memory configuration for persistent user data and preferences.
+   * Maintains a structured record (Markdown or schema-based) that agents update over time.
+   * Can be thread-scoped (per conversation) or resource-scoped (across all user threads).
+   *
+   * @example
+   * ```typescript
+   * workingMemory: {
+   *   enabled: true,
+   *   scope: 'resource', // Persist across all resource (user) conversations
+   *   template: '# User Profile\n- **Name**:\n- **Preferences**:',
+   *   schema: z.object({
+   *     name: z.string(),
+   *     preferences: z.object({
+   *       communicationStyle: z.string(),
+   *       projectGoal: z.string(),
+   *       deadlines: z.array(z.string()),
+   *     }),
+   *   }),
+   * }
+   * ```
+   */
+  workingMemory?: WorkingMemory;
+};
+
+export type MemoryConfig = BaseMemoryConfig & {
+  /**
+   * Working memory configuration for persistent user data and preferences.
+   * Maintains a structured record (Markdown or schema-based) that agents update over time.
+   * Can be thread-scoped (per conversation) or resource-scoped (across all user threads).
+   *
+   * @example
+   * ```typescript
+   * workingMemory: {
+   *   enabled: true,
+   *   scope: 'resource', // Persist across all resource (user) conversations
+   *   template: '# User Profile\n- **Name**:\n- **Preferences**:',
+   *   schema: z.object({
+   *     name: z.string(),
+   *     preferences: z.object({
+   *       communicationStyle: z.string(),
+   *       projectGoal: z.string(),
+   *       deadlines: z.array(z.string()),
+   *     }),
+   *   }),
+   * }
+   * ```
+   */
+  workingMemory?: TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 };
 
 /**
@@ -914,7 +1106,7 @@ export type SharedMemoryConfig = {
    * working memory, and thread management. Controls how messages are retrieved and
    * what context is included in the LLM's prompt.
    */
-  options?: MemoryConfig;
+  options?: MemoryConfigInternal;
 
   /**
    * Vector database for semantic recall capabilities using RAG-based search.
@@ -990,12 +1182,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
+/** @deprecated Use the `format` field on `WorkingMemoryTemplate` discriminated union instead. */
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -1067,8 +1259,23 @@ export type SerializedObservationalMemoryConfig = {
   /** Memory scope: 'resource' or 'thread' */
   scope?: 'resource' | 'thread';
 
+  /** Inactivity TTL before forcing buffered observation activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+
+  /** Force-activate buffered observation activation when the actor model changes */
+  activateOnProviderChange?: boolean;
+
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
+
+  /** Persist inline temporal gap markers for long pauses between messages */
+  temporalMarkers?: boolean;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
+   * @experimental
+   */
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;
@@ -1093,8 +1300,16 @@ export type SerializedObservationalMemoryObservationConfig = {
   bufferTokens?: number | false;
   /** Ratio of buffered observations to activate */
   bufferActivation?: number;
+  /** Inactivity TTL before forcing buffered observation activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+  /** Force-activate buffered observation activation when the actor model changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Optional token budget for observer context (0 = full truncation, false = disabled) */
+  previousObserverTokens?: number | false;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */
@@ -1109,6 +1324,10 @@ export type SerializedObservationalMemoryReflectionConfig = {
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Inactivity TTL before forcing buffered reflection activation */
+  activateAfterIdle?: ObservationalMemoryActivationTTL;
+  /** Force-activate buffered reflection activation when the actor model changes */
+  activateOnProviderChange?: boolean;
   /** Ratio for async reflection buffering */
   bufferActivation?: number;
 };

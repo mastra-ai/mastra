@@ -5,12 +5,14 @@
  * explores the repo's existing testing conventions, and produces
  * a detailed audit report with actionable improvement recommendations.
  */
-import { MC_TOOLS } from '../../tool-names.js';
-import type { SubagentDefinition } from './types.js';
+import type { HarnessSubagent } from '@mastra/core/harness';
 
-export const auditTestsSubagent: SubagentDefinition = {
+import { MC_TOOLS } from '../../tool-names.js';
+
+export const auditTestsSubagent: HarnessSubagent = {
   id: 'audit-tests',
   name: 'Audit Tests',
+  description: 'Read-only test quality auditor that reviews test files and produces detailed audit reports.',
   instructions: `You are an expert test auditor. Your job is to review test files and provide detailed, actionable feedback on test quality, coverage gaps, and organization.
 
 You will be given:
@@ -118,5 +120,5 @@ Prioritized, actionable list. Most impactful improvements first. Be specific —
 - Ground all feedback in the repo's actual conventions, not generic best practices.
 - Be direct. If tests are sloppy, say so. If they're good, say that too.
 - Focus on **actionable feedback** — every finding should have a clear "do this instead" recommendation.`,
-  allowedTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
+  allowedWorkspaceTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
 };

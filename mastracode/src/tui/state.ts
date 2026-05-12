@@ -5,9 +5,9 @@
  * MastraTUI class.
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
-import type { Workspace } from '@mastra/core/workspace';
+import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -18,17 +18,21 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
-
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
+import type { ShellStreamComponent } from './components/shell-output.js';
 import type { SlashCommandComponent } from './components/slash-command.js';
 import type { SubagentExecutionComponent } from './components/subagent-execution.js';
+import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { TaskProgressComponent } from './components/task-progress.js';
+import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
-import { getEditorTheme } from './theme.js';
+
+import { GoalManager } from './goal-manager.js';
+import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -96,29 +100,49 @@ export interface TUIState {
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: HarnessMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
-  /** Position hint for task_write inline rendering when streaming */
-  taskWriteInsertIndex: number;
+  /** Task tools are hidden on success but promoted to normal tool boxes on errors */
+  pendingTaskToolIds: Set<string>;
+  /** Position hint for inline task-tool rendering when streaming */
+  taskToolInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
   seenToolCallIds: Set<string>;
   /** Track subagent tool call IDs to skip in trailing content logic */
   subagentToolCallIds: Set<string>;
+  /** Track streamed system reminders for the active assistant run */
+  currentRunSystemReminderKeys: Set<string>;
   /** Track all tools for expand/collapse */
   allToolComponents: IToolExecutionComponent[];
   /** Track slash command boxes for expand/collapse */
   allSlashCommandComponents: SlashCommandComponent[];
+  /** Track inline system reminders for expand/collapse */
+  allSystemReminderComponents: Array<SystemReminderComponent | TemporalGapComponent>;
+  /** Track rendered message components by message id for anchored inserts */
+  messageComponentsById: Map<string, Component>;
+  /** Track shell passthrough components for expand/collapse */
+  allShellComponents: ShellStreamComponent[];
   /** Track active subagent tasks */
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
   quietMode: boolean;
+  /** Active goal judge status-line override while evaluating the last turn. */
+  activeGoalJudge?: { modelId: string };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** Current thread title (for display in status line) */
+  currentThreadTitle?: string;
+  /** Cached thread previews for the current TUI session */
+  threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
+  /** Threads whose preview lookup already returned empty during this session */
+  attemptedThreadPreviewIds: Set<string>;
 
   // ── Inline interaction ────────────────────────────────────────────────
-  /** Track the most recent ask_user tool for inline question placement */
-  lastAskUserComponent?: IToolExecutionComponent;
+  /** Track the most recent ask_user component for inline question activation */
+  lastAskUserComponent?: AskQuestionInlineComponent;
+  /** Map toolCallId → AskQuestionInlineComponent for streaming arg updates */
+  pendingAskUserComponents: Map<string, AskQuestionInlineComponent>;
   /** Saved editor text for Alt+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
@@ -127,9 +151,13 @@ export interface TUIState {
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
-  /** Follow-up messages sent via Ctrl+F while streaming */
+  /** User-message follow-ups queued while the agent is running */
+  pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
+  /** FIFO ordering across queued follow-up messages and slash commands */
+  pendingQueuedActions: Array<'message' | 'slash'>;
+  /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
-  /** Slash commands queued via Ctrl+F while the agent is running */
+  /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
   pendingApprovalDismiss: (() => void) | null;
@@ -145,13 +173,19 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationTTLMarker?: OMMarkerComponent;
+  activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;
 
+  // ── Goal loop ─────────────────────────────────────────────────────────
+  goalManager: GoalManager;
+
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
@@ -175,13 +209,19 @@ export interface TUIState {
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
   const terminal = new ProcessTerminal();
+  // Override columns getter to prevent line wrapping in nested terminal emulators
+  Object.defineProperty(terminal, 'columns', {
+    get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
+  });
   const ui = new TUI(terminal);
+
+  // Perf profiling removed
+
   const chatContainer = new Container();
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
-
-  return {
+  const result: TUIState = {
     // Core dependencies
     harness: options.harness,
     options,
@@ -201,11 +241,16 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Agent / streaming
     isInitialized: false,
     pendingTools: new Map(),
-    taskWriteInsertIndex: -1,
+    pendingTaskToolIds: new Set(),
+    taskToolInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
+    currentRunSystemReminderKeys: new Set(),
     allToolComponents: [],
     allSlashCommandComponents: [],
+    allSystemReminderComponents: [],
+    messageComponentsById: new Map(),
+    allShellComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
@@ -213,10 +258,16 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
+    currentThreadTitle: undefined,
+    threadPreviewCache: new Map(),
+    attemptedThreadPreviewIds: new Set(),
 
     // Inline interaction
     lastClearedText: '',
+    pendingAskUserComponents: new Map(),
     pendingInlineQuestions: [],
+    pendingFollowUpMessages: [],
+    pendingQueuedActions: [],
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,
@@ -225,12 +276,23 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
 
+    // Goal loop
+    goalManager: new GoalManager(),
+
     // Input
     customSlashCommands: [],
+    goalSkillCommands: [],
     pendingImages: [],
 
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
   };
+  editor.getModeColor = () => {
+    if (result.activeGoalJudge) {
+      return mastra.blue;
+    }
+    return options.harness.getCurrentMode()?.color;
+  };
+  return result;
 }

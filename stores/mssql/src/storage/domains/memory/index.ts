@@ -144,7 +144,13 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const sql = `SELECT 
         id,
@@ -159,7 +165,7 @@ export class MemoryMSSQL extends MemoryStorage {
       request.input('threadId', threadId);
       const resultSet = await request.query(sql);
       const thread = resultSet.recordset[0] || null;
-      if (!thread) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
       return {
@@ -508,6 +514,25 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    const mult = direction === 'ASC' ? 1 : -1;
+    return messages.sort((a, b) => {
+      const aVal = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bVal = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aVal == null || bVal == null) {
+        return aVal == null && bVal == null ? a.id.localeCompare(b.id) : aVal == null ? 1 : -1;
+      }
+
+      const diff =
+        (typeof aVal === 'number' && typeof bVal === 'number'
+          ? aVal - bVal
+          : String(aVal).localeCompare(String(bVal))) * mult;
+
+      return diff !== 0 ? diff : a.id.localeCompare(b.id);
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
@@ -696,6 +721,24 @@ export class MemoryMSSQL extends MemoryStorage {
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
       };
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        const messages = this._parseAndFormatMessages(includeMessages ?? [], 'v2') as MastraDBMessage[];
+        return {
+          messages: this._sortMessages(messages, field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
       // Get total count
       const countRequest = this.pool.request();

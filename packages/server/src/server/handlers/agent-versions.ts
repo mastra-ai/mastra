@@ -1,3 +1,5 @@
+import type { z } from 'zod/v4';
+
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -13,6 +15,7 @@ import {
   deleteVersionResponseSchema,
   compareVersionsResponseSchema,
 } from '../schemas/agent-versions';
+import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
@@ -78,9 +81,17 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Verify agent exists
-      const agent = await agentsStore.getById(agentId);
-      if (!agent) {
+      // Verify agent exists in code or storage
+      const storedAgent = await agentsStore.getById(agentId);
+      let codeAgentExists = false;
+      try {
+        mastra.getAgentById(agentId);
+        codeAgentExists = true;
+      } catch {
+        // Agent not registered in code
+      }
+
+      if (!storedAgent && !codeAgentExists) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
 
@@ -464,7 +475,19 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
 /**
  * GET /stored/agents/:agentId/versions/compare - Compare two versions
  */
-export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
+export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
+  InferParams<typeof agentVersionPathParams, typeof compareVersionsQuerySchema, undefined>,
+  z.infer<typeof compareVersionsResponseSchema>,
+  'json',
+  RouteSchemas<
+    typeof agentVersionPathParams,
+    typeof compareVersionsQuerySchema,
+    undefined,
+    typeof compareVersionsResponseSchema
+  >,
+  'GET',
+  '/stored/agents/:agentId/versions/compare'
+> = createRoute({
   method: 'GET',
   path: '/stored/agents/:agentId/versions/compare',
   requiresAuth: true,

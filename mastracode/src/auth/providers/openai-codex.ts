@@ -11,13 +11,22 @@
 // NEVER convert to top-level imports - breaks browser/Vite builds (web-ui)
 let _randomBytes: ((size: number) => Buffer) | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+let _httpPromise: Promise<typeof import('node:http')> | null = null;
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let _http: typeof import('node:http') | null = null;
+type HttpServer = {
+  off: (event: 'error' | 'listening', listener: (...args: any[]) => void) => HttpServer;
+  once: (event: 'error' | 'listening', listener: (...args: any[]) => void) => HttpServer;
+  listen: (port: number, hostname: string) => HttpServer;
+  close: () => void;
+};
 if (typeof process !== 'undefined' && (process.versions?.node || process.versions?.bun)) {
   import('node:crypto').then(m => {
     _randomBytes = m.randomBytes;
   });
-  import('node:http').then(m => {
+  _httpPromise = import('node:http').then(m => {
     _http = m;
+    return m;
   });
 }
 
@@ -27,7 +36,8 @@ import type { OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderI
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 const AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize';
 const TOKEN_URL = 'https://auth.openai.com/oauth/token';
-const REDIRECT_URI = 'http://localhost:1455/auth/callback';
+const DEFAULT_CALLBACK_PORT = 1455;
+const FALLBACK_CALLBACK_PORT = 1457;
 const SCOPE = 'openid profile email offline_access';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 
@@ -111,11 +121,7 @@ function decodeJwt(token: string): JwtPayload | null {
   }
 }
 
-async function exchangeAuthorizationCode(
-  code: string,
-  verifier: string,
-  redirectUri: string = REDIRECT_URI,
-): Promise<TokenResult> {
+async function exchangeAuthorizationCode(code: string, verifier: string, redirectUri: string): Promise<TokenResult> {
   const response = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -195,15 +201,16 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
 }
 
 async function createAuthorizationFlow(
+  redirectUri: string,
+  state: string,
   originator: string = 'pi',
-): Promise<{ verifier: string; state: string; url: string }> {
+): Promise<{ verifier: string; url: string }> {
   const { verifier, challenge } = await generatePKCE();
-  const state = createState();
 
   const url = new URL(AUTHORIZE_URL);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', CLIENT_ID);
-  url.searchParams.set('redirect_uri', REDIRECT_URI);
+  url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('scope', SCOPE);
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
@@ -212,24 +219,86 @@ async function createAuthorizationFlow(
   url.searchParams.set('codex_cli_simplified_flow', 'true');
   url.searchParams.set('originator', originator);
 
-  return { verifier, state, url: url.toString() };
+  return { verifier, url: url.toString() };
 }
 
 type OAuthServerInfo = {
+  redirectUri: string;
+  warning?: string;
   close: () => void;
   cancelWait: () => void;
   waitForCode: () => Promise<{ code: string } | null>;
 };
 
-function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
+type CallbackPorts = {
+  defaultPort: number;
+  fallbackPort: number;
+};
+
+const CODEX_CALLBACK_PORTS: CallbackPorts = {
+  defaultPort: DEFAULT_CALLBACK_PORT,
+  fallbackPort: FALLBACK_CALLBACK_PORT,
+};
+
+async function requestCancel(port: number): Promise<void> {
+  try {
+    await fetch(`http://127.0.0.1:${port}/cancel`, { signal: AbortSignal.timeout(200) });
+  } catch {
+    // The existing listener might not be a Codex auth server.
+  }
+}
+
+function listen(server: HttpServer, port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const onError = () => {
+      server.off('listening', onListening);
+      resolve(false);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolve(true);
+    };
+
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function bindOAuthServer(server: HttpServer, ports: CallbackPorts): Promise<number | null> {
+  await requestCancel(ports.defaultPort);
+  if (await listen(server, ports.defaultPort)) return ports.defaultPort;
+  if (await listen(server, ports.fallbackPort)) return ports.fallbackPort;
+
+  return null;
+}
+
+async function getHttpModule() {
+  if (!_http && _httpPromise) {
+    _http = await _httpPromise;
+  }
   if (!_http) {
     throw new Error('OpenAI Codex OAuth is only available in Node.js environments');
   }
+  return _http;
+}
+
+async function startLocalOAuthServer(
+  state: string,
+  ports: CallbackPorts = CODEX_CALLBACK_PORTS,
+): Promise<OAuthServerInfo> {
+  const http = await getHttpModule();
   let lastCode: string | null = null;
   let cancelled = false;
-  const server = _http.createServer((req, res) => {
+  const server = http.createServer((req, res) => {
     try {
       const url = new URL(req.url || '', 'http://localhost');
+      if (url.pathname === '/cancel') {
+        cancelled = true;
+        res.statusCode = 200;
+        res.end('Cancelled');
+        return;
+      }
       if (url.pathname !== '/auth/callback') {
         res.statusCode = 404;
         res.end('Not found');
@@ -257,31 +326,11 @@ function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
   });
 
   return new Promise(resolve => {
-    server
-      .listen(1455, '127.0.0.1', () => {
+    bindOAuthServer(server, ports).then(port => {
+      if (!port) {
         resolve({
-          close: () => server.close(),
-          cancelWait: () => {
-            cancelled = true;
-          },
-          waitForCode: async () => {
-            const sleep = () => new Promise(r => setTimeout(r, 100));
-            for (let i = 0; i < 600; i += 1) {
-              if (lastCode) return { code: lastCode };
-              if (cancelled) return null;
-              await sleep();
-            }
-            return null;
-          },
-        });
-      })
-      .on('error', (err: NodeJS.ErrnoException) => {
-        console.error(
-          '[openai-codex] Failed to bind http://127.0.0.1:1455 (',
-          err.code,
-          ') Falling back to manual paste.',
-        );
-        resolve({
+          redirectUri: `http://localhost:${ports.fallbackPort}/auth/callback`,
+          warning: `OpenAI Codex OAuth requires localhost port ${ports.defaultPort} or ${ports.fallbackPort}, but both are in use. Automatic browser callback will not work until one is freed.`,
           close: () => {
             try {
               server.close();
@@ -292,7 +341,26 @@ function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
           cancelWait: () => {},
           waitForCode: async () => null,
         });
+        return;
+      }
+
+      resolve({
+        redirectUri: `http://localhost:${port}/auth/callback`,
+        close: () => server.close(),
+        cancelWait: () => {
+          cancelled = true;
+        },
+        waitForCode: async () => {
+          const sleep = () => new Promise(r => setTimeout(r, 100));
+          for (let i = 0; i < 600; i += 1) {
+            if (lastCode) return { code: lastCode };
+            if (cancelled) return null;
+            await sleep();
+          }
+          return null;
+        },
       });
+    });
   });
 }
 
@@ -321,12 +389,18 @@ export async function loginOpenAICodex(options: {
   onManualCodeInput?: () => Promise<string>;
   originator?: string;
 }): Promise<OAuthCredentials> {
-  const { verifier, state, url } = await createAuthorizationFlow(options.originator);
+  const state = createState();
   const server = await startLocalOAuthServer(state);
+  if (server.warning) {
+    options.onProgress?.(server.warning);
+  }
+  const { verifier, url } = await createAuthorizationFlow(server.redirectUri, state, options.originator);
 
   options.onAuth({
     url,
-    instructions: 'A browser window should open. Complete login to finish.',
+    instructions: server.warning
+      ? `${server.warning} You can still paste the authorization code or full redirect URL manually.`
+      : 'A browser window should open. Complete login to finish.',
   });
 
   let code: string | undefined;
@@ -403,7 +477,7 @@ export async function loginOpenAICodex(options: {
       throw new Error('Missing authorization code');
     }
 
-    const tokenResult = await exchangeAuthorizationCode(code, verifier);
+    const tokenResult = await exchangeAuthorizationCode(code, verifier, server.redirectUri);
     if (tokenResult.type !== 'success') {
       throw new Error('Token exchange failed');
     }
@@ -423,6 +497,11 @@ export async function loginOpenAICodex(options: {
     server.close();
   }
 }
+
+export const __testing = {
+  createAuthorizationFlow,
+  startLocalOAuthServer,
+};
 
 /**
  * Refresh OpenAI Codex OAuth token

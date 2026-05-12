@@ -1,9 +1,9 @@
 ---
-title: "Guide: WhatsApp Chat Bot"
+title: "Guide: WhatsApp chat bot"
 description: Create a WhatsApp chat bot using Mastra agents and workflows to handle incoming messages and respond naturally via text messages.
 ---
 
-# WhatsApp Chat Bot
+# WhatsApp chat bot
 
 This guide demonstrates how to create a WhatsApp chat bot using Mastra agents and workflows. The bot receives incoming WhatsApp messages via webhook, processes them through an AI agent, breaks responses into natural text messages, and sends them back via the WhatsApp Business API.
 
@@ -122,7 +122,7 @@ export const chatAgent = new Agent({
 
     Always aim to be helpful while maintaining a friendly, approachable conversation style.
   `,
-  model: 'anthropic/claude-4-sonnet-20250514',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'agent-storage',
@@ -160,7 +160,7 @@ export const textMessageAgent = new Agent({
 
     Always return exactly 5-8 messages in the messages array.
   `,
-  model: 'anthropic/claude-4-sonnet-20250514',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'agent-storage',

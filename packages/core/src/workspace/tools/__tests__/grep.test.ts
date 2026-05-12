@@ -26,7 +26,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' }, { workspace });
 
@@ -41,7 +41,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const sensitive = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -70,18 +70,18 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
         pattern: 'target',
-        path: '/a',
+        path: 'a',
       },
       { workspace },
     );
 
     expect(result).toContain('1 match across 1 file');
-    expect(result).toContain('/a/file.ts');
+    expect(result).toContain('a/file.ts');
   });
 
   it('should filter files by glob pattern', async () => {
@@ -91,7 +91,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -111,7 +111,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -135,7 +135,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -154,7 +154,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -172,7 +172,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -188,7 +188,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -208,7 +208,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -229,7 +229,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -252,7 +252,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
 
@@ -265,12 +265,12 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
         pattern: 'anything',
-        path: '/empty',
+        path: 'empty',
       },
       { workspace },
     );
@@ -284,19 +284,19 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
         pattern: '^#',
-        path: '/target.md',
+        path: 'target.md',
       },
       { workspace },
     );
 
     expect(result).toContain('2 matches across 1 file');
-    expect(result).toContain('/target.md');
-    expect(result).not.toContain('/other.md');
+    expect(result).toContain('target.md');
+    expect(result).not.toContain('other.md');
   });
 
   it('should report correct column for match', async () => {
@@ -304,7 +304,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
 
@@ -318,7 +318,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'SECRET' }, { workspace });
 
@@ -333,7 +333,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -355,7 +355,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -377,7 +377,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -399,7 +399,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
 
@@ -417,7 +417,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -441,7 +441,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -462,7 +462,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       {
@@ -487,7 +487,7 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
       { pattern: 'findme', includeHidden: true },
@@ -506,15 +506,15 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
-      { pattern: 'findme', path: '/dist' },
+      { pattern: 'findme', path: 'dist' },
       { workspace },
     );
 
     expect(result).toContain('1 match across 1 file');
-    expect(result).toContain('/dist/app.js');
+    expect(result).toContain('dist/app.js');
   });
 
   it('should still apply gitignore when targeting a non-ignored subdirectory', async () => {
@@ -525,10 +525,10 @@ describe('workspace_grep', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
-      { pattern: 'findme', path: '/src' },
+      { pattern: 'findme', path: 'src' },
       { workspace },
     );
 

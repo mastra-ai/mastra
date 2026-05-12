@@ -1,0 +1,296 @@
+---
+title: "Reference: Inworld | Voice"
+description: "Documentation for the InworldVoice class, providing streaming text-to-speech and batch speech-to-text capabilities using Inworld AI."
+packages:
+  - "@mastra/voice-inworld"
+---
+
+# Inworld
+
+The Inworld voice implementation in Mastra provides streaming text-to-speech (TTS) and batch speech-to-text (STT) capabilities using Inworld AI's API. It supports multiple TTS and STT models, configurable audio encodings, and progressive audio streaming.
+
+## Usage example
+
+```typescript
+import { InworldVoice } from '@mastra/voice-inworld'
+
+// Initialize with default configuration (uses INWORLD_API_KEY environment variable)
+const voice = new InworldVoice()
+
+// Initialize with custom configuration
+const voice = new InworldVoice({
+  speechModel: {
+    name: 'inworld-tts-2',
+    apiKey: 'your-api-key',
+  },
+  listeningModel: {
+    name: 'groq/whisper-large-v3',
+    apiKey: 'your-api-key',
+  },
+  speaker: 'Dennis',
+})
+
+// Text-to-Speech (streaming)
+const audioStream = await voice.speak('Hello, world!')
+
+// Speech-to-Text
+const transcript = await voice.listen(audioStream)
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'speechModel',
+    type: 'InworldVoiceConfig',
+    description: 'Configuration for text-to-speech functionality.',
+    isOptional: true,
+    defaultValue: "{ name: 'inworld-tts-2' }",
+    properties: [
+      {
+        type: 'InworldVoiceConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: "'inworld-tts-2' | 'inworld-tts-1.5-max' | 'inworld-tts-1.5-mini'",
+            description: 'The Inworld TTS model to use.',
+            isOptional: true,
+            defaultValue: "'inworld-tts-2'",
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Inworld API key. Falls back to INWORLD_API_KEY environment variable.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'listeningModel',
+    type: 'InworldListeningConfig',
+    description: 'Configuration for speech-to-text functionality.',
+    isOptional: true,
+    defaultValue: "{ name: 'groq/whisper-large-v3' }",
+    properties: [
+      {
+        type: 'InworldListeningConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: "'groq/whisper-large-v3'",
+            description: 'The Inworld STT model to use.',
+            isOptional: true,
+            defaultValue: "'groq/whisper-large-v3'",
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Inworld API key. Falls back to INWORLD_API_KEY environment variable.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'speaker',
+    type: 'string',
+    description: 'Default voice ID to use for text-to-speech.',
+    isOptional: true,
+    defaultValue: "'Dennis'",
+  },
+  {
+    name: 'audioEncoding',
+    type: "'LINEAR16' | 'MP3' | 'OGG_OPUS' | 'ALAW' | 'MULAW' | 'FLAC' | 'PCM' | 'WAV'",
+    description: 'Default audio encoding for TTS output.',
+    isOptional: true,
+    defaultValue: "'MP3'",
+  },
+  {
+    name: 'sampleRateHertz',
+    type: 'number',
+    description: 'Default sample rate for TTS output.',
+    isOptional: true,
+    defaultValue: '48000',
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: 'Default BCP-47 language code for STT.',
+    isOptional: true,
+    defaultValue: "'en-US'",
+  },
+]}
+/>
+
+## Methods
+
+### `speak(input, options?)`
+
+Converts text to speech using Inworld's streaming TTS endpoint. Returns a readable stream that emits audio chunks progressively as they arrive.
+
+```typescript
+const audioStream = await voice.speak('Hello, world!', {
+  speaker: 'Olivia',
+  audioEncoding: 'WAV',
+  sampleRateHertz: 24000,
+  speakingRate: 1.2,
+  temperature: 0.8,
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text to convert to speech. If a stream is provided, it will be converted to text first.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'InworldSpeakOptions',
+    description: 'Additional options for speech synthesis.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'InworldSpeakOptions',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker for this request.',
+            isOptional: true,
+          },
+          {
+            name: 'audioEncoding',
+            type: 'AudioEncoding',
+            description: 'Override the default audio encoding.',
+            isOptional: true,
+          },
+          {
+            name: 'sampleRateHertz',
+            type: 'number',
+            description: 'Override the default sample rate.',
+            isOptional: true,
+          },
+          {
+            name: 'speakingRate',
+            type: 'number',
+            description: 'Adjust the speaking rate.',
+            isOptional: true,
+          },
+          {
+            name: 'temperature',
+            type: 'number',
+            description:
+              'Controls voice variability. Honored on `inworld-tts-1.5-*` models; ignored by `inworld-tts-2`.',
+            isOptional: true,
+          },
+          {
+            name: 'deliveryMode',
+            type: "'STABLE' | 'BALANCED' | 'CREATIVE'",
+            description: 'Steering control for delivery style. Only honored by `inworld-tts-2`.',
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'BCP-47 language code for this request. Auto-detected when omitted.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+**Returns:** `Promise<NodeJS.ReadableStream>`
+
+### `listen(input, options?)`
+
+Converts speech to text using Inworld's batch STT endpoint.
+
+```typescript
+const transcript = await voice.listen(audioStream, {
+  audioEncoding: 'MP3',
+  sampleRateHertz: 44100,
+  language: 'ja-JP',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'InworldListenOptions',
+    description: 'Additional options for transcription.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'InworldListenOptions',
+        parameters: [
+          {
+            name: 'audioEncoding',
+            type: "'LINEAR16' | 'MP3' | 'OGG_OPUS' | 'FLAC' | 'AUTO_DETECT'",
+            description: 'Audio encoding of the input stream.',
+            isOptional: true,
+            defaultValue: "'AUTO_DETECT'",
+          },
+          {
+            name: 'sampleRateHertz',
+            type: 'number',
+            description: 'Sample rate of the input audio.',
+            isOptional: true,
+            defaultValue: '16000',
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'BCP-47 language code for transcription.',
+            isOptional: true,
+            defaultValue: "'en-US'",
+          },
+          {
+            name: 'numberOfChannels',
+            type: 'number',
+            description: 'Number of audio channels in the input.',
+            isOptional: true,
+            defaultValue: '1',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+**Returns:** `Promise<string>`
+
+### `getSpeakers()`
+
+Returns a list of available voices from the Inworld API.
+
+```typescript
+const speakers = await voice.getSpeakers()
+// [{ voiceId: 'Dennis', name: 'Dennis', language: 'en', description: '...', tags: ['friendly'], source: 'SYSTEM' }, ...]
+```
+
+**Returns:** `Promise<Array<{ voiceId: string; name: string; language: string; description: string; tags: string[]; source: string }>>`
+
+## Notes
+
+- The TTS endpoint uses progressive NDJSON streaming, so audio playback can begin before the full response is received.
+- An API key can be provided via the `speechModel` or `listeningModel` config, or the `INWORLD_API_KEY` environment variable. TTS and STT keys are resolved independently: passing distinct `speechModel.apiKey` and `listeningModel.apiKey` values lets each service use its own credential. If only one is provided, it is reused for both services as a fallback before the env var.
+- `inworld-tts-2` is the default flagship model. Use `deliveryMode` (`STABLE` | `BALANCED` | `CREATIVE`) to steer delivery style on this model. The `temperature` option is ignored on `inworld-tts-2`.
+- The `inworld-tts-1.5-mini` model offers lower latency at the cost of reduced voice quality compared to `inworld-tts-1.5-max`.

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -11,10 +12,12 @@ import type {
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
-import { createTool } from '@mastra/core/tools';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
+import { createTool, isValidationError } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
+import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -35,23 +38,25 @@ import {
   PromptSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
-  ResourceContents,
+  TextResourceContents,
+  BlobResourceContents,
   Resource,
   ResourceTemplate,
   ServerCapabilities,
-  Prompt,
   CallToolResult,
   ElicitResult,
   ElicitRequest,
   LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
-import { z } from 'zod';
+
+import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from './types';
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt, AppResources } from './types';
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -92,8 +97,9 @@ export class MCPServer extends MCPServerBase {
   private definedResources?: Resource[];
   private definedResourceTemplates?: ResourceTemplate[];
   private resourceOptions?: MCPServerResources;
-  private definedPrompts?: Prompt[];
+  private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
+  private jsonSchemaValidator?: jsonSchemaValidator;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
 
@@ -234,23 +240,91 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
+  constructor(
+    opts: MCPServerConfig & {
+      resources?: MCPServerResources;
+      prompts?: MCPServerPrompts;
+      /**
+       * Optional MCP App resources configuration.
+       *
+       * Registers `ui://` resources that serve interactive HTML UIs as defined
+       * by the MCP Apps extension (SEP-1865). These are automatically merged
+       * into the resource system and served alongside any user-provided resources.
+       *
+       * @example
+       * ```typescript
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   appResources: {
+       *     'ui://weather/dashboard': {
+       *       name: 'Weather Dashboard',
+       *       html: '<html>...</html>',
+       *       meta: { csp: { connectDomains: ['https://api.weather.com'] } },
+       *     },
+       *   },
+       * });
+       * ```
+       */
+      appResources?: AppResources;
+      /**
+       * Optional custom JSON Schema validator forwarded to the underlying MCP
+       * SDK server. Use this to opt into a non-default validator
+       * implementation.
+       *
+       * Pass `CfWorkerJsonSchemaValidator` (from
+       * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+       * Cloudflare Workers / V8 isolates: the default
+       * `AjvJsonSchemaValidator` compiles validators with `new Function(...)`,
+       * which workerd refuses to evaluate when a registered tool has an
+       * `outputSchema`.
+       *
+       * @example
+       * ```typescript
+       * import { MCPServer } from '@mastra/mcp';
+       * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+       *
+       * const server = new MCPServer({
+       *   name: 'My Server',
+       *   version: '1.0.0',
+       *   tools: { ... },
+       *   jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+       * });
+       * ```
+       */
+      jsonSchemaValidator?: jsonSchemaValidator;
+    },
+  ) {
     super(opts);
-    this.resourceOptions = opts.resources;
+
+    // Merge appResources into the resource system
+    this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
     this.promptOptions = opts.prompts;
+    this.jsonSchemaValidator = opts.jsonSchemaValidator;
 
     const capabilities: ServerCapabilities = {
       tools: {},
       logging: { enabled: true },
-      elicitation: {},
     };
 
-    if (opts.resources) {
+    if (this.resourceOptions) {
       capabilities.resources = { subscribe: true, listChanged: true };
     }
 
     if (opts.prompts) {
       capabilities.prompts = { listChanged: true };
+    }
+
+    // Advertise MCP Apps extension if any tool has UI metadata or appResources are configured
+    const hasUiTools = Object.values(this.convertedTools).some(
+      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+    );
+    if (hasUiTools || opts.appResources) {
+      capabilities.extensions = {
+        ...capabilities.extensions,
+        'io.modelcontextprotocol/ui': {},
+      };
     }
 
     this.server = new Server(
@@ -261,12 +335,17 @@ export class MCPServer extends MCPServerBase {
       {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
+        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
       },
     );
 
-    this.logger.info(
-      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')} and resources. Capabilities: ${JSON.stringify(capabilities)}`,
-    );
+    this.logger.info('Initialized MCPServer', {
+      name: this.name,
+      version: this.version,
+      id: this.id,
+      tools: Object.keys(this.convertedTools),
+      capabilities,
+    });
 
     this.sseHonoTransports = new Map();
 
@@ -314,12 +393,12 @@ export class MCPServer extends MCPServerBase {
     serverInstance?: Server,
     options?: RequestOptions,
   ): Promise<ElicitResult> {
-    this.logger.debug(`Sending elicitation request: ${request.message}`);
+    this.logger.debug('Sending elicitation request', { message: request.message });
 
     const server = serverInstance || this.server;
     const response = await server.elicitInput(request, options);
 
-    this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
+    this.logger.debug('Received elicitation response', { response });
 
     return response;
   }
@@ -369,6 +448,100 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Merges appResources into the resource system alongside any user-provided resources.
+   *
+   * App resources are auto-registered as `ui://` resources with the MCP Apps MIME type.
+   * If the user also provides a `resources` config, the two are merged — user callbacks
+   * take precedence for overlapping URIs.
+   */
+  private mergeAppResources(
+    userResources: MCPServerResources | undefined,
+    appResources: AppResources | undefined,
+  ): MCPServerResources | undefined {
+    if (!appResources || Object.keys(appResources).length === 0) {
+      return userResources;
+    }
+
+    // Resolve HTML content for all app resources (read files once at startup)
+    const resolvedAppResources = new Map<string, { resource: Resource; html: string }>();
+    for (const [uri, appResource] of Object.entries(appResources)) {
+      let html: string;
+      if (appResource.html) {
+        html = appResource.html;
+      } else if (appResource.htmlPath) {
+        html = readFileSync(appResource.htmlPath, 'utf-8');
+      } else {
+        this.logger.warn(`App resource '${uri}' has neither html nor htmlPath — skipping`);
+        continue;
+      }
+
+      const resource: Resource = {
+        uri,
+        name: appResource.name,
+        ...(appResource.description ? { description: appResource.description } : {}),
+        mimeType: RESOURCE_MIME_TYPE,
+        ...(appResource.meta ? { _meta: { ui: appResource.meta } } : {}),
+      };
+
+      resolvedAppResources.set(uri, { resource, html });
+    }
+
+    if (resolvedAppResources.size === 0) {
+      return userResources;
+    }
+
+    // Build merged resource callbacks
+    const appListResources = async () => {
+      return Array.from(resolvedAppResources.values()).map(r => r.resource);
+    };
+
+    const appGetResourceContent = async ({ uri }: { uri: string }) => {
+      const appRes = resolvedAppResources.get(uri);
+      if (appRes) {
+        return { text: appRes.html };
+      }
+      throw new Error(`App resource not found: ${uri}`);
+    };
+
+    if (!userResources) {
+      return {
+        listResources: appListResources,
+        getResourceContent: appGetResourceContent,
+      };
+    }
+
+    // Merge: user resources take precedence, app resources are appended
+    return {
+      listResources: async ({ extra }) => {
+        const userResourceList = await userResources.listResources({ extra });
+        const appResourceList = await appListResources();
+        // Filter out app resources that conflict with user-defined ones
+        const userUris = new Set(userResourceList.map(r => r.uri));
+        const nonConflicting = appResourceList.filter(r => !userUris.has(r.uri));
+        return [...userResourceList, ...nonConflicting];
+      },
+      getResourceContent: async ({ uri, extra }) => {
+        // Try user resources first, fall back to app resources
+        const appRes = resolvedAppResources.get(uri);
+        if (appRes) {
+          // Check if user also defines this URI — if so, prefer user
+          try {
+            const userResourceList = await userResources.listResources({ extra });
+            if (userResourceList.some(r => r.uri === uri)) {
+              return userResources.getResourceContent({ uri, extra });
+            }
+          } catch {
+            // If user listResources fails, fall through to app resource
+          }
+          return { text: appRes.html };
+        }
+        return userResources.getResourceContent({ uri, extra });
+      },
+      ...(userResources.resourceTemplates ? { resourceTemplates: userResources.resourceTemplates } : {}),
+    };
+  }
+
+  /**
    * Creates a new Server instance configured with all handlers for HTTP sessions.
    * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
    */
@@ -376,7 +549,6 @@ export class MCPServer extends MCPServerBase {
     const capabilities: ServerCapabilities = {
       tools: {},
       logging: { enabled: true },
-      elicitation: {},
     };
 
     if (this.resourceOptions) {
@@ -387,6 +559,20 @@ export class MCPServer extends MCPServerBase {
       capabilities.prompts = { listChanged: true };
     }
 
+    // Re-apply extension capabilities for the new server instance
+    const hasUiTools = Object.values(this.convertedTools).some(
+      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+    );
+    if (hasUiTools || this.resourceOptions) {
+      const hasUiResources = this.definedResources?.some(r => r.uri.startsWith('ui://'));
+      if (hasUiTools || hasUiResources) {
+        capabilities.extensions = {
+          ...capabilities.extensions,
+          'io.modelcontextprotocol/ui': {},
+        };
+      }
+    }
+
     const serverInstance = new Server(
       {
         name: this.name,
@@ -395,6 +581,7 @@ export class MCPServer extends MCPServerBase {
       {
         capabilities,
         ...(this.instructions ? { instructions: this.instructions } : {}),
+        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
       },
     );
 
@@ -410,25 +597,36 @@ export class MCPServer extends MCPServerBase {
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    serverInstance.setRequestHandler(ListToolsRequestSchema, async () => {
-      this.logger.debug('Handling ListTools request');
+    serverInstance.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
+      const proxiedContext = this.createProxiedRequestContext(extra);
+      const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
-        tools: Object.values(this.convertedTools).map(tool => {
+        tools: tools.map(([, tool]) => {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
-            inputSchema: tool.parameters.jsonSchema,
+            inputSchema: this.convertSchema(tool.parameters),
           };
           if (tool.outputSchema) {
-            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
+            toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
           }
           // Include MCP tool annotations if present
           if (tool.mcp?.annotations) {
             toolSpec.annotations = tool.mcp.annotations;
           }
-          // Include _meta if present
-          if (tool.mcp?._meta) {
-            toolSpec._meta = tool.mcp._meta;
+          const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
+          if (toolMeta) {
+            // Normalize UI metadata for backward compatibility with older hosts:
+            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
+            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
+            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
+            if (uiMeta?.resourceUri && !legacyUri) {
+              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+            } else if (legacyUri && !uiMeta?.resourceUri) {
+              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
+            } else {
+              toolSpec._meta = toolMeta;
+            }
           }
           return toolSpec;
         }),
@@ -441,7 +639,7 @@ export class MCPServer extends MCPServerBase {
       try {
         const tool = this.convertedTools[request.params.name];
         if (!tool) {
-          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
+          this.logger.warn('Unknown tool requested', { tool: request.params.name });
           return {
             content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
             isError: true,
@@ -450,7 +648,8 @@ export class MCPServer extends MCPServerBase {
 
         const validation = tool.parameters.validate?.(request.params.arguments ?? {});
         if (validation && !validation.success) {
-          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
+          this.logger.warn('Invalid tool arguments', {
+            tool: request.params.name,
             errors: validation.error,
           });
 
@@ -475,7 +674,7 @@ export class MCPServer extends MCPServerBase {
           };
         }
         if (!tool.execute) {
-          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
+          this.logger.warn('Tool does not have an execute function', { tool: request.params.name });
           return {
             content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
             isError: true,
@@ -489,9 +688,17 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
+        const proxiedContext = new RequestContext();
+        if (extra) {
+          Object.entries(extra).forEach(([key, value]) => {
+            proxiedContext.set(key, value);
+          });
+        }
+
         const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
           toolCallId: '',
+          requestContext: proxiedContext,
           // Pass MCP-specific context through the mcp property
           mcp: {
             elicitation: sessionElicitation,
@@ -506,10 +713,25 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
+        await this.enforceToolExecutionFGA(request.params.name, proxiedContext);
+
         const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
 
-        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         const duration = Date.now() - startTime;
+
+        // Check if the tool builder returned a validation error (e.g. input failed Zod validation
+        // after passing the JSON Schema first-pass validation above)
+        if (isValidationError(result)) {
+          this.logger.warn(`CallTool: Tool '${request.params.name}' returned a validation error in ${duration}ms.`, {
+            error: result.message,
+          });
+          return {
+            content: [{ type: 'text', text: result.message }],
+            isError: true,
+          };
+        }
+
+        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
 
         const response: CallToolResult = { isError: false, content: [] };
@@ -527,7 +749,8 @@ export class MCPServer extends MCPServerBase {
 
           const outputValidation = tool.outputSchema.validate?.(structuredContent ?? {});
           if (outputValidation && !outputValidation.success) {
-            this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
+            this.logger.warn('Invalid structured content', {
+              tool: request.params.name,
               errors: outputValidation.error,
             });
             throw new Error(
@@ -551,23 +774,24 @@ export class MCPServer extends MCPServerBase {
         return response;
       } catch (error) {
         const duration = Date.now() - startTime;
-        if (error instanceof z.ZodError) {
+        if (error instanceof Error && 'issues' in error && Array.isArray((error as any).issues)) {
+          const issues: Array<{ path: string[]; message: string }> = (error as any).issues;
           this.logger.warn('Invalid tool arguments', {
             tool: request.params.name,
-            errors: error.errors,
+            errors: issues,
             duration: `${duration}ms`,
           });
           return {
             content: [
               {
                 type: 'text',
-                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+                text: `Invalid arguments: ${issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
               },
             ],
             isError: true,
           };
         }
-        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
+        this.logger.error('Tool execution failed', { tool: request.params.name, error });
         if (error instanceof MastraError) {
           return {
             content: [{ type: 'text', text: JSON.stringify(error.toJSON()) }],
@@ -584,7 +808,7 @@ export class MCPServer extends MCPServerBase {
     // Set logging level handler
     serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
       this.currentLoggingLevel = request.params.level;
-      this.logger.debug(`Logging level set to: ${request.params.level}`);
+      this.logger.debug('Logging level set', { level: request.params.level });
       return {};
     });
 
@@ -609,17 +833,16 @@ export class MCPServer extends MCPServerBase {
     // List resources handler
     if (capturedResourceOptions.listResources) {
       serverInstance.setRequestHandler(ListResourcesRequestSchema, async (_request, extra) => {
-        this.logger.debug('Handling ListResources request');
         if (this.definedResources) {
           return { resources: this.definedResources };
         } else {
           try {
             const resources = await capturedResourceOptions.listResources!({ extra });
             this.definedResources = resources;
-            this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
+            this.logger.debug('Fetched and cached resources', { count: this.definedResources.length });
             return { resources: this.definedResources };
           } catch (error) {
-            this.logger.error('Error fetching resources via listResources():', { error });
+            this.logger.error('Error fetching resources', { error });
             throw error;
           }
         }
@@ -631,7 +854,7 @@ export class MCPServer extends MCPServerBase {
       serverInstance.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
         const startTime = Date.now();
         const uri = request.params.uri;
-        this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
+        this.logger.debug('Handling ReadResource request', { uri });
 
         if (!this.definedResources) {
           const resources = await this.resourceOptions?.listResources?.({ extra });
@@ -642,7 +865,7 @@ export class MCPServer extends MCPServerBase {
         const resource = this.definedResources?.find(r => r.uri === uri);
 
         if (!resource) {
-          this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
+          this.logger.warn('Unknown resource URI requested', { uri });
           throw new Error(`Resource not found: ${uri}`);
         }
 
@@ -651,29 +874,34 @@ export class MCPServer extends MCPServerBase {
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
-          const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
-            const contentItem: ResourceContents = {
+          const contents: (TextResourceContents | BlobResourceContents)[] = resourcesContent.map(resourceContent => {
+            if ('text' in resourceContent && resourceContent.text !== undefined) {
+              return {
+                uri: resource.uri,
+                mimeType: resource.mimeType,
+                text: resourceContent.text,
+              } as TextResourceContents;
+            }
+
+            const blob = (resourceContent as { blob?: string }).blob;
+            if (blob === undefined) {
+              throw new Error(`Resource '${uri}' returned content with neither text nor blob`);
+            }
+
+            return {
               uri: resource.uri,
               mimeType: resource.mimeType,
-            };
-            if ('text' in resourceContent) {
-              contentItem.text = resourceContent.text;
-            }
-
-            if ('blob' in resourceContent) {
-              contentItem.blob = resourceContent.blob;
-            }
-
-            return contentItem;
+              blob,
+            } as BlobResourceContents;
           });
           const duration = Date.now() - startTime;
-          this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
+          this.logger.info('Resource read successfully', { uri, duration });
           return {
             contents,
           };
         } catch (error) {
           const duration = Date.now() - startTime;
-          this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
+          this.logger.error('Failed to get content for resource', { uri, duration, error });
           throw error;
         }
       });
@@ -682,14 +910,13 @@ export class MCPServer extends MCPServerBase {
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
       serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async (_request, extra) => {
-        this.logger.debug('Handling ListResourceTemplates request');
         if (this.definedResourceTemplates) {
           return { resourceTemplates: this.definedResourceTemplates };
         } else {
           try {
             const templates = await capturedResourceOptions.resourceTemplates!({ extra });
             this.definedResourceTemplates = templates;
-            this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
+            this.logger.debug('Fetched and cached resource templates', { count: this.definedResourceTemplates.length });
             return { resourceTemplates: this.definedResourceTemplates };
           } catch (error) {
             this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
@@ -702,14 +929,14 @@ export class MCPServer extends MCPServerBase {
     // Subscribe/unsubscribe handlers
     serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
-      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
+      this.logger.info('Received resources/subscribe request', { uri });
       this.subscriptions.add(uri);
       return {};
     });
 
     serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
-      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
+      this.logger.info('Received resources/unsubscribe request', { uri });
       this.subscriptions.delete(uri);
       return {};
     });
@@ -728,7 +955,7 @@ export class MCPServer extends MCPServerBase {
         this.logger.debug('Handling ListPrompts request');
         if (this.definedPrompts) {
           return {
-            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+            prompts: this.definedPrompts,
           };
         } else {
           try {
@@ -737,9 +964,9 @@ export class MCPServer extends MCPServerBase {
               PromptSchema.parse(prompt);
             }
             this.definedPrompts = prompts;
-            this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
+            this.logger.debug('Fetched and cached prompts', { count: this.definedPrompts.length });
             return {
-              prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+              prompts: this.definedPrompts,
             };
           } catch (error) {
             this.logger.error('Error fetching prompts via listPrompts():', {
@@ -755,23 +982,17 @@ export class MCPServer extends MCPServerBase {
     if (capturedPromptOptions.getPromptMessages) {
       serverInstance.setRequestHandler(
         GetPromptRequestSchema,
-        async (request: { params: { name: string; version?: string; arguments?: any } }, extra) => {
+        async (request: { params: { name: string; arguments?: any } }, extra) => {
           const startTime = Date.now();
-          const { name, version, arguments: args } = request.params;
+          const { name, arguments: args } = request.params;
           if (!this.definedPrompts) {
             const prompts = await this.promptOptions?.listPrompts?.({ extra });
             if (!prompts) throw new Error('Failed to load prompts');
             this.definedPrompts = prompts;
           }
-          // Select prompt by name and version (if provided)
-          let prompt;
-          if (version) {
-            prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
-          } else {
-            // Select the first matching name if no version is provided.
-            prompt = this.definedPrompts?.find(p => p.name === name);
-          }
-          if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
+          // Select prompt by name
+          const prompt = this.definedPrompts?.find(p => p.name === name);
+          if (!prompt) throw new Error(`Prompt "${name}" not found`);
           // Validate required arguments
           if (prompt.arguments) {
             for (const arg of prompt.arguments) {
@@ -783,16 +1004,14 @@ export class MCPServer extends MCPServerBase {
           try {
             let messages: any[] = [];
             if (capturedPromptOptions.getPromptMessages) {
-              messages = await capturedPromptOptions.getPromptMessages({ name, version, args, extra });
+              messages = await capturedPromptOptions.getPromptMessages({ name, version: prompt.version, args, extra });
             }
             const duration = Date.now() - startTime;
-            this.logger.info(
-              `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
-            );
-            return { prompt, messages };
+            this.logger.info('Prompt retrieved successfully', { prompt: name, duration });
+            return { description: prompt.description, messages };
           } catch (error) {
             const duration = Date.now() - startTime;
-            this.logger.error(`Failed to get content for prompt '${name}' in ${duration}ms`, { error });
+            this.logger.error('Failed to get prompt content', { prompt: name, duration, error });
             throw error;
           }
         },
@@ -812,7 +1031,7 @@ export class MCPServer extends MCPServerBase {
     for (const agentKey in agentsConfig) {
       const agent = agentsConfig[agentKey];
       if (!agent || !('generate' in agent)) {
-        this.logger.warn(`Agent instance for '${agentKey}' is invalid or missing a generate function. Skipping.`);
+        this.logger.warn('Invalid agent instance, skipping', { agentKey });
         continue;
       }
 
@@ -826,22 +1045,24 @@ export class MCPServer extends MCPServerBase {
 
       const agentToolName = `ask_${agentKey}`;
       if (definedConvertedTools?.[agentToolName] || agentTools[agentToolName]) {
-        this.logger.warn(
-          `Tool with name '${agentToolName}' already exists. Agent '${agentKey}' will not be added as a duplicate tool.`,
-        );
+        this.logger.warn('Duplicate tool name, skipping agent', { tool: agentToolName, agentKey });
         continue;
       }
 
       const agentToolDefinition = createTool({
         id: agentToolName,
         description: `Ask agent '${agent.name}' a question. Agent description: ${agentDescription}`,
-        inputSchema: z.object({
-          message: z.string().describe('The question or input for the agent.'),
-        }),
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            message: { type: 'string', description: 'The question or input for the agent.' },
+          },
+          required: ['message'],
+          additionalProperties: false,
+        },
         execute: async (inputData, context) => {
-          this.logger.debug(
-            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
-          );
+          const { message } = inputData as { message: string };
+          this.logger.debug('Executing agent tool', { tool: agentToolName, agent: agent.name, message });
           try {
             const proxiedContext = context?.requestContext || new RequestContext();
             if (context?.mcp?.extra) {
@@ -851,13 +1072,13 @@ export class MCPServer extends MCPServerBase {
               });
             }
 
-            const response = await agent.generate(inputData.message, {
+            const response = await agent.generate(message, {
               ...(context ?? {}),
               requestContext: proxiedContext,
             });
             return response;
           } catch (error) {
-            this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
+            this.logger.error('Error executing agent tool', { tool: agentToolName, agent: agent.name, error });
             throw error;
           }
         },
@@ -880,7 +1101,7 @@ export class MCPServer extends MCPServerBase {
           toolType: 'agent',
         },
       } as InternalCoreTool;
-      this.logger.info(`Registered agent '${agent.name}' (key: '${agentKey}') as tool: '${agentToolName}'`);
+      this.logger.info('Registered agent as tool', { agent: agent.name, key: agentKey, tool: agentToolName });
     }
     return agentTools;
   }
@@ -972,7 +1193,11 @@ export class MCPServer extends MCPServerBase {
           toolType: 'workflow',
         },
       } as InternalCoreTool;
-      this.logger.info(`Registered workflow '${workflow.id}' (key: '${workflowKey}') as tool: '${workflowToolName}'`);
+      this.logger.info('Registered workflow as tool', {
+        workflow: workflow.id,
+        key: workflowKey,
+        tool: workflowToolName,
+      });
     }
     return workflowTools;
   }
@@ -995,12 +1220,12 @@ export class MCPServer extends MCPServerBase {
     for (const toolName of Object.keys(tools)) {
       const toolInstance = tools[toolName];
       if (!toolInstance) {
-        this.logger.warn(`Tool instance for '${toolName}' is undefined. Skipping.`);
+        this.logger.warn('Tool instance is undefined, skipping', { tool: toolName });
         continue;
       }
 
       if (typeof toolInstance.execute !== 'function') {
-        this.logger.warn(`Tool '${toolName}' does not have a valid execute function. Skipping.`);
+        this.logger.warn('Tool has no execute function, skipping', { tool: toolName });
         continue;
       }
 
@@ -1019,9 +1244,9 @@ export class MCPServer extends MCPServerBase {
         ...coreTool,
         id: toolName,
       } as InternalCoreTool;
-      this.logger.info(`Registered explicit tool: '${toolName}'`);
+      this.logger.info('Registered explicit tool', { tool: toolName });
     }
-    this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
+    this.logger.info('Total defined tools registered', { count: Object.keys(definedConvertedTools).length });
 
     let agentDerivedTools: Record<string, InternalCoreTool> = {};
     let workflowDerivedTools: Record<string, InternalCoreTool> = {};
@@ -1332,10 +1557,10 @@ export class MCPServer extends MCPServerBase {
     res: http.ServerResponse<http.IncomingMessage>;
     options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
   }) {
-    this.logger.debug(`startHTTP: Received ${req.method} request to ${url.pathname}`);
+    this.logger.debug('Received HTTP request', { method: req.method, path: url.pathname });
 
     if (url.pathname !== httpPath) {
-      this.logger.debug(`startHTTP: Pathname ${url.pathname} does not match httpPath ${httpPath}. Returning 404.`);
+      this.logger.debug('Pathname does not match httpPath, returning 404', { path: url.pathname, httpPath });
       res.writeHead(404);
       res.end();
       return;
@@ -1346,7 +1571,7 @@ export class MCPServer extends MCPServerBase {
       options?.serverless || (options && 'sessionIdGenerator' in options && options.sessionIdGenerator === undefined);
 
     if (isStatelessMode) {
-      this.logger.debug('startHTTP: Running in stateless mode (serverless or sessionIdGenerator: undefined)');
+      this.logger.debug('Running in stateless mode');
       await this.handleServerlessRequest(req, res);
       return;
     }
@@ -1359,20 +1584,19 @@ export class MCPServer extends MCPServerBase {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     let transport: StreamableHTTPServerTransport | undefined;
 
-    this.logger.debug(
-      `startHTTP: Session ID from headers: ${sessionId}. Active transports: ${Array.from(this.streamableHTTPTransports.keys()).join(', ')}`,
-    );
+    this.logger.debug('Session ID from headers', {
+      sessionId,
+      activeTransports: Array.from(this.streamableHTTPTransports.keys()),
+    });
 
     try {
       if (sessionId && this.streamableHTTPTransports.has(sessionId)) {
         // Found existing session
         transport = this.streamableHTTPTransports.get(sessionId)!;
-        this.logger.debug(`startHTTP: Using existing Streamable HTTP transport for session ID: ${sessionId}`);
+        this.logger.debug('Using existing transport for session', { sessionId });
 
         if (req.method === 'GET') {
-          this.logger.debug(
-            `startHTTP: Handling GET request for existing session ${sessionId}. Calling transport.handleRequest.`,
-          );
+          this.logger.debug('Handling GET request for existing session', { sessionId });
         }
 
         // Handle the request using the existing transport
@@ -1380,9 +1604,24 @@ export class MCPServer extends MCPServerBase {
         const body = req.method === 'POST' ? await this.readJsonBody(req) : undefined;
 
         await transport.handleRequest(req, res, body);
+      } else if (sessionId) {
+        // Session ID provided but not found (e.g. server restarted, session expired).
+        // Per MCP spec: server MUST respond with 404 so the client knows to re-initialize.
+        this.logger.warn('Session ID not found, returning 404', { sessionId, method: req.method });
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Session not found',
+            },
+            id: null,
+          }),
+        );
       } else {
-        // No session ID or session ID not found
-        this.logger.debug(`startHTTP: No existing Streamable HTTP session ID found. ${req.method}`);
+        // No session ID provided
+        this.logger.debug('No session ID provided', { method: req.method });
 
         // Only allow new sessions via POST initialize request
         if (req.method === 'POST') {
@@ -1392,7 +1631,7 @@ export class MCPServer extends MCPServerBase {
           const { isInitializeRequest } = await import('@modelcontextprotocol/sdk/types.js');
 
           if (isInitializeRequest(body)) {
-            this.logger.debug('startHTTP: Received Streamable HTTP initialize request, creating new transport.');
+            this.logger.debug('Received initialize request, creating new transport');
 
             // Create a new transport for the new session
             transport = new StreamableHTTPServerTransport({
@@ -1407,14 +1646,12 @@ export class MCPServer extends MCPServerBase {
             transport.onclose = () => {
               const closedSessionId = transport?.sessionId;
               if (closedSessionId && this.streamableHTTPTransports.has(closedSessionId)) {
-                this.logger.debug(
-                  `startHTTP: Streamable HTTP transport closed for session ${closedSessionId}, removing from map.`,
-                );
+                this.logger.debug('Transport closed for session, removing from map', { sessionId: closedSessionId });
                 this.streamableHTTPTransports.delete(closedSessionId);
                 // Also clean up the server instance for this session
                 if (this.httpServerInstances.has(closedSessionId)) {
                   this.httpServerInstances.delete(closedSessionId);
-                  this.logger.debug(`startHTTP: Cleaned up server instance for closed session ${closedSessionId}`);
+                  this.logger.debug('Cleaned up server instance for closed session', { sessionId: closedSessionId });
                 }
               }
             };
@@ -1429,18 +1666,16 @@ export class MCPServer extends MCPServerBase {
             if (transport.sessionId) {
               this.streamableHTTPTransports.set(transport.sessionId, transport);
               this.httpServerInstances.set(transport.sessionId, sessionServerInstance);
-              this.logger.debug(
-                `startHTTP: Streamable HTTP session initialized and stored with ID: ${transport.sessionId}`,
-              );
+              this.logger.debug('Session initialized and stored', { sessionId: transport.sessionId });
             } else {
-              this.logger.warn('startHTTP: Streamable HTTP transport initialized without a session ID.');
+              this.logger.warn('Transport initialized without a session ID');
             }
 
             // Handle the initialize request
             return await transport.handleRequest(req, res, body);
           } else {
             // POST request but not initialize, and no session ID
-            this.logger.warn('startHTTP: Received non-initialize POST request without a session ID.');
+            this.logger.warn('Received non-initialize POST request without session ID');
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
@@ -1455,7 +1690,7 @@ export class MCPServer extends MCPServerBase {
           }
         } else {
           // Non-POST request (GET/DELETE) without a session ID
-          this.logger.warn(`startHTTP: Received ${req.method} request without a session ID.`);
+          this.logger.warn('Received request without session ID', { method: req.method });
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
@@ -1480,7 +1715,7 @@ export class MCPServer extends MCPServerBase {
         error,
       );
       this.logger.trackException(mastraError);
-      this.logger.error('startHTTP: Error handling Streamable HTTP request:', { error: mastraError });
+      this.logger.error('Error handling HTTP request', { error: mastraError });
       // If headers haven't been sent, send an error response
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1513,14 +1748,15 @@ export class MCPServer extends MCPServerBase {
    */
   private async handleServerlessRequest(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
     try {
-      this.logger.debug(`handleServerlessRequest: Received ${req.method} request`);
+      this.logger.debug('Received serverless request', { method: req.method });
 
       // Parse the request body (for POST requests)
       const body =
         req.method === 'POST' ? ((await this.readJsonBody(req)) as { method?: string; id?: unknown }) : undefined;
 
-      this.logger.debug(`handleServerlessRequest: Processing ${req.method} request`, {
-        method: body?.method,
+      this.logger.debug('Processing serverless request', {
+        method: req.method,
+        bodyMethod: body?.method,
         id: body?.id,
       });
 
@@ -1542,7 +1778,7 @@ export class MCPServer extends MCPServerBase {
       // The transport will send the response and this instance will be garbage collected
       await tempTransport.handleRequest(req, res, body);
 
-      this.logger.debug(`handleServerlessRequest: Completed ${body?.method} request`, { id: body?.id });
+      this.logger.debug('Completed serverless request', { method: body?.method, id: body?.id });
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -1554,7 +1790,7 @@ export class MCPServer extends MCPServerBase {
         error,
       );
       this.logger.trackException(mastraError);
-      this.logger.error('handleServerlessRequest: Error handling request:', { error: mastraError });
+      this.logger.error('Error handling serverless request', { error: mastraError });
 
       // If headers haven't been sent, send an error response
       if (!res.headersSent) {
@@ -1816,6 +2052,13 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  private convertSchema(schema: any) {
+    if (isStandardSchemaWithJSON(schema)) {
+      return standardSchemaToJSONSchema(schema);
+    }
+    return schema?.jsonSchema || schema;
+  }
+
   /**
    * Gets a list of all tools provided by this MCP server with their schemas.
    *
@@ -1833,18 +2076,56 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  public getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
-  } {
-    this.logger.debug(`Getting tool list information for MCPServer '${this.name}'`);
+  public getToolListInfo(requestContext?: RequestContext):
+    | {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }
+    | Promise<{
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema: any;
+          outputSchema?: any;
+          toolType?: MCPToolType;
+          _meta?: Record<string, unknown>;
+        }>;
+      }> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (fgaProvider && requestContext) {
+      return this.getAuthorizedConvertedToolEntries(requestContext).then(tools => ({
+        tools: tools.map(([toolId, tool]) => ({
+          id: toolId,
+          name: tool.id || toolId,
+          description: tool.description,
+          inputSchema: this.convertSchema(tool.parameters),
+          outputSchema: this.convertSchema(tool.outputSchema),
+          toolType: tool.mcp?.toolType,
+          _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
+        })),
+      }));
+    }
+
+    if (fgaProvider && !requestContext) {
+      return { tools: [] };
+    }
+
+    this.logger.debug('Getting tool list', { server: this.name });
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
         id: toolId,
         name: tool.id || toolId,
         description: tool.description,
-        inputSchema: tool.parameters?.jsonSchema || tool.parameters,
-        outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
+        inputSchema: this.convertSchema(tool.parameters),
+        outputSchema: this.convertSchema(tool.outputSchema),
         toolType: tool.mcp?.toolType,
+        _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
       })),
     };
   }
@@ -1867,22 +2148,92 @@ export class MCPServer extends MCPServerBase {
    * }
    * ```
    */
-  public getToolInfo(
-    toolId: string,
-  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined {
+  public getToolInfo(toolId: string):
+    | {
+        name: string;
+        description?: string;
+        inputSchema: any;
+        outputSchema?: any;
+        toolType?: MCPToolType;
+        _meta?: Record<string, unknown>;
+      }
+    | undefined {
     const tool = this.convertedTools[toolId];
     if (!tool) {
-      this.logger.debug(`Tool '${toolId}' not found on MCPServer '${this.name}'`);
+      this.logger.debug('Tool not found', { tool: toolId, server: this.name });
       return undefined;
     }
-    this.logger.debug(`Getting info for tool '${toolId}' on MCPServer '${this.name}'`);
+    this.logger.debug('Getting tool info', { tool: toolId, server: this.name });
     return {
       name: tool.id || toolId,
       description: tool.description,
-      inputSchema: tool.parameters?.jsonSchema || tool.parameters,
-      outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
+      inputSchema: this.convertSchema(tool.parameters),
+      outputSchema: this.convertSchema(tool.outputSchema),
       toolType: tool.mcp?.toolType,
+      _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
     };
+  }
+
+  private createProxiedRequestContext(extra?: unknown): RequestContext {
+    const proxiedContext = new RequestContext();
+    if (extra && typeof extra === 'object') {
+      Object.entries(extra as Record<string, unknown>).forEach(([key, value]) => {
+        proxiedContext.set(key, value);
+      });
+    }
+    return proxiedContext;
+  }
+
+  private async getAuthorizedConvertedToolEntries(
+    requestContext: RequestContext,
+  ): Promise<Array<[string, (typeof this.convertedTools)[string]]>> {
+    const entries = Object.entries(this.convertedTools);
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return entries;
+    }
+
+    const user = requestContext.get('user');
+    if (!user) {
+      return [];
+    }
+
+    const accessible = await Promise.all(
+      entries.map(async ([toolId, tool]) => {
+        try {
+          await this.enforceToolExecutionFGA(toolId, requestContext);
+          return [toolId, tool] as [string, (typeof this.convertedTools)[string]];
+        } catch (error) {
+          if (error instanceof Error && error.name === 'FGADeniedError') {
+            return null;
+          }
+          throw error;
+        }
+      }),
+    );
+
+    return accessible.filter((entry): entry is [string, (typeof this.convertedTools)[string]] => entry !== null);
+  }
+
+  private async enforceToolExecutionFGA(toolId: string, requestContext?: RequestContext): Promise<void> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) {
+      return;
+    }
+
+    const { checkFGA, FGADeniedError, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const resourceId = JSON.stringify([this.id, toolId]);
+    const user = requestContext?.get('user');
+    if (!user) {
+      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+    }
+
+    await checkFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'tool', id: resourceId },
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+    });
   }
 
   /**
@@ -1910,43 +2261,62 @@ export class MCPServer extends MCPServerBase {
   public async executeTool(
     toolId: string,
     args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string },
+    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
     let validatedArgs = args;
     try {
       if (!tool) {
-        this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);
+        this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
         throw new Error(`Unknown tool: ${toolId}`);
       }
 
-      this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
+      this.logger.debug('Invoking tool', { tool: toolId, args });
 
-      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-        const validation = tool.parameters.safeParse(args ?? {});
-        if (!validation.success) {
-          const errorMessages = validation.error.errors
-            .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+      const paramsSchema = tool.parameters as {
+        validate?: (value: unknown) => any;
+        safeParse?: (value: unknown) => any;
+      };
+
+      const validation =
+        typeof paramsSchema?.validate === 'function'
+          ? paramsSchema.validate(args ?? {})
+          : typeof paramsSchema?.safeParse === 'function'
+            ? paramsSchema.safeParse(args ?? {})
+            : null;
+
+      if (validation) {
+        const success = typeof validation.success === 'boolean' ? validation.success : !validation.issues?.length;
+
+        if (!success) {
+          const issues = validation.error?.issues ?? validation.error?.errors ?? validation.issues ?? [];
+          const errorMessages = issues
+            .map(
+              (e: { path?: (string | number)[]; message: string }) => `- ${e.path?.join('.') || 'root'}: ${e.message}`,
+            )
             .join('\n');
-          this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
-            errors: validation.error.format(),
+          const validationErrors = validation.error?.format?.() ?? validation.error ?? validation.issues;
+
+          this.logger.warn('Invalid tool arguments', {
+            tool: toolId,
+            errorMessages,
+            errors: validationErrors,
           });
           // Return validation error as a result instead of throwing
           return {
             error: true,
-            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
-            validationErrors: validation.error.format(),
+            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages || 'Validation failed'}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            validationErrors,
           };
         }
-        validatedArgs = validation.data;
+
+        validatedArgs = validation.data ?? validation.value ?? args;
       } else {
-        this.logger.debug(
-          `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,
-        );
+        this.logger.debug('Tool parameters missing schema, skipping validation', { tool: toolId });
       }
 
       if (!tool.execute) {
-        this.logger.error(`ExecuteTool: Tool '${toolId}' does not have an execute function.`);
+        this.logger.error('Tool does not have an execute function', { tool: toolId });
         throw new Error(`Tool '${toolId}' cannot be executed.`);
       }
     } catch (error) {
@@ -1970,9 +2340,11 @@ export class MCPServer extends MCPServerBase {
       const finalExecutionContext = {
         messages: executionContext?.messages || [],
         toolCallId: executionContext?.toolCallId || randomUUID(),
+        requestContext: executionContext?.requestContext,
       };
+      await this.enforceToolExecutionFGA(toolId, finalExecutionContext.requestContext);
       const result = await tool.execute(validatedArgs, finalExecutionContext);
-      this.logger.info(`ExecuteTool: Tool '${toolId}' executed successfully.`);
+      this.logger.info('Tool executed successfully', { tool: toolId });
       return result;
     } catch (error) {
       const mastraError = new MastraError(
@@ -1988,8 +2360,60 @@ export class MCPServer extends MCPServerBase {
         error,
       );
       this.logger.trackException(mastraError);
-      this.logger.error(`ExecuteTool: Tool execution failed for '${toolId}':`, { error });
       throw mastraError;
     }
+  }
+
+  /**
+   * Reads the content of a resource by URI.
+   *
+   * Used by the Studio API to proxy `ui://` resource reads for MCP Apps rendering.
+   *
+   * @param uri - The resource URI to read (e.g. `ui://weather/dashboard`)
+   * @returns Promise resolving to the resource content
+   */
+  public async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    if (!this.resourceOptions?.getResourceContent) {
+      throw new MastraError({
+        id: 'MCP_SERVER_RESOURCES_NOT_CONFIGURED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { uri },
+      });
+    }
+
+    const extra = {} as any;
+    const result = await this.resourceOptions.getResourceContent({ uri, extra });
+    const contents = Array.isArray(result) ? result : [result];
+
+    return {
+      contents: contents.map(c => ({
+        uri,
+        ...('text' in c && c.text !== undefined ? { text: c.text } : {}),
+        ...('blob' in c && c.blob !== undefined ? { blob: c.blob } : {}),
+      })),
+    };
+  }
+
+  /**
+   * Lists all resources available on this MCP server.
+   *
+   * Used by the Studio API to discover `ui://` resources for MCP Apps.
+   *
+   * @returns Promise resolving to the list of resources
+   */
+  public async listResources(): Promise<{ resources: Resource[] }> {
+    if (!this.resourceOptions?.listResources) {
+      return { resources: [] };
+    }
+
+    const extra = {} as any;
+    if (this.definedResources) {
+      return { resources: this.definedResources };
+    }
+
+    const resources = await this.resourceOptions.listResources({ extra });
+    this.definedResources = resources;
+    return { resources };
   }
 }

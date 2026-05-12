@@ -9,7 +9,7 @@ packages:
 
 Abstract base class for implementing custom model gateways. Gateways handle provider-specific logic for accessing language models, including provider configuration, authentication, URL construction, and model instantiation.
 
-## Class Overview
+## Class overview
 
 ```typescript
 import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm'
@@ -60,7 +60,7 @@ class MyCustomGateway extends MastraModelGateway {
 }
 ```
 
-## Required Properties
+## Required properties
 
 <PropertiesTable
   content={[
@@ -78,9 +78,9 @@ class MyCustomGateway extends MastraModelGateway {
 ]}
 />
 
-## Required Methods
+## Required methods
 
-### fetchProviders()
+### `fetchProviders()`
 
 Fetches provider configurations from the gateway.
 
@@ -131,9 +131,11 @@ Fetches provider configurations from the gateway.
 ]}
 />
 
-### buildUrl()
+### `buildUrl()`
 
 Builds the API URL for a specific model/provider combination.
+
+If your provider URL contains placeholders such as `${ACCOUNT_ID}`, resolve them inside `buildUrl()` from `envVars` or `process.env` before returning the final URL.
 
 **Parameters:**
 
@@ -155,7 +157,7 @@ Builds the API URL for a specific model/provider combination.
 
 **Returns:** `string | undefined | Promise<string | undefined>`
 
-### getApiKey()
+### `getApiKey()`
 
 Retrieves the API key for authentication.
 
@@ -173,7 +175,7 @@ Retrieves the API key for authentication.
 
 **Returns:** `Promise<string>`
 
-### resolveLanguageModel()
+### `resolveLanguageModel()`
 
 Creates a language model instance.
 
@@ -201,15 +203,15 @@ Creates a language model instance.
 
 **Returns:** `Promise<LanguageModelV2> | LanguageModelV2`
 
-## Instance Methods
+## Instance methods
 
-### getId()
+### `getId()`
 
 Returns the gateway's unique identifier.
 
 **Returns:** `string` - The gateway's `id` property
 
-## Model ID Format
+## Model ID format
 
 For true gateways, the gateway ID is used as a prefix and models are accessed using this format:
 
@@ -221,15 +223,15 @@ Examples:
 
 - Gateway with `id = 'custom'`: `'custom/my-provider/model-1'`
 
-## Built-in Implementations
+## Built-in implementations
 
 - **NetlifyGateway** - Netlify AI Gateway integration
 - **ModelsDevGateway** - Registry of OpenAI-compatible providers
 
 ## Related
 
-- [Custom Gateways Guide](/models/gateways/custom-gateways) - Complete guide to creating custom gateways
-- [Mastra.addGateway()](/reference/core/addGateway) - Add a gateway to Mastra
-- [Mastra.getGateway()](/reference/core/getGateway) - Get gateway by registration key
-- [Mastra.getGatewayById()](/reference/core/getGatewayById) - Get gateway by ID
-- [Mastra.listGateways()](/reference/core/listGateways) - List all gateways
+- [Custom Gateways Guide](/models/gateways/custom-gateways): Complete guide to creating custom gateways
+- [Mastra.addGateway()](/reference/core/addGateway): Add a gateway to Mastra
+- [Mastra.getGateway()](/reference/core/getGateway): Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/core/getGatewayById): Get gateway by ID
+- [Mastra.listGateways()](/reference/core/listGateways): List all gateways

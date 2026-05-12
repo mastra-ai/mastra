@@ -1,12 +1,12 @@
 ---
-title: "Reference: MastraAuthAuth0 Class | Auth"
+title: "Reference: MastraAuthAuth0 class | Auth"
 description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
 packages:
   - "@mastra/auth-auth0"
   - "@mastra/core"
 ---
 
-# MastraAuthAuth0 Class
+# MastraAuthAuth0 class
 
 The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) set. In that case, simply use `new MastraAuthAuth0()` without any arguments.
+You can omit the constructor parameters if you have the appropriately named environment variables (`AUTH0_DOMAIN` and `AUTH0_AUDIENCE`) set. In that case, use `new MastraAuthAuth0()` without any arguments.
 
 :::
 
@@ -68,9 +68,9 @@ You can omit the constructor parameters if you have the appropriately named envi
 ]}
 />
 
-## Environment Variables
+## Environment variables
 
-The following environment variables are automatically used when constructor options are not provided:
+The following environment variables are automatically used when constructor options aren't provided:
 
 <PropertiesTable
   content={[
@@ -90,19 +90,19 @@ The following environment variables are automatically used when constructor opti
 ]}
 />
 
-## Default Authorization Behavior
+## Default authorization behavior
 
 By default, `MastraAuthAuth0` validates Auth0 JWT tokens and allows access to all authenticated users:
 
 1. **Token Verification**: The JWT token is verified using Auth0's public keys (JWKS)
 1. **Signature Validation**: Ensures the token was signed by your Auth0 tenant
-1. **Expiration Check**: Verifies the token has not expired
+1. **Expiration Check**: Verifies the token hasn't expired
 1. **Audience Validation**: Confirms the token was issued for your specific API (audience)
 1. **Issuer Validation**: Ensures the token was issued by your Auth0 domain
 
 If all validations pass, the user is considered authorized. To implement custom authorization logic (e.g., role-based access control), provide a custom `authorizeUser` function.
 
-## Auth0 User Type
+## Auth0 user type
 
 The `Auth0User` type used in the `authorizeUser` function corresponds to the decoded JWT token payload, which typically includes:
 

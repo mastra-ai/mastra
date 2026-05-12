@@ -2448,6 +2448,268 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(result.length).toBeGreaterThan(0);
     });
 
+    it('should send only plain text to the title model, not JSON-serialized part objects', async () => {
+      // Regression: previously the title model received JSON.stringify(partsToGen) which sent
+      // the full TextPart objects as a JSON string (e.g. [{"type":"text","text":"..."}]).
+      // When message objects contained metadata with strings like "mastra", the title model
+      // would see those and produce titles referencing internal framework details.
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const userMsg = messages.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Weather in Paris',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const userMsg = messages.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Weather in Paris',
+              content: [{ type: 'text', text: 'Weather in Paris' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'text-only-title-agent',
+        name: 'Text Only Title Agent',
+        instructions: 'test agent',
+        model: titleModel,
+      });
+
+      await agent.generateTitleFromUserMessage({
+        message: {
+          role: 'user',
+          content: 'What is the weather in Paris?',
+        },
+      });
+
+      // The model receives parts from MessageList, but the text content should be
+      // the plain user text — not a JSON-serialized array of TextPart objects
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+      expect(allText).toContain('What is the weather in Paris?');
+      // Must NOT contain JSON artifacts from the old JSON.stringify approach
+      expect(allText).not.toContain('"type"');
+      expect(allText).not.toContain('{"');
+    });
+
+    it('should not leak metadata or framework internals into title generation input', async () => {
+      // Simulates a real-world scenario where the user message object has metadata
+      // containing framework strings like "mastra". Only the text content should
+      // reach the title model — not providerOptions, createdAt timestamps, etc.
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const userMsg = messages.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Image Description Request',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const userMsg = messages.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Image Description Request',
+              content: [{ type: 'text', text: 'Image Description Request' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'no-metadata-leak-agent',
+        name: 'No Metadata Leak Agent',
+        instructions: 'test agent',
+        model: titleModel,
+      });
+
+      // Message with file parts and text — file parts get converted to descriptive text
+      await agent.generateTitleFromUserMessage({
+        message: {
+          role: 'user',
+          content: [
+            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+            { type: 'text' as const, text: 'Describe this image for me' },
+          ],
+        },
+      });
+
+      // Extract just the text from the parts the model received
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+
+      // Should contain the actual user text and the file description
+      expect(allText).toContain('Describe this image for me');
+      expect(allText).toContain('User added image/png file');
+      // Should NOT contain JSON structure from old JSON.stringify approach
+      expect(allText).not.toContain('"type":"text"');
+      expect(allText).not.toContain('[{');
+      // Should NOT contain providerOptions/metadata that MessageList adds internally
+      expect(allText).not.toContain('providerOptions');
+      expect(allText).not.toContain('createdAt');
+    });
+
+    it('should format multi-turn conversations with all part types for title generation', async () => {
+      // When minMessages > 1, title generation fires after multiple turns.
+      // The title model should receive all messages formatted with roles,
+      // including assistant responses, tool calls, and tool results.
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const userMsg = messages.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Paris Weather Check',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const userMsg = messages.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Paris Weather Check',
+              content: [{ type: 'text', text: 'Paris Weather Check' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'multi-turn-title-agent',
+        name: 'Multi Turn Title Agent',
+        instructions: 'test agent',
+        model: titleModel,
+      });
+
+      const uiMessages = [
+        {
+          id: '1',
+          role: 'user' as const,
+          content: '',
+          parts: [{ type: 'text' as const, text: 'What is the weather in Paris?' }],
+        },
+        {
+          id: '2',
+          role: 'assistant' as const,
+          content: '',
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                state: 'call' as const,
+                args: { city: 'Paris' },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                state: 'result' as const,
+                args: { city: 'Paris' },
+                result: { temp: 22, condition: 'sunny' },
+              },
+            },
+            { type: 'text' as const, text: 'The weather in Paris is 22°C and sunny.' },
+          ],
+        },
+        {
+          id: '3',
+          role: 'user' as const,
+          content: '',
+          parts: [{ type: 'text' as const, text: 'What about tomorrow?' }],
+        },
+      ];
+
+      await agent.generateTitleFromUserMessage({
+        messages: uiMessages,
+      });
+
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+
+      // Should include user messages with role prefix
+      expect(allText).toContain('User: What is the weather in Paris?');
+      expect(allText).toContain('User: What about tomorrow?');
+      // Should include assistant text with role prefix
+      expect(allText).toContain('Assistant: The weather in Paris is 22°C and sunny.');
+      // Should include tool call and result
+      expect(allText).toContain('Tool Call getWeather:');
+      expect(allText).toContain('Tool Result getWeather:');
+      // Tool args/result payloads should be included so the title model has context
+      expect(allText).toContain('Paris');
+      expect(allText).toMatch(/22|sunny/);
+      // Should NOT contain metadata
+      expect(allText).not.toContain('providerOptions');
+      expect(allText).not.toContain('toolCallId');
+    });
+
     it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
       // Verify that MessageList.aiV5.ui() converts core-format file parts (data/mimeType)
       // into UI-format (url/mediaType), which is what generateTitleFromUserMessage

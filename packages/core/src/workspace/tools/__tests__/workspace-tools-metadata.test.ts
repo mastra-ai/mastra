@@ -58,7 +58,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const { context, writerCustom } = createContext(workspace);
 
-    await readFileTool.execute!({ path: '/test.txt' }, context);
+    await readFileTool.execute!({ path: 'test.txt' }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
   });
@@ -67,7 +67,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const { context, writerCustom } = createContext(workspace);
 
-    await writeFileTool.execute!({ path: '/new.txt', content: 'data', overwrite: true }, context);
+    await writeFileTool.execute!({ path: 'new.txt', content: 'data', overwrite: true }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
   });
@@ -77,7 +77,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const { context, writerCustom } = createContext(workspace);
 
     await editFileTool.execute!(
-      { path: '/test.txt', old_string: 'hello', new_string: 'hi', replace_all: false },
+      { path: 'test.txt', old_string: 'hello', new_string: 'hi', replace_all: false },
       context,
     );
 
@@ -88,7 +88,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const { context, writerCustom } = createContext(workspace);
 
-    await listFilesTool.execute!({ path: '/', maxDepth: 1, showHidden: false, dirsOnly: false }, context);
+    await listFilesTool.execute!({ path: '', maxDepth: 1, showHidden: false, dirsOnly: false }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
   });
@@ -99,7 +99,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const { context, writerCustom } = createContext(workspace);
 
-    await deleteFileTool.execute!({ path: '/deleteme.txt', recursive: false }, context);
+    await deleteFileTool.execute!({ path: 'deleteme.txt', recursive: false }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.DELETE);
   });
@@ -108,7 +108,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const { context, writerCustom } = createContext(workspace);
 
-    await fileStatTool.execute!({ path: '/test.txt' }, context);
+    await fileStatTool.execute!({ path: 'test.txt' }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
   });
@@ -117,7 +117,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const { context, writerCustom } = createContext(workspace);
 
-    await mkdirTool.execute!({ path: '/newdir', recursive: true }, context);
+    await mkdirTool.execute!({ path: 'newdir', recursive: true }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
   });
@@ -129,7 +129,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    await workspace.index('/test.txt', 'hello world');
+    await workspace.index('test.txt', 'hello world');
     const { context, writerCustom } = createContext(workspace);
 
     await searchTool.execute!({ query: 'hello', topK: 5 }, context);
@@ -144,7 +144,7 @@ describe('all workspace tools emit data-workspace-metadata', () => {
     });
     const { context, writerCustom } = createContext(workspace);
 
-    await indexContentTool.execute!({ path: '/doc.txt', content: 'some content' }, context);
+    await indexContentTool.execute!({ path: 'doc.txt', content: 'some content' }, context);
 
     expectMetadataEmitted(writerCustom, WORKSPACE_TOOLS.SEARCH.INDEX);
   });

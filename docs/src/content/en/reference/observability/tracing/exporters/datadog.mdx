@@ -12,13 +12,17 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
 
+:::info
+If you also use `dd-trace` APM auto-instrumentation and need it correctly parented under Mastra spans, use the [DatadogBridge](/reference/observability/tracing/bridges/datadog) instead. The exporter sends LLM Observability data after execution completes, so it doesn't participate in `dd-trace`'s live scope.
+:::
+
 ## Constructor
 
 ```typescript prettier:false
 new DatadogExporter(config: DatadogExporterConfig)
 ```
 
-## DatadogExporterConfig
+## `DatadogExporterConfig`
 
 ```typescript
 interface DatadogExporterConfig extends BaseExporterConfig {
@@ -87,7 +91,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -145,9 +149,9 @@ const exporter = new DatadogExporter({
 })
 ```
 
-## Span Mapping
+## Span mapping
 
-Mastra span types are mapped to Datadog LLMObs span kinds:
+Mastra span types are mapped to Datadog LLM Observability span kinds:
 
 | Mastra SpanType | Datadog Kind |
 | - | - |
@@ -161,7 +165,7 @@ Mastra span types are mapped to Datadog LLMObs span kinds:
 
 All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
 
-## Environment Variables
+## Environment variables
 
 The exporter reads configuration from these environment variables:
 

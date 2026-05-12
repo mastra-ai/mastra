@@ -4,10 +4,17 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import { Hono } from 'hono';
-import type { ZodError } from 'zod';
+import type { ZodError } from 'zod/v4';
+import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
+import {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
+} from '../constants';
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
@@ -16,6 +23,13 @@ import type { ServerRoute } from './routes';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_STUDIO_CLIENT_TYPE,
+  isReservedRequestContextKey,
+  isStudioClientTypeHeader,
+} from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
@@ -82,6 +96,73 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
+  const schemaDef = (schema as any)?._def ?? (schema as any)?.def;
+  return schemaDef?.typeName ?? schemaDef?.type;
+}
+
+function unwrapOptionalNullable(schema: z.ZodTypeAny): z.ZodTypeAny {
+  let inner = schema;
+  let typeName = getSchemaTypeName(inner);
+
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
+    const innerDef = (inner as any)?._def ?? (inner as any)?.def;
+    if (!innerDef?.innerType) {
+      return inner;
+    }
+    inner = innerDef.innerType;
+    typeName = getSchemaTypeName(inner);
+  }
+
+  return inner;
+}
+
+function parseComplexQueryParams(
+  queryParamSchema: z.ZodTypeAny,
+  params: Record<string, QueryParamValue>,
+): Record<string, QueryParamValue | unknown> {
+  if (!(queryParamSchema instanceof z.ZodObject)) {
+    return params;
+  }
+
+  const parsedParams: Record<string, QueryParamValue | unknown> = { ...params };
+  const shape = queryParamSchema.shape as Record<string, z.ZodTypeAny>;
+
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    const rawValue = parsedParams[key];
+    if (typeof rawValue !== 'string') {
+      continue;
+    }
+
+    const unwrappedField = unwrapOptionalNullable(fieldSchema);
+    const typeName = getSchemaTypeName(unwrappedField);
+    const isComplex =
+      typeName === 'ZodObject' ||
+      typeName === 'ZodArray' ||
+      typeName === 'ZodRecord' ||
+      typeName === 'object' ||
+      typeName === 'array' ||
+      typeName === 'record';
+
+    if (!isComplex) {
+      continue;
+    }
+
+    try {
+      parsedParams[key] = JSON.parse(rawValue);
+    } catch {
+      // Keep original string; schema validation will surface a clear error.
+    }
+  }
+
+  return parsedParams;
 }
 
 /**
@@ -267,15 +348,29 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const requestContext = new RequestContext();
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
+        if (isReservedRequestContextKey(key)) continue;
         requestContext.set(key, value);
       }
     }
     if (paramsRequestContext) {
       for (const [key, value] of Object.entries(paramsRequestContext)) {
+        if (isReservedRequestContextKey(key)) continue;
         requestContext.set(key, value);
       }
     }
     return requestContext;
+  }
+
+  protected applyRequestMetadataToContext({
+    requestContext,
+    getHeader,
+  }: {
+    requestContext: RequestContext;
+    getHeader: (name: string) => string | undefined;
+  }): void {
+    if (isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER))) {
+      requestContext.set(MASTRA_IS_STUDIO_KEY, true);
+    }
   }
 
   /**
@@ -300,7 +395,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
     },
-  ): Promise<{ status: number; error: string } | null> {
+  ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     const authConfig = this.mastra.getServer()?.auth;
 
     // No auth config means no auth required
@@ -336,12 +431,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     });
 
     if (result.action === 'next') {
+      // Pass through any refresh headers (e.g. Set-Cookie from transparent session refresh)
+      if (result.headers) {
+        return { status: 200, error: '', headers: result.headers };
+      }
       return null;
     }
 
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
-    return { status: result.status, error: errorBody?.error ?? 'Access denied' };
+    return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
   }
 
   /**
@@ -407,18 +506,23 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
   /**
    * Validate that EE features have a valid license in production.
-   * Throws if RBAC is configured without a valid license outside dev/test environments.
+   * Throws if RBAC or FGA is configured without a valid license outside dev/test environments.
    */
   async validateEELicense(): Promise<void> {
-    const rbacProvider = this.mastra.getServer()?.rbac;
-    if (!rbacProvider) return;
+    const serverConfig = this.mastra.getServer();
+    const configuredFeatures = [serverConfig?.rbac ? 'RBAC' : null, serverConfig?.fga ? 'FGA' : null].filter(
+      (feature): feature is string => feature !== null,
+    );
+
+    if (configuredFeatures.length === 0) return;
 
     try {
       const { isEEEnabled } = await import('@mastra/core/auth/ee');
       if (!isEEEnabled()) {
+        const featureList = configuredFeatures.join(' and ');
         throw new Error(
-          '[mastra/auth-ee] RBAC is configured but no valid EE license was found.\n' +
-            'RBAC requires a Mastra Enterprise License for production use.\n' +
+          `[mastra/auth-ee] ${featureList} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but no valid EE license was found.\n` +
+            `${featureList} ${configuredFeatures.length === 1 ? 'requires' : 'require'} a Mastra Enterprise License for production use.\n` +
             'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
             'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
         );
@@ -427,9 +531,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
         throw err;
       }
-      // @mastra/core/auth/ee module not available — RBAC cannot function
+      // @mastra/core/auth/ee module not available; EE authorization cannot function.
       throw new Error(
-        '[mastra/auth-ee] RBAC is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+        `[mastra/auth-ee] ${configuredFeatures.join(' and ')} ${configuredFeatures.length === 1 ? 'is' : 'are'} configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n` +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
@@ -442,6 +546,25 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async registerCustomApiRoutes(): Promise<void> {
     // Default no-op. Adapters override this to register custom routes
     // using their framework-specific middleware.
+  }
+
+  /**
+   * Validates that no custom route path collides with the built-in route prefix.
+   * Throws if any route path starts with the server's `apiPrefix`.
+   */
+  protected validateCustomRoutePaths(routes: ApiRoute[]): void {
+    const prefix = this.prefix ?? '';
+    if (!prefix) return;
+    for (const route of routes) {
+      if (route._mastraInternal) continue;
+      if (route.path.startsWith(`${prefix}/`) || route.path === prefix) {
+        throw new Error(
+          `Custom API route "${route.path}" must not start with "${prefix}" — ` +
+            `that path is reserved for built-in Mastra routes. ` +
+            `Choose a different path (e.g. "${route.path.replace(prefix, '/custom')}").`,
+        );
+      }
+    }
   }
 
   /**
@@ -467,6 +590,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       c.set('requestContext', c.env?.requestContext ?? new RequestContext());
       await next();
     });
+
+    // Propagate the server's onError handler so errors from custom route handlers
+    // are caught here (not swallowed by Hono's default plain-text 500).
+    const serverOnError = this.mastra.getServer()?.onError;
+    app.onError((err, c) => {
+      if (serverOnError) {
+        return serverOnError(err, c);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
+
+    this.validateCustomRoutePaths(routes);
 
     // Register each custom route
     for (const route of routes) {
@@ -501,7 +636,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   /**
    * Forwards a request to the internal custom route handler.
    * Returns the Response if a custom route matched, or null to fall through.
-   * Used by non-Hono adapter bridges.
    */
   protected async handleCustomRouteRequest(
     url: string,
@@ -523,13 +657,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const init: RequestInit = { method, headers: fetchHeaders };
     if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
-      const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
-      if (contentType.includes('application/json')) {
-        init.body = JSON.stringify(body);
-      } else if (typeof body === 'string') {
-        init.body = body;
-      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+      if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
+        if (body instanceof ReadableStream) {
+          (init as any).duplex = 'half';
+        }
+      } else {
+        const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
+        if (contentType.includes('application/json')) {
+          init.body = JSON.stringify(body);
+        } else if (typeof body === 'string') {
+          init.body = body;
+        }
       }
     }
 
@@ -580,6 +719,33 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
   }
 
+  /**
+   * Builds the OpenAPI spec object with servers field and custom route paths.
+   */
+  private buildOpenAPISpec(config: { title: string; version: string; description: string }, prefix?: string): any {
+    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, config);
+
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
+
+    // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
+    const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (allCustomRoutes && allCustomRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      if (prefix) {
+        for (const pathKey of Object.keys(customPaths)) {
+          if (!customPaths[pathKey].servers) {
+            customPaths[pathKey].servers = [{ url: '/' }];
+          }
+        }
+      }
+      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
+    }
+
+    return openApiSpec;
+  }
+
   async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
     const {
       title = 'Mastra API',
@@ -588,22 +754,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       path = '/openapi.json',
     } = config;
 
-    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, {
-      title,
-      version,
-      description,
-    });
-
-    // Set the servers field so Swagger UI knows routes are served under the prefix
-    if (prefix) {
-      openApiSpec.servers = [{ url: prefix }];
-    }
-
-    // Merge custom API routes into the OpenAPI spec
-    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
-      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
-    }
+    const openApiSpec = this.buildOpenAPISpec({ title, version, description }, prefix);
 
     const openApiRoute: ServerRoute = {
       method: 'GET',
@@ -624,16 +775,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     if (this.openapiPath) {
-      await this.registerOpenAPIRoute(
-        this.app,
-        {
-          title: 'Mastra API',
-          version: '1.0.0',
-          description: 'Mastra Server API',
-          path: this.openapiPath,
-        },
-        { prefix: this.prefix },
-      );
+      const specConfig = {
+        title: 'Mastra API',
+        version: '1.0.0',
+        description: 'Mastra Server API',
+      };
+
+      await this.registerOpenAPIRoute(this.app, { ...specConfig, path: this.openapiPath }, { prefix: this.prefix });
     }
   }
 
@@ -643,7 +791,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return pathParamSchema.parseAsync(params);
+    return pathParamSchema.parseAsync(params) as Promise<Record<string, any>>;
   }
 
   async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
@@ -652,7 +800,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return queryParamSchema.parseAsync(params);
+    const normalizedParams = parseComplexQueryParams(queryParamSchema as z.ZodTypeAny, params);
+    return queryParamSchema.parseAsync(normalizedParams) as Promise<Record<string, any>>;
   }
 
   async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
@@ -695,4 +844,88 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
     };
   }
+}
+
+/**
+ * Check FGA authorization for an HTTP route.
+ * Returns null if authorized or FGA not configured, or an error object if denied.
+ */
+export async function checkRouteFGA(
+  mastra: any,
+  route: ServerRoute,
+  requestContext: RequestContext,
+  params: Record<string, unknown>,
+): Promise<{ status: number; error: string; message: string } | null> {
+  const fgaConfig = route.fga;
+  if (!fgaConfig) return null;
+
+  const fgaProvider = mastra?.getServer?.()?.fga;
+  if (!fgaProvider) return null;
+
+  const user = requestContext?.get('user');
+  if (!user) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: authenticated user is required',
+    };
+  }
+
+  const resourceId =
+    typeof fgaConfig.resourceId === 'function'
+      ? fgaConfig.resourceId(params, { requestContext })
+      : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
+  if (!fgaConfig.resourceType || !resourceId) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: 'FGA authorization denied: route FGA metadata is incomplete',
+    };
+  }
+  const permission =
+    fgaConfig.permission ||
+    (route.path ? getEffectivePermission(route) : null) ||
+    `${getFGAResourcePermissionSlug(fgaConfig.resourceType)}:${deriveFGAAction(route.method)}`;
+
+  const authorized = await fgaProvider.check(user, {
+    resource: { type: fgaConfig.resourceType, id: resourceId },
+    permission,
+    context: { resourceId, requestContext },
+  });
+
+  if (!authorized) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
+    };
+  }
+
+  return null;
+}
+
+function deriveFGAAction(method: string): string {
+  switch (method.toUpperCase()) {
+    case 'GET':
+      return 'read';
+    case 'DELETE':
+      return 'delete';
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+      return 'write';
+    default:
+      return 'read';
+  }
+}
+
+function getFGAResourcePermissionSlug(resourceType: string): string {
+  const resourcePermissionSlugs: Record<string, string> = {
+    agent: 'agents',
+    workflow: 'workflows',
+    tool: 'tools',
+    thread: 'memory',
+  };
+
+  return resourcePermissionSlugs[resourceType] ?? resourceType;
 }

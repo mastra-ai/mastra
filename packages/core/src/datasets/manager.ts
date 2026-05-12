@@ -4,6 +4,7 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
+import type { TargetType } from '../storage/types.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
 
@@ -93,7 +94,11 @@ export class DatasetsManager {
     description?: string;
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
+    requestContextSchema?: Record<string, unknown> | null;
     metadata?: Record<string, unknown>;
+    targetType?: TargetType;
+    targetIds?: string[];
+    scorerIds?: string[];
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
 

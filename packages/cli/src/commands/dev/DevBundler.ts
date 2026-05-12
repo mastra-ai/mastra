@@ -91,8 +91,9 @@ export class DevBundler extends Bundler {
               return;
             }
 
-            this.logger.warn(`Circular dependency found:
-\t${warning.message.replace('Circular dependency: ', '')}`);
+            this.logger.warn('Circular dependency found', {
+              dependency: warning.message.replace('Circular dependency: ', ''),
+            });
           }
         },
         plugins: [

@@ -8,11 +8,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "zod": "^3.24.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@internal/client-js-test-utils": "workspace:*",
-    "vitest": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

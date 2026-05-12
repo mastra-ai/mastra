@@ -1,6 +1,8 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import Ajv from 'ajv';
+import Ajv2020 from 'ajv/dist/2020';
 import type { JSONSchema7 } from 'json-schema';
+import traverse from 'json-schema-traverse';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -182,6 +184,19 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
       }
     }
 
+    if (options?.libraryOptions?.override) {
+      const override = options.libraryOptions.override as (ctx: { jsonSchema: traverse.SchemaObject }) => void;
+      traverse(clonedSchema, {
+        cb: {
+          post: schema => {
+            override({
+              jsonSchema: schema,
+            });
+          },
+        },
+      });
+    }
+
     return clonedSchema;
   }
 
@@ -191,9 +206,11 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
    */
   #getAjvValidator(): ReturnType<Ajv['compile']> {
     if (!this.#ajvValidateCache) {
-      this.#ajvInstance = new Ajv({
-        allErrors: true, // Report all errors, not just the first one
-        strict: false, // Be lenient with schema keywords
+      const is2020 = typeof this.#schema.$schema === 'string' && this.#schema.$schema.includes('2020-12');
+      const AjvClass = is2020 ? Ajv2020 : Ajv;
+      this.#ajvInstance = new AjvClass({
+        allErrors: true,
+        strict: false,
         ...this.#options.ajvOptions,
       });
 

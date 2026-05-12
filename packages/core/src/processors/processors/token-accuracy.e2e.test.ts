@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
-import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
-import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -12,6 +12,10 @@ import { TokenLimiterProcessor } from './token-limiter';
 import { ToolCallFilter } from './tool-call-filter';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('TokenLimiterProcessor', () => {
   it('should limit messages to the specified token count', async () => {
@@ -25,7 +29,24 @@ describe('TokenLimiterProcessor', () => {
 
     const limiter = new TokenLimiterProcessor(200);
     const mockAbort = vi.fn() as any;
-    const result = await limiter.processInput({ messages: messagesV2, abort: mockAbort });
+    const messageList = new MessageList({ threadId: '1', resourceId: 'test-resource' });
+    for (const msg of messagesV2) {
+      messageList.add(msg, 'input');
+    }
+
+    await limiter.processInputStep({
+      messageList,
+      messages: messageList.get.all.db(),
+      abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
+    });
+
+    const result = messageList.get.all.db();
 
     // Should prioritize newest messages (higher ids)
     expect(result.length).toBe(2);
@@ -36,12 +57,24 @@ describe('TokenLimiterProcessor', () => {
   it('should throw TripWire for empty messages array', async () => {
     const limiter = new TokenLimiterProcessor(1000);
     const mockAbort = vi.fn() as any;
-    await expect(limiter.processInput({ messages: [], abort: mockAbort })).rejects.toThrow(
-      'TokenLimiterProcessor: No messages to process',
-    );
+    const emptyMessageList = new MessageList({ threadId: 'test-empty', resourceId: 'test' });
+
+    await expect(
+      limiter.processInputStep({
+        messageList: emptyMessageList,
+        messages: [],
+        abort: mockAbort,
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        systemMessages: [],
+        model: { modelId: 'test-model' } as any,
+        retryCount: 0,
+      }),
+    ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
   });
 
-  it('should use different encodings based on configuration', async () => {
+  it('should accept the deprecated encoding option without throwing', async () => {
     const { messagesV2 } = generateConversationHistory({
       threadId: '6',
       messageCount: 1,
@@ -49,24 +82,35 @@ describe('TokenLimiterProcessor', () => {
       toolFrequency: 0,
     });
 
-    // Create limiters with different encoding settings
-    const defaultLimiter = new TokenLimiterProcessor(1000);
-    const customLimiter = new TokenLimiterProcessor({
+    // The `encoding` option is retained for backwards compatibility but is now a no-op.
+    // Passing any value should not throw or change behavior compared to the default.
+    const limiter = new TokenLimiterProcessor({
       limit: 1000,
-      encoding: cl100k_base,
+      encoding: { foo: 'bar' } as unknown,
     });
 
     const mockAbort = vi.fn() as any;
-    // All should process messagesV2 successfully but potentially with different token counts
-    const defaultResult = await defaultLimiter.processInput({ messages: messagesV2, abort: mockAbort });
-    const customResult = await customLimiter.processInput({ messages: messagesV2, abort: mockAbort });
+    const messageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
+    for (const msg of messagesV2) {
+      messageList.add(msg, 'input');
+    }
 
-    // Each should return the same messagesV2 but with potentially different token counts
-    expect(defaultResult.length).toBe(messagesV2.length);
-    expect(customResult.length).toBe(messagesV2.length);
+    await limiter.processInputStep({
+      messageList,
+      messages: messageList.get.all.db(),
+      abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
+    });
+
+    expect(messageList.get.all.db().length).toBe(messagesV2.length);
   });
 
-  function estimateTokens(messages: MastraDBMessage[]) {
+  async function estimateTokens(messages: MastraDBMessage[]) {
     // Create a TokenLimiterProcessor just for counting tokens
     const testLimiter = new TokenLimiterProcessor(Infinity);
 
@@ -75,7 +119,7 @@ describe('TokenLimiterProcessor', () => {
     // Count tokens for each message including all overheads
     for (const message of messages) {
       // Base token count from the countInputMessageTokens method
-      estimatedTokens += (testLimiter as any).countInputMessageTokens(message);
+      estimatedTokens += await (testLimiter as any).countInputMessageTokens(message);
     }
 
     return Number(estimatedTokens.toFixed(2));
@@ -90,11 +134,14 @@ describe('TokenLimiterProcessor', () => {
   async function expectTokenEstimate(
     config: Parameters<typeof generateConversationHistory>[0],
     agent: Agent,
-    accuracyMargin: number = 2,
+    // tokenx is ~96% accurate vs the model's actual BPE count, so the default margin is wider than
+    // it was when this suite ran against js-tiktoken. Heavy tool-call cases use a higher override.
+    // revisit if tokenx updates significantly change heuristic accuracy.
+    accuracyMargin: number = 8,
   ) {
     const { messagesV2, fakeCore } = generateConversationHistory(config);
 
-    const estimate = estimateTokens(messagesV2);
+    const estimate = await estimateTokens(messagesV2);
     const used = (await agent.generateLegacy(fakeCore)).usage.promptTokens;
 
     // Check if within accuracy margin
@@ -121,7 +168,7 @@ describe('TokenLimiterProcessor', () => {
     tools: { calculatorTool },
   });
 
-  describe.concurrent(`98% accuracy`, () => {
+  describe.concurrent(`tokenx accuracy vs model promptTokens`, () => {
     it(
       `20 messages, no tools`,
       {
@@ -219,7 +266,7 @@ describe('TokenLimiterProcessor', () => {
             threadId: '5',
           },
           agent,
-          12, // Higher margin due to LLM token counting variability with many tool calls
+          20, // Higher margin: many tool calls + tokenx's heuristic estimation amplify variance
         );
       },
     );

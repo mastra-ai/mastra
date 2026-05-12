@@ -2,11 +2,26 @@ import { Agent } from '@mastra/core/agent';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+  RequestContext,
+} from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { GET_PROVIDERS_ROUTE, GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE, isProviderConnected } from './agents';
+import { sendAgentSignalBodySchema, subscribeAgentThreadBodySchema } from '../schemas/agents';
+import {
+  GET_PROVIDERS_ROUTE,
+  GENERATE_AGENT_ROUTE,
+  STREAM_GENERATE_ROUTE,
+  RESUME_STREAM_ROUTE,
+  SEND_AGENT_SIGNAL_ROUTE,
+  SUBSCRIBE_AGENT_THREAD_ROUTE,
+  isProviderConnected,
+  extractVersionOptions,
+} from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
 vi.mock('@mastra/core/llm', async () => {
@@ -166,7 +181,7 @@ describe('getProvidersHandler', () => {
       const registryEntry = PROVIDER_REGISTRY[provider.id as keyof typeof PROVIDER_REGISTRY];
       expect(registryEntry).toBeDefined();
       expect(provider.name).toBe(registryEntry.name);
-      expect(provider.envVar).toBe(registryEntry.apiKeyEnvVar);
+      expect(provider.envVar).toEqual(registryEntry.apiKeyEnvVar);
       // Models should match (converting readonly to regular array)
       expect(provider.models).toEqual([...registryEntry.models]);
     });
@@ -179,7 +194,7 @@ describe('getProvidersHandler', () => {
       name: 'Test Gateway',
       getId: () => 'test-gateway',
       fetchProviders: vi.fn().mockResolvedValue({
-        'test-gateway/custom-llm': {
+        'custom-llm': {
           name: 'Custom LLM',
           models: ['custom-model-1', 'custom-model-2'],
           apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',
@@ -500,6 +515,7 @@ describe('Agent Routes Authorization', () => {
 
     mastra = new Mastra({
       agents: { 'test-agent': mockAgent },
+      storage,
       logger: false,
     });
   });
@@ -717,5 +733,625 @@ describe('Agent Routes Authorization', () => {
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-value');
     });
+  });
+
+  describe('RESUME_STREAM_ROUTE', () => {
+    async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status: 'suspended',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+        },
+      });
+    }
+
+    it('should return 400 when runId is missing', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RESUME_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          resumeData: { approved: true },
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+    });
+
+    it('should return 403 when memory option specifies thread owned by different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'resume-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RESUME_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'test-run-id',
+          resumeData: { step: 'next' },
+          memory: {
+            thread: 'resume-thread-owned-by-b',
+            resource: 'user-a',
+          },
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should return 403 when runId belongs to a different resource', async () => {
+      await persistAgenticLoopRun({ runId: 'resume-run-owned-by-b', resourceId: 'user-b' });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RESUME_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'resume-run-owned-by-b',
+          resumeData: { step: 'next' },
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+      );
+    });
+
+    it('should override client-provided resource with context value', async () => {
+      await mockMemory.createThread({
+        threadId: 'resume-thread-owned-by-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+        memory: {
+          thread: 'resume-thread-owned-by-a',
+          resource: 'user-b',
+        },
+      } as any);
+
+      expect(capturedOptions.memory.resource).toBe('user-a');
+    });
+
+    it('should use reserved requestContext memory keys when body memory is omitted', async () => {
+      await mockMemory.createThread({
+        threadId: 'resume-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+      await persistAgenticLoopRun({ runId: 'resume-run-from-context', resourceId: 'user-a' });
+
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'resume-thread-from-context',
+      });
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'resume-run-from-context',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(capturedOptions.memory).toMatchObject({
+        resource: 'user-a',
+        thread: 'resume-thread-from-context',
+      });
+      expect(capturedOptions.requestContext).toBe(requestContext);
+      expect(capturedOptions.runId).toBe('resume-run-from-context');
+    });
+
+    it('should pass resumeData, runId, and toolCallId to agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      let capturedResumeData: any;
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (resumeData, options) => {
+        capturedResumeData = resumeData;
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { workflowResult: 'approved' },
+        toolCallId: 'tool-call-123',
+      } as any);
+
+      expect(capturedResumeData).toEqual({ workflowResult: 'approved' });
+      expect(capturedOptions.runId).toBe('test-run-id');
+      expect(capturedOptions.toolCallId).toBe('tool-call-123');
+    });
+
+    it('should pass requestContext to agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      requestContext.set('custom-key', 'resume-value');
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-value');
+    });
+
+    it('should stash version overrides on requestContext before calling agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+        versions: {
+          agents: {
+            'sub-agent': { versionId: 'version-1' },
+          },
+        },
+      } as any);
+
+      expect(capturedOptions.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'sub-agent': { versionId: 'version-1' },
+        },
+      });
+    });
+
+    it('should pass abortSignal to agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      const abortController = new AbortController();
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: abortController.signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(capturedOptions.abortSignal).toBe(abortController.signal);
+    });
+
+    it('should work without toolCallId (optional)', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { customData: 'value' },
+      } as any);
+
+      expect(capturedOptions.toolCallId).toBeUndefined();
+      expect(capturedOptions.runId).toBe('test-run-id');
+    });
+
+    it('should return fullStream from agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      const expectedStream = new ReadableStream();
+
+      vi.spyOn(mockAgent, 'resumeStream').mockResolvedValue({
+        fullStream: expectedStream,
+      } as any);
+
+      const result = await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(result).toBe(expectedStream);
+    });
+  });
+
+  describe('SIGNAL_ROUTES', () => {
+    it('should validate typed user-message signal contents and attributes', () => {
+      const body = {
+        signal: {
+          type: 'user-message',
+          contents: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'describe these files' },
+                { type: 'image', image: 'data:image/png;base64,image-data', mediaType: 'image/png' },
+                { type: 'file', data: 'file-data', mimeType: 'application/pdf', filename: 'brief.pdf' },
+              ],
+              metadata: { source: 'studio' },
+            },
+          ],
+          attributes: { intent: 'follow-up', count: 1, urgent: false, empty: null },
+        },
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      };
+
+      expect(sendAgentSignalBodySchema.safeParse(body).success).toBe(true);
+    });
+
+    it('should validate string and string-array user-message signal contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: ['hello', 'again'] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should validate Mastra DB message shaped user-message signal contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: {
+            type: 'user-message',
+            contents: [
+              {
+                id: 'stored-message-1',
+                role: 'user',
+                createdAt: '2026-05-08T00:00:00.000Z',
+                threadId: 'thread-a',
+                resourceId: 'user-a',
+                content: {
+                  format: 2,
+                  content: 'stored hello',
+                  parts: [{ type: 'text', text: 'stored hello' }],
+                  metadata: { source: 'memory' },
+                },
+              },
+            ],
+          },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should reject malformed user-message content parts', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: {
+            type: 'user-message',
+            contents: { role: 'user', content: [{ type: 'image' }] },
+          },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should require non-user signals to use string contents', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: '<system-reminder>Use the tool result</system-reminder>' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: [{ role: 'user', content: 'not allowed' }] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should accept run-targeted signal bodies with active behavior', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'user-message', contents: 'pause here' },
+          runId: 'run-123',
+          ifActive: { behavior: 'persist' },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should accept thread-targeted signal bodies with active and idle behavior', () => {
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: '<system-reminder>review PR comment</system-reminder>' },
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ifActive: { behavior: 'discard' },
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: {
+              maxSteps: 3,
+              instructions: 'Use the PR context.',
+            },
+          },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should accept subscribe thread bodies', () => {
+      expect(
+        subscribeAgentThreadBodySchema.safeParse({
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should send a signal using context resource and thread values', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Signal Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      });
+      let capturedSignal: any;
+      let capturedTarget: any;
+
+      (mockAgent as any).sendSignal = vi.fn((signal, target) => {
+        capturedSignal = signal;
+        capturedTarget = target;
+        return { accepted: true, runId: 'signal-run-id' };
+      });
+
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'user-message', contents: 'hello', attributes: { source: 'test', attempt: 1 } },
+        resourceId: 'user-b',
+        threadId: 'client-thread',
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'signal-run-id' });
+      expect(capturedSignal).toEqual({
+        type: 'user-message',
+        contents: 'hello',
+        attributes: { source: 'test', attempt: 1 },
+      });
+      expect(capturedTarget).toMatchObject({
+        resourceId: 'user-a',
+        threadId: 'signal-thread-from-context',
+      });
+    });
+
+    it('should reject sending a signal to a thread owned by a different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should subscribe to a thread and stream future run chunks', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Subscribe Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-from-context',
+      });
+      let capturedTarget: any;
+      const unsubscribe = vi.fn();
+      const chunk = {
+        type: 'text-delta',
+        runId: 'subscribed-run-id',
+        from: 'AGENT',
+        payload: { id: 'text-1', text: 'hello' },
+      };
+
+      (mockAgent as any).subscribeToThread = vi.fn(async target => {
+        capturedTarget = target;
+        return {
+          activeRunId: () => null,
+          abort: () => false,
+          unsubscribe,
+          stream: (async function* () {
+            yield chunk;
+          })(),
+        } as any;
+      });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-b',
+        threadId: 'client-thread',
+      } as any)) as ReadableStream;
+
+      expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
+      const reader = stream.getReader();
+      await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
+      await reader.cancel();
+      expect(unsubscribe).toHaveBeenCalled();
+    });
+
+    it('should reject subscribing to a thread owned by a different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'subscribe-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+  });
+});
+
+describe('extractVersionOptions', () => {
+  it('should return undefined when no requestContext or bodyRequestContext', () => {
+    expect(extractVersionOptions()).toBeUndefined();
+    expect(extractVersionOptions(undefined, undefined)).toBeUndefined();
+  });
+
+  it('should extract agentVersionId from server RequestContext', () => {
+    const ctx = new RequestContext();
+    ctx.set('agentVersionId', 'version-from-server');
+    expect(extractVersionOptions(ctx)).toEqual({ versionId: 'version-from-server' });
+  });
+
+  it('should extract agentVersionId from body requestContext', () => {
+    const bodyCtx = { agentVersionId: 'version-from-body' };
+    expect(extractVersionOptions(undefined, bodyCtx)).toEqual({ versionId: 'version-from-body' });
+  });
+
+  it('should prefer server RequestContext over body requestContext', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', 'server-version');
+    const bodyCtx = { agentVersionId: 'body-version' };
+    expect(extractVersionOptions(serverCtx, bodyCtx)).toEqual({ versionId: 'server-version' });
+  });
+
+  it('should fall back to body when server RequestContext has no agentVersionId', () => {
+    const serverCtx = new RequestContext();
+    const bodyCtx = { agentVersionId: 'body-version' };
+    expect(extractVersionOptions(serverCtx, bodyCtx)).toEqual({ versionId: 'body-version' });
+  });
+
+  it('should return undefined for empty string agentVersionId in server context', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', '');
+    expect(extractVersionOptions(serverCtx)).toBeUndefined();
+  });
+
+  it('should return undefined for empty string agentVersionId in body context', () => {
+    expect(extractVersionOptions(undefined, { agentVersionId: '' })).toBeUndefined();
+  });
+
+  it('should return undefined for non-string agentVersionId values', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', 42);
+    expect(extractVersionOptions(serverCtx)).toBeUndefined();
+
+    expect(extractVersionOptions(undefined, { agentVersionId: 42 })).toBeUndefined();
+    expect(extractVersionOptions(undefined, { agentVersionId: true })).toBeUndefined();
+    expect(extractVersionOptions(undefined, { agentVersionId: null })).toBeUndefined();
+  });
+
+  it('should skip empty server context and use body when server value is non-string', () => {
+    const serverCtx = new RequestContext();
+    serverCtx.set('agentVersionId', 123);
+    const bodyCtx = { agentVersionId: 'valid-body-version' };
+    expect(extractVersionOptions(serverCtx, bodyCtx)).toEqual({ versionId: 'valid-body-version' });
+  });
+
+  it('should handle body requestContext without agentVersionId key', () => {
+    expect(extractVersionOptions(undefined, { otherKey: 'value' })).toBeUndefined();
+    expect(extractVersionOptions(undefined, {})).toBeUndefined();
   });
 });

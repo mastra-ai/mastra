@@ -1,12 +1,12 @@
 ---
-title: "Reference: MastraAuthFirebase Class | Auth"
+title: "Reference: MastraAuthFirebase class | Auth"
 description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
 packages:
   - "@mastra/auth-firebase"
   - "@mastra/core"
 ---
 
-# MastraAuthFirebase Class
+# MastraAuthFirebase class
 
 The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `auth` option.
 
@@ -78,9 +78,9 @@ export const mastra = new Mastra({
 ]}
 />
 
-## Environment Variables
+## Environment variables
 
-The following environment variables are automatically used when constructor options are not provided:
+The following environment variables are automatically used when constructor options aren't provided:
 
 <PropertiesTable
   content={[
@@ -106,7 +106,7 @@ The following environment variables are automatically used when constructor opti
 ]}
 />
 
-## Default Authorization Behavior
+## Default authorization behavior
 
 By default, `MastraAuthFirebase` uses Firestore to manage user access:
 
@@ -115,7 +115,7 @@ By default, `MastraAuthFirebase` uses Firestore to manage user access:
 1. If the document exists, the user is authorized; otherwise, access is denied
 1. The Firestore database used is determined by the `databaseId` parameter or environment variables
 
-## Firebase User Type
+## Firebase user type
 
 The `FirebaseUser` type used in the `authorizeUser` function corresponds to Firebase's `DecodedIdToken` interface, which includes:
 

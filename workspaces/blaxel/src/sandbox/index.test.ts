@@ -13,6 +13,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { BlaxelSandbox } from './index';
@@ -339,20 +340,27 @@ describe('BlaxelSandbox', () => {
     });
   });
 
-  describe('instance accessor', () => {
+  describe('blaxel accessor', () => {
     it('throws SandboxNotReadyError if not started', () => {
       const sandbox = new BlaxelSandbox();
 
-      expect(() => sandbox.instance).toThrow();
+      expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
     });
 
     it('returns Blaxel SandboxInstance when started', async () => {
       const sandbox = new BlaxelSandbox();
       await sandbox._start();
 
-      const instance = sandbox.instance;
+      const instance = sandbox.blaxel;
 
       expect(instance).toBe(mockSandbox);
+    });
+
+    it('deprecated instance getter delegates to blaxel', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      expect(sandbox.instance).toBe(sandbox.blaxel);
     });
   });
 
@@ -690,6 +698,40 @@ describe('BlaxelSandbox Mount Configuration', () => {
       expect(s3fsMountCall[0].command).toMatch(/\bro\b/);
     }
   });
+
+  it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
+    const sandbox = new BlaxelSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-prefix',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        prefix: 'workspace/data/',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-prefix');
+
+    const calls = mockSandbox.process.exec.mock.calls;
+    const s3fsMountCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('s3fs') && cmd.includes('/data/s3-prefix') && !cmd.includes('which');
+    });
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0].command).toContain('test-bucket:/workspace/data');
+      expect(s3fsMountCall[0].command).not.toContain('test-bucket:/workspace/data/');
+    }
+  });
 });
 
 /**
@@ -916,10 +958,10 @@ describe('BlaxelSandbox Error Handling', () => {
     (SandboxInstance.get as any).mockRejectedValue(new Error('not found'));
   });
 
-  it('SandboxNotReadyError thrown if instance accessed before start', () => {
+  it('SandboxNotReadyError thrown if blaxel accessed before start', () => {
     const sandbox = new BlaxelSandbox();
 
-    expect(() => sandbox.instance).toThrow(/not started|not ready|Sandbox/i);
+    expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
   });
 
   it('executeCommand auto-starts sandbox if not running', async () => {

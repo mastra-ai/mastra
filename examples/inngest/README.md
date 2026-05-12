@@ -41,9 +41,11 @@ See the [Observability Configuration](#observability-configuration) section for 
 npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server
 
 docker run --rm -p 8288:8288 \
-  inngest/inngest \
+  inngest/inngest:v1.18.0 \
   inngest dev -u http://host.docker.internal:3000/inngest/api
 ```
+
+> Requires `inngest@^4` and Inngest Dev Server `v1.18.0` or later. Realtime is built into the SDK in v4, so `@inngest/realtime` and `realtimeMiddleware` are no longer used.
 
 Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
 
@@ -356,14 +358,13 @@ import { PinoLogger } from '@mastra/loggers';
 import { Inngest } from 'inngest';
 import { activityPlanningWorkflow } from './workflows/inngest-workflow';
 import { planningAgent } from './agents/planning-agent';
-import { realtimeMiddleware } from '@inngest/realtime/middleware';
 
 // Create an Inngest instance for workflow orchestration and event handling
+// Realtime is built into the SDK in v4, so no middleware is needed.
 const inngest = new Inngest({
   id: 'mastra',
   baseUrl: `http://localhost:8288`, // URL of your local Inngest server
   isDev: true,
-  middleware: [realtimeMiddleware()], // Enable real-time updates in the Inngest dashboard
 });
 
 // Create and configure the main Mastra instance
@@ -378,7 +379,7 @@ export const mastra = new Mastra({
     host: '0.0.0.0',
     apiRoutes: [
       {
-        path: '/api/inngest', // API endpoint for Inngest to send events to
+        path: '/inngest/api', // API endpoint for Inngest to send events to
         method: 'ALL',
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },
@@ -566,7 +567,7 @@ For detailed information about flow control options and their behavior, see the 
 This example uses `@mastra/observability` to trace workflow execution. The configuration is in `index.ts`:
 
 ```ts
-import { Observability, ConsoleExporter, DefaultExporter } from '@mastra/observability';
+import { Observability, ConsoleExporter, MastraStorageExporter } from '@mastra/observability';
 
 const observability = new Observability({
   configs: {
@@ -575,7 +576,7 @@ const observability = new Observability({
       sampling: { type: 'always' }, // Sample all traces
       exporters: [
         new ConsoleExporter(), // Logs traces to console
-        new DefaultExporter(), // Persists traces to storage
+        new MastraStorageExporter(), // Persists traces to storage
       ],
     },
   },
@@ -629,3 +630,55 @@ new OtelExporter({
 ```
 
 For more information, see the [Mastra Observability documentation](https://mastra.ai/docs/observability).
+
+## Durable Agents
+
+This example includes two **durable agents** - AI agent loops that survive server crashes via Inngest's durable execution. Each step (LLM call, tool execution) is checkpointed and resumes automatically.
+
+### Included Durable Agents
+
+1. **Research Agent** (`research-agent`) - Simple agent with a web search tool
+2. **File Manager Agent** (`file-manager-agent`) - Demonstrates tool approval for dangerous operations (delete-file requires approval)
+
+### Running
+
+Start both the Inngest dev server and Mastra:
+
+```sh
+# Terminal 1: Inngest dev server
+pnpm start:inngest:server
+
+# Terminal 2: Mastra dev server + studio
+pnpm mastra:dev
+```
+
+Then open Mastra Studio and interact with the durable agents like any other agent. You can also monitor runs in the Inngest dashboard at http://localhost:8288.
+
+### Creating a Durable Agent
+
+```ts
+import { createInngestAgent } from '@mastra/inngest';
+import { Agent } from '@mastra/core/agent';
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful assistant.',
+  tools: {
+    /* your tools */
+  },
+});
+
+// Wrap with durable execution
+export const durableAgent = createInngestAgent({
+  agent: myAgent,
+  inngest,
+});
+
+// Register in mastra config - workflows auto-register
+export const mastra = new Mastra({
+  agents: { durableAgent },
+});
+```
+
+For more details, see the [Inngest Durable Agents guide](https://mastra.ai/docs/guides/deployment/inngest).
