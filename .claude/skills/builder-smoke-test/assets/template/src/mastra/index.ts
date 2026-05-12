@@ -110,7 +110,7 @@ export const mastra = new Mastra({
             allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-opus-4-7' }],
             default: {
               provider: 'openai',
-              modelId: 'gpt-4o-mini',
+              modelId: 'gpt-5.4',
             },
           },
           tools: { allowed: ['weather-info'] },
