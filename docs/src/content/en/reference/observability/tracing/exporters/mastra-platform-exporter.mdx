@@ -269,7 +269,7 @@ Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `
 
 ## Span wire format
 
-The shape of each span sent to Mastra Platform is documented here for reference only — it is not exported from `@mastra/observability` and should not be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
+The shape of each span sent to Mastra platform is documented here for reference only — it is not exported from `@mastra/observability` and should not be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
 
 ```typescript
 type MastraPlatformSpanRecord = AnyExportedSpan & {

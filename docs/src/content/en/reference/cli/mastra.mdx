@@ -580,7 +580,7 @@ It accepts [common flags][common-flags].
 
 ## `mastra api`
 
-Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra Platform projects, or self-hosted Mastra servers.
+Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, or self-hosted Mastra servers.
 
 ```bash
 mastra api agent list --pretty
@@ -622,9 +622,9 @@ The command resolves the target server in this order:
 
 1. `--url <url>` for an explicit remote or self-hosted server.
 1. `http://localhost:4111` for a local `mastra dev` server.
-1. `.mastra-project.json` for a Mastra Platform project.
+1. `.mastra-project.json` for a Mastra platform project.
 
-Automatic platform auth is only used when the CLI resolves a Mastra Platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
 
 ### Flags
 

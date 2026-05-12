@@ -149,7 +149,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'deployment/mastra-platform',
-          label: 'Mastra Platform',
+          label: 'Mastra platform',
         },
         {
           type: 'doc',
@@ -367,7 +367,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'migrations/mastra-cloud',
-          label: 'Mastra Cloud to Mastra Platform',
+          label: 'Mastra Cloud to Mastra platform',
         },
         {
           type: 'doc',
