@@ -9,7 +9,44 @@ vi.mock('node:fs/promises', async () => {
   };
 });
 
-const { writeObservabilityEnv } = await import('./utils');
+vi.mock('@clack/prompts', () => ({
+  select: vi.fn(),
+  isCancel: (v: unknown) => typeof v === 'symbol',
+}));
+
+vi.mock('../auth/credentials.js', () => ({
+  getToken: vi.fn(),
+}));
+
+const { promptForObservability, writeObservabilityEnv } = await import('./utils');
+const prompts = await import('@clack/prompts');
+const { getToken } = await import('../auth/credentials.js');
+
+const selectMock = vi.mocked(prompts.select);
+const getTokenMock = vi.mocked(getToken);
+
+describe('promptForObservability', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getTokenMock.mockResolvedValue('platform-token');
+  });
+
+  test('starts platform auth immediately when observability is enabled', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+
+    await expect(promptForObservability()).resolves.toEqual({ enabled: true, token: 'platform-token' });
+
+    expect(getTokenMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not start platform auth when observability is skipped', async () => {
+    selectMock.mockResolvedValueOnce('no' as never);
+
+    await expect(promptForObservability()).resolves.toEqual({ enabled: false });
+
+    expect(getTokenMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('writeObservabilityEnv', () => {
   const cwd = '/mock-project';
