@@ -7,7 +7,7 @@ import { Agent } from '../agent';
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
-const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+const openai_v5 = createOpenAIV5();
 
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
