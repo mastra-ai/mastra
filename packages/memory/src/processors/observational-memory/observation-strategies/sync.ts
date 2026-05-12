@@ -8,7 +8,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from '../markers';
-import { getLastObservedMessageCursor } from '../message-utils';
+import { getLastObservedMessageCursor, getObservableMessageIds } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
@@ -125,7 +125,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
 
-    const newMessageIds = messages.map(m => m.id);
+    const newMessageIds = getObservableMessageIds(messages);
     const existingIds = record.observedMessageIds ?? [];
     const observedMessageIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
 

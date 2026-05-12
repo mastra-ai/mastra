@@ -87,88 +87,33 @@ function messageHasToolCallForId(msg: MastraDBMessage, toolCallId: string): bool
   return false;
 }
 
-function messageHasToolResultLikeForId(msg: MastraDBMessage, toolCallId: string): boolean {
-  const parts = getMessageListPartsForToolScan(msg);
-  for (const raw of parts) {
-    const part = raw as ToolInvocationPart;
-    const type = part?.type;
-    const id = part?.toolInvocation?.toolCallId ?? part?.toolCallId;
-    if (id !== toolCallId) continue;
+/**
+ * Returns the subset of message IDs that are safe to mark as observed.
+ *
+ * Excludes any message that carries a tool call (state: 'call' or 'partial-call')
+ * whose matching result does not exist anywhere in the given message set.
+ * This stops a call from entering observedMessageIds before its result arrives —
+ * which is the root cause of client-side tool orphaning: once a call is observed,
+ * the next request's pruning can drop it while the result is still present.
+ */
+export function getObservableMessageIds(messages: MastraDBMessage[]): string[] {
+  const { withCallOrPartial, withResultLike } = scanToolInvocationIds(messages);
 
-    if (type === 'tool-invocation') {
-      const state = part.toolInvocation?.state;
-      if (state && TOOL_RESULT_LIKE_STATES.has(state)) return true;
-    } else if (type === 'tool-result') {
-      return true;
+  const unpairedCallIds = new Set<string>();
+  for (const id of withCallOrPartial) {
+    if (!withResultLike.has(id)) {
+      unpairedCallIds.add(id);
     }
   }
-  return false;
-}
 
-/**
- * When pruning messages for observational memory, avoid removing a message that would
- * orphan a tool-invocation `toolCallId` across the remaining thread (e.g. client-side
- * tools where the call and result may land in different {@link MastraDBMessage}s).
- *
- * @returns Message ids that are still safe to remove after applying pairing rules.
- */
-function partitionMessagesByRemovalPlan(
-  allMessages: MastraDBMessage[],
-  toRemove: ReadonlySet<string>,
-): { staying: MastraDBMessage[]; removed: MastraDBMessage[] } {
-  const staying: MastraDBMessage[] = [];
-  const removed: MastraDBMessage[] = [];
-  for (const m of allMessages) {
-    if (!m?.id || m.id === 'om-continuation') continue;
-    if (toRemove.has(m.id)) removed.push(m);
-    else staying.push(m);
-  }
-  return { staying, removed };
-}
-
-function restoreToolPairingDonors(
-  removed: MastraDBMessage[],
-  stayScan: ToolInvocationScan,
-  remScan: ToolInvocationScan,
-  toRemove: Set<string>,
-): boolean {
-  let changed = false;
-
-  for (const t of stayScan.withResultLike) {
-    if (stayScan.withCallOrPartial.has(t)) continue;
-    const donor = removed.find(m => m.id && messageHasToolCallForId(m, t));
-    if (!donor?.id) continue;
-    toRemove.delete(donor.id);
-    changed = true;
+  if (unpairedCallIds.size === 0) {
+    return messages.map(m => m.id).filter((id): id is string => !!id);
   }
 
-  for (const t of stayScan.withCallOrPartial) {
-    if (stayScan.withResultLike.has(t)) continue;
-    if (!remScan.withResultLike.has(t)) continue;
-    const donor = removed.find(m => m.id && messageHasToolResultLikeForId(m, t));
-    if (!donor?.id) continue;
-    toRemove.delete(donor.id);
-    changed = true;
-  }
-
-  return changed;
-}
-
-export function resolveMessageIdsToRemoveRespectingToolPairs(
-  allMessages: MastraDBMessage[],
-  candidateIdsToRemove: ReadonlySet<string>,
-): string[] {
-  const toRemove = new Set(candidateIdsToRemove);
-  const maxIter = Math.max(8, allMessages.length + 2);
-
-  for (let i = 0; i < maxIter; i++) {
-    const { staying, removed } = partitionMessagesByRemovalPlan(allMessages, toRemove);
-    const stayScan = scanToolInvocationIds(staying);
-    const remScan = scanToolInvocationIds(removed);
-    if (!restoreToolPairingDonors(removed, stayScan, remScan, toRemove)) break;
-  }
-
-  return [...toRemove];
+  return messages
+    .filter(m => !m.id || !Array.from(unpairedCallIds).some(id => messageHasToolCallForId(m, id)))
+    .map(m => m.id)
+    .filter((id): id is string => !!id);
 }
 
 /**
@@ -296,13 +241,7 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      const adjusted = resolveMessageIdsToRemoveRespectingToolPairs(
-        allMessages,
-        new Set(messagesToRemove.filter(Boolean)),
-      );
-      if (adjusted.length > 0) {
-        messageList.removeByIds(adjusted);
-      }
+      messageList.removeByIds(messagesToRemove);
     }
 
     const unobserved = getUnobservedParts(markerMessage);
@@ -342,13 +281,7 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      const adjusted = resolveMessageIdsToRemoveRespectingToolPairs(
-        allMessages,
-        new Set(messagesToRemove.filter(Boolean)),
-      );
-      if (adjusted.length > 0) {
-        messageList.removeByIds(adjusted);
-      }
+      messageList.removeByIds(messagesToRemove);
     }
   }
 }

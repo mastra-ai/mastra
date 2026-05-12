@@ -3,7 +3,7 @@ import { setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
-import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
+import { getBufferedChunks, combineObservationsForBuffering, getObservableMessageIds } from '../message-utils';
 
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
@@ -81,7 +81,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     }
 
     const observationTokens = this.tokenCounter.countObservations(newObservations);
-    const messageIds = messages.map(m => m.id);
+    const messageIds = getObservableMessageIds(messages);
     const maxTs = this.getMaxMessageTimestamp(messages);
     const lastObservedAt = new Date(maxTs.getTime() + 1);
 

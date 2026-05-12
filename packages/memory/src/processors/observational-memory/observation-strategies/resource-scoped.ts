@@ -8,7 +8,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from '../markers';
-import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
+import { getLastObservedMessageCursor, getObservableMessageIds, sortThreadsByOldestMessage } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { getMaxThreshold } from '../thresholds';
 
@@ -326,7 +326,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     const observedMessages = this.observationResults.flatMap(r => r.threadMessages);
     const lastObservedAt = this.getMaxMessageTimestamp(observedMessages);
-    const newMessageIds = observedMessages.map(m => m.id);
+    const newMessageIds = getObservableMessageIds(observedMessages);
     const existingIds = record.observedMessageIds ?? [];
     const observedMessageIds = [...new Set([...existingIds, ...newMessageIds])];
     const observationTokens = this.tokenCounter.countObservations(currentObservations);
