@@ -184,6 +184,81 @@ describe('Harness signal messages', () => {
     expect(abort).toHaveBeenCalled();
   });
 
+  it('aborts and unsubscribes the live thread stream when cleaning up the subscription', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'cleanup-subscription-agent',
+      name: 'cleanup-subscription-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const harness = createHarness(storage, agent);
+    const abort = vi.fn(() => true);
+    const unsubscribe = vi.fn();
+
+    await harness.createThread();
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe,
+      abort,
+      activeRunId: () => 'active-run-id',
+    });
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'active-run-id',
+      signal: createSignal({ type: 'user-message', contents: 'active hello' }),
+    });
+
+    const signal = harness.sendSignal({ content: 'active hello' });
+    await signal.accepted;
+    expect(harness.getCurrentRunId()).toBe('active-run-id');
+
+    await harness.createThread();
+
+    expect(abort).toHaveBeenCalled();
+    expect(unsubscribe).toHaveBeenCalled();
+    expect(harness.getCurrentRunId()).toBeNull();
+  });
+
+  it('emits an error and clears run state when a subscription iterator throws', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'throwing-subscription-agent',
+      name: 'throwing-subscription-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const harness = createHarness(storage, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await harness.createThread();
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {
+        yield { type: 'start', runId: 'run-1' };
+        throw new Error('subscription failed');
+      })(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: true,
+      runId: 'run-1',
+      signal: createSignal({ type: 'user-message', contents: 'active hello' }),
+    });
+
+    const signal = harness.sendSignal({ content: 'active hello' });
+    await signal.accepted;
+
+    await waitFor(() => events.some(event => event.type === 'agent_end' && event.reason === 'error'));
+
+    expect(events.some(event => event.type === 'error' && event.error.message === 'subscription failed')).toBe(true);
+    expect(harness.getCurrentRunId()).toBeNull();
+  });
+
   it('ignores trailing chunks from an aborted subscription run', async () => {
     const storage = new InMemoryStore();
     const agent = new Agent({
