@@ -130,6 +130,18 @@ jobs:
             --passWithNoTests
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
+          OPENAI_API_KEY: dummyapikey
+          OPENROUTER_API_KEY: dummyapikey
+          ANTHROPIC_API_KEY: dummyapikey
+          GOOGLE_GENERATIVE_AI_API_KEY: dummyapikey
+          COHERE_API_KEY: dummyapikey
+          PINECONE_API_KEY: dummyapikey
+          ASTRA_DB_ENDPOINT: https://dummy.local
+          ASTRA_DB_TOKEN: dummyapikey
+          CLOUDFLARE_API_TOKEN: dummyapikey
+          CLOUDFLARE_ACCOUNT_ID: dummyapikey
+          KV_REST_API_URL: https://dummy.local
+          KV_REST_API_TOKEN: dummyapikey
 
       - name: Upload test results
         if: always()
