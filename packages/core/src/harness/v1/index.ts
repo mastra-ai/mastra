@@ -27,6 +27,9 @@ export type {
   HarnessEventUnsubscribe,
   ModeChangedEvent,
   ModelChangedEvent,
+  PermissionGrantedEvent,
+  PermissionPolicyChangedEvent,
+  PermissionRevokedEvent,
   SessionClosedEvent,
   SessionCreatedEvent,
   SessionEvictedEvent,
@@ -88,6 +91,7 @@ export type {
   HarnessMode,
   HarnessWorkspaceConfig,
   ListMessagesOptions,
+  PermissionPolicy,
   SessionListOptions,
   SessionLoadByIdOptions,
   SessionRecord,
@@ -107,4 +111,7 @@ export type {
   ThreadRecord,
   ThreadRenameOptions,
   ThreadSelectOrCreateOptions,
+  ToolCategory,
 } from './types';
+
+export type { PermissionRules, SessionGrants } from '../../storage/domains/harness';

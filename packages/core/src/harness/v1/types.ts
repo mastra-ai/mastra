@@ -84,6 +84,33 @@ export interface HarnessMode {
 }
 
 // ---------------------------------------------------------------------------
+// Permissions (§4.2e).
+//
+// The permission gate combines tool identity (name + category), session
+// policy (rules + grants), harness defaults, and tool-owned approval flags
+// to decide allow / ask / deny for each tool invocation. These types are
+// the public surface; the gate evaluation lives next to the tool dispatch
+// path.
+// ---------------------------------------------------------------------------
+
+/**
+ * Coarse-grained classification used to write rules without enumerating
+ * every tool. Resolved per-call via `HarnessConfig.toolCategoryResolver`.
+ *
+ * The `'mcp'` category covers tools provided by MCP servers; `'other'` is
+ * the bucket for anything an integration intentionally leaves
+ * unclassified.
+ */
+export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+
+/**
+ * Outcome of a permission rule (§4.2e). Per-tool rules win over category
+ * rules; explicit `'deny'` is terminal. Session-scoped grants can suppress
+ * an `'ask'` reason but never override `'deny'`.
+ */
+export type PermissionPolicy = 'allow' | 'ask' | 'deny';
+
+// ---------------------------------------------------------------------------
 // Placeholders.
 //
 // These are intentionally empty/loose. Each gets filled in as we work
@@ -237,6 +264,36 @@ export interface HarnessConfigCommon {
     defaultJudgeModel?: string;
     defaultMaxTurns?: number;
   };
+
+  /**
+   * Default policy applied when a tool's resolved category has no rule and
+   * no per-tool override (§4.2e). Set to `'allow'` to opt out of the gate
+   * entirely; set to `'deny'` for a strict allow-list posture. Defaults to
+   * `'ask'`.
+   */
+  defaultPermissionPolicy?: PermissionPolicy;
+
+  /**
+   * Resolves a tool name to its category for permission-gate evaluation
+   * (§4.2e). Returning `null` leaves the tool uncategorised — only per-tool
+   * rules apply, and `defaultPermissionPolicy` is the floor.
+   *
+   * Pure function — must not read from the harness or perform IO. Called
+   * synchronously inside the gate.
+   *
+   * The function form is primary. {@link toolCategories} is accepted as
+   * optional sugar and desugars to `(name) => toolCategories[name] ?? null`
+   * at construction time. When both are provided the resolver wins.
+   */
+  toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+
+  /**
+   * Optional sugar for {@link toolCategoryResolver} — a static
+   * `toolName -> ToolCategory` map. Equivalent to passing a resolver of
+   * `(name) => toolCategories[name] ?? null`. Ignored when
+   * `toolCategoryResolver` is also set.
+   */
+  toolCategories?: Record<string, ToolCategory>;
 
   /**
    * Workspace configuration (§2.7). Selects one of three ownership models —

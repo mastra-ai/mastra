@@ -24,6 +24,7 @@ import type { TaskItem } from '../../tools/builtin/shared';
 import { HarnessEventSerializationError, HarnessValidationError } from './errors';
 import type { EventSerializationReason } from './errors';
 import type { SessionLifecycleState } from './session';
+import type { PermissionPolicy, ToolCategory } from './types';
 
 // ---------------------------------------------------------------------------
 // Event base.
@@ -88,6 +89,35 @@ export interface ModelChangedEvent extends HarnessEventBase {
 export interface StateChangedEvent extends HarnessEventBase {
   type: 'state_changed';
   changedKeys: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Permission events (§4.2e).
+//
+// Emitted whenever the session's permission rules or session-scoped grants
+// change. Exactly one of `category` / `toolName` is set on each event so
+// subscribers can route to per-category vs per-tool views without
+// inspecting payload shape.
+// ---------------------------------------------------------------------------
+
+export interface PermissionGrantedEvent extends HarnessEventBase {
+  type: 'permission_granted';
+  category?: ToolCategory;
+  toolName?: string;
+}
+
+export interface PermissionRevokedEvent extends HarnessEventBase {
+  type: 'permission_revoked';
+  category?: ToolCategory;
+  toolName?: string;
+}
+
+export interface PermissionPolicyChangedEvent extends HarnessEventBase {
+  type: 'permission_policy_changed';
+  category?: ToolCategory;
+  toolName?: string;
+  oldPolicy: PermissionPolicy | undefined;
+  newPolicy: PermissionPolicy;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,6 +499,9 @@ export type HarnessEvent =
   | ModeChangedEvent
   | ModelChangedEvent
   | StateChangedEvent
+  | PermissionGrantedEvent
+  | PermissionRevokedEvent
+  | PermissionPolicyChangedEvent
   | AgentStartEvent
   | MessageStartEvent
   | MessageUpdateEvent
@@ -691,6 +724,9 @@ const RESERVED_EVENT_TYPES: ReadonlySet<string> = new Set([
   'goal_cleared',
   'workspace_status_changed',
   'workspace_error',
+  'permission_granted',
+  'permission_revoked',
+  'permission_policy_changed',
 ]);
 
 /** Prefixes reserved for built-in event families (subagent_*, goal_*, etc.). */
@@ -701,6 +737,7 @@ const RESERVED_EVENT_PREFIXES: readonly string[] = [
   'session_',
   'workspace_',
   'thread_',
+  'permission_',
 ];
 
 /**

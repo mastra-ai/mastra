@@ -299,7 +299,17 @@ interface HarnessConfig<TState = Record<string, unknown>> {
 
   // Tooling
   tools?: ToolsetInput;                               // Available tools
-  toolCategories?: Record<string, ToolCategory>;      // Authoritative tool -> category mapping
+  // Authoritative tool -> category mapping. The function form is primary:
+  // categorization is a function of tool identity, and adapters may need to
+  // inspect tool metadata, configured groups, or naming conventions rather
+  // than enumerate every tool. Returning `null` means "no configured
+  // category" and falls through to the §4.2e permission rules (per-tool
+  // rule -> `defaultPermissionPolicy` -> `ask`). `toolCategories` remains
+  // accepted as optional sugar and desugars to
+  // `(name) => toolCategories[name] ?? null` at config validation. When both
+  // are provided, the resolver takes precedence and the map is ignored.
+  toolCategoryResolver?: (toolName: string) => ToolCategory | null;
+  toolCategories?: Record<string, ToolCategory>;      // Optional sugar for the resolver above
   defaultPermissionPolicy?: PermissionPolicy;         // Default approval behavior
 
   // Lifecycle hooks

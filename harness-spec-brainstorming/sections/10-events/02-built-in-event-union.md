@@ -92,7 +92,18 @@ type StateEvent =
   | { type: 'state_changed'; state: Record<string, JsonValue>; changedKeys: string[] }
   | { type: 'mode_changed';  modeId: string }
   | { type: 'model_changed'; modelId: string }
-  | { type: 'token_usage_changed'; usage: TokenUsage };
+  | { type: 'token_usage_changed'; usage: TokenUsage }
+  // Permission mutations (§4.2e). Emitted only after the owning session's
+  // `SessionRecord.permissionRules` / `sessionGrants` transition commits under
+  // the session lease; validation, closed-session, ownership, or storage
+  // failures reject before any of these events are emitted. Exactly one of
+  // `category` / `toolName` is set, matching the originating mutator. These
+  // are advisory notifications for display/audit projections; the permission
+  // gate (§4.2e) always reads the authoritative `SessionRecord` row, never
+  // these events.
+  | { type: 'permission_granted'; category?: ToolCategory; toolName?: string }
+  | { type: 'permission_revoked'; category?: ToolCategory; toolName?: string }
+  | { type: 'permission_policy_changed'; category?: ToolCategory; toolName?: string; oldPolicy: PermissionPolicy; newPolicy: PermissionPolicy };
 
 // Turn (session-scoped)
 type TurnEvent =

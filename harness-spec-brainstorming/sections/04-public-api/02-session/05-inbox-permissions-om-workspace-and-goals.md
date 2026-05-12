@@ -114,9 +114,12 @@ observational memory, workspace, goal, and token-usage semantics):
 
   // Permissions. Mutators write `SessionRecord.permissionRules` /
   // `SessionRecord.sessionGrants` and resolve only after the durable transition
-  // commits under the session lease. Validation, closed-session, ownership, or
-  // storage failures reject before any permission event or display projection is
-  // emitted. Tool approval evaluation is separate from route/resource/principal
+  // commits under the session lease. On commit, `grantCategory` / `grantTool`
+  // emit `permission_granted`, `revokeCategory` / `revokeTool` emit
+  // `permission_revoked`, and `setPolicy` emits `permission_policy_changed`
+  // (see §10.2). Validation, closed-session, ownership, or storage failures
+  // reject before any permission event or display projection is emitted. Tool
+  // approval evaluation is separate from route/resource/principal
   // authorization; remote calls must pass the §13.2 authorization matrix before
   // admission, and neither `yolo` nor grants can bypass that boundary.
   //

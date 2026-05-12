@@ -32,7 +32,9 @@ import type {
   GoalState,
   HarnessStorage,
   PendingResume,
+  PermissionRules,
   QueuedItem,
+  SessionGrants,
   SessionRecord,
 } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
@@ -70,7 +72,9 @@ import type {
   MessageOptionsDefault,
   MessageOptionsStream,
   MessageOptionsStructured,
+  PermissionPolicy,
   QueueOptions,
+  ToolCategory,
 } from './types';
 
 /**
@@ -115,6 +119,32 @@ const GoalJudgeSchema = z.object({
 
 /** Per-message cap on judge-context strings to keep judge latency bounded. */
 const JUDGE_TRUNCATE_LIMIT = 4000;
+
+// ---------------------------------------------------------------------------
+// Permission helpers (§4.2e). Tiny shape validators kept module-scoped so the
+// session methods stay focused on persistence + event emission.
+// ---------------------------------------------------------------------------
+
+const TOOL_CATEGORIES: readonly ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
+const PERMISSION_POLICIES: readonly PermissionPolicy[] = ['allow', 'ask', 'deny'];
+
+function assertToolCategory(method: string, value: unknown): asserts value is ToolCategory {
+  if (typeof value !== 'string' || !TOOL_CATEGORIES.includes(value as ToolCategory)) {
+    throw new HarnessValidationError(method, `unknown ToolCategory ${JSON.stringify(value)}`);
+  }
+}
+
+function assertToolName(method: string, value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HarnessValidationError(method, 'toolName must be a non-empty string');
+  }
+}
+
+function assertPolicy(method: string, value: unknown): asserts value is PermissionPolicy {
+  if (typeof value !== 'string' || !PERMISSION_POLICIES.includes(value as PermissionPolicy)) {
+    throw new HarnessValidationError(method, `policy must be one of ${PERMISSION_POLICIES.join(' | ')}`);
+  }
+}
 
 function truncateForJudge(value: string): string {
   return value.length > JUDGE_TRUNCATE_LIMIT ? value.slice(0, JUDGE_TRUNCATE_LIMIT) + '\n...[truncated]' : value;
@@ -1745,6 +1775,181 @@ export class Session {
       approved: opts.approved,
       revision: opts.revision,
       transitionToMode: opts.transitionToMode,
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Permissions (§4.2e).
+  //
+  // Session-scoped grants (`SessionRecord.sessionGrants`) and policy rules
+  // (`SessionRecord.permissionRules`) compose with the tool's static
+  // approval flag, the harness `defaultPermissionPolicy`, and any
+  // resolver-supplied category to decide allow/ask/deny on each tool call.
+  //
+  // Both surfaces are persisted under the session's write lease so a crash
+  // mid-grant either lands entirely or not at all.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Session permissions namespace (§4.2e). All mutators write
+   * `SessionRecord.permissionRules` / `SessionRecord.sessionGrants` under
+   * the session lease and resolve only after the durable transition
+   * commits. Validation, closed-session, ownership, or storage failures
+   * reject before any event or display projection is emitted.
+   */
+  readonly permissions = Object.freeze({
+    grantCategory: (opts: { category: ToolCategory }): Promise<void> => this._permGrantCategory(opts),
+    grantTool: (opts: { toolName: string }): Promise<void> => this._permGrantTool(opts),
+    revokeCategory: (opts: { category: ToolCategory }): Promise<void> => this._permRevokeCategory(opts),
+    revokeTool: (opts: { toolName: string }): Promise<void> => this._permRevokeTool(opts),
+    getGrants: (): Readonly<SessionGrants> => this._permGetGrants(),
+    getRules: (): Readonly<PermissionRules> => this._permGetRules(),
+    setPolicy: (
+      opts:
+        | { category: ToolCategory; toolName?: never; policy: PermissionPolicy }
+        | { toolName: string; category?: never; policy: PermissionPolicy },
+    ): Promise<void> => this._permSetPolicy(opts),
+  });
+
+  /**
+   * Grant every tool in a category for the lifetime of this session
+   * ("don't ask again for `read` tools"). No-op if already granted.
+   * Emits `permission_granted` on a transition.
+   */
+  private async _permGrantCategory(opts: { category: ToolCategory }): Promise<void> {
+    this._assertLive('permissions.grantCategory()');
+    assertToolCategory('permissions.grantCategory', opts.category);
+    if (this._record.sessionGrants.categories.includes(opts.category)) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        categories: [...prev.sessionGrants.categories, opts.category],
+      },
+    }));
+    this._emitter.emit({ type: 'permission_granted', category: opts.category });
+  }
+
+  /**
+   * Grant a specific tool for the lifetime of this session. No-op if
+   * already granted. Emits `permission_granted` on a transition.
+   */
+  private async _permGrantTool(opts: { toolName: string }): Promise<void> {
+    this._assertLive('permissions.grantTool()');
+    assertToolName('permissions.grantTool', opts.toolName);
+    if (this._record.sessionGrants.tools.includes(opts.toolName)) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        tools: [...prev.sessionGrants.tools, opts.toolName],
+      },
+    }));
+    this._emitter.emit({ type: 'permission_granted', toolName: opts.toolName });
+  }
+
+  /**
+   * Revoke a previously granted category. No-op if not granted. Emits
+   * `permission_revoked` on a transition.
+   */
+  private async _permRevokeCategory(opts: { category: ToolCategory }): Promise<void> {
+    this._assertLive('permissions.revokeCategory()');
+    assertToolCategory('permissions.revokeCategory', opts.category);
+    const idx = this._record.sessionGrants.categories.indexOf(opts.category);
+    if (idx === -1) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        categories: prev.sessionGrants.categories.filter(c => c !== opts.category),
+      },
+    }));
+    this._emitter.emit({ type: 'permission_revoked', category: opts.category });
+  }
+
+  /**
+   * Revoke a previously granted tool. No-op if not granted. Emits
+   * `permission_revoked` on a transition.
+   */
+  private async _permRevokeTool(opts: { toolName: string }): Promise<void> {
+    this._assertLive('permissions.revokeTool()');
+    assertToolName('permissions.revokeTool', opts.toolName);
+    const idx = this._record.sessionGrants.tools.indexOf(opts.toolName);
+    if (idx === -1) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      sessionGrants: {
+        ...prev.sessionGrants,
+        tools: prev.sessionGrants.tools.filter(t => t !== opts.toolName),
+      },
+    }));
+    this._emitter.emit({ type: 'permission_revoked', toolName: opts.toolName });
+  }
+
+  /** Read-only snapshot of the session's current grants. */
+  private _permGetGrants(): Readonly<SessionGrants> {
+    this._assertLive('permissions.getGrants()');
+    const { categories, tools } = this._record.sessionGrants;
+    return Object.freeze({ categories: [...categories], tools: [...tools] });
+  }
+
+  /** Read-only snapshot of the session's current per-category / per-tool rules. */
+  private _permGetRules(): Readonly<PermissionRules> {
+    this._assertLive('permissions.getRules()');
+    const { categories, tools } = this._record.permissionRules;
+    return Object.freeze({ categories: { ...categories }, tools: { ...tools } });
+  }
+
+  /**
+   * Set a permission rule. Exactly one of `category` / `toolName` must be
+   * set — the wire shape and the storage shape both keep these
+   * dimensions separate so subscribers can route without inspecting the
+   * payload. Emits `permission_policy_changed` on a transition.
+   */
+  private async _permSetPolicy(
+    opts:
+      | { category: ToolCategory; toolName?: never; policy: PermissionPolicy }
+      | { toolName: string; category?: never; policy: PermissionPolicy },
+  ): Promise<void> {
+    this._assertLive('permissions.setPolicy()');
+    if ((opts.category === undefined) === (opts.toolName === undefined)) {
+      throw new HarnessValidationError('permissions.setPolicy', 'must set exactly one of "category" or "toolName"');
+    }
+    assertPolicy('permissions.setPolicy', opts.policy);
+    if (opts.category !== undefined) {
+      assertToolCategory('permissions.setPolicy', opts.category);
+      const oldPolicy = this._record.permissionRules.categories[opts.category];
+      if (oldPolicy === opts.policy) return;
+      await this._flushUpdate(prev => ({
+        ...prev,
+        permissionRules: {
+          ...prev.permissionRules,
+          categories: { ...prev.permissionRules.categories, [opts.category!]: opts.policy },
+        },
+      }));
+      this._emitter.emit({
+        type: 'permission_policy_changed',
+        category: opts.category,
+        oldPolicy,
+        newPolicy: opts.policy,
+      });
+      return;
+    }
+    assertToolName('permissions.setPolicy', opts.toolName!);
+    const oldPolicy = this._record.permissionRules.tools[opts.toolName!];
+    if (oldPolicy === opts.policy) return;
+    await this._flushUpdate(prev => ({
+      ...prev,
+      permissionRules: {
+        ...prev.permissionRules,
+        tools: { ...prev.permissionRules.tools, [opts.toolName!]: opts.policy },
+      },
+    }));
+    this._emitter.emit({
+      type: 'permission_policy_changed',
+      toolName: opts.toolName,
+      oldPolicy,
+      newPolicy: opts.policy,
     });
   }
 

@@ -28,6 +28,10 @@ export interface HarnessTestSetupOptions {
   workspace?: HarnessConfig['workspace'];
   /** Optional subagent registry. */
   subagents?: HarnessConfig['subagents'];
+  /** Optional default permission policy (§4.2e). */
+  defaultPermissionPolicy?: HarnessConfig['defaultPermissionPolicy'];
+  /** Optional tool-category resolver (§4.2e). */
+  toolCategoryResolver?: HarnessConfig['toolCategoryResolver'];
 }
 
 export interface HarnessTestSetup {
@@ -54,6 +58,8 @@ export function setupHarness(opts: HarnessTestSetupOptions = {}): HarnessTestSet
     ...(opts.goals ? { goals: opts.goals } : {}),
     ...(opts.workspace ? { workspace: opts.workspace } : {}),
     ...(opts.subagents ? { subagents: opts.subagents } : {}),
+    ...(opts.defaultPermissionPolicy ? { defaultPermissionPolicy: opts.defaultPermissionPolicy } : {}),
+    ...(opts.toolCategoryResolver ? { toolCategoryResolver: opts.toolCategoryResolver } : {}),
   });
   const firstAgent = Object.values(agents)[0]!;
   return { harness, agent: firstAgent, agents, storage };

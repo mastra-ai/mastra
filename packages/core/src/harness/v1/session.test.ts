@@ -231,6 +231,13 @@ describe('Session — surface area (M1)', () => {
         'respondToToolSuspension',
         'respondToQuestion',
         'respondToPlanApproval',
+        '_permGrantCategory',
+        '_permGrantTool',
+        '_permRevokeCategory',
+        '_permRevokeTool',
+        '_permGetGrants',
+        '_permGetRules',
+        '_permSetPolicy',
         'subscribe',
         '_assertLive',
         '_beginTurn',
@@ -278,5 +285,14 @@ describe('Session — surface area (M1)', () => {
     // Sanity check on instance-side identity readonly fields.
     expect(typeof session.id).toBe('string');
     expect(typeof session.threadId).toBe('string');
+  });
+
+  it('exposes a frozen `permissions` namespace with the §4.2e methods', () => {
+    const { session } = makeStandaloneSession();
+    expect(typeof session.permissions).toBe('object');
+    expect(Object.isFrozen(session.permissions)).toBe(true);
+    expect(Object.keys(session.permissions).sort()).toEqual(
+      ['getGrants', 'getRules', 'grantCategory', 'grantTool', 'revokeCategory', 'revokeTool', 'setPolicy'].sort(),
+    );
   });
 });

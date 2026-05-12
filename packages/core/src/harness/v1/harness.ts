@@ -53,6 +53,7 @@ import type {
   AttachmentUploadOptions,
   HarnessConfig,
   HarnessMode,
+  PermissionPolicy,
   SessionListOptions,
   SessionLoadByIdOptions,
   SessionResolveOptions,
@@ -67,6 +68,7 @@ import type {
   ThreadRecord,
   ThreadRenameOptions,
   ThreadSelectOrCreateOptions,
+  ToolCategory,
 } from './types';
 import { WorkspaceRegistry } from './workspace-registry';
 
@@ -74,6 +76,7 @@ const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
 const DEFAULT_SUBAGENT_MAX_DEPTH = 1;
 const DEFAULT_GOAL_MAX_TURNS = 50;
+const DEFAULT_PERMISSION_POLICY: PermissionPolicy = 'ask';
 
 export class Harness {
   /** Process-scoped owner id used as the lease holder for all sessions. */
@@ -99,6 +102,8 @@ export class Harness {
   private readonly _subagentTypes: ReadonlyMap<string, SubagentDefinition>;
   private readonly _subagentMaxDepth: number;
   private readonly _goalDefaults: { defaultJudgeModel?: string; defaultMaxTurns: number };
+  private readonly _defaultPermissionPolicy: PermissionPolicy;
+  private readonly _toolCategoryResolver?: (toolName: string) => ToolCategory | null;
   private readonly _emitter = new EventEmitter();
   /** Per-session unsubscribers so harness-level subscribers see session events too. */
   private readonly _sessionEventBridges = new Map<string, HarnessEventUnsubscribe>();
@@ -150,6 +155,42 @@ export class Harness {
       ...(goalsCfg?.defaultJudgeModel !== undefined ? { defaultJudgeModel: goalsCfg.defaultJudgeModel } : {}),
       defaultMaxTurns: goalsCfg?.defaultMaxTurns ?? DEFAULT_GOAL_MAX_TURNS,
     };
+
+    // Permission gate config (§4.2e).
+    if (
+      config.defaultPermissionPolicy !== undefined &&
+      config.defaultPermissionPolicy !== 'allow' &&
+      config.defaultPermissionPolicy !== 'ask' &&
+      config.defaultPermissionPolicy !== 'deny'
+    ) {
+      throw new HarnessConfigError(
+        'defaultPermissionPolicy',
+        `must be one of 'allow' | 'ask' | 'deny' (received: ${JSON.stringify(config.defaultPermissionPolicy)})`,
+      );
+    }
+    if (config.toolCategoryResolver !== undefined && typeof config.toolCategoryResolver !== 'function') {
+      throw new HarnessConfigError('toolCategoryResolver', 'must be a function');
+    }
+    if (
+      config.toolCategories !== undefined &&
+      (typeof config.toolCategories !== 'object' ||
+        config.toolCategories === null ||
+        Array.isArray(config.toolCategories))
+    ) {
+      throw new HarnessConfigError('toolCategories', 'must be a Record<string, ToolCategory>');
+    }
+    this._defaultPermissionPolicy = config.defaultPermissionPolicy ?? DEFAULT_PERMISSION_POLICY;
+    // `toolCategoryResolver` is primary; `toolCategories` is sugar that
+    // desugars to `(name) => toolCategories[name] ?? null`. When both are
+    // provided the resolver wins (§9.1 sugar contract).
+    if (config.toolCategoryResolver) {
+      this._toolCategoryResolver = config.toolCategoryResolver;
+    } else if (config.toolCategories) {
+      const map = config.toolCategories;
+      this._toolCategoryResolver = (name: string) => map[name] ?? null;
+    } else {
+      this._toolCategoryResolver = undefined;
+    }
 
     // Workspace (§2.7). Three ownership models; registry handles lifecycle.
     // Cross-checks against the subagent registry happen below.
@@ -434,6 +475,27 @@ export class Harness {
    */
   getMode(modeId: string): HarnessMode | undefined {
     return this._modesById.get(modeId);
+  }
+
+  // -------------------------------------------------------------------------
+  // Permission gate accessors — §4.2e.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Resolve a tool name to its category, using the resolver configured on
+   * `HarnessConfig.toolCategoryResolver`. Returns `null` for tools with no
+   * configured resolver or that the resolver explicitly leaves
+   * uncategorised. Used by the permission gate and by TUIs that want to
+   * render tools grouped by category.
+   */
+  getToolCategory(opts: { toolName: string }): ToolCategory | null {
+    if (!this._toolCategoryResolver) return null;
+    return this._toolCategoryResolver(opts.toolName) ?? null;
+  }
+
+  /** @internal — Session reads this as the floor when no per-tool / per-category rule applies. */
+  _getDefaultPermissionPolicy(): PermissionPolicy {
+    return this._defaultPermissionPolicy;
   }
 
   // -------------------------------------------------------------------------
