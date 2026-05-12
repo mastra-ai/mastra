@@ -62,10 +62,12 @@ export function useCredentialsSignUp() {
 
   return useMutation<CredentialsSignUpResponse, Error, CredentialsSignUpRequest>({
     mutationFn: async ({ email, password, name }) => {
-      const baseUrl = (client as any).options?.baseUrl || '';
+      const { baseUrl = '', apiPrefix } = (client as any).options || {};
+      const raw = (apiPrefix || '/api').trim();
+      const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
       // Generic Mastra auth endpoint - works with any credentials provider
-      const response = await fetch(`${baseUrl}/api/auth/credentials/sign-up`, {
+      const response = await fetch(`${baseUrl}${prefix}/auth/credentials/sign-up`, {
         method: 'POST',
         credentials: 'include',
         headers: {
