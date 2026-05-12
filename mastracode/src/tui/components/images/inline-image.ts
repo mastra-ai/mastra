@@ -11,6 +11,12 @@
  * followed by a kitty `\x1b_G` APC — the CSI scanner stops at `G` and
  * swallows the APC introducer. The line gets treated as thousands of
  * columns wide and sliced mid-payload, rendering as raw base64.
+ *
+ * Lifecycle: register in constructor; the owning component MUST call
+ * `dispose()` before discarding the instance so the manager can drop
+ * the registration and delete the kitty placement. Without dispose,
+ * the manager accumulates dead registrations that ghost on overlay
+ * toggles.
  */
 
 import { visibleWidth } from '@mariozechner/pi-tui';
@@ -65,6 +71,11 @@ export class InlineImageComponent implements Component, ImageOwner {
     imageManager.register(this, this.kittyImageId);
   }
 
+  /** Drop manager registration. Call before discarding the instance. */
+  dispose(): void {
+    imageManager.unregister(this);
+  }
+
   render(): string[] {
     if (imageManager.isPlaceholder(this)) {
       return this.placeholderLines;
@@ -75,5 +86,7 @@ export class InlineImageComponent implements Component, ImageOwner {
     return lines;
   }
 
+  // Required by pi-tui Component. No cached state to invalidate: placeholder
+  // lines are theme-stable and drawn lines are rebuilt every render().
   invalidate(): void {}
 }

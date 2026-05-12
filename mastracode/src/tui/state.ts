@@ -4,8 +4,8 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
+import { Container, ProcessTerminal } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Text, TUI } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
@@ -18,7 +18,7 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
-import { imageManager } from './components/images/index.js';
+import { imageManager, ViewportAwareTUI } from './components/images/index.js';
 import type { GradientAnimator } from './components/obi-loader.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
@@ -221,7 +221,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   Object.defineProperty(terminal, 'columns', {
     get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
   });
-  const ui = new TUI(terminal);
+  const ui = new ViewportAwareTUI(terminal);
   imageManager.attachTui(ui);
 
   // Perf profiling removed

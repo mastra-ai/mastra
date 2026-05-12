@@ -135,6 +135,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
+  /** Live InlineImageComponent instances; disposed before each rebuild so
+   * the image manager doesn't accumulate stale registrations. */
+  private inlineImages: InlineImageComponent[] = [];
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -213,6 +216,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
    */
   private rebuild(): void {
     this.updateBgColor();
+    // Dispose any image components from the previous build so the image
+    // manager can drop their registrations and delete kitty placements.
+    for (const img of this.inlineImages) img.dispose();
+    this.inlineImages = [];
     this.contentBox.clear();
 
     switch (this.toolName) {
@@ -1592,16 +1599,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       if (rendered) {
         const borderPrefix = borderFn('│') + ' ';
         const moveUp = rendered.rows > 1 ? `\x1b[${rendered.rows - 1}A` : '';
-        this.contentBox.addChild(
-          new InlineImageComponent({
-            rows: rendered.rows,
-            borderPrefix,
-            sequence: rendered.sequence,
-            moveUp,
-            contentWidth: maxWidthCells,
-            kittyImageId: rendered.imageId,
-          }),
-        );
+        const imageComponent = new InlineImageComponent({
+          rows: rendered.rows,
+          borderPrefix,
+          sequence: rendered.sequence,
+          moveUp,
+          contentWidth: maxWidthCells,
+          kittyImageId: rendered.imageId,
+        });
+        this.inlineImages.push(imageComponent);
+        this.contentBox.addChild(imageComponent);
       } else {
         this.contentBox.addChild(
           new Text(borderFn('│') + ' ' + theme.fg('muted', imageFallback(img.mimeType, dims)), 0, 0),
