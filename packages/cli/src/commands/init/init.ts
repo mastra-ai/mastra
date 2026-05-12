@@ -37,6 +37,7 @@ export const init = async ({
   observability,
   observabilityProject,
   observabilityMode = 'pick',
+  observabilityToken,
 }: {
   directory?: string;
   components: Component[];
@@ -49,6 +50,7 @@ export const init = async ({
   initGit?: boolean;
   observability?: boolean;
   observabilityProject?: string;
+  observabilityToken?: string;
   /**
    * `'create'` skips the picker and always provisions a new platform project
    * named after the local one (used by `create-mastra`). `'pick'` shows the
@@ -202,6 +204,7 @@ export const init = async ({
           defaultProjectName,
           observabilityProject,
           mode: observabilityMode,
+          token: observabilityToken,
         });
         await writeObservabilityEnv({
           token: result.token,
@@ -224,7 +227,7 @@ export const init = async ({
 
   Empty ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.
 
-  1. Visit ${color.cyan('https://projects.mastra.ai')} to create a project and mint an access token.
+  1. Visit ${color.cyan('https://projects.mastra.ai')} to create a project and an access token.
   2. Paste the token into ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and the project id into ${color.cyan('MASTRA_PROJECT_ID')}.`,
         );
       }

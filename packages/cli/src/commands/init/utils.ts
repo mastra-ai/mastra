@@ -11,6 +11,7 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
+import { getToken } from '../auth/credentials.js';
 import {
   cursorGlobalMCPConfigPath,
   windsurfGlobalMCPConfigPath,
@@ -25,6 +26,28 @@ export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
 
 export type LLMProvider = (typeof LLMProvider)[number];
 export type Component = (typeof COMPONENTS)[number];
+
+export interface ObservabilityPromptResult {
+  enabled?: boolean;
+  token?: string;
+}
+
+export async function promptForObservability(): Promise<ObservabilityPromptResult> {
+  const choice = await p.select({
+    message: 'Enable Mastra Observability? (will open auth flow)',
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+    initialValue: 'yes',
+  });
+
+  if (p.isCancel(choice)) return {};
+  if (choice !== 'yes') return { enabled: false };
+
+  const token = await getToken();
+  return { enabled: true, token };
+}
 
 /**
  * Type-guard to check if a value is a valid LLMProvider
@@ -751,18 +774,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
       },
       observability: async () => {
         if (skip?.observability) return undefined;
-
-        const choice = await p.select({
-          message: 'Enable Mastra Observability? (will open auth flow)',
-          options: [
-            { value: 'yes', label: 'Yes' },
-            { value: 'no', label: 'No' },
-          ],
-          initialValue: 'yes',
-        });
-
-        if (p.isCancel(choice)) return undefined;
-        return choice === 'yes';
+        return promptForObservability();
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
@@ -957,10 +969,12 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     },
   );
 
-  // Flatten the configureMastraToolingForAgents return value
-  const { configureMastraToolingForAgents, ...rest } = mastraProject;
+  // Flatten grouped prompt return values
+  const { configureMastraToolingForAgents, observability, ...rest } = mastraProject;
   return {
     ...rest,
+    observability: observability?.enabled,
+    observabilityToken: observability?.token,
     skills: configureMastraToolingForAgents?.skills as string[] | undefined,
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
   };

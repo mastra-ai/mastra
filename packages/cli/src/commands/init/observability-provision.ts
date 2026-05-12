@@ -49,6 +49,7 @@ export async function provisionObservabilityProject({
   defaultProjectName,
   observabilityProject,
   mode = 'pick',
+  token: providedToken,
 }: {
   defaultProjectName?: string;
   /**
@@ -64,8 +65,10 @@ export async function provisionObservabilityProject({
    * attach to an existing project or create a new one.
    */
   mode?: 'create' | 'pick';
+  /** Platform auth token already acquired during the observability opt-in prompt. */
+  token?: string;
 } = {}): Promise<ObservabilityProvisionResult> {
-  const token = await getToken();
+  const token = providedToken ?? (await getToken());
   const { orgId, orgName } = await resolveCurrentOrg(token, { forcePrompt: true });
 
   let project: ObservabilityProject;
