@@ -332,6 +332,11 @@ const sidebars = {
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
         },
+        {
+          type: 'doc',
+          id: 'mcp/coinbase-agentic-wallet',
+          label: 'Coinbase Agentic Wallet',
+        },
       ],
     },
     {
