@@ -9,5 +9,3 @@ Suspend and resume now works reliably for evented workflows that use parallel st
 **`dountil` / `dowhile` loops** — a loop body that calls `suspend()` now suspends the workflow instead of crashing the run. And after a resume, subsequent loop iterations run fresh instead of re-receiving the resume data — which previously made loops either run forever or skip their own suspend logic.
 
 **Nested workflows** — resuming a suspended step inside a nested workflow now gives it the correct input (the output of the step right before it, not the nested workflow's own input), so it produces correct results, even when workflows are nested several levels deep. The suspended-step path returned in a workflow result is also correct now, so you can pass it straight back into `resume({ step })`.
-
-Branch step outputs that aren't plain JSON (like `Date`) also survive into the workflow result, and internal markers for branch arms that weren't taken no longer show up in `result.steps`.
