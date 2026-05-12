@@ -135,6 +135,57 @@ describe('FGA Middleware - checkRouteFGA', () => {
     );
   });
 
+  it('should derive built-in FGA metadata for scoped tool routes', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/agents/:agentId/tools/:toolId',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { agentId: 'agent-1', toolId: 'search' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'POST',
+          path: '/mcp/:serverId/tools/:toolId/execute',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { serverId: 'server-1', toolId: 'fetch' },
+      ),
+    ).resolves.toBeNull();
+
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      1,
+      { id: 'user-1' },
+      {
+        resource: { type: 'tool', id: 'agent-1:search' },
+        permission: 'tools:read',
+        context: { resourceId: 'agent-1:search', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      2,
+      { id: 'user-1' },
+      {
+        resource: { type: 'tool', id: JSON.stringify(['server-1', 'fetch']) },
+        permission: 'tools:execute',
+        context: { resourceId: JSON.stringify(['server-1', 'fetch']), requestContext },
+      },
+    );
+  });
+
   it('should derive built-in FGA metadata for response and conversation resource routes', async () => {
     const fgaProvider = createMockFGAProvider(true);
     const mastra = { getServer: () => ({ fga: fgaProvider }) };

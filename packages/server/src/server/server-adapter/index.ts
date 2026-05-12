@@ -127,6 +127,10 @@ function getRoutePermissions(route: ServerRoute): MastraFGAPermissionInput[] {
   );
 }
 
+function getToolRoutePermission(path: string): MastraFGAPermissionInput {
+  return path.includes('/execute') ? 'tools:execute' : 'tools:read';
+}
+
 function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
   if (!isProtectedFGARoute(route)) {
     return null;
@@ -138,6 +142,14 @@ function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
   }
 
   const path = route.path;
+  if (path.startsWith('/agents/:agentId/tools/:toolId')) {
+    return {
+      resourceType: 'tool',
+      resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
+      permission: getToolRoutePermission(path),
+    };
+  }
+
   if (path.startsWith('/agents/:agentId')) {
     return { resourceType: 'agent', resourceIdParam: 'agentId', permission };
   }
@@ -154,7 +166,7 @@ function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | null {
     return {
       resourceType: 'tool',
       resourceId: ({ serverId, toolId }) => JSON.stringify([String(serverId), String(toolId)]),
-      permission,
+      permission: getToolRoutePermission(path),
     };
   }
 

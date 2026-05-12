@@ -1080,7 +1080,6 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: MastraFGAPermissions.AGENTS_READ },
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
