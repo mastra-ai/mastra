@@ -20,3 +20,34 @@ new SlackProvider({
   },
 });
 ```
+
+Wrapping `defaultHandler` is a clean way to gate the agent on per-user ACLs, rate limits, or audit logging without reimplementing dispatch:
+
+```ts
+new SlackProvider({
+  baseUrl: process.env.MASTRA_BASE_URL,
+  handlers: {
+    onMention: async (thread, message, defaultHandler) => {
+      if (!authorizedUserIds.includes(message.author.userId)) {
+        console.log('Received a mention from an unauthorized user:', { userId: message.author.userId });
+        return;
+      }
+      return defaultHandler(thread, message);
+    },
+    onDirectMessage: async (thread, message, defaultHandler) => {
+      if (!authorizedUserIds.includes(message.author.userId)) {
+        console.log('Received a DM from an unauthorized user:', { userId: message.author.userId });
+        return;
+      }
+      return defaultHandler(thread, message);
+    },
+    onSubscribedMessage: async (thread, message, defaultHandler) => {
+      if (!authorizedUserIds.includes(message.author.userId)) {
+        console.log('Received a subscribed message from an unauthorized user:', { userId: message.author.userId });
+        return;
+      }
+      return defaultHandler(thread, message);
+    },
+  },
+});
+```
