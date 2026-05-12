@@ -6,7 +6,8 @@
  */
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { config } from 'dotenv';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -16,7 +17,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-config();
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
