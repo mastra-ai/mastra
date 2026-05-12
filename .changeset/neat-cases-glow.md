@@ -2,4 +2,4 @@
 '@mastra/libsql': patch
 ---
 
-Improved local LibSQL startup performance by applying local SQLite performance settings before initialization and reducing schema initialization contention.
+Improved local LibSQL startup performance by applying conservative local SQLite performance settings before initialization, exposing local PRAGMA overrides, and reducing schema initialization contention.

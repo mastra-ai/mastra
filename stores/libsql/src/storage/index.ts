@@ -45,6 +45,23 @@ export type { LibSQLDomainConfig } from './db';
 
 export type LibSQLStorageDomain = keyof StorageDomains;
 
+const DEFAULT_LOCAL_CACHE_SIZE = -16000;
+const DEFAULT_LOCAL_MMAP_SIZE = 134217728;
+
+export type LibSQLLocalPragmaOptions = {
+  /**
+   * SQLite PRAGMA cache_size value for local databases.
+   * Negative values are interpreted as kibibytes by SQLite.
+   * @default -16000
+   */
+  cacheSize?: number;
+  /**
+   * SQLite PRAGMA mmap_size value in bytes for local databases.
+   * @default 134217728
+   */
+  mmapSize?: number;
+};
+
 /**
  * Base configuration options shared across LibSQL configurations
  */
@@ -61,6 +78,11 @@ export type LibSQLBaseConfig = {
    * @default 100
    */
   initialBackoffMs?: number;
+  /**
+   * Overrides local SQLite PRAGMA values used for startup/read performance.
+   * Only applies to local file and in-memory databases.
+   */
+  localPragmas?: LibSQLLocalPragmaOptions;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -116,6 +138,7 @@ export class LibSQLStore extends MastraCompositeStore {
   private readonly initialBackoffMs: number;
   private readonly pragmasReady: Promise<void>;
   private readonly isLocalDb: boolean;
+  private readonly localPragmas: Required<LibSQLLocalPragmaOptions>;
 
   stores: StorageDomains;
 
@@ -127,6 +150,10 @@ export class LibSQLStore extends MastraCompositeStore {
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
+    this.localPragmas = {
+      cacheSize: config.localPragmas?.cacheSize ?? DEFAULT_LOCAL_CACHE_SIZE,
+      mmapSize: config.localPragmas?.mmapSize ?? DEFAULT_LOCAL_MMAP_SIZE,
+    };
 
     if ('url' in config) {
       // need to re-init every time for in memory dbs or the tables might not exist
@@ -198,8 +225,8 @@ export class LibSQLStore extends MastraCompositeStore {
       ['busy_timeout=5000', 'PRAGMA busy_timeout=5000;'],
       ['synchronous=NORMAL', 'PRAGMA synchronous=NORMAL;'],
       ['temp_store=MEMORY', 'PRAGMA temp_store=MEMORY;'],
-      ['cache_size=-128000', 'PRAGMA cache_size=-128000;'],
-      ['mmap_size=1073741824', 'PRAGMA mmap_size=1073741824;'],
+      [`cache_size=${this.localPragmas.cacheSize}`, `PRAGMA cache_size=${this.localPragmas.cacheSize};`],
+      [`mmap_size=${this.localPragmas.mmapSize}`, `PRAGMA mmap_size=${this.localPragmas.mmapSize};`],
     ] as const;
 
     for (const [label, sql] of pragmas) {

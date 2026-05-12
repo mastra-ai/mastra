@@ -49,8 +49,8 @@ const storeLevelPragmas = [
   'PRAGMA busy_timeout=5000;',
   'PRAGMA synchronous=NORMAL;',
   'PRAGMA temp_store=MEMORY;',
-  'PRAGMA cache_size=-128000;',
-  'PRAGMA mmap_size=1073741824;',
+  'PRAGMA cache_size=-16000;',
+  'PRAGMA mmap_size=134217728;',
 ];
 
 beforeEach(() => {
@@ -74,8 +74,8 @@ describe('LibSQLStore local performance initialization', () => {
       'PRAGMA busy_timeout=5000;',
       'PRAGMA synchronous=NORMAL;',
       'PRAGMA temp_store=MEMORY;',
-      'PRAGMA cache_size=-128000;',
-      'PRAGMA mmap_size=1073741824;',
+      'PRAGMA cache_size=-16000;',
+      'PRAGMA mmap_size=134217728;',
     ];
 
     for (const pragma of expectedPragmas) {
@@ -106,6 +106,25 @@ describe('LibSQLStore local performance initialization', () => {
     const executedSql = sqls(statements);
     expect(executedSql).toContain('PRAGMA synchronous=NORMAL;');
     expect(executedSql).not.toContain('PRAGMA synchronous=OFF;');
+  });
+
+  it('allows local cache and mmap PRAGMAs to be increased', async () => {
+    const { client, statements } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({
+      id: 'local-file-custom-pragmas',
+      url: 'file:local-performance-custom-pragmas.db',
+      localPragmas: {
+        cacheSize: -128000,
+        mmapSize: 1073741824,
+      },
+    });
+    await store.init();
+
+    const executedSql = sqls(statements);
+    expect(executedSql).toContain('PRAGMA cache_size=-128000;');
+    expect(executedSql).toContain('PRAGMA mmap_size=1073741824;');
   });
 
   it('creates message indexes for startup history reads', async () => {
