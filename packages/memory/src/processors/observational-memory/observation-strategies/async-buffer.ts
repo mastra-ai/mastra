@@ -121,6 +121,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       cycleObservationTokens: observationTokens,
       observedMessageIds: messageIds,
       lastObservedAt,
+      observedMessages: messages,
+      activeObservations: this.opts.record.activeObservations ?? '',
+      newObservations: output.observations,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
@@ -152,9 +155,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
     // Update thread title immediately — don't wait for activation. Custom
-    // extractor values are written through to thread metadata at the same
-    // time so the next observation cycle can carry them forward and
-    // onExtracted hooks see up-to-date persisted state.
+    // extractor values are already normalized by onExtracted hooks and are
+    // written through so the next observation cycle can carry them forward.
     const newTitle = processed.threadTitle?.trim();
     const shouldWriteTitle = !!newTitle && newTitle.length >= 3;
     const extractedValues = processed.extractedValues;
@@ -200,6 +202,15 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const updatedChunks = getBufferedChunks(updatedRecord);
     const totalBufferedTokens =
       updatedChunks.reduce((sum, c) => sum + (c.tokenCount ?? 0), 0) || processed.observationTokens;
+
+    await this.emitExtractedMarker({
+      cycleId: this.cycleId,
+      operationType: 'observation',
+      threadId,
+      resourceId: record.resourceId ?? undefined,
+      recordId: record.id,
+      extractedValues: processed.extractedValues,
+    });
 
     const endMarker = createBufferingEndMarker({
       cycleId: this.cycleId,

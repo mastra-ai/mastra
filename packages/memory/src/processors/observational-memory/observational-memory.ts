@@ -5,7 +5,7 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
@@ -2026,6 +2026,7 @@ ${formattedMessages}
     lockKey: string,
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
+    agent?: ProcessorAgent,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<void> {
@@ -2052,6 +2053,7 @@ ${formattedMessages}
       unobservedMessages,
       bufferKey,
       writer,
+      agent,
       requestContext,
       observabilityContext,
     ).finally(() => {
@@ -2077,6 +2079,7 @@ ${formattedMessages}
     unobservedMessages: MastraDBMessage[],
     bufferKey: string,
     writer?: ProcessorStreamWriter,
+    agent?: ProcessorAgent,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
   ): Promise<void> {
@@ -2187,6 +2190,7 @@ ${formattedMessages}
       cycleId,
       startedAt,
       writer,
+      agent,
       requestContext,
       observabilityContext,
     }).run();
@@ -2216,6 +2220,7 @@ ${formattedMessages}
     unobservedMessages: MastraDBMessage[];
     threshold: number;
     writer?: ProcessorStreamWriter;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
   }): Promise<boolean> {
@@ -2238,6 +2243,7 @@ ${formattedMessages}
         lockKey,
         opts.writer,
         opts.unbufferedPendingTokens,
+        opts.agent,
         opts.requestContext,
       );
     }
@@ -2956,6 +2962,7 @@ ${formattedMessages}
      *  before lastBufferedBoundary is set. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     /** Called with the final candidate messages after cursor filtering, before the observer runs.
@@ -3412,6 +3419,7 @@ ${formattedMessages}
     resourceId?: string;
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
+    agent?: ProcessorAgent;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3420,7 +3428,7 @@ ${formattedMessages}
     reflected: boolean;
     record: ObservationalMemoryRecord;
   }> {
-    const { threadId, resourceId, messages, hooks, requestContext } = opts;
+    const { threadId, resourceId, messages, hooks, agent, requestContext } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
@@ -3460,6 +3468,7 @@ ${formattedMessages}
           resourceId,
           messages: unobservedMessages,
           reflectionHooks,
+          agent,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3719,6 +3728,8 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent: ProcessorAgent;
+    requestContext: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3727,6 +3738,8 @@ ${formattedMessages}
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       messageList: opts.messageList,
+      agent: opts.agent,
+      requestContext: opts.requestContext,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

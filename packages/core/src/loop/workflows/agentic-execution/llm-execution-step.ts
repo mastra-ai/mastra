@@ -579,6 +579,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   llmRequestInputProcessors,
   errorProcessors,
   logger,
+  agent,
   agentId,
   downloadRetries,
   downloadConcurrency,
@@ -722,6 +723,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               inputProcessors: inputStepProcessors,
               outputProcessors: [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
+              agent: agent!,
               agentName: agentId || 'unknown',
               processorStates,
             });
@@ -982,6 +984,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
+            agent: agent!,
             agentName: agentId || 'unknown',
             processorStates,
           });
@@ -1168,6 +1171,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               isLLMExecutionStep: true,
               tracingContext,
               processorStates,
+              agent,
               requestContext,
             },
           });
@@ -1340,6 +1344,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 outputProcessors: outputProcessors || [],
                 errorProcessors: errorProcessors || [],
                 logger: logger || new ConsoleLogger({ level: 'error' }),
+                agent: agent!,
                 agentName: agentId || 'unknown',
                 processorStates,
               });
@@ -1480,6 +1485,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: outputProcessors || [],
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
+          agent: agent!,
           agentName: agentId || 'unknown',
           processorStates,
         });
@@ -1602,6 +1608,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           inputProcessors: [],
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
+          agent: agent!,
           agentName: agentId || 'unknown',
           processorStates,
         });

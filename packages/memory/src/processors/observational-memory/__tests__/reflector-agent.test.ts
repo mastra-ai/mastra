@@ -69,12 +69,16 @@ describe('reflector extractor support', () => {
     expect(onParseError).toHaveBeenCalledTimes(1);
   });
 
-  it('persists reflected extracted values to thread metadata and invokes hooks', async () => {
-    const onExtracted = vi.fn();
+  it('persists normalized reflected extracted values to thread metadata and invokes hooks', async () => {
+    const onExtracted = vi.fn(({ extracted }) => ({
+      ...extracted.previous,
+      ...extracted.current,
+      normalized: true,
+    }));
     const extractor = new Extractor({
       name: 'active-topic',
       instructions: 'Output JSON like {"topic":"billing"}.',
-      schema: z.object({ topic: z.string() }),
+      schema: z.object({ topic: z.string(), normalized: z.boolean().optional(), source: z.string().optional() }),
       onExtracted,
     });
     const updateThread = vi.fn().mockResolvedValue(undefined);
@@ -82,7 +86,9 @@ describe('reflector extractor support', () => {
       getThreadById: vi.fn().mockResolvedValue({
         id: 'thread-1',
         title: 'Existing title',
-        metadata: { mastra: { om: { extracted: { retained: 'prior' } } } },
+        metadata: {
+          mastra: { om: { extracted: { retained: 'prior', 'active-topic': { topic: 'prior', source: 'previous' } } } },
+        },
       }),
       updateThread,
     };
@@ -106,9 +112,17 @@ describe('reflector extractor support', () => {
       extractors: [extractor],
     } as any);
 
-    await (runner as any).persistExtractedValues('thread-1', 'resource-1', {
-      'active-topic': { topic: 'billing' },
-    });
+    await (runner as any).persistExtractedValues(
+      'thread-1',
+      'resource-1',
+      {
+        'active-topic': { topic: 'billing' },
+      },
+      {
+        activeObservations: 'Date: yesterday\n* User had a prior billing issue.',
+        newObservations: 'Date: today\n* User billing context was condensed.',
+      },
+    );
 
     expect(updateThread).toHaveBeenCalledWith({
       id: 'thread-1',
@@ -118,7 +132,7 @@ describe('reflector extractor support', () => {
           om: {
             extracted: {
               retained: 'prior',
-              'active-topic': { topic: 'billing' },
+              'active-topic': { topic: 'billing', source: 'previous', normalized: true },
             },
           },
         },
@@ -126,10 +140,19 @@ describe('reflector extractor support', () => {
     });
     expect(onExtracted).toHaveBeenCalledWith(
       expect.objectContaining({
-        extracted: { topic: 'billing' },
+        extracted: {
+          previous: { topic: 'prior', source: 'previous' },
+          current: { topic: 'billing' },
+        },
         threadId: 'thread-1',
         resourceId: 'resource-1',
+        source: 'reflector',
+        observations: {
+          activeObservations: 'Date: yesterday\n* User had a prior billing issue.',
+          newObservations: 'Date: today\n* User billing context was condensed.',
+        },
       }),
     );
+    expect(onExtracted.mock.calls[0]![0]!.observations).not.toHaveProperty('observedMessages');
   });
 });

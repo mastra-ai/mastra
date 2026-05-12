@@ -174,6 +174,9 @@ export class SyncObservationStrategy extends ObservationStrategy {
       cycleObservationTokens,
       observedMessageIds,
       lastObservedAt,
+      observedMessages: messages,
+      activeObservations: existingObservations,
+      newObservations: output.observations,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
@@ -239,6 +242,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
     const actualTokensObserved = await this.tokenCounter.countMessagesAsync(this.opts.messages);
+    await this.emitExtractedMarker({
+      cycleId,
+      operationType: 'observation',
+      threadId: this.opts.threadId,
+      resourceId: this.opts.resourceId,
+      recordId: this.opts.record.id,
+      extractedValues: processed.extractedValues,
+    });
+
     if (this.lastMessage?.id) {
       const endMarker = createObservationEndMarker({
         cycleId,

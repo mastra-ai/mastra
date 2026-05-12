@@ -1,7 +1,9 @@
 import { MessageList } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
 import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -373,8 +375,17 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         throw new Error(`TRIPWIRE:${reason || 'Processor aborted'}`);
       };
 
+      const processorExecutorAgent = { id: 'processor-executor', name: 'Processor Executor' } as unknown as Agent<
+        any,
+        any,
+        any,
+        any
+      >;
+
       // Build the context based on phase
       const baseContext = {
+        agent: processorExecutorAgent,
+        requestContext: new RequestContext(),
         abort,
         retryCount: 0,
         messages: messageList.get.all.db(),

@@ -136,6 +136,29 @@ test.describe('Observational Memory - Behavior Tests', () => {
      *
      * For now, we verify the sidebar behavior instead of chat markers.
      */
+    test('should show extracted values when observation persists extractor output', async ({ page }) => {
+      // ARRANGE: The kitchen-sink OM agent has an active-topic extractor, and its mock observer emits
+      // <active-topic>{"topic":"billing","confidence":0.91}</active-topic> during observation.
+      await selectFixture(page, 'om-observation-success');
+      await page.goto('/agents/om-agent/chat/new');
+
+      const chatInput = page.locator('textarea[placeholder*="message"]').first();
+      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
+
+      // ACT: Trigger a multi-step agent response so OM observes and streams data-om-extracted.
+      await chatInput.fill('Please help me with my billing question.');
+      await chatInput.press('Enter');
+
+      const observationMarker = threadWrapper.getByRole('button', { name: /Observed.*→.*tokens/i }).first();
+      await expect(observationMarker).toBeVisible({ timeout: 15000 });
+
+      // ASSERT: The extracted topic from the OM stream marker is rendered in the chat badge.
+      const extractedSummary = threadWrapper.getByTestId('om-extracted-summary').first();
+      await expect(extractedSummary).toContainText('active-topic', { timeout: 10000 });
+      await expect(extractedSummary).toContainText('billing');
+      await expect(extractedSummary).toContainText('normalized');
+    });
+
     test('should show completion stats when observation finishes', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');

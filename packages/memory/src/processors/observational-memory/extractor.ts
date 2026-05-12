@@ -1,3 +1,6 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
+import type { ProcessorAgent } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 
 /**
@@ -14,17 +17,50 @@ import { z } from 'zod';
 export type ExtractorInjectionBehaviour = 'carry-forward' | 'none';
 
 /**
+ * Source-specific observation payload passed to an extractor's `onExtracted`
+ * lifecycle hook.
+ *
+ * @experimental
+ */
+export type ExtractorOnExtractedObservationContext =
+  | {
+      /** The Observer produced this extracted value from recent DB messages. */
+      source: 'observer';
+      observations: {
+        /** DB-format messages consumed by this observation cycle. */
+        observedMessages: MastraDBMessage[];
+        /** Active observations before this observation cycle was applied. */
+        activeObservations: string;
+        /** Newly generated observations from this observation cycle. */
+        newObservations: string;
+      };
+    }
+  | {
+      /** The Reflector produced this extracted value while condensing observations. */
+      source: 'reflector';
+      observations: {
+        /** Active observations before this reflection cycle was applied. */
+        activeObservations: string;
+        /** Newly reflected/condensed observations from this reflection cycle. */
+        newObservations: string;
+      };
+    };
+
+/**
  * Context passed to an extractor's `onExtracted` lifecycle hook every time
  * the Observer or Reflector emits a value for it.
  *
  * @experimental
  */
-export interface ExtractorOnExtractedContext<T> {
+export type ExtractorOnExtractedContext<T> = ExtractorOnExtractedObservationContext & {
   /**
-   * The extracted value, or `undefined` if the observer didn't emit a value
-   * for this extractor in the current cycle.
+   * The previous persisted value and the current value emitted by this
+   * observer or reflector cycle.
    */
-  extracted: T | undefined;
+  extracted: {
+    previous?: T;
+    current: T;
+  };
 
   /** The extractor configuration that produced this value. */
   extractor: Extractor<T>;
@@ -32,9 +68,15 @@ export interface ExtractorOnExtractedContext<T> {
   /** The thread this extraction belongs to. */
   threadId: string;
 
+  /** The main agent execution this extraction belongs to. */
+  mainAgent: ProcessorAgent;
+
+  /** Runtime context from the agent request. */
+  requestContext: RequestContext;
+
   /** The resource ID, when this thread belongs to one. */
   resourceId?: string;
-}
+};
 
 /**
  * Configuration options for an `Extractor`.
@@ -78,12 +120,13 @@ export interface ExtractorConfig<T = string> {
 
   /**
    * Lifecycle hook invoked whenever the Observer or Reflector produces a new
-   * value for this extractor. Use this to drive thread-scoped side effects.
+   * value for this extractor. Return a schema-valid value to normalize what
+   * gets persisted; return `undefined` to persist `extracted.current`.
    *
    * Errors thrown from this callback are caught and logged — they do not
    * fail the observation or reflection cycle.
    */
-  onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => void | Promise<void>;
+  onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => T | void | Promise<T | void>;
 }
 
 /**
@@ -161,7 +204,7 @@ const DEFAULT_SUGGESTED_RESPONSE_INSTRUCTIONS = [
  * inside structured output. Each extractor's value is parsed back out,
  * optionally carried forward into the next model call as a "prior" hint, and
  * surfaced to a thread-scoped lifecycle hook (`onExtracted`) where you can
- * react to the typed value.
+ * react to the typed value or return a normalized value to persist.
  *
  * @example User-defined extractor with a Zod schema
  * ```ts
@@ -173,8 +216,11 @@ const DEFAULT_SUGGESTED_RESPONSE_INSTRUCTIONS = [
  *   instructions: 'Output JSON like {"priority":"high","reason":"..."}.',
  *   schema: z.object({ priority: z.enum(['low', 'medium', 'high']), reason: z.string() }),
  *   injectionBehaviour: 'carry-forward',
- *   onExtracted: ({ extracted, threadId }) => {
- *     console.log(threadId, extracted.priority);
+ *   onExtracted: ({ source, extracted, observations, threadId }) => {
+ *     if (source === 'observer') {
+ *       console.log(threadId, observations.observedMessages.length, observations.newObservations);
+ *     }
+ *     return { ...extracted.previous, ...extracted.current };
  *   },
  * });
  * ```
@@ -209,7 +255,7 @@ export class Extractor<T = string> {
   /** How the previous extracted value is reused on subsequent observer calls. */
   readonly injectionBehaviour: ExtractorInjectionBehaviour;
   /** Optional lifecycle hook invoked after each successful extraction. */
-  readonly onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => void | Promise<void>;
+  readonly onExtracted?: (ctx: ExtractorOnExtractedContext<T>) => T | void | Promise<T | void>;
 
   constructor(config: ExtractorConfig<T>) {
     if (!config.name || !config.name.trim()) {
@@ -504,9 +550,9 @@ export function getExtractedValueForExtractor(
 
 /**
  * Invoke the `onExtracted` lifecycle hook for every extractor in the list
- * that has one configured. Errors thrown by user-supplied hooks are caught
- * and reported via the optional `onError` callback so a single bad hook
- * never breaks the observation cycle for the other extractors.
+ * and return the final custom extracted values to persist. Hook errors and
+ * invalid returned values are reported via `onError`; the current extracted
+ * value is used as a fallback so a single bad hook never breaks the cycle.
  *
  * @internal
  */
@@ -518,32 +564,60 @@ export async function invokeExtractorHooks(
     threadTitle?: string;
     extractedValues?: Readonly<Record<string, unknown>>;
   },
-  ctx: {
+  ctx: ExtractorOnExtractedObservationContext & {
     threadId: string;
     resourceId?: string;
+    mainAgent: ProcessorAgent;
+    requestContext: RequestContext;
+    previousValues?: {
+      currentTask?: string;
+      suggestedContinuation?: string;
+      threadTitle?: string;
+      extractedValues?: Readonly<Record<string, unknown>>;
+    };
   },
   onError?: (extractor: Extractor<any>, error: unknown) => void,
-): Promise<void> {
-  if (extractors.length === 0) return;
+): Promise<Record<string, unknown>> {
+  const normalizedValues: Record<string, unknown> = {};
+  if (extractors.length === 0) return normalizedValues;
+
   await Promise.all(
     extractors.map(async extractor => {
-      if (!extractor.onExtracted) return;
-      const extracted = getExtractedValueForExtractor(extractor, values);
-      if (extracted === undefined || extracted === null || extracted === '') {
+      const current = getExtractedValueForExtractor(extractor, values);
+      if (current === undefined || current === null || current === '') {
         // Don't fire the hook for empty values — the observer didn't emit
         // a value for this extractor in the current cycle.
         return;
       }
-      try {
-        await extractor.onExtracted({
-          extracted,
-          extractor: extractor as Extractor<any>,
-          threadId: ctx.threadId,
-          resourceId: ctx.resourceId,
-        });
-      } catch (err) {
-        onError?.(extractor, err);
+
+      const previous = ctx.previousValues ? getExtractedValueForExtractor(extractor, ctx.previousValues) : undefined;
+      let valueToPersist = current;
+
+      if (extractor.onExtracted) {
+        try {
+          const returned = await extractor.onExtracted({
+            source: ctx.source,
+            observations: ctx.observations,
+            extracted: { previous, current },
+            extractor: extractor as Extractor<any>,
+            threadId: ctx.threadId,
+            mainAgent: ctx.mainAgent,
+            requestContext: ctx.requestContext,
+            resourceId: ctx.resourceId,
+          } as ExtractorOnExtractedContext<any>);
+          if (returned !== undefined && !isBuiltInExtractorSlug(extractor.slug)) {
+            valueToPersist = extractor.schema.parse(returned);
+          }
+        } catch (err) {
+          onError?.(extractor, err);
+        }
+      }
+
+      if (!isBuiltInExtractorSlug(extractor.slug)) {
+        normalizedValues[extractor.slug] = valueToPersist;
       }
     }),
   );
+
+  return normalizedValues;
 }

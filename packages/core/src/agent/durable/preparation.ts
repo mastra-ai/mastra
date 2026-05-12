@@ -224,6 +224,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         outputProcessors,
         errorProcessors,
         logger: logger as any,
+        agent,
         agentName: agent.name,
         processorStates,
       });
@@ -351,6 +352,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
+    agent,
     tools,
     saveQueueManager,
     memory,

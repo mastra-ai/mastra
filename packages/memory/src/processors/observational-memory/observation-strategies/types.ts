@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorAgent, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
@@ -21,6 +21,7 @@ export interface ObservationRunOpts {
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  agent?: ProcessorAgent;
   requestContext?: RequestContext;
   observabilityContext?: ObservabilityContext;
 }
@@ -57,7 +58,13 @@ export interface ProcessedObservation {
     threadTitle?: string;
     lastObservedMessageCursor?: { createdAt: string; id: string };
     extractedValues?: Record<string, unknown>;
+    observedMessages?: MastraDBMessage[];
+    activeObservations?: string;
+    newObservations?: string;
   }>;
+  observedMessages?: MastraDBMessage[];
+  activeObservations?: string;
+  newObservations?: string;
   suggestedContinuation?: string;
   currentTask?: string;
   threadTitle?: string;

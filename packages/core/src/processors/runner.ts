@@ -13,7 +13,7 @@ import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
-import type { RequestContext } from '../request-context';
+import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
@@ -36,6 +36,7 @@ import type {
   Processor,
   ProcessorMessageResult,
   ProcessorStreamWriter,
+  ProcessorAgent,
   ProcessorViolation,
   ProcessorWorkflow,
   RunProcessInputStepArgs,
@@ -275,6 +276,7 @@ export class ProcessorRunner {
   public readonly outputProcessors: ProcessorOrWorkflow[];
   public readonly errorProcessors: ErrorProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
+  private readonly agent: ProcessorAgent;
   private readonly agentName: string;
   /**
    * Shared processor state that persists across loop iterations.
@@ -288,6 +290,7 @@ export class ProcessorRunner {
     outputProcessors,
     errorProcessors,
     logger,
+    agent,
     agentName,
     processorStates,
   }: {
@@ -295,14 +298,16 @@ export class ProcessorRunner {
     outputProcessors?: ProcessorOrWorkflow[];
     errorProcessors?: ErrorProcessorOrWorkflow[];
     logger: IMastraLogger;
-    agentName: string;
+    agent: ProcessorAgent;
+    agentName?: string;
     processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
     this.errorProcessors = errorProcessors ?? [];
     this.logger = logger;
-    this.agentName = agentName;
+    this.agent = agent;
+    this.agentName = agentName ?? agent.name;
     this.processorStates = processorStates ?? new Map();
   }
 
@@ -332,6 +337,8 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
+    requestContext = requestContext ?? new RequestContext();
+
     // Create a run and start the workflow
     const run = await workflow.createRun();
     const result = await run.start({
@@ -339,6 +346,8 @@ export class ProcessorRunner {
       // but not part of the official ProcessorStepOutput schema
       inputData: {
         ...input,
+        // Pass the agent so workflow processor steps can access the owning agent context
+        agent: this.agent,
         // Pass the processorStates map so workflow processor steps can access their state
         processorStates: this.processorStates,
         // Pass abortSignal so processors can cancel in-flight work
@@ -417,6 +426,8 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter,
     result?: OutputResult,
   ): Promise<MessageList> {
+    requestContext = requestContext ?? new RequestContext();
+
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
       let processableMessages: MastraDBMessage[] = [...allNewMessages];
@@ -497,6 +508,7 @@ export class ProcessorRunner {
           result: result ?? defaultResult,
           abort,
           ...createObservabilityContext({ currentSpan: processorSpan }),
+          agent: this.agent,
           requestContext,
           retryCount,
           writer,
@@ -591,6 +603,8 @@ export class ProcessorRunner {
     tripwireOptions?: TripWireOptions<unknown>;
     processorId?: string;
   }> {
+    requestContext = requestContext ?? new RequestContext();
+
     if (!this.outputProcessors.length) {
       return { part, blocked: false };
     }
@@ -678,6 +692,7 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
               },
               ...createObservabilityContext({ currentSpan: state.span }),
+              agent: this.agent,
               requestContext,
               messageList,
               retryCount,
@@ -821,6 +836,8 @@ export class ProcessorRunner {
     requestContext?: RequestContext,
     retryCount: number = 0,
   ): Promise<MessageList> {
+    requestContext = requestContext ?? new RequestContext();
+
     for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
       let processableMessages: MastraDBMessage[] = messageList.get.input.db();
       const inputIds = processableMessages.map((m: MastraDBMessage) => m.id);
@@ -893,6 +910,7 @@ export class ProcessorRunner {
           abort,
           ...createObservabilityContext({ currentSpan: processorSpan }),
           messageList,
+          agent: this.agent,
           requestContext,
           retryCount,
           sendSignal: createProcessorSendSignal({ messageList }),
@@ -1057,7 +1075,8 @@ export class ProcessorRunner {
    * @returns The processed MessageList
    */
   async runProcessInputStep(args: RunProcessInputStepArgs): Promise<RunProcessInputStepResult> {
-    const { messageList, stepNumber, steps, requestContext, writer } = args;
+    const { messageList, stepNumber, steps, writer } = args;
+    const requestContext = args.requestContext ?? new RequestContext();
     const observabilityContext = resolveObservabilityContext(args);
 
     // Initialize with all provided values - processors will modify this object in order
@@ -1196,6 +1215,7 @@ export class ProcessorRunner {
         const processMethodArgs = {
           messageList,
           ...inputData,
+          agent: this.agent,
           state: processorState.customState,
           abort,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
@@ -1284,6 +1304,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext;
     writer?: ProcessorStreamWriter;
   }): Promise<{ prompt: LanguageModelV2Prompt; response?: CachedLLMStepResponse }> {
+    const requestContext = args.requestContext ?? new RequestContext();
     const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
 
     let currentPrompt = args.prompt;
@@ -1313,7 +1334,8 @@ export class ProcessorRunner {
           steps: args.steps,
           state: processorState.customState,
           retryCount: args.retryCount ?? 0,
-          requestContext: args.requestContext,
+          agent: this.agent,
+          requestContext,
           abort,
           abortSignal: args.abortSignal,
           writer: args.writer,
@@ -1371,6 +1393,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext;
     writer?: ProcessorStreamWriter;
   }): Promise<void> {
+    const requestContext = args.requestContext ?? new RequestContext();
     const observabilityContext = resolveObservabilityContext({ tracingContext: args.tracingContext });
 
     for (const processorOrWorkflow of this.inputProcessors) {
@@ -1398,7 +1421,8 @@ export class ProcessorRunner {
           rawResponse: args.rawResponse,
           fromCache: args.fromCache,
           retryCount: args.retryCount ?? 0,
-          requestContext: args.requestContext,
+          agent: this.agent,
+          requestContext,
           abort,
           abortSignal: args.abortSignal,
           writer: args.writer,
@@ -1477,6 +1501,7 @@ export class ProcessorRunner {
       retryCount = 0,
       writer,
     } = args;
+    const normalizedRequestContext = requestContext ?? new RequestContext();
     const observabilityContext = resolveObservabilityContext(args);
 
     // Run through all output processors that have processOutputStep
@@ -1504,7 +1529,7 @@ export class ProcessorRunner {
             retryCount,
           },
           observabilityContext,
-          requestContext,
+          normalizedRequestContext,
           writer,
         );
         continue;
@@ -1571,7 +1596,8 @@ export class ProcessorRunner {
           state: processorState.customState,
           abort,
           ...createObservabilityContext({ currentSpan: processorSpan }),
-          requestContext,
+          agent: this.agent,
+          requestContext: normalizedRequestContext,
           retryCount,
           writer,
           sendSignal: createProcessorSendSignal({ messageList, writer }),
@@ -1676,6 +1702,7 @@ export class ProcessorRunner {
     } & Partial<ObservabilityContext>,
   ): Promise<{ retry: boolean }> {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
+    const normalizedRequestContext = requestContext ?? new RequestContext();
     const observabilityContext = resolveObservabilityContext(args);
 
     const allProcessors: ProcessorOrWorkflow[] = [
@@ -1750,7 +1777,8 @@ export class ProcessorRunner {
           error,
           abort,
           ...createObservabilityContext({ currentSpan: processorSpan }),
-          requestContext,
+          agent: this.agent,
+          requestContext: normalizedRequestContext,
           retryCount,
           writer,
           abortSignal,
