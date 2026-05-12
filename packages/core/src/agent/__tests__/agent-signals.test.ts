@@ -448,11 +448,13 @@ describe('Agent signals', () => {
       },
     });
 
+    const memory = new MockMemory();
     const agent = new Agent({
       id: 'active-signal-agent',
       name: 'Active Signal Agent',
       instructions: 'Test',
       model,
+      memory,
     });
 
     const subscription = await agent.subscribeToThread({
@@ -479,6 +481,21 @@ describe('Agent signals', () => {
     expect(firstRun.value.text).toBe('first responsesignal response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Hello while running');
+
+    await stream.consumeStream();
+    const recalled = await memory.recall({ threadId: 'active-thread', resourceId: 'active-user' });
+    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant', 'signal', 'assistant']);
+    expect(recalled.messages.map(message => message.content.parts.map(part => part.type))).toEqual([
+      ['text'],
+      ['text'],
+      ['text'],
+      ['text'],
+    ]);
+    expect(
+      recalled.messages.map(message =>
+        message.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
+      ),
+    ).toEqual(['Hello', 'first response', 'Hello while running', 'signal response']);
 
     subscription.unsubscribe();
   });
