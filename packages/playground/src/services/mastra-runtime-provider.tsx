@@ -475,6 +475,7 @@ export function MastraRuntimeProvider({
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);
+      setPendingSignals([]);
     },
   });
 
@@ -1304,6 +1305,7 @@ export function MastraRuntimeProvider({
   const onCancel = async () => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    setPendingSignals([]);
     setIsLegacyRunning(false);
     // Reset OM streaming state in case observation was in progress
     resetObservationalMemoryStreamState();
