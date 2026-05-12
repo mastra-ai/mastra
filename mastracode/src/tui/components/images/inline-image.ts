@@ -16,14 +16,14 @@
  * Because the row count never changes the input box, prompts, etc. never
  * shift when we toggle between states.
  *
- * "Placeholder" is chosen whenever one of these is true:
- *   - this is not the most recent inline image (a newer screenshot has
- *     taken over as "active"); we do not stack kitty placements.
- *   - an overlay is currently visible; pi-tui's compositor cannot paint
- *     over image-bearing lines, so we hide ours and `imageManager` also
- *     writes a delete-by-id to clear the graphics layer underneath the
- *     overlay. When the overlay closes the next render re-emits the
- *     escape and the diff renderer re-places it.
+ * "Placeholder" vs "drawn" is decided per-frame by a single call to
+ * `imageManager.isPlaceholder(self)`. The manager returns true when this
+ * is no longer the most recent inline image (a newer screenshot took
+ * over — we do not stack kitty placements) or when an overlay is
+ * currently visible (pi-tui's compositor cannot paint over image-bearing
+ * lines, so the manager hides ours and writes a delete-by-id to clear
+ * the graphics layer underneath the overlay; when the overlay closes the
+ * next render re-emits the escape and the diff renderer re-places it).
  *
  * Why a custom component (not Text)
  * ---------------------------------
@@ -89,8 +89,7 @@ export class InlineImageComponent implements Component, ImageOwner {
   }
 
   render(): string[] {
-    const showImage = imageManager.isActive(this) && !imageManager.imageSuppressedByOverlay();
-    if (!showImage) {
+    if (imageManager.isPlaceholder(this)) {
       return this.placeholderLines;
     }
     const last = this.borderPrefix + this.moveUp + this.sequence;

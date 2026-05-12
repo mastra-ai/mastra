@@ -29,20 +29,25 @@
  *   - Each `InlineImageComponent` registers with the manager on
  *     construction. A new registration becomes active and the previous
  *     placement is deleted from the terminal.
- *   - Components query `isActive(self)` and `imageSuppressedByOverlay()`
- *     each frame and pick between drawing the kitty/iTerm2 escape or
- *     showing a fixed-size "(image)" placeholder that uses the same row
- *     count. Toggling never reflows the chat.
+ *   - Components query `isPlaceholder(self)` each frame and pick
+ *     between drawing the kitty/iTerm2 escape or showing a fixed-size
+ *     "(image)" placeholder that uses the same row count. Toggling
+ *     never reflows the chat.
  *   - When an overlay opens we proactively delete the placement so its
  *     graphics layer doesn't bleed through the popup. When it closes the
  *     line-stream emits the kitty escape again and the diff renderer
  *     re-places the image.
  *
- * The manager owns no rendering of its own; it just answers two questions
- * for components every frame:
+ * The manager owns no rendering of its own. Components ask it a single
+ * question every frame:
  *
- *   - `isActive(component)`        — should I draw the image bytes?
- *   - `imageSuppressedByOverlay()` — is there an overlay covering me?
+ *   - `isPlaceholder(component)` — should I render the muted "(image)"
+ *     placeholder instead of the kitty/iTerm2 escape this frame?
+ *
+ * Returns true when the component isn't the most recent active image OR
+ * when an overlay is currently up. The manager handles overlay-transition
+ * side effects (delete the placement on open, force a full redraw on
+ * open/close) internally.
  */
 
 import * as fs from 'node:fs';
@@ -65,8 +70,7 @@ function markOverlay(event: 'open' | 'close'): void {
 
 /**
  * Marker interface for components the manager tracks. The manager doesn't
- * call back into owners — components poll `isActive` / `imageSuppressedByOverlay`
- * each frame.
+ * call back into owners — components poll `isPlaceholder` each frame.
  */
 export type ImageOwner = object;
 
@@ -107,20 +111,32 @@ class ImageManager {
     }
   }
 
-  isActive(owner: ImageOwner): boolean {
-    return this.active?.owner === owner;
+  /**
+   * Single per-frame predicate for inline image components.
+   *
+   * Returns true when the component should render its muted "(image)"
+   * placeholder instead of the kitty/iTerm2 escape — either because it is
+   * no longer the active image (a newer one took over) or because an
+   * overlay is currently up.
+   *
+   * As a side effect, also detects overlay open/close transitions and
+   * runs the cleanup work that has to happen at those edges (delete the
+   * kitty placement so the popup isn't punched through; force a full
+   * viewport redraw so popup glyphs don't ghost on image-bearing rows).
+   * Components don't need to know about overlays — they just ask this.
+   */
+  isPlaceholder(owner: ImageOwner): boolean {
+    const overlayUp = this.pollOverlayTransition();
+    return overlayUp || this.active?.owner !== owner;
   }
 
   /**
-   * True when the active image's terminal placement must be hidden right
-   * now (because an overlay is on screen). Components consult this every
-   * frame from `render()`.
-   *
-   * Detects overlay open/close transitions and forces a full screen
-   * redraw on each transition so popup-composited cells from the
-   * previous frame can't leak into surrounding rows.
+   * Drive the overlay transition state machine. Returns the current
+   * overlay state. Called from `isPlaceholder` once per component per
+   * frame; the transition branches only execute on actual edges so
+   * repeated calls within a frame are cheap.
    */
-  imageSuppressedByOverlay(): boolean {
+  private pollOverlayTransition(): boolean {
     if (!this.ui) return false;
     const overlayUp = this.ui.hasOverlay();
     if (overlayUp !== this.overlayActive) {
