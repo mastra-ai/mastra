@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
-import type { AgentSignalContents } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
@@ -141,6 +141,7 @@ function toSystemReminderContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
+  const metadata = getRecordValue(payload.metadata);
   const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
   if (message === undefined) return undefined;
 
@@ -159,8 +160,13 @@ function toSystemReminderContent(
           ? attributes.gapMs
           : undefined,
     timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
-    goalMaxTurns: typeof payload.goalMaxTurns === 'number' ? payload.goalMaxTurns : undefined,
-    judgeModelId: getStringValue(payload.judgeModelId),
+    goalMaxTurns:
+      typeof payload.goalMaxTurns === 'number'
+        ? payload.goalMaxTurns
+        : typeof metadata?.goalMaxTurns === 'number'
+          ? metadata.goalMaxTurns
+          : undefined,
+    judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
   };
 }
 
@@ -1642,20 +1648,20 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Send a user signal to the current agent/thread.
+   * Send a signal to the current agent/thread.
    */
-  sendSignal({
-    content,
-    tracingContext,
-    tracingOptions,
-    requestContext: requestContextInput,
-  }: {
-    content: AgentSignalContents;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    requestContext?: RequestContext;
-  }): { id: string; type: 'user-message'; accepted: Promise<{ accepted: true; runId: string }> } {
-    const signal = createSignal({ type: 'user-message', contents: content });
+  sendSignal(
+    input:
+      | AgentSignalInput
+      | {
+          content: AgentSignalContents;
+          tracingContext?: TracingContext;
+          tracingOptions?: TracingOptions;
+          requestContext?: RequestContext;
+        },
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
+    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const signal = createSignal('content' in input ? { type: 'user-message', contents: input.content } : input);
     const accepted = Promise.resolve().then(async () => {
       if (!this.currentThreadId) {
         const thread = await this.createThread();
@@ -1672,6 +1678,11 @@ export class Harness<TState = {}> {
         });
         return { accepted: result.accepted, runId: result.runId };
       }
+
+      let emittedAgentEnd = false;
+      const unsubscribeAgentEnd = this.subscribe(event => {
+        if (event.type === 'agent_end') emittedAgentEnd = true;
+      });
 
       this.abortController ??= new AbortController();
       const requestContext = await this.buildRequestContext(requestContextInput);
@@ -1694,10 +1705,18 @@ export class Harness<TState = {}> {
         threadId: this.currentThreadId,
         ifIdle: { streamOptions: streamOptions as any },
       });
+      void Promise.resolve().then(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await this.waitForCurrentThreadStreamIdle();
+        unsubscribeAgentEnd();
+        if (!emittedAgentEnd && !this.pendingSuspensionRunId) {
+          this.emit({ type: 'agent_end', reason: 'complete' });
+        }
+      });
       return { accepted: result.accepted, runId: result.runId };
     });
 
-    return { id: signal.id, type: 'user-message', accepted };
+    return { id: signal.id, type: signal.type, accepted };
   }
 
   /**
@@ -1930,6 +1949,7 @@ export class Harness<TState = {}> {
         type: signalMetadata.type,
         contents: signalMetadata.contents ?? msg.content.content,
         attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
+        metadata: getRecordValue(signalMetadata.metadata),
       });
       if (reminder) {
         content.push(reminder);

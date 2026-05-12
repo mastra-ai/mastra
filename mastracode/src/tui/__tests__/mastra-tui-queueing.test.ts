@@ -72,6 +72,7 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     addUserMessage: vi.fn(),
     addChildBeforeFollowUps: vi.fn(),
     fireMessage: vi.fn(),
+    startGoal: vi.fn(),
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
@@ -527,6 +528,49 @@ describe('MastraTUI queueing', () => {
       expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
     });
     expect(ctx.fireMessage).not.toHaveBeenCalledWith('goal continuation');
+  });
+
+  it('sends goal continuation as a system-reminder signal', async () => {
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    const state = createQueueState({
+      harness: {
+        getFollowUpCount: vi.fn(() => 0),
+        sendSignal,
+      } as any,
+      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      goalManager: {
+        isActive: vi.fn(() => true),
+        getGoal: vi.fn(() => ({
+          id: 'goal-1',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+        evaluateAfterTurn: vi.fn().mockResolvedValue({
+          continuation: 'goal continuation',
+          judgeResult: { decision: 'continue', reason: 'Keep going.' },
+        }),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    await vi.waitFor(() => {
+      expect(sendSignal).toHaveBeenCalledWith({
+        type: 'system-reminder',
+        contents: 'goal continuation',
+        attributes: { type: 'goal-judge' },
+        metadata: {
+          goalId: 'goal-1',
+          turnsUsed: 2,
+          maxTurns: 20,
+          judgeModelId: 'openai/gpt-5.5',
+        },
+      });
+    });
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
   });
 
   it('persists terminal goal judge responses when no continuation is queued', async () => {
