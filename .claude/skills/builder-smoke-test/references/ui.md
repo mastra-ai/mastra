@@ -31,6 +31,8 @@ If you skip a step, mark it ⏭️ in the result table with a one-line reason
 
 Navigate to `http://localhost:4111/agent-builder`.
 
+> **Note:** On a totally empty project (no agents and no skills), `/agent-builder` currently redirects to the full-page `/agent-builder/agents/create` starter (no shell, no sidebar). To exercise this step, create at least one agent first (the scaffold's `weather-agent` is registered but stored agents start at zero). Once any stored agent or skill exists, the shell renders.
+
 - [ ] Page loads without error
 - [ ] Sidebar visible: `My agents`, `Skills`, `Favorites`, `Library` (main nav)
 - [ ] `Infrastructure` is pinned at the bottom of the sidebar, visually separated from the main group
@@ -45,6 +47,7 @@ Navigate to `http://localhost:4111/agent-builder/skills`.
 - [ ] `+ New skill` button top-right
 - [ ] Each skill row shows name, description (if set), and a star button
 - [ ] Clicking a row navigates to `/agent-builder/skills/<id>/edit` (NOT an inline detail panel)
+- [ ] Canonical detail routes are `/agent-builder/skills/<id>/edit` (owner) and `/agent-builder/skills/<id>/view` (non-owner). The bare `/agent-builder/skills/<id>` path is not a registered route — navigate via the list, not by typing the URL.
 
 ### 3. Create Skill via UI _(Core)_
 

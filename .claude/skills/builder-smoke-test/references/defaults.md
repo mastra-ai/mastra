@@ -94,7 +94,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST "$BASE/stored/agents" \
 ### 4. Verify defaults expose via settings
 
 ```bash
-curl -s "$BASE/editor/builder/settings" | jq '.agent // .builder.agent // .configuration.agent'
+curl -s "$BASE/editor/builder/settings" | jq '.configuration.agent'
 ```
 
 - [ ] `workspace`, `memory`, `browser`, `models.default`, `models.allowed` all appear

@@ -6,6 +6,8 @@ The builder's `features.agent.tools|agents|workflows` flags + per-feature allowl
 
 `features.agent.tools = true` means tools can be attached. If a `pickerAllowlist` is configured per surface, only entries on the list appear. With no allowlist, all registered tools/agents/workflows are visible (subject to feature flag).
 
+Settings payload exposes resolved allowlists at top level as `visibleTools` / `visibleAgents` / `visibleWorkflows` (each is `string[] | null`; `null` = unrestricted). Stored-agent records use different keys (`tools` / `agents` / `workflows`), so cross-check both shapes when validating.
+
 ## Steps
 
 ### 1. Confirm features enabled

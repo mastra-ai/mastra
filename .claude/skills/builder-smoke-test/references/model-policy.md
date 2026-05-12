@@ -71,7 +71,7 @@ curl -s -o /tmp/policy-err.json -w '%{http_code}\n' \
 cat /tmp/policy-err.json | jq .
 ```
 
-- [ ] Returns 400/403 (or a validation error) with a clear "model not in allowed list" message
+- [ ] Returns `422` (semantic validation error) with a clear "model not in allowed list" message
 - [ ] No agent was created (list count unchanged)
 
 ### 5. Browser dropdown respects the policy

@@ -104,11 +104,13 @@ In `/agent-builder/skills`:
 
 ## Steps — Library Copy flow
 
+> **Setup note:** The smoke-test scaffold has no seeded public skills. To exercise this flow you must either (a) run the smoke test against a project that has seeded skills (e.g. `examples/agent-builder` with its `mastra.db`), or (b) under `--auth on`, create a public skill while impersonating a different user (or use a separate WorkOS account) so the current user can "Copy" a non-owned skill. Under `--auth off`, every skill resolves to the same `null` author, so the Copy affordance won't appear — defer this section to Run 2.
+
 ### 9. Library page lists public skills
 
 Navigate to `/agent-builder/library`.
 
-- [ ] Shows public skills (including seeded `web-design-guidelines`, `api-design-principles`, `vercel-react-best-practices`, `postgres-query-tuning` from the example DB)
+- [ ] Shows at least one public skill authored by someone other than current user (skip with a note if none exist — see setup note above)
 - [ ] All shown skills are public and authored by someone other than current user
 
 ### 10. Copy a public skill

@@ -16,15 +16,17 @@ channels: {
 
 ## Steps
 
-### 1. Slack with no env vars
+### 1. Slack with no env vars _(auth-off-friendly negative path)_
 
-If `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / etc. are unset:
+If `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / etc. are unset (the default scaffold state):
 
 ```bash
 curl -s "$BASE/editor/builder/infrastructure" | jq '.channels'
 ```
 
-- [ ] `slack` entry is absent (filtered out by `isConfigured`)
+- [ ] Response shape is `{ providers: [...] }`
+- [ ] `providers` is `[]` (empty array) — `slack` is filtered out by `isConfigured`
+- [ ] Section status: ✅ (negative path verified). Steps 2–5 (positive Slack flow) defer to Run 2 only when `SLACK_*` env vars are set.
 
 ### 2. Slack with env vars
 
