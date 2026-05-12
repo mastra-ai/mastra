@@ -372,7 +372,8 @@ After testing, provide:
 | 14  | UI                 | ✅/❌/⏭️ |                                 |
 | 15  | Auth               | ✅/❌/⏭️ | (skipped if no WORKOS\_\* vars) |
 
-**Issues found**: (list any)
+**Product issues**: (list any — server/UI behaved unexpectedly. For each: HTTP method + path or UI route, expected vs actual, one-sentence guess at the cause. Do not pre-decide "known bug" — log what the server actually did. Say "none" if empty.)
+**Skill issues**: (list any — the skill itself was wrong, unclear, stale, or unreachable. For each: which file + step (e.g. `references/skills.md` step F2), and what was wrong. Doc drift, not product bugs. Say "none" if empty.)
 **Regressions**: (list any behavioral changes from a previous run)
 **Warnings**: (e.g., dev-server crash on `/auth/refresh` polling, OPENAI_API_KEY required at startup)
 **Skipped sections**: (list with reason)
