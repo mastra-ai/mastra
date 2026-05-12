@@ -15,7 +15,7 @@ export type MemoryInfo = { threadId: string; resourceId?: string };
 
 type MastraMessageShared = {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
@@ -110,7 +110,7 @@ export type MastraDBMessage = MastraMessageShared & {
 export type MastraMessageV1 = {
   id: string;
   content: string | CoreMessageV4['content'];
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'signal';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;

@@ -1,5 +1,48 @@
 # @mastra/react
 
+## 0.3.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`105e454`](https://github.com/mastra-ai/mastra/commit/105e454c95af06a7c741c15969d8f9b0f02463a7)]:
+  - @mastra/core@1.33.0-alpha.15
+  - @mastra/client-js@1.18.0-alpha.16
+
+## 0.3.0-alpha.15
+
+### Minor Changes
+
+- Added client, React, and Studio support for Agent signals in threaded chat. Threaded user messages now send through Agent signals, stream output is consumed from the thread subscription, echoed user messages are deduped by signal ID, file and image message contents are preserved, Studio can send follow-ups while a response is streaming, Studio subscribes to open threads so additional tabs can observe active streams, and the Studio stop button aborts the active thread subscription. React chat also falls back to legacy threaded streaming when it connects to a server or core version that does not support signal routes yet. ([#16338](https://github.com/mastra-ai/mastra/pull/16338))
+
+  ```ts
+  const { sendMessage } = useChat({ agentId, resourceId, threadId });
+  await sendMessage({ message: 'Follow up while streaming', threadId });
+  ```
+
+### Patch Changes
+
+- Fixed streaming chat messages so sending while an agent is running does not duplicate assistant output or leave the previous response marked as streaming. ([#16338](https://github.com/mastra-ai/mastra/pull/16338))
+
+- Updated dependencies [[`05dab92`](https://github.com/mastra-ai/mastra/commit/05dab92b3373306a4791c3a035a3100dd9a76b7f)]:
+  - @mastra/client-js@1.18.0-alpha.15
+  - @mastra/core@1.33.0-alpha.14
+
+## 0.2.36-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`ce01024`](https://github.com/mastra-ai/mastra/commit/ce010242eee9bdfc09e4c26725b9d37998679a8d), [`f984b4d`](https://github.com/mastra-ai/mastra/commit/f984b4d6c60bf2ae2a9b156f0e8c35a66fe96c91), [`8373ff4`](https://github.com/mastra-ai/mastra/commit/8373ff46745d77af79f183c4470f80fa2727a6b2), [`11c1528`](https://github.com/mastra-ai/mastra/commit/11c152848c5d0ef227184853b5040f5b41ee7b1e)]:
+  - @mastra/core@1.33.0-alpha.13
+  - @mastra/client-js@1.18.0-alpha.14
+
+## 0.2.36-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`b59316f`](https://github.com/mastra-ai/mastra/commit/b59316ffa0f7688165b0f9c81ccdf85da461e5b2), [`55f1e2d`](https://github.com/mastra-ai/mastra/commit/55f1e2d65425b95a49ae788053b266f256e38c96), [`19a2b5e`](https://github.com/mastra-ai/mastra/commit/19a2b5eda9d93f6e1026e0c84f3c1f1c85700a9f), [`d48a705`](https://github.com/mastra-ai/mastra/commit/d48a705ff3dfbdc7a996e07ecd8293b5effd9a2a)]:
+  - @mastra/core@1.33.0-alpha.12
+  - @mastra/client-js@1.18.0-alpha.13
+
 ## 0.2.36-alpha.12
 
 ### Patch Changes

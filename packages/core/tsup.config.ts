@@ -59,6 +59,7 @@ export default defineConfig({
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
     'src/test-utils/llm-mock.ts',
+    'src/a2a/client.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
     'src/evals/scoreTraces/index.ts',

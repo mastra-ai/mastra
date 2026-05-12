@@ -209,10 +209,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Strip __state from stepResults at top level
     const { __state: _removedState, ...stepResultsWithoutTopLevelState } = resultData.stepResults ?? {};
 
-    // Recursively clean each step result to remove internal properties (__state, nestedRunId)
-    // This handles both object and array step results (e.g., forEach outputs)
+    // Recursively clean each step result to remove internal properties (__state, nestedRunId).
+    // This handles both object and array step results (e.g., forEach outputs).
+    // `skipped` entries are internal bookkeeping for un-taken conditional branches (used to
+    // know when every branch has reported in) — the default engine never surfaces them, so
+    // they're dropped from the user-facing step results too.
     const cleanStepResults: Record<string, any> = {};
     for (const [stepId, stepResult] of Object.entries(stepResultsWithoutTopLevelState)) {
+      if ((stepResult as any)?.status === 'skipped') {
+        continue;
+      }
       cleanStepResults[stepId] = cleanStepResult(stepResult);
     }
 

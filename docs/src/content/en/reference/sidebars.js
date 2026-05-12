@@ -455,6 +455,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
+        { type: 'doc', id: 'storage/dsql', label: 'Aurora DSQL Storage' },
         { type: 'doc', id: 'storage/clickhouse', label: 'ClickHouse Storage' },
         { type: 'doc', id: 'storage/cloudflare-d1', label: 'Cloudflare D1 Storage' },
         { type: 'doc', id: 'storage/cloudflare', label: 'Cloudflare KV Storage' },
@@ -514,6 +515,7 @@ const sidebars = {
       label: 'Tools & MCP',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
