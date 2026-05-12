@@ -247,13 +247,32 @@ bash .claude/skills/builder-smoke-test/scripts/preflight.sh --expect on \
 
 Preflight chains `scaffold.sh` followed by validation checks (project exists with `node_modules/@mastra/core`, `$PROJECT_DIR/.env` has `OPENAI_API_KEY`, optional WorkOS keys present when `--expect on`, and auth mode matches `--expect`). Each failure prints a stable error code; this table tells the agent what to do.
 
+### Resolving missing env vars
+
+If `scaffold.sh` or `preflight.sh` reports a missing `OPENAI_API_KEY` or `WORKOS_*` var, the agent must **not** silently source any rc file. Instead, work down this list and stop at the first one that resolves:
+
+1. Check whether the var is already in the process env you can see (`echo "${OPENAI_API_KEY:-<unset>}"`). If yes, re-run scaffold with `--openai-key "$OPENAI_API_KEY"` (and equivalent for WorkOS).
+2. Check whether the var is in `$PROJECT_DIR/.env` from a prior run (`grep -E "^(OPENAI_API_KEY|WORKOS_)" "$PROJECT_DIR/.env" 2>/dev/null`). If yes, you can pass `--reuse` to the next scaffold call.
+3. If neither, ask the user, in one message, *both* questions:
+   - "Can you paste the value, or give me permission to source one of these rc files?"
+   - List the candidates that exist on disk: `~/.zshrc`, `~/.bashrc`, `~/.zshenv`, `~/.profile`, `~/.mastra-env`, `~/.env.global`. Show only the ones that exist; don't fabricate.
+4. Only after the user explicitly approves a specific file, source it in a subshell and rerun scaffold with the inherited env. The canonical recipe is:
+
+   ```bash
+   zsh -c 'source ~/.mastra-env && bash .claude/skills/builder-smoke-test/scripts/scaffold.sh --reuse'
+   ```
+
+   (Substitute the approved file for `~/.mastra-env`; substitute `zsh -c` for `bash -c` if the rc file is a bashrc.)
+
+5. Never write the secret value back into any rc file, never `export` it into the user's interactive shell, and never echo it back in chat in full. Refer to it as `<your-openai-key>` once you've used it.
+
 | Error code               | What it means                                                                                       | What the agent should do                                                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `not-in-mastra-repo`     | The script can't resolve a worktree from its own location (no `pnpm-workspace.yaml` upwards).       | Reinstall the skill into a Mastra worktree, or copy `.claude/skills/builder-smoke-test` somewhere under your worktree.                              |
 | `scaffold-failed`        | `scripts/scaffold.sh` returned non-zero.                                                            | Re-run scaffold with `--no-reuse` to force a fresh install. Inspect the printed `pnpm install` output for the real error.                           |
 | `project-not-installed`  | `$PROJECT_DIR/node_modules/@mastra/core` missing after scaffold.                                    | Re-run the scaffold without `--reuse`. If that still fails, delete `$PROJECT_DIR` and re-run.                                                       |
-| `openai-key-missing`     | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                 | Re-run preflight with `--openai-key <value>` or export `OPENAI_API_KEY` in the shell first.                                                         |
-| `workos-keys-missing`    | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Re-run preflight with all three `--workos-*` flags. If they're stored in the shell, pass `--workos-api-key "$WORKOS_API_KEY"` etc.                  |
+| `openai-key-missing`     | `$PROJECT_DIR/.env` has no usable `OPENAI_API_KEY`.                                                 | Follow the "Resolving missing env vars" section above. Re-run preflight with `--openai-key <value>` once you have it.                               |
+| `workos-keys-missing`    | `--expect on` but one or more of `WORKOS_API_KEY` / `WORKOS_CLIENT_ID` / `WORKOS_ORGANIZATION_ID` is absent or blank in `.env`. | Follow the "Resolving missing env vars" section above. Re-run preflight with all three `--workos-*` flags.                                          |
 | `mode-mismatch`          | `--expect` disagrees with what `auth-detect.sh` reports for `$PROJECT_DIR/.env`.                    | Re-run the scaffold with (auth on) or without (auth off) `--workos-*` flags. The scaffold is idempotent for the parts that don't change.            |
 | `bad-expect-value`       | `--expect` got something other than `off` or `on`.                                                  | Fix the invocation.                                                                                                                                  |
 
