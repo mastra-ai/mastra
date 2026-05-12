@@ -1,0 +1,293 @@
+# Smoke tests — runs after npm publish (or on manual dispatch) to verify core features.
+#
+# All GitHub-managed config is prefixed `SMOKE_*` so it groups together in repo
+# Settings → Secrets and variables → Actions.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions → Secrets):
+#   SMOKE_MASTRA_GATEWAY_API_KEY – Mastra gateway API key (mg_...). Agents use
+#                                  models like `mastra/openai/gpt-4o-mini`, so
+#                                  all LLM traffic flows through the gateway.
+#   SMOKE_SLACK_BOT_TOKEN        – Slack Bot User OAuth Token (xoxb-...)
+#
+# Required repository variables (Settings → Secrets and variables → Actions → Variables):
+#   SMOKE_SLACK_CHANNEL_ID – Slack channel ID (C...) to post results to.
+#                            The bot must be invited to this channel.
+#
+# Triggers:
+#   workflow_run     – fires automatically when "Publish to npm" completes on main.
+#                      The resolve job inspects which publish job succeeded:
+#                        prerelease → tag=alpha    stable → tag=latest    snapshot → skip
+#   workflow_dispatch – manual run with a tag input (default "alpha").
+
+name: Smoke Tests
+
+on:
+  workflow_run:
+    workflows: ['Publish to npm']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'npm dist-tag to smoke (alpha, latest, or custom)'
+        required: false
+        default: 'alpha'
+
+concurrency:
+  group: smoke-${{ github.event.inputs.tag || 'auto' }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Resolve which npm tag to smoke and whether to run at all ────────────
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      publish_run_url: ${{ steps.resolve.outputs.publish_run_url }}
+      trigger: ${{ steps.resolve.outputs.trigger }}
+    steps:
+      - name: Resolve tag and run flag
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          PUBLISH_RUN_ID: ${{ github.event.workflow_run.id }}
+          PUBLISH_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "tag=${INPUT_TAG:-alpha}" >> "$GITHUB_OUTPUT"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "publish_run_url=" >> "$GITHUB_OUTPUT"
+            echo "trigger=manual" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # workflow_run path: inspect the upstream publish jobs.
+          echo "Fetching jobs for publish run $PUBLISH_RUN_ID"
+          jobs_json=$(gh api "/repos/$REPO/actions/runs/$PUBLISH_RUN_ID/jobs" --paginate)
+          echo "$jobs_json" | jq -r '.jobs[] | "\(.name)\t\(.conclusion)"'
+
+          stable=$(echo "$jobs_json" | jq -r '[.jobs[] | select(.name=="stable")     | .conclusion] | .[0] // ""')
+          prerelease=$(echo "$jobs_json" | jq -r '[.jobs[] | select(.name=="prerelease") | .conclusion] | .[0] // ""')
+
+          if [ "$stable" = "success" ]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$prerelease" = "success" ]; then
+            echo "tag=alpha" >> "$GITHUB_OUTPUT"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No main-line publish job succeeded; skipping smoke."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "publish_run_url=$PUBLISH_RUN_URL" >> "$GITHUB_OUTPUT"
+          echo "trigger=publish" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    needs: resolve
+    if: needs.resolve.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    strategy:
+      fail-fast: false
+      matrix:
+        zod-version: ['3', '4']
+        include:
+          - zod-version: '3'
+            zod-spec: '^3.25.76'
+          - zod-version: '4'
+            zod-spec: '^4.3.6'
+    defaults:
+      run:
+        working-directory: e2e-tests/smoke
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # ── Rewrite Zod and Mastra deps to the matrix/tag versions ──────────
+      - name: Set zod version
+        run: |
+          node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            pkg.devDependencies.zod = '${{ matrix.zod-spec }}';
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "Set zod to ${{ matrix.zod-spec }}"
+
+      - name: Set Mastra package specs to $TAG
+        run: |
+          node -e "
+            const fs = require('fs');
+            const tag = process.env.TAG;
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            for (const section of ['dependencies', 'devDependencies']) {
+              const block = pkg[section] || {};
+              for (const dep of Object.keys(block)) {
+                if (dep === 'mastra' || dep.startsWith('@mastra/')) {
+                  block[dep] = tag;
+                }
+              }
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "Set Mastra deps to $TAG"
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-workspace
+
+      # ── Collect resolved versions + provenance ─────────────────────────
+      - name: Collect package versions
+        id: versions
+        run: |
+          MASTRA_VERSIONS=$(node -e "
+            const lock = require('fs').readFileSync('pnpm-lock.yaml', 'utf8');
+            const lines = lock.split('\n');
+            const deps = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            const allDeps = { ...deps.dependencies, ...deps.devDependencies };
+            const mastraPkgs = Object.keys(allDeps).filter(n => n.startsWith('@mastra/') || n === 'mastra');
+            const versions = [];
+            for (let i = 0; i < lines.length; i++) {
+              for (const pkg of mastraPkgs) {
+                if (lines[i].trim().startsWith(\"'\" + pkg + \"':\") || lines[i].trim().startsWith(pkg + ':')) {
+                  for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+                    const vm = lines[j].match(/^\\s+version:\\s*'?([^('\\s]+)/);
+                    if (vm) { versions.push(pkg + '@' + vm[1]); break; }
+                  }
+                }
+              }
+            }
+            const seen = new Set();
+            const unique = versions.filter(v => { const n = v.split('@').slice(0, -1).join('@'); if (seen.has(n)) return false; seen.add(n); return true; });
+            console.log(unique.join(', '));
+          ")
+          echo "mastra_versions=$MASTRA_VERSIONS" >> "$GITHUB_OUTPUT"
+
+          ZOD_RESOLVED=$(node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('node_modules/zod/package.json', 'utf8'));
+            console.log(pkg.version);
+          ")
+          echo "zod_resolved=$ZOD_RESOLVED" >> "$GITHUB_OUTPUT"
+
+      # ── Print a self-explanatory provenance block (logs + run summary) ─
+      - name: Print resolved versions
+        env:
+          MASTRA_VERSIONS: ${{ steps.versions.outputs.mastra_versions }}
+          ZOD_RESOLVED: ${{ steps.versions.outputs.zod_resolved }}
+          TRIGGER: ${{ needs.resolve.outputs.trigger }}
+          PUBLISH_RUN_URL: ${{ needs.resolve.outputs.publish_run_url }}
+        run: |
+          # Plain text to job logs
+          echo "────────────────────────────────────────────────────────"
+          echo "Smoke run resolved:"
+          echo "  trigger:         $TRIGGER"
+          echo "  npm tag:         $TAG"
+          echo "  zod (matrix):    ${{ matrix.zod-version }} (${{ matrix.zod-spec }} → $ZOD_RESOLVED)"
+          echo "  publish run:     ${PUBLISH_RUN_URL:-n/a}"
+          echo "  mastra packages:"
+          echo "$MASTRA_VERSIONS" | tr ',' '\n' | sed 's/^ */    /'
+          echo "────────────────────────────────────────────────────────"
+
+          # Markdown to the run-page summary
+          {
+            echo "## Smoke run — zod ${{ matrix.zod-version }}"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| trigger | \`$TRIGGER\` |"
+            echo "| npm tag | \`$TAG\` |"
+            echo "| zod | \`${{ matrix.zod-spec }}\` → \`$ZOD_RESOLVED\` |"
+            if [ -n "${PUBLISH_RUN_URL:-}" ]; then
+              echo "| publish run | [link]($PUBLISH_RUN_URL) |"
+            fi
+            echo ""
+            echo "<details><summary>Mastra packages</summary>"
+            echo ""
+            echo '```'
+            echo "$MASTRA_VERSIONS" | tr ',' '\n' | sed 's/^ *//'
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Build ───────────────────────────────────────────────────────────
+      - name: Build project
+        run: pnpm build:studio
+
+      # ── Playwright browsers ────────────────────────────────────────────
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # ── Run tests ──────────────────────────────────────────────────────
+      - name: Run API tests
+        id: api-tests
+        run: pnpm test
+        continue-on-error: true
+        env:
+          MASTRA_GATEWAY_API_KEY: ${{ secrets.SMOKE_MASTRA_GATEWAY_API_KEY }}
+
+      - name: Run UI tests
+        id: ui-tests
+        run: pnpm test:ui
+        continue-on-error: true
+        env:
+          MASTRA_GATEWAY_API_KEY: ${{ secrets.SMOKE_MASTRA_GATEWAY_API_KEY }}
+
+      # ── Surface JUnit failures as GitHub check annotations ─────────────
+      - name: Publish API test annotations
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: API tests (zod ${{ matrix.zod-version }})
+          path: e2e-tests/smoke/reports/api-junit.xml
+          reporter: jest-junit
+          fail-on-error: false
+          working-directory: e2e-tests/smoke
+
+      - name: Publish UI test annotations
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: UI tests (zod ${{ matrix.zod-version }})
+          path: e2e-tests/smoke/reports/ui-junit.xml
+          reporter: java-junit
+          fail-on-error: false
+          working-directory: e2e-tests/smoke
+
+      # ── Report to Slack ────────────────────────────────────────────────
+      - name: Report to Slack
+        run: pnpm report:slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SMOKE_SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SMOKE_SLACK_CHANNEL_ID }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PUBLISH_RUN_URL: ${{ needs.resolve.outputs.publish_run_url }}
+          SMOKE_TRIGGER: ${{ needs.resolve.outputs.trigger }}
+          NPM_TAG: ${{ needs.resolve.outputs.tag }}
+          ZOD_VERSION: ${{ steps.versions.outputs.zod_resolved }}
+          MASTRA_VERSIONS: ${{ steps.versions.outputs.mastra_versions }}
+
+      # ── Upload artifacts (backup) ──────────────────────────────────────
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-test-results-zod${{ matrix.zod-version }}
+          path: |
+            e2e-tests/smoke/reports/
+            e2e-tests/smoke/test-results/
+          retention-days: 30
