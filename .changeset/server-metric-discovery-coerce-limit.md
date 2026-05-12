@@ -3,4 +3,4 @@
 '@mastra/server': patch
 ---
 
-Fix `GET /api/observability/discovery/metric-names` and `GET /api/observability/discovery/metric-label-values` rejecting valid requests with `limit` set. The query schema used `z.number()` for `limit`, so callers (whose values arrive as strings via URL query params) hit `Invalid input: expected number, received string`. Switched the discovery arg schemas to `z.coerce.number()` so HTTP callers no longer need to pre-parse numeric values, matching the pattern used by other query schemas (e.g. `paginationArgsSchema`).
+`GET /api/observability/discovery/metric-names` and `GET /api/observability/discovery/metric-label-values` now accept `limit` as a URL query parameter without pre-parsing. Previously, passing `?limit=10` was rejected as a validation error; callers can now use these endpoints directly from HTTP clients, consistent with other query endpoints (e.g. pagination).
