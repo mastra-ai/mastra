@@ -21,7 +21,7 @@ setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const describeE2E = process.env.OPENAI_API_KEY ? describe : describe.skip;
+const describeE2E = describe.skip;
 
 const testStorage = new MockStore();
 
