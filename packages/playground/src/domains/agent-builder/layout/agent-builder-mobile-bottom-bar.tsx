@@ -1,8 +1,9 @@
 import { AgentIcon } from '@mastra/playground-ui';
-import { LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
+import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -13,47 +14,56 @@ interface MobileLink {
 }
 
 const agentsLink: MobileLink = { name: 'Agents', url: '/agent-builder/agents', icon: <AgentIcon /> };
+const skillsLink: MobileLink = {
+  name: 'Skills',
+  url: '/agent-builder/skills',
+  icon: <Blocks className="size-5" />,
+};
 const favoritesLink: MobileLink = {
   name: 'Favorites',
   url: '/agent-builder/favorite',
   icon: <StarIcon className="size-5" />,
-};
-const infrastructureLink: MobileLink = {
-  name: 'Infra',
-  url: '/agent-builder/infrastructure',
-  icon: <ServerCogIcon className="size-5" />,
 };
 const libraryLink: MobileLink = {
   name: 'Library',
   url: '/agent-builder/library',
   icon: <LibraryIcon className="size-5" />,
 };
+const infrastructureLink: MobileLink = {
+  name: 'Infra',
+  url: '/agent-builder/infrastructure',
+  icon: <ServerCogIcon className="size-5" />,
+};
 
 export function AgentBuilderMobileBottomBar() {
   const { Link } = useLinkComponent();
   const { pathname } = useLocation();
-  const { canUseFavorites } = useBuilderAgentAccess();
+  const features = useBuilderAgentFeatures();
+  const { canManageSkills, canUseFavorites } = useBuilderAgentAccess();
   const { hasPermission } = usePermissions();
   const canViewInfrastructure = hasPermission('infrastructure:read');
 
   const links = useMemo(() => {
     const result: MobileLink[] = [agentsLink];
-    if (canViewInfrastructure) {
-      result.push(infrastructureLink);
+    if (features.skills && canManageSkills) {
+      result.push(skillsLink);
     }
     if (canUseFavorites) {
       result.push(favoritesLink);
     }
     result.push(libraryLink);
+    if (canViewInfrastructure) {
+      result.push(infrastructureLink);
+    }
     return result;
-  }, [canViewInfrastructure, canUseFavorites]);
+  }, [features.skills, canManageSkills, canUseFavorites, canViewInfrastructure]);
 
   return (
     <nav
       aria-label="Primary"
       className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border1 bg-surface1/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]"
     >
-      <ul className={`grid ${links.length === 4 ? 'grid-cols-4' : links.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      <ul className="grid" style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}>
         {links.map(link => {
           const isActive = pathname.startsWith(link.url);
           return (

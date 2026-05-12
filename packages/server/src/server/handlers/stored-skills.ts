@@ -437,24 +437,31 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       // Derive references/scripts/assets path arrays from the files tree
       const indexedPaths = files ? extractIndexedPathsFromFiles(files, { references, scripts, assets }) : {};
 
-      // Update the skill with both entity-level and config-level fields
-      // The storage layer handles separating these into record updates vs new-version creation
-      await skillStore.update({
-        id: storedSkillId,
-        authorId,
-        visibility: resolvedVisibility,
-        name,
-        description,
-        instructions,
-        license,
-        compatibility,
-        source,
-        references: indexedPaths.references ?? references,
-        scripts: indexedPaths.scripts ?? scripts,
-        assets: indexedPaths.assets ?? assets,
-        files,
-        metadata,
-      });
+      // Update the skill with both entity-level and config-level fields.
+      // The storage layer handles separating these into record updates vs
+      // new-version creation, but it uses `field in updates` to detect config
+      // changes — so we must only include fields the caller actually sent.
+      // Forwarding `undefined` keys would trigger a spurious version create
+      // and pass `undefined` into the database driver.
+      const update: Record<string, unknown> = { id: storedSkillId };
+      if (authorId !== undefined) update.authorId = authorId;
+      if (resolvedVisibility !== undefined) update.visibility = resolvedVisibility;
+      if (name !== undefined) update.name = name;
+      if (description !== undefined) update.description = description;
+      if (instructions !== undefined) update.instructions = instructions;
+      if (license !== undefined) update.license = license;
+      if (compatibility !== undefined) update.compatibility = compatibility;
+      if (source !== undefined) update.source = source;
+      const resolvedReferences = indexedPaths.references ?? references;
+      const resolvedScripts = indexedPaths.scripts ?? scripts;
+      const resolvedAssets = indexedPaths.assets ?? assets;
+      if (resolvedReferences !== undefined) update.references = resolvedReferences;
+      if (resolvedScripts !== undefined) update.scripts = resolvedScripts;
+      if (resolvedAssets !== undefined) update.assets = resolvedAssets;
+      if (files !== undefined) update.files = files;
+      if (metadata !== undefined) update.metadata = metadata;
+
+      await skillStore.update(update as Parameters<typeof skillStore.update>[0]);
 
       // Return the resolved skill with the updated config
       const resolved = await skillStore.getByIdResolved(storedSkillId);

@@ -31,12 +31,18 @@ function flattenFiles(nodes: InMemoryFileNode[], basePath: string): { path: stri
   return results;
 }
 
-export function useUpdateSkill() {
+interface UseUpdateSkillOptions {
+  /** When true, suppresses success and error toasts. Used by autosave flows. */
+  silent?: boolean;
+}
+
+export function useUpdateSkill(options: UseUpdateSkillOptions = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const writeFile = useWriteWorkspaceFile();
   const { hasPermission } = usePermissions();
   const canWriteWorkspace = hasPermission('workspaces:write');
+  const { silent = false } = options;
 
   return useMutation({
     mutationFn: async (params: UpdateSkillParams): Promise<StoredSkillResponse> => {
@@ -61,23 +67,34 @@ export function useUpdateSkill() {
         }
       }
 
+      // Build a sparse update body — the server handler currently forwards
+      // every key (including `undefined`) to the storage driver, which then
+      // rejects "undefined cannot be passed as argument to the database".
+      // Only include fields the caller actually wants to change.
+      const resolvedInstructions = instructions ?? (files ? extractSkillInstructions(files) : undefined);
+      const resolvedLicense = files ? extractSkillLicense(files) : undefined;
+      const updateBody: Record<string, unknown> = {};
+      if (name !== undefined) updateBody.name = name;
+      if (description !== undefined) updateBody.description = description;
+      if (visibility !== undefined) updateBody.visibility = visibility;
+      if (resolvedInstructions !== undefined) updateBody.instructions = resolvedInstructions;
+      if (resolvedLicense !== undefined) updateBody.license = resolvedLicense;
+      if (files !== undefined) updateBody.files = files;
+
       // Update stored skill via API
-      return client.getStoredSkill(id).update({
-        name,
-        description,
-        visibility,
-        instructions: instructions ?? (files ? extractSkillInstructions(files) : undefined),
-        license: files ? extractSkillLicense(files) : undefined,
-        files,
-      });
+      return client.getStoredSkill(id).update(updateBody);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
       void queryClient.invalidateQueries({ queryKey: ['stored-skill'] });
-      toast.success('Skill updated');
+      if (!silent) {
+        toast.success('Skill updated');
+      }
     },
     onError: error => {
-      toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (!silent) {
+        toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     },
   });
 }
