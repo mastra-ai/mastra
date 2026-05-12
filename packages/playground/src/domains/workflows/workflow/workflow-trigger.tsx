@@ -17,11 +17,11 @@ import {
 } from '@mastra/playground-ui';
 import { Braces, Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
+import { WorkflowRunAgentConversationsPanel } from '../components/workflow-run-agent-conversations-panel';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
-import { WorkflowRunAgentConversationsPanel } from '../components/workflow-run-agent-conversations-panel';
 import { WorkflowStepsStatus } from './workflow-steps-status';
 import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
 import type { ResumeStepParams } from './workflow-suspended-steps';
@@ -94,8 +94,14 @@ export function WorkflowTrigger({
 }: WorkflowTriggerProps) {
   const requestContext = useMergedRequestContext();
 
-  const { result, setResult, payload, setPayload, setRunId: setContextRunId, runId: contextRunId } =
-    useContext(WorkflowRunContext);
+  const {
+    result,
+    setResult,
+    payload,
+    setPayload,
+    setRunId: setContextRunId,
+    runId: contextRunId,
+  } = useContext(WorkflowRunContext);
   const { canExecute } = usePermissions();
 
   // Check if user can execute workflows
@@ -160,13 +166,13 @@ export function WorkflowTrigger({
       setInnerRunId(paramsRunId);
       setContextRunId(paramsRunId);
     }
-  }, [paramsRunId]);
+  }, [paramsRunId, observeWorkflowStream, workflowId, setContextRunId]);
 
   useEffect(() => {
     if (streamResult) {
       setResult(streamResult);
     }
-  }, [streamResult]);
+  }, [streamResult, setResult]);
 
   if (isLoading) {
     return (
@@ -240,6 +246,7 @@ export function WorkflowTrigger({
             workflowId={workflowId}
             runId={activeRunId}
             runStatus={streamResultToUse?.status ?? result?.status}
+            runSteps={streamResultToUse?.steps}
           />
         ) : null}
       </div>

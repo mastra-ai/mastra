@@ -1,25 +1,11 @@
-import type { StorageThreadType } from '@mastra/core/memory';
 import { WORKFLOW_AGENT_INVOCATION_SCOPE } from '@mastra/core/workflows';
+import type { WorkflowStateStepResult } from '@mastra/core/workflows';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
+import { sortWorkflowRunThreads } from '../workflow-run-conversations-sort';
 import { useMergedRequestContext } from '@/domains/request-context';
-
-function dateMs(value: Date | string | undefined | null): number | undefined {
-  if (value == null) return undefined;
-  const n = new Date(value).getTime();
-  return Number.isFinite(n) ? n : undefined;
-}
-
-/** Earliest activity first (run timeline order). */
-function sortWorkflowRunThreads(threads: StorageThreadType[]): StorageThreadType[] {
-  return [...threads].sort((a, b) => {
-    const ta = dateMs(a.createdAt) ?? dateMs(a.updatedAt) ?? 0;
-    const tb = dateMs(b.createdAt) ?? dateMs(b.updatedAt) ?? 0;
-    if (ta !== tb) return ta - tb;
-    return String(a.id).localeCompare(String(b.id));
-  });
-}
 
 /**
  * Lists memory threads produced by agent workflow steps (`createStep(agent)`) during a workflow run.
@@ -36,11 +22,13 @@ export function useWorkflowRunAgentConversations(
   runId: string | undefined,
   /** Bumps the query cache when the run finishes so we refetch persisted threads */
   runStatus?: string | null,
+  /** When present, step `startedAt` values sort transcripts in true run order (not title / DB clock ties). */
+  runSteps?: Record<string, WorkflowStateStepResult>,
 ) {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['workflow-run-agent-conversations', workflowId, runId, runStatus, requestContext],
     queryFn: async () => {
       if (!workflowId || !runId) {
@@ -53,10 +41,14 @@ export function useWorkflowRunAgentConversations(
         },
         requestContext,
       });
-      return sortWorkflowRunThreads(threads);
+      return threads;
     },
     enabled: Boolean(workflowId && runId),
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
+
+  const data = useMemo(() => sortWorkflowRunThreads(query.data ?? [], runSteps), [query.data, runSteps]);
+
+  return { ...query, data };
 }

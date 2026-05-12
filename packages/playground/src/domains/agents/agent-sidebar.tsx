@@ -8,15 +8,11 @@ export function AgentSidebar({
   threadId,
   threads,
   isLoading,
-  showWorkflowInvocationThreads,
-  onShowWorkflowInvocationThreadsChange,
 }: {
   agentId: string;
   threadId: string;
   threads?: StorageThreadType[];
   isLoading: boolean;
-  showWorkflowInvocationThreads: boolean;
-  onShowWorkflowInvocationThreadsChange: (value: boolean) => void;
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
@@ -36,8 +32,6 @@ export function AgentSidebar({
       isLoading={isLoading}
       threadId={threadId}
       onDelete={handleDelete}
-      showWorkflowInvocationThreads={showWorkflowInvocationThreads}
-      onShowWorkflowInvocationThreadsChange={onShowWorkflowInvocationThreadsChange}
     />
   );
 }

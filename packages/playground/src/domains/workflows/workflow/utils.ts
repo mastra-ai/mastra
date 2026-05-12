@@ -199,6 +199,7 @@ const getStepNodeAndEdge = ({
           canSuspend: stepFlow.step.canSuspend,
           isForEach: stepFlow.type === 'foreach',
           metadata: stepFlow.step.metadata,
+          stepComponent: stepFlow.step.component,
         },
       },
     ];
@@ -325,12 +326,14 @@ const getStepNodeAndEdge = ({
         type: hasGraph ? 'nested-node' : 'default-node',
         data: {
           label: _step.id,
+          stepId: _step.id,
           description: _step.description,
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
           stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
           canSuspend: _step.canSuspend,
           metadata: _step.metadata,
+          stepComponent: _step.component,
         },
       },
       {

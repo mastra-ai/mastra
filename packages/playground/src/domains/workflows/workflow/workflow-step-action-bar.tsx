@@ -1,3 +1,4 @@
+import { buildWorkflowAgentThreadId } from '@mastra/core/workflows';
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import {
   Button,
@@ -13,9 +14,13 @@ import { useContext, useMemo, useState } from 'react';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { WorkflowAgentTranscriptActions } from './workflow-agent-transcript-actions';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+
+/** Serialized workflow graph step `component` for `createStep(agent)` — matches core agent steps. */
+const WORKFLOW_GRAPH_AGENT_COMPONENT = 'AGENT';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
@@ -31,6 +36,8 @@ export interface WorkflowStepActionBarProps {
   status?: WorkflowRunStatus;
   stepKey?: string;
   stepsFlow?: Record<string, string[]>;
+  /** Serialized step `component` from the workflow definition (e.g. agent steps use `'AGENT'`). */
+  stepComponent?: string;
 }
 
 export const WorkflowStepActionBar = ({
@@ -47,6 +54,7 @@ export const WorkflowStepActionBar = ({
   status,
   stepKey,
   stepsFlow,
+  stepComponent,
 }: WorkflowStepActionBarProps) => {
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [isOutputOpen, setIsOutputOpen] = useState(false);
@@ -63,7 +71,7 @@ export const WorkflowStepActionBar = ({
     result,
     runSnapshot,
     timeTravelWorkflowStream,
-    runId: prevRunId,
+    runId: contextRunId,
     workflowId,
     setDebugMode,
   } = useContext(WorkflowRunContext);
@@ -136,7 +144,7 @@ export const WorkflowStepActionBar = ({
 
   const handleRunMapStep = (isContinueRun?: boolean) => {
     const payload = {
-      runId: prevRunId,
+      runId: contextRunId,
       workflowId,
       step: stepKey as string,
       inputData: stepPayload?.hasMultiSteps ? undefined : stepPayload?.input,
@@ -164,6 +172,20 @@ export const WorkflowStepActionBar = ({
     void timeTravelWorkflowStream(payload);
   };
 
+  const showAgentTranscriptActions =
+    stepComponent === WORKFLOW_GRAPH_AGENT_COMPONENT && Boolean(workflowId && contextRunId && stepId);
+
+  const agentThreadId = useMemo(() => {
+    if (!showAgentTranscriptActions || !workflowId || !contextRunId || !stepId) {
+      return undefined;
+    }
+    return buildWorkflowAgentThreadId({
+      workflowId,
+      runId: contextRunId,
+      stepId: stepId,
+    });
+  }, [showAgentTranscriptActions, workflowId, contextRunId, stepId]);
+
   return (
     <>
       {(input ||
@@ -174,7 +196,8 @@ export const WorkflowStepActionBar = ({
         resumeData ||
         onShowNestedGraph ||
         showTimeTravel ||
-        showDebugMode) && (
+        showDebugMode ||
+        showAgentTranscriptActions) && (
         <div
           className={cn(
             'flex flex-wrap items-center bg-surface4 border-t border-border1 px-2 py-1 gap-2 rounded-b-lg',
@@ -383,6 +406,10 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
+
+          {showAgentTranscriptActions && agentThreadId ? (
+            <WorkflowAgentTranscriptActions agentId={stepId} threadId={agentThreadId} />
+          ) : null}
         </div>
       )}
     </>

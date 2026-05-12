@@ -23,6 +23,7 @@ export type NestedNode = Node<
     canSuspend?: boolean;
     isForEach?: boolean;
     metadata?: Record<string, unknown>;
+    stepComponent?: string;
   },
   'nested-node'
 >;
@@ -51,6 +52,7 @@ export function WorkflowNestedNode({
     isParallel,
     canSuspend,
     isForEach,
+    stepComponent,
   } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
@@ -173,6 +175,7 @@ export function WorkflowNestedNode({
           status={displayStatus}
           stepKey={stepKey}
           stepsFlow={stepsFlow}
+          stepComponent={stepComponent}
         />
       </div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}

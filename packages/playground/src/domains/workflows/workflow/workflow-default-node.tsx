@@ -23,6 +23,7 @@ export type DefaultNode = Node<
     canSuspend?: boolean;
     isForEach?: boolean;
     metadata?: Record<string, unknown>;
+    stepComponent?: string;
   },
   'default-node'
 >;
@@ -50,6 +51,7 @@ export function WorkflowDefaultNode({
     isParallel,
     canSuspend,
     isForEach,
+    stepComponent,
   } = data;
 
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
@@ -191,6 +193,7 @@ export function WorkflowDefaultNode({
           status={displayStatus as any}
           stepKey={stepKey}
           stepsFlow={stepsFlow}
+          stepComponent={stepComponent}
         />
       </div>
 
