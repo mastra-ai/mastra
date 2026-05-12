@@ -269,8 +269,10 @@ test.describe('Observability list-mode switcher', () => {
 
     // The anchor span renders inside the detail panel even though its parentSpanId === 'root-A'
     // (which is NOT in the subtree response) — this is the "must not require a trace root"
-    // requirement from the ticket.
-    await expect(page.getByText('tool: weatherInfo').first()).toBeVisible();
+    // requirement from the ticket. Scope to `[data-span-id]` (emitted only by the timeline
+    // in TraceDataPanelView — not by the list rows) so the assertion can't pass just because
+    // the same span appears as a branches-list row above.
+    await expect(page.locator('[data-span-id="tool-call-1"]')).toBeVisible();
   });
 
   test('intra-panel span navigation in branches mode changes spanId but keeps anchorSpanId stable (no subtree refetch)', async ({
