@@ -1,0 +1,163 @@
+---
+title: "Signals | Agents"
+description: "Learn how to send real-time context into a Mastra agent thread."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Signals
+
+:::note Experimental
+
+Agent signals are experimental. The API may change in a future release.
+
+:::
+
+Signals are a way to interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send signals. Mastra either wakes the agent when the thread is idle or drops the signal into the running agent loop.
+
+Signals are a context engineering tool for guiding the agent in real time as the agent loop progresses. Use them to add system-generated content from external event sources, such as incoming email notifications, GitHub pull request comments, background task notifications, and similar events.
+
+## Quickstart
+
+Subscribe to the thread before sending signals. The subscription receives the active stream when the signal wakes the agent or enters a running loop.
+
+```typescript title="src/mastra/signals.ts"
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Compare that with the previous option.',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+
+for await (const chunk of subscription.stream) {
+  console.log(chunk)
+}
+```
+
+When the thread has a running agent stream, the signal becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the signal as the first input.
+
+## Control signal behavior
+
+By default, Mastra delivers signals to active runs and wakes idle threads. Use `ifActive.behavior` and `ifIdle.behavior` to change that behavior.
+
+```typescript title="src/mastra/signals.ts"
+const result = agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Store this for later, but do not wake the agent.',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    ifIdle: {
+      behavior: 'persist',
+    },
+  },
+)
+
+await result.persisted
+```
+
+The behavior options are:
+
+- `ifActive.behavior: 'deliver'`: Add the signal to the running agent loop. This is the default.
+- `ifActive.behavior: 'persist'`: Save the signal to memory without adding it to the running loop.
+- `ifActive.behavior: 'discard'`: Ignore the signal while the thread is active.
+- `ifIdle.behavior: 'wake'`: Start a stream with the signal as the first input. This is the default.
+- `ifIdle.behavior: 'persist'`: Save the signal to memory without starting a stream.
+- `ifIdle.behavior: 'discard'`: Ignore the signal while the thread is idle.
+
+Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context. You do not need to repeat `memory.resource` or `memory.thread`; Mastra uses the top-level `resourceId` and `threadId` for the thread.
+
+```typescript title="src/mastra/signals.ts"
+agent.sendSignal(
+  {
+    type: 'user-message',
+    contents: 'Continue with the next step.',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    ifIdle: {
+      behavior: 'wake',
+      streamOptions: {
+        maxSteps: 3,
+      },
+    },
+  },
+)
+```
+
+## Send external event context
+
+Use custom signal types for system-generated context. Non-user signal types are rendered as XML-style user-role context so they can appear inside conversation history without looking like assistant output.
+
+```typescript title="src/mastra/signals.ts"
+agent.sendSignal(
+  {
+    type: 'system-reminder',
+    contents: 'User X has left a new PR comment asking for a smaller API surface.',
+    attributes: {
+      type: 'github',
+      pr: '123',
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+The model receives the custom signal as context like this:
+
+```xml
+<system-reminder type="github" pr="123">User X has left a new PR comment asking for a smaller API surface.</system-reminder>
+```
+
+Use XML-safe signal type names and attribute names. Signal type names and attribute names can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
+
+## Use the client SDK
+
+The JavaScript client exposes the same thread signal APIs. Use `subscribeToThread()` before `sendSignal()` so the client can render the stream that wakes from, or receives, the signal.
+
+```typescript title="src/app/chat.ts"
+const agent = client.getAgent('supportAgent')
+
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+await agent.sendSignal({
+  signal: {
+    type: 'user-message',
+    contents: 'Show the shorter version.',
+  },
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+await subscription.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
+  },
+})
+```
+
+## Related
+
+- [`Agent.sendSignal()`](/reference/agents/agent#sendsignal)
+- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothread)
+- [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
+- [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)

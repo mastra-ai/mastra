@@ -272,6 +272,34 @@ export type WorkflowRunStatus =
   | 'bailed'
   | 'paused';
 
+export type WorkflowResumeLabel = {
+  stepId: string;
+  foreachIndex?: number;
+};
+
+export type WorkflowStateSingleStepResult = {
+  status: WorkflowStepStatus;
+  output?: any;
+  payload?: any;
+  resumePayload?: any;
+  suspendPayload?: any;
+  suspendOutput?: any;
+  error?: SerializedError;
+  startedAt?: number;
+  endedAt?: number;
+  suspendedAt?: number;
+  resumedAt?: number;
+  metadata?: StepMetadata;
+};
+
+export type WorkflowStateStepResult = WorkflowStateSingleStepResult | WorkflowStateSingleStepResult[];
+
+export type WorkflowStateTracingContext = {
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+};
+
 /**
  * Unified workflow state that combines metadata with processed execution state.
  */
@@ -301,21 +329,13 @@ export interface WorkflowState {
   // Optional detailed fields (can be excluded for performance)
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: SerializedStepFlowEntry[];
+  suspendedPaths?: Record<string, number[]>;
+  resumeLabels?: Record<string, WorkflowResumeLabel>;
+  waitingPaths?: Record<string, number[]>;
+  requestContext?: Record<string, any>;
+  tracingContext?: WorkflowStateTracingContext;
   // Step Information (processed) - optional when using field filtering
-  steps?: Record<
-    string,
-    {
-      status: WorkflowRunStatus;
-      output?: Record<string, any>;
-      payload?: Record<string, any>;
-      resumePayload?: Record<string, any>;
-      error?: SerializedError;
-      startedAt: number;
-      endedAt: number;
-      suspendedAt?: number;
-      resumedAt?: number;
-    }
-  >;
+  steps?: Record<string, WorkflowStateStepResult>;
   result?: Record<string, any>;
   payload?: Record<string, any>;
   error?: SerializedError;
@@ -325,8 +345,20 @@ export interface WorkflowState {
  * Valid field names for filtering WorkflowState responses.
  * Use with getWorkflowRunById to reduce payload size.
  * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
+ * requestContext and tracingContext are only returned when explicitly requested.
  */
-export type WorkflowStateField = 'result' | 'error' | 'payload' | 'steps' | 'activeStepsPath' | 'serializedStepGraph';
+export type WorkflowStateField =
+  | 'result'
+  | 'error'
+  | 'payload'
+  | 'steps'
+  | 'activeStepsPath'
+  | 'serializedStepGraph'
+  | 'suspendedPaths'
+  | 'resumeLabels'
+  | 'waitingPaths'
+  | 'requestContext'
+  | 'tracingContext';
 
 export interface WorkflowRunState {
   // Core state info
@@ -341,13 +373,7 @@ export interface WorkflowRunState {
   activePaths: Array<number>;
   activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<
-    string,
-    {
-      stepId: string;
-      foreachIndex?: number;
-    }
-  >;
+  resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
@@ -358,14 +384,7 @@ export interface WorkflowRunState {
    * Persisted when workflow suspends to enable linking resumed spans
    * as children of the original suspended span.
    */
-  tracingContext?: {
-    /** The trace ID for this workflow run */
-    traceId?: string;
-    /** The span ID of the workflow run span (for linking on resume) */
-    spanId?: string;
-    /** The parent span ID (if this is a nested workflow) */
-    parentSpanId?: string;
-  };
+  tracingContext?: WorkflowStateTracingContext;
 }
 
 /**

@@ -94,7 +94,8 @@ function createPrefillErrorModel(
   return { model, getCallCount: () => callCount, getReceivedPrompts: () => receivedPrompts };
 }
 
-const ANTHROPIC_PREFILL_RETRY_REMINDER = '<system-reminder>continue</system-reminder>';
+const ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE = 'anthropic-prefill-processor-retry';
+const ANTHROPIC_PREFILL_RETRY_REMINDER = `<system-reminder type="${ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE}">continue</system-reminder>`;
 
 describe('PrefillErrorHandler Recovery', () => {
   describe('generate()', () => {
@@ -184,22 +185,29 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(
         visibleMessages.messages.some(
           message =>
-            message.role === 'user' &&
-            message.content.parts.some(part => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
+            message.role === 'signal' &&
+            (message.content.metadata as any)?.signal?.attributes?.type === ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE,
         ),
       ).toBe(false);
 
       const rawMessages = await mockMemory.recall({ threadId, resourceId, includeSystemReminders: true });
       const retryReminderMessage = rawMessages.messages.find(
         message =>
-          message.role === 'user' &&
-          message.content.parts.some(part => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
+          message.role === 'signal' &&
+          message.content.parts.some(part => part.type === 'text' && part.text === 'continue'),
       );
       expect(retryReminderMessage).toBeDefined();
       expect(retryReminderMessage?.content.metadata).toEqual({
-        systemReminder: {
-          type: 'anthropic-prefill-processor-retry',
-        },
+        signal: expect.objectContaining({
+          type: 'system-reminder',
+          contents: 'continue',
+          attributes: {
+            type: ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE,
+          },
+          metadata: {
+            message: 'Continuing after prefill error',
+          },
+        }),
       });
     });
 

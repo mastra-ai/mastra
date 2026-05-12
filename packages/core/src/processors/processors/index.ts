@@ -67,3 +67,14 @@ export { ToolSearchProcessor, type ToolSearchProcessorOptions } from './tool-sea
 export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
+export {
+  ResponseCache,
+  DEFAULT_RESPONSE_CACHE_TTL_SECONDS,
+  RESPONSE_CACHE_CONTEXT_KEY,
+  buildResponseCacheKey,
+  type ResponseCacheOptions,
+  type ResponseCacheContextOptions,
+  type ResponseCacheKeyFn,
+  type ResponseCacheKeyInputs,
+  type CachedLLMStepResponse,
+} from './response-cache';

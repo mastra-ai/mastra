@@ -163,9 +163,10 @@ export class MessageHistory implements Processor {
 
   /**
    * Filters messages before persisting to storage:
-   * 1. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
-   * 2. Removes updateWorkingMemory tool invocations (hide args from message history)
-   * 3. Strips <working_memory> tags from text content
+   * 1. Removes system messages - these are runtime instructions and should never be stored
+   * 2. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
+   * 3. Removes updateWorkingMemory tool invocations (hide args from message history)
+   * 4. Strips <working_memory> tags from text content
    *
    * Note: We preserve 'call' state tool invocations because:
    * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
@@ -173,6 +174,7 @@ export class MessageHistory implements Processor {
    */
   private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
+      .filter(m => m.role !== 'system')
       .map(m => {
         const newMessage = { ...m };
         // Only spread content if it's a proper V2 object

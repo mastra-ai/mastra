@@ -38,6 +38,8 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentSignalParams,
+  SubscribeAgentThreadParams,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
@@ -275,6 +277,59 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.request(`/agents/${this.agentId}/signals`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const streamResponse = (await this.request(`/agents/${this.agentId}/threads/subscribe`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    })) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    if (!streamResponse.body) {
+      throw new Error('No response body');
+    }
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+        signal: this.options.abortSignal,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * Clones this agent to a new stored agent in the database
    * @param params - Clone parameters including optional newId, newName, metadata, authorId, and requestContext
    * @returns Promise containing the created stored agent
@@ -303,8 +358,14 @@ export class Agent extends BaseResource {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
     if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
-    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);

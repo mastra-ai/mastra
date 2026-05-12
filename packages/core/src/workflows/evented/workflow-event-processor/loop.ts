@@ -60,91 +60,52 @@ export async function processWorkflowLoop(
     iterationCount,
   });
 
+  // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
+  // resume metadata. Otherwise the body would keep receiving the same resumeData on every
+  // iteration (and e.g. never re-suspend).
+  const loopAgainData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps: [] as string[],
+    stepResults,
+    prevResult: stepResult,
+    resumeData: undefined,
+    activeSteps,
+    requestContext,
+    retryCount,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+  const loopEndData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps,
+    stepResults,
+    prevResult: stepResult,
+    resumeData,
+    activeSteps,
+    requestContext,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+
   if (step.loopType === 'dountil') {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          state: currentState,
-          outputOptions,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     }
   } else {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     }
   }
 }
@@ -404,8 +365,33 @@ export async function processWorkflowForEach(
     }
   }
 
-  if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
-    // Foreach completed all iterations - advance to next step
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+
+  if (
+    (idx >= targetLen && currentResult?.output?.filter((r: any) => r !== null)?.length >= targetLen) ||
+    (prevResult as any)?.output?.length === 0
+  ) {
+    // Foreach completed all iterations or the previous result is an empty array - advance to next step
+    // If the previous result is an empty array, we need to create a new result with an empty array output, save to stroage and stepResults
+    let result = currentResult;
+    if ((prevResult as any)?.output?.length === 0) {
+      result = {
+        status: 'success',
+        output: [],
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+        payload: (prevResult as any)?.output,
+      };
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: step.step.id,
+        result,
+        requestContext,
+      });
+      stepResults[step.step.id] = result as any;
+    }
+
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       runId,
@@ -417,7 +403,7 @@ export async function processWorkflowForEach(
         resumeSteps,
         stepResults,
         timeTravel,
-        prevResult: currentResult,
+        prevResult: result,
         resumeData: undefined, // No resumeData when advancing past foreach
         activeSteps,
         requestContext,
@@ -432,8 +418,6 @@ export async function processWorkflowForEach(
     // wait for the 'null' values to be filled from the concurrent run
     return;
   }
-
-  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency

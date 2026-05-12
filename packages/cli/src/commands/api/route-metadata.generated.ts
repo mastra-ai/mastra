@@ -168,6 +168,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/signals": {
+    "method": "POST",
+    "path": "/agents/:agentId/signals",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -736,6 +750,48 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": false,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/runs/:runId/steps/execute": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/runs/:runId/steps/execute",
+    "pathParams": [
+      "workflowId",
+      "runId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "executionPath",
+      "foreachIdx",
+      "format",
+      "input",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "retryCount",
+      "state",
+      "stepId",
+      "stepResults",
+      "validateInputs"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/events": {
+    "method": "POST",
+    "path": "/workflows/events",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "event"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

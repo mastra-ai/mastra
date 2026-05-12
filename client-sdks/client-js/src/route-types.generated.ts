@@ -5383,6 +5383,3347 @@ export interface PostAgentsAgentIdObserve_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+type PostAgentsAgentIdSignals_Body_Auxiliary_2 =
+  | string
+  | number
+  | boolean
+  | null
+  | PostAgentsAgentIdSignals_Body_Auxiliary_2[]
+  | {
+      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+    };
+
+export type PostAgentsAgentIdSignals_Body =
+  | {
+      signal:
+        | {
+            id?: string | undefined;
+            createdAt?: (string | Date) | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                }
+              | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            type: 'user-message';
+            contents:
+              | string
+              | string[]
+              | (
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool';
+                      content:
+                        | string
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[];
+                    }
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool' | 'data';
+                      content?:
+                        | (
+                            | string
+                            | (
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'text';
+                                    text: string;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'image';
+                                    image:
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        };
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'file';
+                                    data?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    file?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    url?: string | undefined;
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                    filename?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-call';
+                                    toolCallId: string;
+                                    toolName: string;
+                                    args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-result';
+                                    toolCallId: string;
+                                    toolName?: string | undefined;
+                                    result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                              )[]
+                          )
+                        | undefined;
+                      parts?:
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[]
+                        | undefined;
+                      createdAt?: (string | Date) | undefined;
+                    }
+                  | {
+                      id: string;
+                      role: 'system' | 'user' | 'assistant' | 'signal';
+                      createdAt: string | Date;
+                      threadId?: string | undefined;
+                      resourceId?: string | undefined;
+                      type?: string | undefined;
+                      content: {
+                        format: 2;
+                        parts: {
+                          type: string;
+                          [x: string]: unknown;
+                        }[];
+                        content?:
+                          | (
+                              | string
+                              | (
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'text';
+                                      text: string;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'image';
+                                      image:
+                                        | string
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          };
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'file';
+                                      data?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      file?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      url?: string | undefined;
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                      filename?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-call';
+                                      toolCallId: string;
+                                      toolName: string;
+                                      args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-result';
+                                      toolCallId: string;
+                                      toolName?: string | undefined;
+                                      result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                )[]
+                            )
+                          | undefined;
+                        experimental_attachments?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        toolInvocations?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        reasoning?: string | undefined;
+                        annotations?: PostAgentsAgentIdSignals_Body_Auxiliary_2[] | undefined;
+                        metadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        providerMetadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        [x: string]: unknown;
+                      };
+                    }
+                )
+              | (
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool';
+                      content:
+                        | string
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[];
+                    }
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool' | 'data';
+                      content?:
+                        | (
+                            | string
+                            | (
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'text';
+                                    text: string;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'image';
+                                    image:
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        };
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'file';
+                                    data?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    file?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    url?: string | undefined;
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                    filename?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-call';
+                                    toolCallId: string;
+                                    toolName: string;
+                                    args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-result';
+                                    toolCallId: string;
+                                    toolName?: string | undefined;
+                                    result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                              )[]
+                          )
+                        | undefined;
+                      parts?:
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[]
+                        | undefined;
+                      createdAt?: (string | Date) | undefined;
+                    }
+                  | {
+                      id: string;
+                      role: 'system' | 'user' | 'assistant' | 'signal';
+                      createdAt: string | Date;
+                      threadId?: string | undefined;
+                      resourceId?: string | undefined;
+                      type?: string | undefined;
+                      content: {
+                        format: 2;
+                        parts: {
+                          type: string;
+                          [x: string]: unknown;
+                        }[];
+                        content?:
+                          | (
+                              | string
+                              | (
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'text';
+                                      text: string;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'image';
+                                      image:
+                                        | string
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          };
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'file';
+                                      data?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      file?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      url?: string | undefined;
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                      filename?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-call';
+                                      toolCallId: string;
+                                      toolName: string;
+                                      args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-result';
+                                      toolCallId: string;
+                                      toolName?: string | undefined;
+                                      result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                )[]
+                            )
+                          | undefined;
+                        experimental_attachments?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        toolInvocations?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        reasoning?: string | undefined;
+                        annotations?: PostAgentsAgentIdSignals_Body_Auxiliary_2[] | undefined;
+                        metadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        providerMetadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        [x: string]: unknown;
+                      };
+                    }
+                )[];
+          }
+        | {
+            id?: string | undefined;
+            createdAt?: (string | Date) | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                }
+              | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            type: string;
+            contents: string;
+          };
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          }
+        | undefined;
+      runId: string;
+      resourceId?: string | undefined;
+      threadId?: string | undefined;
+      ifIdle?: undefined | undefined;
+    }
+  | {
+      signal:
+        | {
+            id?: string | undefined;
+            createdAt?: (string | Date) | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                }
+              | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            type: 'user-message';
+            contents:
+              | string
+              | string[]
+              | (
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool';
+                      content:
+                        | string
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[];
+                    }
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool' | 'data';
+                      content?:
+                        | (
+                            | string
+                            | (
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'text';
+                                    text: string;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'image';
+                                    image:
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        };
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'file';
+                                    data?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    file?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    url?: string | undefined;
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                    filename?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-call';
+                                    toolCallId: string;
+                                    toolName: string;
+                                    args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-result';
+                                    toolCallId: string;
+                                    toolName?: string | undefined;
+                                    result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                              )[]
+                          )
+                        | undefined;
+                      parts?:
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[]
+                        | undefined;
+                      createdAt?: (string | Date) | undefined;
+                    }
+                  | {
+                      id: string;
+                      role: 'system' | 'user' | 'assistant' | 'signal';
+                      createdAt: string | Date;
+                      threadId?: string | undefined;
+                      resourceId?: string | undefined;
+                      type?: string | undefined;
+                      content: {
+                        format: 2;
+                        parts: {
+                          type: string;
+                          [x: string]: unknown;
+                        }[];
+                        content?:
+                          | (
+                              | string
+                              | (
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'text';
+                                      text: string;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'image';
+                                      image:
+                                        | string
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          };
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'file';
+                                      data?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      file?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      url?: string | undefined;
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                      filename?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-call';
+                                      toolCallId: string;
+                                      toolName: string;
+                                      args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-result';
+                                      toolCallId: string;
+                                      toolName?: string | undefined;
+                                      result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                )[]
+                            )
+                          | undefined;
+                        experimental_attachments?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        toolInvocations?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        reasoning?: string | undefined;
+                        annotations?: PostAgentsAgentIdSignals_Body_Auxiliary_2[] | undefined;
+                        metadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        providerMetadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        [x: string]: unknown;
+                      };
+                    }
+                )
+              | (
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool';
+                      content:
+                        | string
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[];
+                    }
+                  | {
+                      id?: string | undefined;
+                      name?: string | undefined;
+                      metadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      providerOptions?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      experimental_providerMetadata?:
+                        | {
+                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                          }
+                        | undefined;
+                      role: 'system' | 'user' | 'assistant' | 'tool' | 'data';
+                      content?:
+                        | (
+                            | string
+                            | (
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'text';
+                                    text: string;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'image';
+                                    image:
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        };
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'file';
+                                    data?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    file?:
+                                      | (
+                                          | string
+                                          | {
+                                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                            }
+                                        )
+                                      | undefined;
+                                    url?: string | undefined;
+                                    mediaType?: string | undefined;
+                                    mimeType?: string | undefined;
+                                    filename?: string | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-call';
+                                    toolCallId: string;
+                                    toolName: string;
+                                    args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                                | {
+                                    id?: string | undefined;
+                                    name?: string | undefined;
+                                    metadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    providerOptions?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    experimental_providerMetadata?:
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                      | undefined;
+                                    type: 'tool-result';
+                                    toolCallId: string;
+                                    toolName?: string | undefined;
+                                    result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                  }
+                              )[]
+                          )
+                        | undefined;
+                      parts?:
+                        | (
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'text';
+                                text: string;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'image';
+                                image:
+                                  | string
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    };
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'file';
+                                data?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                file?:
+                                  | (
+                                      | string
+                                      | {
+                                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                        }
+                                    )
+                                  | undefined;
+                                url?: string | undefined;
+                                mediaType?: string | undefined;
+                                mimeType?: string | undefined;
+                                filename?: string | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-call';
+                                toolCallId: string;
+                                toolName: string;
+                                args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                            | {
+                                id?: string | undefined;
+                                name?: string | undefined;
+                                metadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                providerOptions?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                experimental_providerMetadata?:
+                                  | {
+                                      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                    }
+                                  | undefined;
+                                type: 'tool-result';
+                                toolCallId: string;
+                                toolName?: string | undefined;
+                                result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                              }
+                          )[]
+                        | undefined;
+                      createdAt?: (string | Date) | undefined;
+                    }
+                  | {
+                      id: string;
+                      role: 'system' | 'user' | 'assistant' | 'signal';
+                      createdAt: string | Date;
+                      threadId?: string | undefined;
+                      resourceId?: string | undefined;
+                      type?: string | undefined;
+                      content: {
+                        format: 2;
+                        parts: {
+                          type: string;
+                          [x: string]: unknown;
+                        }[];
+                        content?:
+                          | (
+                              | string
+                              | (
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'text';
+                                      text: string;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'image';
+                                      image:
+                                        | string
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          };
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'file';
+                                      data?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      file?:
+                                        | (
+                                            | string
+                                            | {
+                                                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                              }
+                                          )
+                                        | undefined;
+                                      url?: string | undefined;
+                                      mediaType?: string | undefined;
+                                      mimeType?: string | undefined;
+                                      filename?: string | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-call';
+                                      toolCallId: string;
+                                      toolName: string;
+                                      args?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      input?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                  | {
+                                      id?: string | undefined;
+                                      name?: string | undefined;
+                                      metadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      providerOptions?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      experimental_providerMetadata?:
+                                        | {
+                                            [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                                          }
+                                        | undefined;
+                                      type: 'tool-result';
+                                      toolCallId: string;
+                                      toolName?: string | undefined;
+                                      result?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                      output?: PostAgentsAgentIdSignals_Body_Auxiliary_2 | undefined;
+                                    }
+                                )[]
+                            )
+                          | undefined;
+                        experimental_attachments?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        toolInvocations?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }[]
+                          | undefined;
+                        reasoning?: string | undefined;
+                        annotations?: PostAgentsAgentIdSignals_Body_Auxiliary_2[] | undefined;
+                        metadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        providerMetadata?:
+                          | {
+                              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                            }
+                          | undefined;
+                        [x: string]: unknown;
+                      };
+                    }
+                )[];
+          }
+        | {
+            id?: string | undefined;
+            createdAt?: (string | Date) | undefined;
+            metadata?:
+              | {
+                  [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_2;
+                }
+              | undefined;
+            attributes?:
+              | {
+                  [key: string]: string | number | boolean | null | undefined;
+                }
+              | undefined;
+            type: string;
+            contents: string;
+          };
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          }
+        | undefined;
+      runId?: string | undefined;
+      resourceId: string;
+      threadId: string;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            streamOptions?:
+              | {
+                  instructions?: (string | string[] | any | any[]) | undefined;
+                  system?: (string | string[] | any | any[]) | undefined;
+                  context?: any[] | undefined;
+                  memory?:
+                    | {
+                        thread:
+                          | string
+                          | {
+                              id: string;
+                              [x: string]: unknown;
+                            };
+                        resource: string;
+                        options?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        readOnly?: boolean | undefined;
+                      }
+                    | undefined;
+                  runId?: string | undefined;
+                  savePerStep?: boolean | undefined;
+                  requestContext?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  versions?:
+                    | {
+                        agents?:
+                          | {
+                              [key: string]:
+                                | {
+                                    versionId: string;
+                                  }
+                                | {
+                                    status: 'draft' | 'published';
+                                  };
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  maxSteps?: number | undefined;
+                  stopWhen?: any | undefined;
+                  providerOptions?:
+                    | {
+                        anthropic?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        google?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        openai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                        xai?:
+                          | {
+                              [key: string]: any;
+                            }
+                          | undefined;
+                      }
+                    | undefined;
+                  modelSettings?: any | undefined;
+                  activeTools?: string[] | undefined;
+                  toolsets?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  clientTools?:
+                    | {
+                        [key: string]: any;
+                      }
+                    | undefined;
+                  toolChoice?:
+                    | (
+                        | ('auto' | 'none' | 'required')
+                        | {
+                            type: 'tool';
+                            toolName: string;
+                          }
+                      )
+                    | undefined;
+                  requireToolApproval?: boolean | undefined;
+                  scorers?:
+                    | (
+                        | {
+                            [key: string]: any;
+                          }
+                        | {
+                            [key: string]: {
+                              scorer: string;
+                              sampling?: any | undefined;
+                            };
+                          }
+                      )
+                    | undefined;
+                  returnScorerData?: boolean | undefined;
+                  tracingOptions?:
+                    | {
+                        metadata?:
+                          | {
+                              [key: string]: unknown;
+                            }
+                          | undefined;
+                        requestContextKeys?: string[] | undefined;
+                        traceId?: string | undefined;
+                        parentSpanId?: string | undefined;
+                        tags?: string[] | undefined;
+                        hideInput?: boolean | undefined;
+                        hideOutput?: boolean | undefined;
+                      }
+                    | undefined;
+                  output?: any | undefined;
+                  structuredOutput?:
+                    | {
+                        schema: {
+                          [x: string]: unknown;
+                        };
+                        model?: (string | any) | undefined;
+                        instructions?: string | undefined;
+                        jsonPromptInjection?: boolean | undefined;
+                        errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
+                        fallbackValue?: any | undefined;
+                      }
+                    | undefined;
+                  [x: string]: unknown;
+                }
+              | undefined;
+          }
+        | undefined;
+    };
+
+export type PostAgentsAgentIdSignals_Response = {
+  accepted: true;
+  runId: string;
+};
+
+export type PostAgentsAgentIdSignals_Request = Simplify<
+  (PostAgentsAgentIdSignals_PathParams extends never ? {} : { params: PostAgentsAgentIdSignals_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdSignals_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdSignals_Body
+        ? { body?: PostAgentsAgentIdSignals_Body }
+        : { body: PostAgentsAgentIdSignals_Body })
+>;
+
+export interface PostAgentsAgentIdSignals_RouteContract {
+  pathParams: PostAgentsAgentIdSignals_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdSignals_Body;
+  request: PostAgentsAgentIdSignals_Request;
+  response: PostAgentsAgentIdSignals_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/threads/subscribe
+// ============================================================================
+export type PostAgentsAgentIdThreadsSubscribe_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdThreadsSubscribe_Body = {
+  resourceId?: string | undefined;
+  threadId: string;
+};
+
+export type PostAgentsAgentIdThreadsSubscribe_Response = any;
+
+export type PostAgentsAgentIdThreadsSubscribe_Request = Simplify<
+  (PostAgentsAgentIdThreadsSubscribe_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdThreadsSubscribe_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdThreadsSubscribe_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdThreadsSubscribe_Body
+        ? { body?: PostAgentsAgentIdThreadsSubscribe_Body }
+        : { body: PostAgentsAgentIdThreadsSubscribe_Body })
+>;
+
+export interface PostAgentsAgentIdThreadsSubscribe_RouteContract {
+  pathParams: PostAgentsAgentIdThreadsSubscribe_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdThreadsSubscribe_Body;
+  request: PostAgentsAgentIdThreadsSubscribe_Request;
+  response: PostAgentsAgentIdThreadsSubscribe_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/tools/:toolId/execute
 // ============================================================================
 export type PostAgentsAgentIdToolsToolIdExecute_PathParams = {
@@ -8809,6 +12150,100 @@ export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteC
 }
 
 // ============================================================================
+// Route: POST /workflows/:workflowId/runs/:runId/steps/execute
+// ============================================================================
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams = {
+  /** Unique identifier for the workflow */
+  workflowId: string;
+  /** Unique identifier for the workflow run */
+  runId: string;
+};
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
+  stepId: string;
+  executionPath: number[];
+  stepResults: {
+    [key: string]: any;
+  };
+  state: {
+    [key: string]: any;
+  };
+  requestContext: {
+    [key: string]: any;
+  };
+  input?: any | undefined;
+  resumeData?: any | undefined;
+  retryCount?: number | undefined;
+  foreachIdx?: number | undefined;
+  format?: ('legacy' | 'vnext') | undefined;
+  perStep?: boolean | undefined;
+  validateInputs?: boolean | undefined;
+};
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = any;
+
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request = Simplify<
+  (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams extends never
+    ? {}
+    : { params: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body extends never
+      ? {}
+      : {} extends PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body
+        ? { body?: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body }
+        : { body: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body })
+>;
+
+export interface PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract {
+  pathParams: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams;
+  queryParams: never;
+  body: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body;
+  request: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request;
+  response: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /workflows/events
+// ============================================================================
+export type PostWorkflowsEvents_Body = {
+  event: {
+    id: string;
+    type: string;
+    data: unknown;
+    runId: string;
+    createdAt: string;
+    index?: number | undefined;
+    deliveryAttempt?: number | undefined;
+    [x: string]: unknown;
+  };
+};
+
+export type PostWorkflowsEvents_Response = {
+  ok: boolean;
+  retry?: boolean | undefined;
+};
+
+export type PostWorkflowsEvents_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostWorkflowsEvents_Body extends never
+      ? {}
+      : {} extends PostWorkflowsEvents_Body
+        ? { body?: PostWorkflowsEvents_Body }
+        : { body: PostWorkflowsEvents_Body })
+>;
+
+export interface PostWorkflowsEvents_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostWorkflowsEvents_Body;
+  request: PostWorkflowsEvents_Request;
+  response: PostWorkflowsEvents_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /tools
 // ============================================================================
 export type GetTools_Response = {
@@ -8994,7 +12429,7 @@ export type PostProcessorsProcessorIdExecute_Body = {
   phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
   messages: {
     id: string;
-    role: 'user' | 'assistant' | 'system' | 'tool';
+    role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
     createdAt?: Date | undefined;
     content:
       | {
@@ -9020,7 +12455,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
   messages?:
     | {
         id: string;
-        role: 'user' | 'assistant' | 'system' | 'tool';
+        role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
         createdAt?: Date | undefined;
         content:
           | {
@@ -9037,7 +12472,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
     | {
         messages: {
           id: string;
-          role: 'user' | 'assistant' | 'system' | 'tool';
+          role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
           createdAt?: Date | undefined;
           content:
             | {
@@ -11249,6 +14684,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'generic'
             | 'model_generation'
             | 'model_step'
+            | 'model_inference'
             | 'model_chunk'
             | 'mcp_tool_call'
             | 'processor_run'
@@ -11268,6 +14704,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11414,6 +14851,7 @@ export type GetObservabilityTraces_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11432,7 +14870,8 @@ export type GetObservabilityTraces_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11619,6 +15058,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'generic'
             | 'model_generation'
             | 'model_step'
+            | 'model_inference'
             | 'model_chunk'
             | 'mcp_tool_call'
             | 'processor_run'
@@ -11638,6 +15078,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'rag_vector_operation'
             | 'rag_action'
             | 'graph_action'
+            | 'mapping'
           )
         | undefined
       )
@@ -11785,6 +15226,7 @@ export type GetObservabilityBranches_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11803,7 +15245,8 @@ export type GetObservabilityBranches_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -11974,6 +15417,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -11992,7 +15436,8 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12156,6 +15601,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12174,7 +15620,8 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12332,6 +15779,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12350,7 +15798,8 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12429,6 +15878,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'generic'
       | 'model_generation'
       | 'model_step'
+      | 'model_inference'
       | 'model_chunk'
       | 'mcp_tool_call'
       | 'processor_run'
@@ -12447,7 +15897,8 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'rag_embedding'
       | 'rag_vector_operation'
       | 'rag_action'
-      | 'graph_action';
+      | 'graph_action'
+      | 'mapping';
     /** Whether this is an event (point-in-time) vs a span (duration) */
     isEvent: boolean;
     /** When the span started */
@@ -12732,6 +16183,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'generic'
           | 'model_generation'
           | 'model_step'
+          | 'model_inference'
           | 'model_chunk'
           | 'mcp_tool_call'
           | 'processor_run'
@@ -12751,6 +16203,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'rag_vector_operation'
           | 'rag_action'
           | 'graph_action'
+          | 'mapping'
         )
       | undefined;
     structuredOutput?: boolean | undefined;
@@ -16421,6 +19874,17 @@ export type GetWellKnownAgentIdAgentCardJson_Response = {
   defaultInputModes: string[];
   defaultOutputModes: string[];
   supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
   skills: {
     id: string;
     name: string;
@@ -75214,6 +78678,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-until-idle': PostAgentsAgentIdStreamUntilIdle_RouteContract;
   'POST /agents/:agentId/stream/vnext': PostAgentsAgentIdStreamVnext_RouteContract;
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
+  'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
+  'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
@@ -75268,6 +78734,8 @@ export interface RouteTypes {
   'POST /workflows/:workflowId/restart-async': PostWorkflowsWorkflowIdRestartAsync_RouteContract;
   'POST /workflows/:workflowId/restart-all-active-workflow-runs': PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_RouteContract;
   'POST /workflows/:workflowId/restart-all-active-workflow-runs-async': PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteContract;
+  'POST /workflows/:workflowId/runs/:runId/steps/execute': PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract;
+  'POST /workflows/events': PostWorkflowsEvents_RouteContract;
   'GET /tools': GetTools_RouteContract;
   'GET /tools/:toolId': GetToolsToolId_RouteContract;
   'POST /tools/:toolId/execute': PostToolsToolIdExecute_RouteContract;
@@ -75646,6 +79114,9 @@ export interface Client {
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
   };
+  '/agents/:agentId/signals': {
+    POST: PostAgentsAgentIdSignals_RouteContract;
+  };
   '/agents/:agentId/skills/:skillName': {
     GET: GetAgentsAgentIdSkillsSkillName_RouteContract;
   };
@@ -75675,6 +79146,9 @@ export interface Client {
   };
   '/agents/:agentId/streamVNext': {
     POST: PostAgentsAgentIdStreamVNext_RouteContract;
+  };
+  '/agents/:agentId/threads/subscribe': {
+    POST: PostAgentsAgentIdThreadsSubscribe_RouteContract;
   };
   '/agents/:agentId/tools/:toolId': {
     GET: GetAgentsAgentIdToolsToolId_RouteContract;
@@ -76290,6 +79764,9 @@ export interface Client {
   '/workflows/:workflowId/runs/:runId/cancel': {
     POST: PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract;
   };
+  '/workflows/:workflowId/runs/:runId/steps/execute': {
+    POST: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract;
+  };
   '/workflows/:workflowId/start': {
     POST: PostWorkflowsWorkflowIdStart_RouteContract;
   };
@@ -76310,6 +79787,9 @@ export interface Client {
   };
   '/workflows/:workflowId/time-travel-stream': {
     POST: PostWorkflowsWorkflowIdTimeTravelStream_RouteContract;
+  };
+  '/workflows/events': {
+    POST: PostWorkflowsEvents_RouteContract;
   };
   '/workspaces': {
     GET: GetWorkspaces_RouteContract;

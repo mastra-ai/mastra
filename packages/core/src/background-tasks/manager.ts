@@ -11,6 +11,7 @@ import type {
   TaskFilter,
   TaskPayload,
   TaskListResult,
+  ToolExecutor,
   BackgroundTaskEvent,
 } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
@@ -31,6 +32,13 @@ export class BackgroundTaskManager {
   // Per-task contexts — keyed by task ID, holds closures from the caller's stream.
   /** @internal — read by the workflow-engine step bodies in workflow.ts */
   taskContexts: Map<string, TaskContext> = new Map();
+
+  // Static executors keyed by tool name. Populated by `Mastra` for every
+  // registered tool, and by `BackgroundTaskWorker.#wireStaticTools` on
+  // standalone worker processes. Used as the fallback for cross-process
+  // dispatch where the producer's per-task closure (taskContexts) is not
+  // visible — a remote worker resolves the tool by name instead.
+  private staticExecutors: Map<string, ToolExecutor> = new Map();
 
   // Track active AbortControllers for running tasks (for cancellation + timeout)
   /** @internal — read by the workflow-engine step bodies in workflow.ts */
@@ -124,7 +132,13 @@ export class BackgroundTaskManager {
       const { buildBackgroundTaskWorkflow } = await import('./workflow');
       const workflow = buildBackgroundTaskWorkflow(this);
       if (!this.#mastra.__hasInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID)) {
-        this.#mastra.__registerInternalWorkflow(workflow as any);
+        // The `__background-task` workflow is typed against `EventedEngineType`
+        // and a concrete input/output schema, while `__registerInternalWorkflow`
+        // accepts the looser default `Workflow` shape. The cast is purely a
+        // type-level bridge — the runtime value is a real Workflow.
+        this.#mastra.__registerInternalWorkflow(
+          workflow as unknown as Parameters<Mastra['__registerInternalWorkflow']>[0],
+        );
       }
     }
 
@@ -159,6 +173,36 @@ export class BackgroundTaskManager {
    */
   deregisterTaskContext(taskId: string): void {
     this.taskContexts.delete(taskId);
+  }
+
+  /**
+   * Register a tool executor by tool name. Used for cross-process dispatch:
+   * when a worker in a different process picks up a `task.dispatch` event,
+   * it has no per-task closure (`taskContexts`) for that taskId, but it can
+   * resolve the executor by tool name via this registry.
+   */
+  registerStaticExecutor(toolName: string, executor: ToolExecutor): void {
+    if (this.staticExecutors.has(toolName)) {
+      this.#mastra?.getLogger?.()?.debug?.(`Overwriting existing static executor for tool "${toolName}"`);
+    }
+    this.staticExecutors.set(toolName, executor);
+  }
+
+  /**
+   * Symmetric to `registerStaticExecutor`. Called when a tool is removed
+   * from `Mastra`.
+   */
+  unregisterStaticExecutor(toolName: string): void {
+    this.staticExecutors.delete(toolName);
+  }
+
+  /**
+   * Look up an executor by tool name. Read by the workflow-step body in
+   * `workflow.ts:executeStep` as a fallback when no per-task `TaskContext`
+   * is registered (cross-process path).
+   */
+  getStaticExecutor(toolName: string): ToolExecutor | undefined {
+    return this.staticExecutors.get(toolName);
   }
 
   // --- Core operations ---
