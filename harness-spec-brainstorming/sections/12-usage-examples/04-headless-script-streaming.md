@@ -1,14 +1,16 @@
 ### 12.4 Headless script — streaming
 
-`message({ stream: true })` is signal-driven and always accepted. The returned `AgentStream` represents the turn that answers this signal — chunks emit as the model produces them, even if the run was already in flight when the signal landed.
+Consume the `AgentStream.textStream` facade after awaiting stream admission.
+§4.2 owns admission and settlement semantics; §4.8 owns the `AgentStream`
+shape.
 
 ```ts
 const session = await harness.session({ resourceId: 'cron:report-builder' });
 
-const stream = session.message({ content: 'Generate the weekly report', stream: true });
+const stream = await session.message({ content: 'Generate the weekly report', stream: true });
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
 ```
 
-If a programmatic caller specifically wants a **clean turn boundary** (no concurrent inputs interleaved into the response), pair `sync: true` with `output: schema` (§12.3) instead — but that form does not stream.
+For the clean turn-boundary form, see §12.3 and the canonical §3/§4.2 rules.

@@ -2,7 +2,9 @@
 
 This example walks through every interruption shape end-to-end: **tool approval**, **mid-execution suspension**, **a question raised by `ask_user`**, and **a `submit_plan` approval gate** — including a server crash midway through and a clean resume on a different process.
 
-The point is to show that all four shapes are the same underlying mechanism: the agent's workflow snapshot is parked in `MastraStorage.workflows` keyed by `runId`, the session record carries the `runId` plus enough UX state to render the prompt, and `agent.resumeStream(...)` continues from the snapshot once the human answers.
+The point is to show that all four shapes use the same pending-item and response
+flow. §4.2 owns the response methods and Required Agent Resume Boundary; §5.1
+owns the persisted pending-item, receipt, and workflow snapshot shapes.
 
 ```ts
 import { Harness, HarnessSessionNotFoundError } from '@mastra/core/harness/v1';
@@ -22,14 +24,18 @@ session.subscribe(async (event) => {
     case 'tool_approval_required': {
       // Model wants to call a tool whose category resolves to 'ask'.
       // Render UI, wait for the human, respond.
-      const decision = await ui.askApproval({
+      const { approved, reason, rememberCategory } = await ui.askApproval({
         toolName: event.toolName,
         input: event.input,
         category: event.toolCategory,
       });
-      session.respondToToolApproval({
-        toolCallId: event.toolCallId,
-        decision,                          // 'approve' | 'decline' | 'always_allow_category'
+      if (approved && rememberCategory && event.toolCategory) {
+        await session.permissions.grantCategory({ category: event.toolCategory });
+      }
+      await session.respondToToolApproval({
+        itemId: event.itemId,
+        approved,
+        reason,
       });
       break;
     }
@@ -41,8 +47,9 @@ session.subscribe(async (event) => {
         toolName: event.toolName,
         suspendData: event.suspendData,
       });
+      // Direct in-process call: wire/webhook callers must also provide responseId.
       await session.respondToToolSuspension({
-        toolCallId: event.toolCallId,
+        itemId: event.itemId,
         resumeData,
       });
       break;
@@ -55,7 +62,7 @@ session.subscribe(async (event) => {
         options: event.options,
         selectionMode: event.selectionMode,
       });
-      session.respondToQuestion({ answer });
+      await session.respondToQuestion({ itemId: event.itemId, answer });
       break;
     }
 
@@ -65,7 +72,7 @@ session.subscribe(async (event) => {
         title: event.title,
         plan: event.plan,
       });
-      await session.respondToPlanApproval({ approved, reason });
+      await session.respondToPlanApproval({ itemId: event.itemId, approved, reason });
       break;
     }
   }
@@ -77,37 +84,16 @@ session.queue({
 });
 
 // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-// What happens behind the scenes:
-//
-//   1. Agent calls `submit_plan` → harness emits `plan_approval_required`,
-//      persists `pendingPlan = { runId, toolCallId, title, plan, source: 'parent' }`
-//      to the SessionRecord. Workflow snapshot lives in MastraStorage.workflows.
-//      User clicks "approve" → harness calls `agent.resumeStream({ approved: true }, { runId })`.
-//      Mode flips to 'build'.
-//
-//   2. Agent calls `mastra_workspace_execute_command('rm -rf packages/legacy/')`.
-//      The `mutation` category resolves to 'ask' → harness emits
-//      `tool_approval_required`, persists `pendingApproval`. User declines →
-//      `agent.resumeStream({ approved: false }, { runId })` — model continues
-//      without the tool result.
-//
-//   3. Agent calls `ask_user('Which billing provider?')` → `question_pending`,
-//      persists `pendingQuestion`. User answers → resume continues.
-//
-//   4. Agent invokes a long-running tool that calls `suspend({ webhookUrl })`.
-//      Harness emits `tool_suspension_required`, persists `pendingSuspension`.
-//      External webhook posts result → `respondToToolSuspension(...)` resumes.
-//
-// Crash recovery: if the server dies after step 1's snapshot is written but
-// before the user approves, the SessionRecord still holds the `pendingPlan`
-// and `runId`. On the next process:
+// Behind the scenes, each interruption persists the pending item and resumes
+// through the same §4.2/§5.1 boundary. If the server dies while a pending item
+// is waiting on a human or webhook, the next process rehydrates that state:
 // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 
 // Different process — server restarted.
 const harness2 = new Harness(config);
 await harness2.init();
 
-const session2 = await harness2.session({ sessionId: 'session-abc' });
+const session2 = await harness2.session({ sessionId: 'session-abc', resourceId: 'user-123' });
 
 // Display state has been rehydrated from the SessionRecord — the pending plan
 // is still there, untouched.
@@ -117,21 +103,17 @@ if (display.pendingPlan) {
     title: display.pendingPlan.title,
     plan: display.pendingPlan.plan,
   });
-  // `respondToPlanApproval` looks up the persisted runId and calls
-  // `agent.resumeStream(...)` — the conversation continues exactly where it
-  // paused, even though we're in a fresh process.
-  await session2.respondToPlanApproval({ approved });
+  // In-process direct call: the harness mints responseId internally. External
+  // callers must provide both itemId and responseId.
+  await session2.respondToPlanApproval({
+    itemId: display.pendingPlan.itemId,
+    approved,
+  });
 }
 ```
 
-**What's persisted vs. transient.** Across the suspension boundary:
-
-| Layer | Persisted | Transient |
-|---|---|---|
-| Agent workflow snapshot | `MastraStorage.workflows[runId]` | — |
-| UX prompt state | `SessionRecord.pendingApproval / pendingSuspension / pendingQuestion / pendingPlan` | — |
-| Queue (typed-ahead) | `SessionRecord.pendingQueue` | — |
-| Subscriber callbacks | — | rebuilt on `session.subscribe(...)` after rehydration |
-| `AbortController`, in-flight promises | — | discarded on dehydration |
-
-If the human never returns, the pending suspension stays parked in storage indefinitely. `harness.closeSession({ sessionId })` is the only operation that drops it (along with the workflow snapshot via cascade) — see §5.5.
+For the persisted/transient boundary across suspension and crash recovery, use
+§5.1 and §5.7 as the source of truth. If the human never returns, use the §5.5
+close lifecycle to dispose of the pending work; multi-tenant code passes the
+trusted `resourceId`, as in
+`harness.closeSession({ sessionId: 'session-abc', resourceId: 'user-123' })`.

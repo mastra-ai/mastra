@@ -3,8 +3,8 @@
 ```ts
 const harness = new Harness({
   ...config,
-  subagents: {
-    maxDepth: 2, // parent → child → grandchild allowed; great-grandchild blocked
+  sessions: {
+    maxSubagentDepth: 2, // parent → child → grandchild allowed; great-grandchild blocked
   },
 });
 

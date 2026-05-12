@@ -7,9 +7,10 @@ The active Codex session is the only writer. It coordinates model council throug
 Start by identifying:
 
 - the user goal
-- the canonical spec sections involved
-- the split files under `sections/` that mirror those sections
+- the section files under `sections/` involved
 - the objectives that must not regress
+- the existing concepts, records, APIs, events, and routes that may already cover
+  the requested fix
 - the narrowest code, docs, or test surface likely to change
 
 Do not inspect unrelated reference material or examples unless the user explicitly asks.
@@ -18,9 +19,18 @@ Do not inspect unrelated reference material or examples unless the user explicit
 
 For non-trivial Harness changes, run council as background CLI work:
 
-- two independent Codex CLI reviews
 - one Claude CLI review using the default model
-- one Gemini CLI review using Gemini 3.1 Pro Preview
+- one OpenCode CLI review using `google-vertex/gemini-3.1-pro-preview-customtools` with
+  the `high` variant and Vertex env vars
+- one Codex CLI review using `gpt-5.5` with high reasoning
+- one OpenCode CLI review using `deepseek/deepseek-v4-pro` with the `max`
+  variant
+- one OpenCode CLI review using `alibaba-coding-plan/qwen3.6-plus` (Alibaba
+  Coding Plan provider, no variant flag)
+- one OpenCode CLI review using `xai/grok-4.3` with the `high` variant
+
+Read `HOW_TO_USE_CLIS.md` before running council. It is the source of truth for
+the exact command forms, prompt shape, model selectors, and failure handling.
 
 Keep council outputs outside the repo, for example under `/private/tmp`, unless the user asks to preserve them. The repo should contain the final spec, split files, and implementation changes, not raw model transcripts.
 
@@ -38,27 +48,31 @@ Model output is advisory only.
 
 For each council claim, classify it before using it:
 
-- `accept`: cited, relevant, and consistent with the canonical spec and objectives
+- `accept`: cited, relevant, and consistent with the section specs and objectives
 - `adapt`: useful, but needs rewriting to fit the Harness v1 contract
 - `reject`: unsupported, stale, duplicative, out of scope, or inconsistent
-- `conflict`: useful but incompatible with the current canonical spec
+- `conflict`: useful but incompatible with the current section specs
 
 Verify accepted and adapted claims against:
 
-- `../HARNESS_V1_SPEC.md`
 - the relevant files under `sections/`
 - `OBJECTIVES.md`
+- related open and closed issue files, especially overlapping or prerequisite
+  concepts
 - affected package-local instructions and tests when implementation files are involved
+- current Mastra source files when the spec depends on existing runtime behavior
 
-If a valid suggestion conflicts with the canonical spec, update the canonical spec intentionally first, then regenerate the affected split files.
+If a valid suggestion conflicts with existing section text, update the relevant section files intentionally and keep cross-references consistent.
 
 ## 4. Write
 
 Only the orchestrator writes files. Do not ask the council models to edit the workspace directly.
 
-When changing the spec, edit `../HARNESS_V1_SPEC.md` first and regenerate the affected split files from it. When changing implementation, keep the patch scoped to the affected packages and run the narrowest useful checks.
+When changing the spec, edit the relevant files under `sections/` directly. Treat each issue as a task to improve the section source of truth, not as permission to add a larger design. Use the smallest change that resolves the invariant. Reuse existing concepts and canonical terms; when a fix overlaps another section element, update the canonical owner and add cross-references instead of creating a duplicate concept.
 
-The final update should be one coherent change set that preserves the Harness contract and keeps the split files aligned with the canonical spec.
+When changing implementation, keep the patch scoped to the affected packages and run the narrowest useful checks.
+
+The final update should be one coherent change set that preserves the Harness contract and keeps related sections aligned with each other.
 
 ## 5. Iterate
 

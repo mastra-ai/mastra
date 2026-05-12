@@ -1,180 +1,69 @@
 ## 9. Configuration
 
-```ts
-interface HarnessConfig<TState = Record<string, unknown>> {
-  // Required
-  agents: Record<string, Agent>;                      // Mastra agents keyed by ID
-  modes: HarnessMode[];                               // Available modes
-  resolveModel: (modelId: string) => LanguageModel;   // Model resolver
-  storage: HarnessStorage;                            // Thread + message persistence
+Orientation diagram (configuration buckets only; the TypeScript surface below
+remains authoritative):
 
-  // Sessions
-  defaultResourceId?: string;                         // Default tenant
-  defaultModelId?: string;                            // Fallback when session has none selected
-  sessions?: {
-    maxLive?: number;                                 // Cap on hydrated sessions. Default: Infinity (no cap).
-    idleTimeoutMs?: number;                           // Auto-evict after this idle period. Default: 2 * 60 * 60 * 1000 (2 hours).
-                                                      //   Sessions with a pending approval/suspension/question/plan
-                                                      //   are exempt from this check — see §5.4.
-    flushDebounceMs?: number;                         // Debounce window for writing dirty state. Default: 500
-    maxFlushFailures?: number;                        // Consecutive debounced-flush failures tolerated
-                                                      //   before the session goes into storage-error mode.
-                                                      //   Default: 5. See §5.7.
-    eventBufferSize?: number;                         // Per-session ring buffer size for event replay
-                                                      //   on SSE reconnect (`Last-Event-ID`).
-                                                      //   Default: 1000. See §13.3.
+<figure>
+  <svg role="img" aria-labelledby="hx-config-title hx-config-desc" viewBox="0 0 1080 600" width="100%" style="max-width: 1100px; height: auto; display: block; margin: 1.5rem auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 16px; box-sizing: border-box;">
+    <title id="hx-config-title">Harness configuration buckets</title>
+    <desc id="hx-config-desc">HarnessConfig fans out into runtime, storage, session policy, channels, wakeups, attachments, workspace providers, and live-helper event settings.</desc>
+    <defs>
+      <marker id="ah-config" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 Z" fill="#334155" />
+      </marker>
+    </defs>
 
-    maxQueueDepth?: number;                           // Cap on `SessionRecord.pendingQueue` length.
-                                                      //   When at the cap, `session.queue(...)` rejects
-                                                      //   with `HarnessQueueFullError` *before* mutating
-                                                      //   storage. The capacity check + durable append
-                                                      //   are atomic under the session's write lease
-                                                      //   (§5.8). Default: Infinity (unbounded).
-                                                      //   Cap deliberately does *not* trigger
-                                                      //   `HarnessBusyError` — busy state is what queue
-                                                      //   exists for. See §3 and §5.7.
+    <rect style="fill: #eef2ff; stroke: #6366f1; stroke-width: 2.5; rx: 16;" x="415" y="25" width="250" height="72" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="540" y="55" text-anchor="middle">HarnessConfig</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="540" y="78" text-anchor="middle">configuration root</text>
 
-    // Write-concurrency — see §5.8.
-    lockMode?: 'fail' | 'wait' | 'steal';             // Behaviour when another instance owns the lease.
-                                                      //   Default: 'fail'. 'wait' is recommended for
-                                                      //   browser/SSE deployments. 'steal' is for
-                                                      //   operator tools and tests.
-    lockTtlMs?: number;                               // Lease TTL. The owner renews on every flush
-                                                      //   and on a `lockRenewMs` interval. After TTL
-                                                      //   without renewal the lease is reclaimable.
-                                                      //   Default: 30_000.
-    lockRenewMs?: number;                             // Keep-alive interval for lease renewal even
-                                                      //   when no flush has happened. Default: 10_000.
-    lockWaitMs?: number;                              // Maximum time `harness.session(...)` blocks
-                                                      //   when `lockMode = 'wait'` before throwing
-                                                      //   `HarnessSessionLockedError`. Default: 5_000.
-  };
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="60" y="155" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="170" y="185" text-anchor="middle">Runtime surface</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="170" y="208" text-anchor="middle">agents / modes / tools</text>
 
-  // Skills
-  skills?: HarnessSkill[];                            // Code-registered skills (precedence over filesystem)
+    <rect style="fill: #ecfdf5; stroke: #22c55e; stroke-width: 2; rx: 14;" x="310" y="155" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="420" y="185" text-anchor="middle">HarnessStorage</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="420" y="208" text-anchor="middle">namespace ledgers</text>
 
-  // Subagents
-  subagents?: {
-    maxDepth?: number;                                // Default: 1
-  };
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="560" y="155" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="670" y="185" text-anchor="middle">Session policy</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="670" y="208" text-anchor="middle">leases / queue / receipts</text>
 
-  // File attachments
-  files?: {
-    maxInlineBytes?: number;                          // Inline attachments larger than this are rejected.
-                                                      //   Default: 10 * 1024 * 1024 (10 MiB).
-                                                      //   Larger files must use the `kind: 'url'` form
-                                                      //   or be pre-uploaded via the wire protocol's
-                                                      //   file route (see §13).
-  };
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="810" y="155" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="920" y="185" text-anchor="middle">Channel bridges</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="920" y="208" text-anchor="middle">inbox / actions / outbox</text>
 
-  // Goals — see §4.7
-  goals?: {
-    defaultJudgeModel?: string;                       // Used when `setGoal({ judgeModel })` omits the field.
-                                                      //   No default — `setGoal` throws if the goal has no
-                                                      //   judge model and no default is configured.
-    defaultMaxTurns?: number;                         // Default: 50
-  };
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="60" y="330" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="170" y="360" text-anchor="middle">Wakeup workers</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="170" y="383" text-anchor="middle">scheduled/proactive work</text>
 
-  // Workspace — see §2.7 for ownership models and the provider contract.
-  // Sugar: passing a `Workspace` is equivalent to `{ kind: 'shared', instance }`.
-  // Sugar: passing a function is equivalent to `{ kind: 'per-session', provider:
-  //   nonDurableProvider(fn) }` (resumable: false; sessions cannot survive
-  //   restarts).
-  workspace?: WorkspaceConfig | Workspace | WorkspaceFactoryFn;
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="310" y="330" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="420" y="360" text-anchor="middle">Attachment policy</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="420" y="383" text-anchor="middle">inline / URL / refs</text>
 
-  // Observational Memory
-  observationalMemory?: ObservationalMemoryConfig;
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="560" y="330" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="670" y="360" text-anchor="middle">Workspace provider</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="670" y="383" text-anchor="middle">shared or per-session</text>
 
-  // Tooling
-  tools?: ToolsetInput;                               // Available tools
-  toolCategories?: Record<string, ToolCategory>;      // Category mapping
-  defaultPermissionPolicy?: PermissionPolicy;         // Default approval behaviour
+    <rect style="fill: #fff7ed; stroke: #f97316; stroke-width: 2; rx: 14;" x="810" y="330" width="220" height="74" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="920" y="360" text-anchor="middle">Events &amp; buffers</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="920" y="383" text-anchor="middle">intervals / SSE helpers</text>
 
-  // Lifecycle hooks
-  intervals?: IntervalHandler[];                      // Registered at init via `onInterval`
+    <rect style="fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; rx: 14;" x="45" y="485" width="250" height="64" />
+    <text style="font: 600 18px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #0f172a;" x="170" y="512" text-anchor="middle">Compatibility generation</text>
+    <text style="font: 500 14px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; fill: #475569;" x="170" y="533" text-anchor="middle">runtime compatibility</text>
 
-  // State
-  initialState?: TState;
-}
-
-interface IntervalHandler {
-  id: string;
-  ms: number;                                         // Tick interval
-  handler: () => void | Promise<void>;
-  immediate?: boolean;                                // Fire once on registration. Default: false
-  shutdown?: () => void | Promise<void>;              // Called when the interval is removed
-}
-
-// Workspace configuration. Three discriminated shapes. `per-session` uses
-// the `WorkspaceProvider` contract (see §2.7) so the harness can validate
-// resumability at startup without provisioning a real sandbox. `shared` and
-// `per-resource` workspaces aren't tied to a specific session record and
-// don't carry a `providerId`.
-type WorkspaceConfig =
-  | { kind: 'shared'; instance: Workspace }
-  | {
-      kind: 'per-resource';
-      create: (ctx: { resourceId: string }) => Workspace | Promise<Workspace>;
-      eager?: boolean;                                // Provision on first session(); default false
-    }
-  | {
-      kind: 'per-session';
-      provider: WorkspaceProvider;                    // see below
-      eager?: boolean;                                // Provision on harness.session(); default false
-    };
-
-// The contract a per-session workspace provider must satisfy. The harness
-// reads `providerId` and `resumable` at config time — without calling
-// `create` — so that a misconfigured combination (e.g. `per-session` against
-// a non-resumable provider that the operator expected to survive restarts)
-// is rejected at `harness.init()` rather than discovered after a crash.
-interface WorkspaceProvider {
-  // Stable, human-readable identity. Persisted into
-  // `SessionRecord.workspace.providerId` and matched on rehydration. A
-  // mismatch surfaces `HarnessWorkspaceProviderMismatchError` rather than
-  // silently handing the record to the wrong provider.
-  readonly providerId: string;
-
-  // Static capability declaration. `false` providers are accepted only as
-  // sugar (factory shorthand) and the harness will not persist or attempt
-  // to resume their workspaces — see the factory-shorthand note below.
-  readonly resumable: boolean;
-
-  // Called the first time a session needs a workspace, or eagerly at
-  // session creation if `eager: true`. The returned Workspace must offer
-  // an opaque `getState()` to feed the harness's persistence loop when
-  // `resumable: true`.
-  create(ctx: WorkspaceCreateContext): Workspace | Promise<Workspace>;
-
-  // Required when `resumable: true`. Called after a server restart with
-  // whatever blob the harness stored in `SessionRecord.workspace.state`
-  // before the restart. Must return a live Workspace equivalent to the
-  // pre-restart instance from the agent's perspective.
-  resume?(ctx: WorkspaceResumeContext): Workspace | Promise<Workspace>;
-}
-
-interface WorkspaceCreateContext {
-  sessionId: string;
-  resourceId: string;
-  threadId: string;
-  parentSessionId?: string;
-}
-
-interface WorkspaceResumeContext extends WorkspaceCreateContext {
-  // The opaque blob the provider previously reported via
-  // `SessionRecord.workspace.state`. Type-erased on purpose — providers
-  // own its shape.
-  state: unknown;
-}
-
-// Factory-shorthand sugar. Equivalent to:
-//   { kind: 'per-session', provider: nonDurableProvider(fn) }
-// where `nonDurableProvider(fn)` returns a `WorkspaceProvider` with
-// `resumable: false`, an auto-generated `providerId` (e.g. an opaque
-// hash of the function reference), and no `resume` implementation.
-// Sessions provisioned through this path are NOT durable across server
-// restarts — see §2.7.
-type WorkspaceFactoryFn = (ctx: WorkspaceCreateContext) => Workspace | Promise<Workspace>;
-```
-
----
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M450 97 C345 120 230 125 180 154" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M505 97 C470 120 438 126 425 154" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M575 97 C610 120 648 126 665 154" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M630 97 C735 120 860 125 910 154" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M445 97 C300 185 200 260 175 329" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M505 97 C450 185 420 260 420 329" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M575 97 C630 185 670 260 670 329" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M630 97 C780 185 900 260 920 329" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M170 229 L170 484" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M820 229 C690 260 540 230 452 229" />
+    <path style="stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#ah-config);" d="M280 367 C330 320 370 270 402 230" />
+  </svg>
+  <figcaption>Configuration groups runtime choices, durable storage policy, session behavior, channel and wakeup bridges, attachment handling, workspace providers, and live event helpers.</figcaption>
+</figure>

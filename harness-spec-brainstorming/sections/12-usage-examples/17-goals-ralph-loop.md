@@ -1,6 +1,7 @@
 ### 12.17 Goals (Ralph loop)
 
-Drive a session toward a long-horizon objective using a separate judge model. The user can interject at any time — their input preempts the next continuation cleanly because continuations land in the queue, not inline.
+Drive a session toward a long-horizon objective using a separate judge model.
+§4.7 owns the goal lifecycle, continuation, budget, and judge-failure rules.
 
 ```ts
 const session = await harness.session({ resourceId: 'user-123' });
@@ -27,7 +28,7 @@ session.subscribe((event) => {
 
 // Kick off the Ralph loop. The judge model sees the conversation context
 // after every assistant turn and decides done / continue / waiting.
-session.setGoal({
+await session.setGoal({
   objective:
     'Refactor the billing service to use the new pricing engine. Run tests after each step and stop when CI passes locally.',
   judgeModel: 'anthropic/claude-haiku-4-5',
@@ -45,20 +46,15 @@ await session.message({ content: 'Begin.' });
 await session.message({ content: 'Actually, focus on the proration bug first.' });
 
 // Pause without losing the goal — useful for triaging an unrelated bug.
-session.pauseGoal();
+await session.pauseGoal();
 await session.message({ content: 'Quick — what does line 42 of pricing.ts do?' });
-session.resumeGoal();
+await session.resumeGoal();
 
 // Done.
-session.clearGoal();
+await session.clearGoal();
 ```
 
-**Important behaviours:**
-
-- Continuations are queued, not inlined. A typed-ahead `queue(...)` item still runs before the next continuation.
-- A `message(...)` posted while the judge is mid-evaluation is accepted normally; the judge's eventual `continue` reason is appended after that user message in the queue.
-- If the goal is cleared or replaced while the judge is still running, the judge's result is dropped silently.
-- Budget exhaustion (`turnsUsed >= maxTurns`) pauses the goal with `reason: 'budget_exhausted'`; raise the cap and call `resumeGoal()` to keep going.
-- Judge failures pause the goal with `reason: 'judge_failed'` and emit an `error` event. No silent retry loop.
+For canonical goal behaviors, including continuation queueing, stale judge
+results, budget exhaustion, and judge failure handling, see §4.7.
 
 ---
