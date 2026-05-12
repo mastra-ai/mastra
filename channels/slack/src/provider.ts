@@ -735,9 +735,8 @@ export class SlackProvider implements ChannelProvider {
    * applied separately.
    */
   #forwardedAdapterOptions() {
-    const { apiUrl, appToken, installationKeyPrefix, logger, mode, socketForwardingSecret, webhookVerifier } =
-      this.#channelConfig;
-    return { apiUrl, appToken, installationKeyPrefix, logger, mode, socketForwardingSecret, webhookVerifier };
+    const { logger } = this.#channelConfig;
+    return { logger };
   }
 
   /**

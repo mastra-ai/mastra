@@ -4,18 +4,6 @@ import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type { SlackInstallation } from './schemas';
 
 /**
- * SlackAdapter fields that the provider forwards to every `createSlackAdapter()`
- * call. Excludes installation-managed credentials/identity (`botToken`,
- * `botUserId`, `signingSecret`, `userName`, `clientId`, `clientSecret`) and
- * `encryptionKey` (which the provider owns at its top level for installation
- * data encryption).
- */
-type ForwardedSlackAdapterOptions = Pick<
-  SlackAdapterConfig,
-  'apiUrl' | 'appToken' | 'installationKeyPrefix' | 'logger' | 'mode' | 'socketForwardingSecret' | 'webhookVerifier'
->;
-
-/**
  * Per-adapter overrides forwarded to the SlackAdapter entry inside
  * `AgentChannels.adapters` — equivalent to passing
  * `{ adapter, ...adapterConfig }` when wiring up `AgentChannels` manually.
@@ -37,11 +25,17 @@ type ForwardedAgentChannelsOptions = Pick<
  * Configuration for SlackProvider at the Mastra level.
  *
  * In addition to the provider-specific fields documented below, this accepts
- * options that are forwarded to the underlying `SlackAdapter` and
- * `AgentChannels` instances managed by the provider — for example `handlers`,
- * `inlineMedia`, `mode: 'socket'`, and `adapterConfig`.
+ * options that are forwarded to the underlying `AgentChannels` instances
+ * managed by the provider — for example `handlers`, `inlineMedia`, and
+ * `adapterConfig`.
  */
-export interface SlackProviderConfig extends ForwardedSlackAdapterOptions, ForwardedAgentChannelsOptions {
+export interface SlackProviderConfig extends ForwardedAgentChannelsOptions {
+  /**
+   * Logger forwarded to the underlying `SlackAdapter` for internal error
+   * reporting. Defaults to the adapter's `ConsoleLogger`.
+   */
+  logger?: SlackAdapterConfig['logger'];
+
   /**
    * Override built-in event handlers (e.g. `onDirectMessage`, `onMention`).
    * Forwarded to `AgentChannels` for every agent connected via this provider.
