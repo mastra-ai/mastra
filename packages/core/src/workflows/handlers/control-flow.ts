@@ -897,7 +897,15 @@ export async function executeForeach(
   const resumeIndex =
     prevPayload?.status === 'suspended' ? prevPayload?.suspendPayload?.__workflow_meta?.foreachIndex || 0 : 0;
 
-  type ForeachStepResult = StepResult<any, any, any, any>;
+  type StepBailed = {
+    status: 'bailed';
+    output: any;
+    payload?: any;
+    startedAt?: number;
+    endedAt: number;
+    metadata?: Record<string, any>;
+  };
+  type ForeachStepResult = StepResult<any, any, any, any> | StepBailed;
   type PersistedForeachStepResult = ForeachStepResult & { suspendPayload?: any };
 
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
@@ -914,6 +922,7 @@ export async function executeForeach(
   // at all times instead of waiting for an entire batch to finish.
   type ForeachTask = { item: any; k: number; resumeToUse: typeof resume };
   let errorResult: StepFailure<any, any, any, any> | null = null;
+  let exitResult = null as ForeachStepResult | null;
   let canceledResult: ForeachStepResult | null = null;
   let inFlight = 0;
   let resolveCompletion: (() => void) | undefined;
@@ -987,6 +996,12 @@ export async function executeForeach(
       if (!errorResult) {
         errorResult = result;
       }
+    } else if (result.status !== 'success') {
+      completedCount++;
+      await emitIterationProgress(k, 'failed');
+      if (!exitResult) {
+        exitResult = result;
+      }
     }
 
     killQueue();
@@ -1029,7 +1044,7 @@ export async function executeForeach(
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
 
-      const result = stepExecResult.result;
+      const result = stepExecResult.result as ForeachStepResult;
 
       if (result.status !== 'success') {
         await handleNonSuccessResult(result, k);
@@ -1193,6 +1208,42 @@ export async function executeForeach(
     });
 
     return finalErrorResult;
+  }
+
+  if (exitResult) {
+    await engine.endChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end.early`,
+      endOptions: {
+        output: 'output' in exitResult ? exitResult.output : undefined,
+      },
+    });
+
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...exitResult,
+        },
+      },
+    });
+
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      },
+    });
+
+    return exitResult as StepResult<any, any, any, any>;
   }
 
   // Handle suspended items
