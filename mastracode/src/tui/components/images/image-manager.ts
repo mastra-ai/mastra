@@ -1,32 +1,10 @@
 /**
- * Coordinates inline image rendering for the TUI.
- *
- * Kitty/iTerm2 images sit on a graphics z-layer outside pi-tui's diff
- * renderer, so they persist across redraws and pi-tui's `compositeLineAt`
- * short-circuits on image-bearing lines — popups can't paint over them.
- *
- * Two pieces of state, both owned by the manager but driven from outside:
- *
- *   1. Registrations. Every live `InlineImageComponent` registers itself.
- *      The manager tracks them so it can issue kitty `deleteKittyImage`
- *      calls when a component transitions off-screen or out of `'image'`
- *      mode. There is no "active" image — multiple images can be live
- *      simultaneously as long as they're in the viewport.
- *   2. The display mode (`'image' | 'placeholder'`), set externally via
- *      `setDisplayMode()` — typically by the overlay watcher when an
- *      overlay opens/closes. Transitions out of `'image'` delete every
- *      live kitty placement; either transition forces a full pi-tui
- *      redraw so popup glyphs don't ghost.
- *
- * Per-frame viewport reconciliation lives in `reconcileViewport(lines)`:
- * post-render, we scan the flat line array for kitty/iTerm2 image
- * escapes, derive each registration's row position, and mark owners as
- * in-view (within `terminal.rows` of the bottom) or off-view. Owners
- * that just went off-view get their kitty placement deleted.
- *
- * Components poll `isPlaceholder(self)` each frame and pick which lines
- * to render. The manager never decides what gets drawn — it just
- * answers "should you render the placeholder?".
+ * Tracks live `InlineImageComponent`s so we can delete their kitty
+ * placements when they go off-screen, when the display mode flips to
+ * `'placeholder'` (overlay open), or when they unregister. Components
+ * poll `isPlaceholder(self)` each frame; the manager never decides what
+ * gets drawn. `reconcileViewport(lines)` runs post-render to flip
+ * `inView` based on row position in the rendered output.
  */
 
 import { deleteKittyImage } from '@mariozechner/pi-tui';
