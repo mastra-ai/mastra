@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Suspend and resume now works reliably for evented workflows that use parallel steps, `.branch()`, `dountil`/`dowhile` loops, and nested workflows — previously it only held up for simple linear flows.
+Fixed suspend and resume for evented workflows that use parallel steps, `.branch()`, `dountil`/`dowhile` loops, and nested workflows — previously these only worked reliably for simple linear flows.
 
 **Parallel & `.branch()` steps** — when more than one branch suspends at the same time (e.g. each branch waits on its own approval), every suspended branch can now be resumed, the workflow stays suspended until all of them have been resumed, and the branch outputs are merged correctly. Before, only the last branch to suspend was resumable, and resuming one branch could prematurely complete the run.
 

@@ -472,6 +472,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             suspendPayload: {
               ...prevResult.suspendPayload,
               __workflow_meta: {
+                // keep resumeLabels / foreachIndex etc. — only the runId and path change as we propagate up
+                ...(prevResult.suspendPayload?.__workflow_meta ?? {}),
                 runId: runId,
                 path: propagatedPath,
               },
