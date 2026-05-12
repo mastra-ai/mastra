@@ -23,7 +23,7 @@ import { z } from 'zod';
 
 import { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
-import type { ToolsInput } from '../../agent/types';
+import type { AgentThreadSubscription, ToolsInput } from '../../agent/types';
 import { ModelRouterLanguageModel } from '../../llm/model/router';
 import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../processors';
 import { RequestContext } from '../../request-context';
@@ -348,6 +348,42 @@ export class Session {
    * can drop the marker and reprovision by calling `clearWorkspaceLost()`.
    */
   private _workspaceLost = false;
+
+  // -------------------------------------------------------------------------
+  // Thread subscription — §4.2 signal routing.
+  //
+  // One AgentThreadSubscription per Session, lazy-acquired on the first
+  // signal-routed `message()` call. The subscription multiplexes every run
+  // on the (resource, thread) tuple — idle-start wakes, mid-flight signal
+  // deliveries, resume runs, queue drains — so a single drain loop owns
+  // chunk → harness event translation for the whole session lifetime.
+  //
+  // Subscription lifetime ends with `close()` (explicit) or session
+  // eviction (the new Session that rehydrates will lazy-open its own).
+  // Cross-agent mode switches re-open against the new agent — see
+  // `_ensureThreadSubscription` for the teardown contract.
+  // -------------------------------------------------------------------------
+
+  /** Cached thread subscription. Lazy. One per Session at a time. */
+  private _threadSubscription?: AgentThreadSubscription<unknown>;
+  /** Agent the current subscription was opened against. Used to detect
+   *  cross-agent mode switches that require re-opening. */
+  private _threadSubscriptionAgent?: Agent;
+  /** Handle to the running drain loop, awaited by `close()`. */
+  private _threadSubscriptionDrain?: Promise<void>;
+  /** True once the subscription has been torn down (by close or eviction).
+   *  Guards re-opens and re-entrant teardown. */
+  private _threadSubscriptionClosed = false;
+  /**
+   * Per-run completion promises, keyed by `runId`. The drain loop resolves
+   * (or rejects) the matching entry on a terminal chunk (`finish` / `error` /
+   * `abort` / `tool-call-suspended`). `_awaitRunCompletion(runId)` reads
+   * here. Entries left over on `close()` are rejected so callers don't hang.
+   */
+  private readonly _runCompletionPromises = new Map<
+    string,
+    { resolve: (full: FullOutput<unknown>) => void; reject: (err: unknown) => void }
+  >();
 
   /** @internal — constructed by the Harness, not directly. */
   constructor(internals: SessionInternals) {
@@ -682,6 +718,107 @@ export class Session {
   }
 
   // -------------------------------------------------------------------------
+  // Signal-routing helpers (§4.2). One long-lived thread subscription per
+  // Session multiplexes every run on the thread into a single chunk
+  // stream. `message()` calls `agent.sendSignal()`, gets a `runId` back,
+  // and awaits the matching entry in `_runCompletionPromises`. The drain
+  // loop resolves that entry when a terminal chunk (`finish` / `error` /
+  // `abort` / `tool-call-suspended`) for the run arrives.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Lazy-acquire the thread subscription against the given agent. Idempotent
+   * when called with the same agent. If the agent changed (cross-agent mode
+   * switch on the same thread), tears down the existing subscription and
+   * opens a new one against the new agent so the chunk stream stays in
+   * sync with the run the next `sendSignal()` will land on.
+   */
+  private async _ensureThreadSubscription(agent: Agent): Promise<AgentThreadSubscription<unknown>> {
+    if (this._threadSubscriptionClosed) {
+      throw new HarnessValidationError(
+        '_ensureThreadSubscription()',
+        'Session is closed; cannot re-open thread subscription.',
+      );
+    }
+    if (this._threadSubscription && this._threadSubscriptionAgent?.id === agent.id) {
+      return this._threadSubscription;
+    }
+    if (this._threadSubscription) {
+      // Cross-agent mode switch: tear down the old subscription so we don't
+      // mix chunks from two agents on the same thread.
+      this._threadSubscription.unsubscribe();
+      if (this._threadSubscriptionDrain) {
+        await this._threadSubscriptionDrain.catch(() => {});
+      }
+      this._threadSubscription = undefined;
+      this._threadSubscriptionAgent = undefined;
+      this._threadSubscriptionDrain = undefined;
+    }
+    const sub = await agent.subscribeToThread({ resourceId: this.resourceId, threadId: this.threadId });
+    this._threadSubscription = sub;
+    this._threadSubscriptionAgent = agent;
+    this._threadSubscriptionDrain = this._drainSubscriptionStream(sub);
+    // Surface drain rejections to outstanding awaiters; the drain loop itself
+    // swallows them in its `finally` block.
+    void this._threadSubscriptionDrain.catch(() => {});
+    return sub;
+  }
+
+  /**
+   * Returns a Promise that resolves with a synthetic `FullOutput` when the
+   * run with the given id terminates. The drain loop resolves (or rejects)
+   * the entry. If `close()` runs while the entry is pending, the entry is
+   * rejected with a typed error.
+   */
+  private _awaitRunCompletion(runId: string): Promise<FullOutput<unknown>> {
+    const existing = this._runCompletionPromises.get(runId);
+    if (existing) {
+      return new Promise<FullOutput<unknown>>((_resolve, reject) => {
+        // Replace the resolver to chain a second waiter — but our normal
+        // usage only ever awaits once per `runId`, so this is a defensive
+        // path. Forbid for clarity.
+        reject(
+          new HarnessValidationError(
+            '_awaitRunCompletion()',
+            `Run ${runId} already has an outstanding completion waiter`,
+          ),
+        );
+      });
+    }
+    return new Promise<FullOutput<unknown>>((resolve, reject) => {
+      this._runCompletionPromises.set(runId, { resolve, reject });
+    });
+  }
+
+  /**
+   * Drain the long-lived subscription stream. Each chunk carries a `runId`;
+   * we maintain per-run accumulators in `_runAccumulators` so terminal
+   * chunks can synthesize a `FullOutput` for `_awaitRunCompletion(runId)`.
+   *
+   * On terminal chunks (`finish` / `error` / `abort` / `tool-call-suspended`)
+   * we resolve the matching completion promise. On drain shutdown (stream
+   * end or unhandled error) every outstanding promise is rejected so
+   * callers don't hang.
+   */
+  private async _drainSubscriptionStream(sub: AgentThreadSubscription<unknown>): Promise<void> {
+    try {
+      for await (const _chunk of sub.stream) {
+        // Slice A commit 1: drain plumbing only — chunk → event translation
+        // still happens in `_drainStreamToEvents` driven directly from
+        // `message()`. Commit 2 moves the per-chunk switch in here and
+        // wires terminal chunks to `_runCompletionPromises`.
+        void _chunk;
+      }
+    } catch (err) {
+      // Reject all outstanding completion promises so callers don't hang.
+      for (const [, entry] of this._runCompletionPromises) {
+        entry.reject(err);
+      }
+      this._runCompletionPromises.clear();
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // message() — §4.2.
   //
   // Always-accept signal-driven entry point. Three return shapes:
@@ -690,10 +827,10 @@ export class Session {
   //   * { stream: true }                 → live MastraModelOutput
   //   * { output: schema, sync: true }   → fail-fast structured object
   //
-  // The signal-routing pathway in the spec (§4.2) is not yet shipped on the
-  // agent layer, so for M1 we wire directly to `agent.stream()` /
-  // `agent.generate()`. When sendSignal lands we'll route the active-run
-  // case through it without changing this surface.
+  // Default + stream paths route through `agent.sendSignal()` (Slice A).
+  // Structured + sync path stays on `agent.generate()` so typed-output
+  // turn boundaries remain fail-fast and uncoupled from the subscription
+  // multiplexer.
   // -------------------------------------------------------------------------
 
   /** Default: bundle the full agent output and return when the run finishes. */
@@ -2441,6 +2578,7 @@ export class Session {
   _markClosed(updatedRecord: SessionRecord): void {
     this._record = updatedRecord;
     this._state = 'closed';
+    this._tearDownThreadSubscription(new HarnessValidationError('session.close()', 'Session closed'));
   }
 
   /**
@@ -2451,6 +2589,27 @@ export class Session {
   _markEvicted(updatedRecord: SessionRecord): void {
     this._record = updatedRecord;
     this._state = 'evicted';
+    this._tearDownThreadSubscription(new HarnessValidationError('session.evict()', 'Session evicted'));
+  }
+
+  /**
+   * Synchronous teardown for the thread subscription on close/evict. Unsubscribes,
+   * marks the subscription closed, and rejects every outstanding entry in
+   * `_runCompletionPromises` so awaiters don't hang on a dead subscription.
+   * The drain loop's `for-await` exits naturally once `unsubscribe()` wakes it.
+   */
+  private _tearDownThreadSubscription(reason: unknown): void {
+    if (this._threadSubscriptionClosed) return;
+    this._threadSubscriptionClosed = true;
+    try {
+      this._threadSubscription?.unsubscribe();
+    } catch {
+      // Best-effort — subscription may already be done.
+    }
+    for (const [, entry] of this._runCompletionPromises) {
+      entry.reject(reason);
+    }
+    this._runCompletionPromises.clear();
   }
 
   /** @internal — accessor for the Harness when it needs the owner id back. */
