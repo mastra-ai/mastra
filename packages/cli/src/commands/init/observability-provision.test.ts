@@ -49,6 +49,29 @@ describe('provisionObservabilityProject', () => {
     resolveCurrentOrgMock.mockResolvedValue({ orgId: 'org_test', orgName: 'Test Org' });
   });
 
+  test('uses a provided platform token instead of starting auth again', async () => {
+    platformFetchMock
+      .mockResolvedValueOnce(jsonResponse({ projects: [] }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          project: { id: 'p1', slug: 'my-app', name: 'my-app', organizationId: 'org_test' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          token: { id: 'k1', name: 'mastra observability – my-app' },
+          secret: 'sk_secret_value',
+        }),
+      );
+
+    textMock.mockResolvedValueOnce('my-app' as never);
+
+    await provisionObservabilityProject({ defaultProjectName: 'my-app', token: 'prompt-token' });
+
+    expect(getTokenMock).not.toHaveBeenCalled();
+    expect(resolveCurrentOrgMock).toHaveBeenCalledWith('prompt-token', { forcePrompt: true });
+  });
+
   test('creates a new project when the org has none, defaulting to package name', async () => {
     platformFetchMock
       .mockResolvedValueOnce(jsonResponse({ projects: [] }))
