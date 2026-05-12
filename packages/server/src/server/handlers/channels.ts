@@ -1,3 +1,5 @@
+import type { Mastra } from '@mastra/core';
+import type { ChannelProvider } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/di';
 import { coreFeatures } from '@mastra/core/features';
 
@@ -26,13 +28,11 @@ function assertChannelsAvailable(): void {
   }
 }
 
-function getChannelOrThrow(mastra: any, platform: string) {
-  const channels = mastra.channels ?? {};
-  const channel = Object.values(channels).find((c: any) => c.id === platform) as any;
+function getChannelOrThrow(mastra: Mastra, platform: string): ChannelProvider {
+  const channels = Object.values(mastra.channels ?? {}) as ChannelProvider[];
+  const channel = channels.find(c => c.id === platform);
   if (!channel) {
-    const available = Object.values(channels)
-      .map((c: any) => c.id)
-      .join(', ');
+    const available = channels.map(c => c.id).join(', ');
     throw new HTTPException(404, {
       message: `Channel "${platform}" is not registered. Available: ${available || 'none'}`,
     });
@@ -40,8 +40,8 @@ function getChannelOrThrow(mastra: any, platform: string) {
   return channel;
 }
 
-function assertAgentExists(mastra: any, agentId: string) {
-  const agent = mastra.getAgentById?.(agentId);
+function assertAgentExists(mastra: Mastra, agentId: string): void {
+  const agent = mastra.getAgentById(agentId);
   if (!agent) {
     throw new HTTPException(404, {
       message: `Agent "${agentId}" not found`,
@@ -59,15 +59,15 @@ function assertAgentExists(mastra: any, agentId: string) {
  * remains the effective gate.
  */
 async function assertChannelAgentWriteAccess(
-  mastra: any,
+  mastra: Mastra,
   requestContext: RequestContext,
   agentId: string,
 ): Promise<void> {
-  const storage = mastra.getStorage?.();
+  const storage = mastra.getStorage();
   if (!storage) return;
 
   const agentsStore = await storage.getStore('agents');
-  if (!agentsStore?.getById) return;
+  if (!agentsStore) return;
 
   const stored = await agentsStore.getById(agentId);
   if (!stored) return;
