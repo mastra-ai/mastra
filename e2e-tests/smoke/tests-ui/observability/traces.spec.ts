@@ -17,7 +17,7 @@ test.describe('Observability', () => {
     // Run a workflow to generate a fresh trace
     await page.goto('/workflows/sequential-steps/graph');
     await page.getByRole('textbox', { name: 'Name' }).first().fill('observability-test');
-    await page.getByRole('button', { name: 'Run' }).click();
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
     const lastNode = page.locator('[data-workflow-node]').last();
     await expect(lastNode).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 10_000 });
 
