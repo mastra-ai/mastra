@@ -2,10 +2,13 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openai } from '@ai-sdk/openai-v5';
-import { useLLMRecording } from '@internal/llm-recorder';
+import { useLLMRecording, getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { CompositeVoice } from '../../composite-voice';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const recordingsDir = resolve(testDir, '__recordings__');

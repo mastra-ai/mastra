@@ -1,5 +1,39 @@
 # mastra
 
+## 1.9.0-alpha.15
+
+### Minor Changes
+
+- Add "Enable Mastra Observability? (will open auth flow)" prompt to `create-mastra` and `mastra init`. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+  When the user opts in, the CLI runs the interactive browser login flow (if not already authenticated), lets them pick an existing project or create a new one, mints a fresh organization access token, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` + `MASTRA_PROJECT_ID` to `.env`. The generated project already registers a `MastraPlatformExporter`, so no additional setup is needed to start sending traces.
+
+  `MASTRA_PLATFORM_ACCESS_TOKEN` replaces `MASTRA_CLOUD_ACCESS_TOKEN`. The old name is still read by the exporter for backwards compatibility but is deprecated.
+
+  If provisioning fails (e.g., the platform is unreachable), the command falls back to writing placeholder env vars with instructions.
+
+  Both commands also accept `--observability` / `--no-observability` flags for non-interactive use, and `--observability-project <name>` to bypass the project picker.
+
+### Patch Changes
+
+- `mastra studio deploy` and `mastra server deploy` now read `MASTRA_PROJECT_ID` and `MASTRA_ORG_ID` from the project's `.env` file, so projects scaffolded with Mastra Observability auto-link to the existing platform project on first deploy instead of creating a new one. Existing `process.env` values still take precedence. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+- Mastra Observability provisioning now creates new platform projects as observability-only (no Studio or Server runtime attached). The first `mastra studio deploy` or `mastra server deploy` flips the matching runtime flag, so projects are no longer mislabelled as Studio in the platform UI before any deploy has happened. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+- `mastra studio deploy` and `mastra server deploy` now prompt you to pick from existing projects in the selected organization instead of silently matching by `package.json` name or always creating a new project. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+  **What changed**
+  - When existing projects are found, both commands show an interactive selector listing them (plus a "Create new project" option).
+  - `--project <id-or-slug>` still bypasses the selector for non-interactive use.
+  - `-y/--yes` auto-accepts only when there is exactly one project whose name or slug matches the local `package.json` name; otherwise it errors asking you to pass `--project`.
+  - Projects saved in `.mastra-project.json` for the same organization are still auto-matched (no prompt).
+
+  This fixes deploys accidentally creating duplicate projects or targeting the wrong existing project when the local package name happened to collide.
+
+- Updated dependencies:
+  - @mastra/deployer@1.33.0-alpha.14
+  - @mastra/core@1.33.0-alpha.14
+
 ## 1.9.0-alpha.14
 
 ### Patch Changes
