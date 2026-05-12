@@ -485,7 +485,8 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       }
       result.modelSettings = settings as ProcessInputStepResult['modelSettings'];
     }
-    if (resolvedProviderOptions) result.providerOptions = resolvedProviderOptions;
+    if (resolvedProviderOptions)
+      result.providerOptions = resolvedProviderOptions as ProcessInputStepResult['providerOptions'];
     return result;
   }
 
