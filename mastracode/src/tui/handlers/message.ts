@@ -190,7 +190,8 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
 
   if (!state.streamingComponent) {
     const trailingParts = getTrailingContentParts(message);
-    if (trailingParts.length === 0) {
+    const hasToolCalls = message.content.some(content => content.type === 'tool_call');
+    if (trailingParts.length === 0 && !hasToolCalls) {
       if (systemReminderParts.length > 0) {
         state.ui.requestRender();
       }

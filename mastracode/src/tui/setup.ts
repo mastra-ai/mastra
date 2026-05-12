@@ -182,9 +182,12 @@ export function setupKeyboardShortcuts(
       return true;
     }
 
-    if (text.trim()) {
-      state.editor.addToHistory(text);
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return true;
     }
+
+    state.editor.addToHistory(text);
     state.editor.setText('');
     callbacks.queueFollowUpMessage(text);
     return true;
