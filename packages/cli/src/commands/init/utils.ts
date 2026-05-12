@@ -506,7 +506,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -614,8 +614,8 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
  * Append Mastra Observability credentials to the project's `.env` file.
  *
  * The generated `src/mastra/index.ts` template already registers a
- * `MastraPlatformExporter` which no-ops unless `MASTRA_CLOUD_ACCESS_TOKEN` is
- * set, so enabling Observability is a pure env-var concern from the
+ * `MastraPlatformExporter` which no-ops unless `MASTRA_PLATFORM_ACCESS_TOKEN`
+ * is set, so enabling Observability is a pure env-var concern from the
  * scaffolder's side.
  *
  * When called with no token, writes empty placeholders so the user can paste
@@ -632,7 +632,7 @@ export const writeObservabilityEnv = async ({
     '# Mastra Observability — https://projects.mastra.ai',
     '# Access token and project id wired up automatically when you ran',
     '# `mastra init` / `create-mastra` with Observability enabled.',
-    `MASTRA_CLOUD_ACCESS_TOKEN=${token ?? ''}`,
+    `MASTRA_PLATFORM_ACCESS_TOKEN=${token ?? ''}`,
     `MASTRA_PROJECT_ID=${projectId ?? ''}`,
   ];
   // Only emit the traces endpoint when caller provided one (e.g. local dev or

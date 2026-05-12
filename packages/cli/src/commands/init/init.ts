@@ -212,7 +212,7 @@ export const init = async ({
           `${color.green('Mastra Observability enabled.')}
 
   Project: ${color.cyan(result.projectName)} (${result.orgName})
-  Wrote ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`,
+  Wrote ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`,
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -222,10 +222,10 @@ export const init = async ({
         p.note(
           `${color.yellow('Could not connect this project to Mastra Observability automatically:')} ${message}
 
-  Empty ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.
+  Empty ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.
 
   1. Visit ${color.cyan('https://projects.mastra.ai')} to create a project and mint an access token.
-  2. Paste the token into ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} and the project id into ${color.cyan('MASTRA_PROJECT_ID')}.`,
+  2. Paste the token into ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and the project id into ${color.cyan('MASTRA_PROJECT_ID')}.`,
         );
       }
     }

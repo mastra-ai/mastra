@@ -16,7 +16,7 @@ interface CreateTokenResponse {
 }
 
 export interface ObservabilityProvisionResult {
-  /** WorkOS organization API key (sk_*) used as MASTRA_CLOUD_ACCESS_TOKEN. */
+  /** WorkOS organization API key (sk_*) used as MASTRA_PLATFORM_ACCESS_TOKEN. */
   token: string;
   /** Platform project id (UUID) used as MASTRA_PROJECT_ID. */
   projectId: string;
