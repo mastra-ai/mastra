@@ -493,6 +493,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sarvam',
+          label: 'Sarvam AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/scaleway',
           label: 'Scaleway',
         },

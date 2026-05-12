@@ -135,6 +135,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.chatContainer.addChild(new Spacer(1));
   }
   state.userInitiatedAbort = false;
+  state.activeGoalJudge = undefined;
 
   state.followUpComponents = [];
   state.pendingFollowUpMessages = [];
@@ -193,7 +194,8 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       ctx.updateStatusLine();
     });
   }
-  state.activeGoalJudge = { modelId: goal.judgeModelId };
+  const activeGoalJudge = { modelId: goal.judgeModelId };
+  state.activeGoalJudge = activeGoalJudge;
   state.gradientAnimator.start();
   ctx.updateStatusLine();
   state.ui.requestRender();
@@ -201,6 +203,10 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
   state.goalManager
     .evaluateAfterTurn(state)
     .then(async ({ continuation, judgeResult }) => {
+      if (state.activeGoalJudge !== activeGoalJudge) {
+        return;
+      }
+
       // Display the judge result in chat if available
       if (judgeResult) {
         const goal = state.goalManager.getGoal()!;
@@ -217,17 +223,21 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
         if (drainQueuedAction(ctx)) {
           return;
         }
-        await state.harness.sendSignal({
-          type: 'system-reminder',
-          contents: continuation,
-          attributes: { type: 'goal-judge' },
-          metadata: {
-            goalId: currentGoal.id,
-            turnsUsed: currentGoal.turnsUsed,
-            maxTurns: currentGoal.maxTurns,
-            judgeModelId: currentGoal.judgeModelId,
-          },
-        }).accepted;
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: continuation,
+            attributes: { type: 'goal-judge' },
+            metadata: {
+              goalId: currentGoal.id,
+              turnsUsed: currentGoal.turnsUsed,
+              maxTurns: currentGoal.maxTurns,
+              judgeModelId: currentGoal.judgeModelId,
+            },
+          }).accepted;
+        } catch (error) {
+          ctx.showError(`Failed to send goal continuation: ${error instanceof Error ? error.message : String(error)}`);
+        }
       } else {
         // Goal is done, paused, or waiting at an explicit checkpoint. Persist the final
         // judge response so the conversation history survives reloads.
@@ -250,7 +260,9 @@ function maybeGoalContinuation(ctx: EventHandlerContext): void {
       // Goal evaluation failed — don't block the TUI
     })
     .finally(() => {
-      state.activeGoalJudge = undefined;
+      if (state.activeGoalJudge === activeGoalJudge) {
+        state.activeGoalJudge = undefined;
+      }
       state.gradientAnimator?.fadeOut();
       ctx.updateStatusLine();
       state.ui.requestRender();

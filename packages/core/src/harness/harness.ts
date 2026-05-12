@@ -1036,8 +1036,8 @@ export class Harness<TState = {}> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    this.cleanupAgentThreadSubscription();
     this.abort();
+    this.cleanupAgentThreadSubscription();
 
     // Acquire lock on new thread before releasing old one.
     // Lock operations must be adjacent (no intermediate awaits) so callers
@@ -1536,9 +1536,14 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   private cleanupAgentThreadSubscription(): void {
+    this.agentThreadSubscription?.abort();
     this.agentThreadSubscription?.unsubscribe();
     this.agentThreadSubscription = null;
     this.agentThreadSubscriptionKey = null;
+    this.currentRunId = null;
+    this.currentTraceId = null;
+    this.abortController = null;
+    this.abortRequested = false;
   }
 
   private getAgentThreadSubscriptionKey(agent: Agent, threadId: string): string {
@@ -1595,6 +1600,9 @@ export class Harness<TState = {}> {
       this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
       this.emit({ type: 'agent_end', reason: 'error' });
     }
+    this.agentThreadSubscription?.unsubscribe();
+    this.agentThreadSubscription = null;
+    this.agentThreadSubscriptionKey = null;
     this.currentRunId = null;
     this.currentTraceId = null;
     this.abortController = null;
@@ -1605,44 +1613,61 @@ export class Harness<TState = {}> {
   private async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
     const requestContext = await this.buildRequestContext();
     let currentRun: HarnessStreamState | undefined;
+    let lastFinishedRunId: string | null = null;
 
-    for await (const chunk of subscription.stream) {
-      if (!this.isActiveAgentThreadSubscription(subscription)) break;
+    try {
+      for await (const chunk of subscription.stream) {
+        if (!this.isActiveAgentThreadSubscription(subscription)) {
+          subscription.unsubscribe();
+          break;
+        }
 
-      if (!currentRun) {
-        currentRun = this.createStreamState();
-        this.currentOperationId += 1;
-        this.abortController ??= new AbortController();
-        this.currentRunId = subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null);
-        this.currentTraceId = null;
-        this.emit({ type: 'agent_start' });
-      }
+        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
+        if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
+          continue;
+        }
 
-      if (chunk.type === 'start') {
-        continue;
-      }
+        if (!currentRun) {
+          currentRun = this.createStreamState();
+          this.currentOperationId += 1;
+          this.abortController ??= new AbortController();
+          this.currentRunId = subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null);
+          this.currentTraceId = null;
+          this.emit({ type: 'agent_start' });
+        }
 
-      try {
-        const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
-        if (
-          streamResult ||
-          chunk.type === 'finish' ||
-          chunk.type === 'error' ||
-          chunk.type === 'abort' ||
-          chunk.type === 'tool-call-suspended'
-        ) {
-          await this.finishSubscribedStreamRun({
-            suspended:
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined,
-            error: chunk.type === 'error',
-          });
+        if (chunk.type === 'start') {
+          continue;
+        }
+
+        try {
+          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
+          if (
+            streamResult ||
+            chunk.type === 'finish' ||
+            chunk.type === 'error' ||
+            chunk.type === 'abort' ||
+            chunk.type === 'tool-call-suspended'
+          ) {
+            const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            await this.finishSubscribedStreamRun({
+              suspended:
+                chunk.type === 'tool-call-suspended' ||
+                (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+                undefined,
+              error: chunk.type === 'error',
+            });
+            lastFinishedRunId = finishedRunId;
+            currentRun = undefined;
+          }
+        } catch (error) {
+          await this.handleSubscribedStreamError(error);
           currentRun = undefined;
         }
-      } catch (error) {
+      }
+    } catch (error) {
+      if (this.isActiveAgentThreadSubscription(subscription)) {
         await this.handleSubscribedStreamError(error);
-        currentRun = undefined;
       }
     }
   }
@@ -2162,6 +2187,8 @@ export class Harness<TState = {}> {
     this.currentRunId = null;
     this.currentTraceId = null;
     this.abortController = null;
+    this.abortRequested = false;
+    await this.drainFollowUpQueue();
 
     return result;
   }

@@ -573,6 +573,38 @@ describe('MastraTUI queueing', () => {
     expect(ctx.fireMessage).not.toHaveBeenCalled();
   });
 
+  it('shows an error when goal continuation signal delivery fails', async () => {
+    const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new Error('signal rejected')) }));
+    const state = createQueueState({
+      harness: {
+        getFollowUpCount: vi.fn(() => 0),
+        sendSignal,
+      } as any,
+      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      goalManager: {
+        isActive: vi.fn(() => true),
+        getGoal: vi.fn(() => ({
+          id: 'goal-1',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+        evaluateAfterTurn: vi.fn().mockResolvedValue({
+          continuation: 'goal continuation',
+          judgeResult: { decision: 'continue', reason: 'Keep going.' },
+        }),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    await vi.waitFor(() => {
+      expect(ctx.showError).toHaveBeenCalledWith('Failed to send goal continuation: signal rejected');
+    });
+  });
+
   it('persists terminal goal judge responses when no continuation is queued', async () => {
     const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const state = createQueueState({
@@ -620,6 +652,50 @@ describe('MastraTUI queueing', () => {
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);
     expect(mocks.showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
+  });
+
+  it('cancels an in-flight goal judge when the user aborts before it resolves', async () => {
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    let resolveEvaluation:
+      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
+      | undefined;
+    const state = createQueueState({
+      harness: {
+        getFollowUpCount: vi.fn(() => 0),
+        sendSignal,
+      } as any,
+      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      goalManager: {
+        isActive: vi.fn(() => true),
+        getGoal: vi.fn(() => ({
+          id: 'goal-1',
+          status: 'active',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+        evaluateAfterTurn: vi.fn(
+          () =>
+            new Promise(resolve => {
+              resolveEvaluation = resolve;
+            }),
+        ),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+    handleAgentAborted(ctx);
+    resolveEvaluation?.({
+      continuation: 'goal continuation',
+      judgeResult: { decision: 'continue', reason: 'Keep going.' },
+    });
+
+    await vi.waitFor(() => {
+      expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
+    });
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(state.chatContainer.children).toHaveLength(0);
   });
 
   it('waits for harness-level follow-ups to finish before draining the local queue', () => {
