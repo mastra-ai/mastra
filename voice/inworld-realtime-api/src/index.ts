@@ -46,10 +46,11 @@ type TTools = ToolsInput;
 
 /**
  * InworldRealtimeVoice provides real-time voice interaction over Inworld's
- * Realtime API. Protocol is the OpenAI Realtime GA spec with two deltas:
- *
- * - `conversation.item.added` (Inworld) instead of `conversation.item.created`
- * - extra `conversation.item.done` (per-item completion)
+ * Realtime API. Wire protocol is the OpenAI Realtime GA spec — same event
+ * names on both sides (`conversation.item.added`, `conversation.item.done`,
+ * `response.output_audio.delta`, etc.). Provider-level differences are the
+ * endpoint, Basic auth, and Inworld-specific knobs surfaced via
+ * `providerData`.
  *
  * Auth: Inworld API keys are already Basic-encoded — they are passed
  * verbatim in the `Authorization: Basic ...` header (do NOT re-encode).
@@ -366,8 +367,8 @@ export class InworldRealtimeVoice extends MastraVoice {
       this.emit('speaker', speakerStream);
     });
 
-    // Inworld extension: per-item completion. Surface as an event for users
-    // who want to react to each item; otherwise harmless.
+    // GA-spec per-item lifecycle: `added` (item appended) and `done` (item
+    // finished). Surface both upward so consumers can drive UI from either edge.
     this.client.on('conversation.item.added', ev => {
       this.emit('conversation.item.added', ev);
     });

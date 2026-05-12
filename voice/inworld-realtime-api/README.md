@@ -2,10 +2,11 @@
 
 Inworld Realtime API integration for Mastra. Full-duplex, websocket-based voice with speech-to-speech, tool calling, and Inworld-specific features (curated voices, semantic VAD, MCP tool routing).
 
-The protocol is the OpenAI Realtime GA spec with two deltas:
+Inworld's wire protocol is the OpenAI Realtime GA spec — same client/server event names (`conversation.item.added`, `conversation.item.done`, `response.output_audio.delta`, etc.). The provider-level differences are:
 
-- `conversation.item.added` (Inworld) instead of `conversation.item.created`
-- Inworld extension: `conversation.item.done` (per-item completion)
+- Endpoint: `wss://api.inworld.ai/api/v1/realtime/session`
+- Auth: `Authorization: Basic <key>` (Inworld keys ship pre-encoded; pass verbatim)
+- Inworld extensions surfaced through `providerData`: curated voice catalog (`Dennis`, …), `inworld-tts` models, playback speed (0.25–1.5×), semantic-VAD eagerness, and `tool_choice: "mcp"` for MCP routing
 
 Sibling to [`@mastra/voice-openai-realtime`](../openai-realtime-api) and [`@mastra/voice-inworld`](../inworld) (TTS-only).
 

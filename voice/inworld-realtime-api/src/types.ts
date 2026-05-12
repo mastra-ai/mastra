@@ -1,10 +1,10 @@
 /**
  * Hand-rolled event types for Inworld's Realtime API.
  *
- * Inworld's realtime websocket is the OpenAI Realtime GA spec with two
- * documented deltas:
- *   - rename: `conversation.item.created` -> `conversation.item.added`
- *   - extra:  `conversation.item.done` (per-item completion)
+ * Inworld's wire protocol is the OpenAI Realtime GA spec — the event names
+ * below match what OpenAI's GA reference also publishes (e.g.
+ * `conversation.item.added`, `conversation.item.done`). Earlier Beta docs
+ * used `conversation.item.created`; GA is what's reflected here.
  *
  * Type names mirror the wire event types verbatim so handlers and switch
  * statements line up with what the server sends.
