@@ -86,6 +86,75 @@ function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase
   return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
+function getStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getRecordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function signalContentsToHarnessContent(contents: unknown): HarnessMessageContent[] {
+  if (typeof contents === 'string') return [{ type: 'text', text: contents }];
+  if (Array.isArray(contents)) return contents.flatMap(signalContentsToHarnessContent);
+  if (!contents || typeof contents !== 'object') return [];
+
+  const content = (contents as { content?: unknown }).content;
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (Array.isArray(content)) {
+    return content.flatMap((part): HarnessMessageContent[] => {
+      const record = getRecordValue(part);
+      if (!record) return [];
+      if (record.type === 'text' && typeof record.text === 'string') {
+        return [{ type: 'text', text: record.text }];
+      }
+      if (record.type === 'file' && typeof record.data === 'string' && typeof record.mediaType === 'string') {
+        if (record.mediaType.startsWith('image/')) {
+          return [{ type: 'image', data: record.data, mimeType: record.mediaType }];
+        }
+        return [
+          {
+            type: 'file',
+            data: record.data,
+            mediaType: record.mediaType,
+            filename: typeof record.filename === 'string' ? record.filename : undefined,
+          },
+        ];
+      }
+      return [];
+    });
+  }
+
+  return [];
+}
+
+function toSystemReminderContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
+  const attributes = getRecordValue(payload.attributes);
+  const message = getStringValue(payload.contents) ?? getStringValue(payload.message);
+  if (message === undefined) return undefined;
+
+  return {
+    type: 'system_reminder',
+    message,
+    reminderType:
+      getStringValue(payload.reminderType) ?? getStringValue(attributes?.type) ?? getStringValue(payload.type),
+    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
+    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
+    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
+    gapMs:
+      typeof payload.gapMs === 'number'
+        ? payload.gapMs
+        : typeof attributes?.gapMs === 'number'
+          ? attributes.gapMs
+          : undefined,
+    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
+    goalMaxTurns: typeof payload.goalMaxTurns === 'number' ? payload.goalMaxTurns : undefined,
+    judgeModelId: getStringValue(payload.judgeModelId),
+  };
+}
+
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -1671,9 +1740,10 @@ export class Harness<TState = {}> {
 
   private convertToHarnessMessage(msg: {
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'signal';
     createdAt: Date;
     content: {
+      content?: string;
       parts: Array<{
         type: string;
         text?: string;
@@ -1697,44 +1767,52 @@ export class Harness<TState = {}> {
     };
   }): HarnessMessage {
     const content: HarnessMessageContent[] = [];
-    const systemReminder =
-      typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
-        ? msg.content.metadata.systemReminder
-        : undefined;
+    const systemReminder = getRecordValue(msg.content.metadata?.systemReminder);
 
-    if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
-      content.push({
-        type: 'system_reminder',
-        message:
-          'message' in systemReminder && typeof systemReminder.message === 'string' ? systemReminder.message : '',
+    if (systemReminder && typeof systemReminder.type === 'string') {
+      const reminder = toSystemReminderContent({
+        ...systemReminder,
+        contents: typeof systemReminder.message === 'string' ? systemReminder.message : '',
         reminderType: systemReminder.type,
-        path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
-        precedesMessageId:
-          'precedesMessageId' in systemReminder && typeof systemReminder.precedesMessageId === 'string'
-            ? systemReminder.precedesMessageId
-            : undefined,
-        gapText:
-          'gapText' in systemReminder && typeof systemReminder.gapText === 'string'
-            ? systemReminder.gapText
-            : undefined,
-        gapMs: 'gapMs' in systemReminder && typeof systemReminder.gapMs === 'number' ? systemReminder.gapMs : undefined,
-        timestamp:
-          'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
-            ? systemReminder.timestamp
-            : undefined,
-        goalMaxTurns:
-          'goalMaxTurns' in systemReminder && typeof systemReminder.goalMaxTurns === 'number'
-            ? systemReminder.goalMaxTurns
-            : undefined,
-        judgeModelId:
-          'judgeModelId' in systemReminder && typeof systemReminder.judgeModelId === 'string'
-            ? systemReminder.judgeModelId
-            : undefined,
       });
+      if (reminder) {
+        content.push(reminder);
+      }
 
       return {
         id: msg.id,
-        role: msg.role,
+        role: msg.role === 'signal' ? 'user' : msg.role,
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
+
+    const signalMetadata = getRecordValue(msg.content.metadata?.signal);
+    if (signalMetadata?.type === 'user-message') {
+      const signalContent = signalContentsToHarnessContent(signalMetadata.contents ?? msg.content.content);
+      if (signalContent.length > 0) {
+        return {
+          id: msg.id,
+          role: 'user',
+          content: signalContent,
+          createdAt: msg.createdAt,
+        };
+      }
+    }
+
+    if (signalMetadata?.type === 'system-reminder') {
+      const reminder = toSystemReminderContent({
+        type: signalMetadata.type,
+        contents: signalMetadata.contents ?? msg.content.content,
+        attributes: getRecordValue(signalMetadata.attributes) ?? msg.content.metadata,
+      });
+      if (reminder) {
+        content.push(reminder);
+      }
+
+      return {
+        id: msg.id,
+        role: 'user',
         content,
         createdAt: msg.createdAt,
       };
@@ -1757,12 +1835,14 @@ export class Harness<TState = {}> {
             const inv = part.toolInvocation;
             content.push({ type: 'tool_call', id: inv.toolCallId, name: inv.toolName, args: inv.args });
             if (inv.state === 'result' && inv.result !== undefined) {
+              const partProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
               content.push({
                 type: 'tool_result',
                 id: inv.toolCallId,
                 name: inv.toolName,
                 result: inv.result,
                 isError: inv.isError ?? false,
+                ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
               });
             }
           } else if (part.toolCallId && part.toolName) {
@@ -1776,12 +1856,14 @@ export class Harness<TState = {}> {
           break;
         case 'tool-result':
           if (part.toolCallId && part.toolName) {
+            const resultProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
             content.push({
               type: 'tool_result',
               id: part.toolCallId,
               name: part.toolName,
               result: part.result,
               isError: part.isError ?? false,
+              ...(resultProviderMetadata ? { providerMetadata: resultProviderMetadata } : {}),
             });
           }
           break;
@@ -1818,20 +1900,16 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-user-message': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push(...signalContentsToHarnessContent(data.contents ?? data.message));
+          break;
+        }
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          const message = data.message;
-          if (typeof message === 'string') {
-            content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
-              path: typeof data.path === 'string' ? data.path : undefined,
-              precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
-              gapText: typeof data.gapText === 'string' ? data.gapText : undefined,
-              gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
-              timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
-            });
+          const reminder = toSystemReminderContent(data);
+          if (reminder) {
+            content.push(reminder);
           }
           break;
         }
@@ -1881,7 +1959,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    return { id: msg.id, role: msg.role, content, createdAt: msg.createdAt };
+    return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
   }
 
   /**
@@ -2014,18 +2092,21 @@ export class Harness<TState = {}> {
 
         case 'tool-result': {
           const toolResult = chunk.payload;
+          const providerMetadata = toolResult.providerMetadata as Record<string, unknown> | undefined;
           currentMessage.content.push({
             type: 'tool_result',
             id: toolResult.toolCallId,
             name: toolResult.toolName,
             result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
             isError: toolResult.isError ?? false,
+            ...(providerMetadata ? { providerMetadata } : {}),
           });
           this.emit({
             type: 'tool_end',
             toolCallId: toolResult.toolCallId,
             result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
             isError: toolResult.isError ?? false,
+            ...(providerMetadata ? { providerMetadata } : {}),
           });
           this.emit({ type: 'message_update', message: { ...currentMessage } });
           break;
@@ -2468,6 +2549,10 @@ export class Harness<TState = {}> {
 
   getCurrentTraceId(): string | null {
     return this.currentTraceId;
+  }
+
+  private getSubagentDisplayName(agentType: string): string | undefined {
+    return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
   }
 
   // ===========================================================================
@@ -3003,9 +3088,11 @@ export class Harness<TState = {}> {
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
-      case 'subagent_start':
+      case 'subagent_start': {
+        const displayName = this.getSubagentDisplayName(event.agentType);
         ds.activeSubagents.set(event.toolCallId, {
           agentType: event.agentType,
+          ...(displayName !== undefined ? { displayName } : {}),
           task: event.task,
           modelId: event.modelId,
           forked: event.forked,
@@ -3014,6 +3101,7 @@ export class Harness<TState = {}> {
           status: 'running',
         });
         break;
+      }
 
       case 'subagent_text_delta': {
         const sub = ds.activeSubagents.get(event.toolCallId);

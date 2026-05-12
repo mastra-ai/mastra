@@ -7,6 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
+import { isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
@@ -187,13 +188,37 @@ export class MessageList {
     }
 
     for (const message of messageArray) {
-      this.addOne(
-        typeof message === `string`
+      const messageInput = isCreatedAgentSignal(message)
+        ? message.toDBMessage(this.memoryInfo ?? undefined)
+        : typeof message === `string`
           ? {
-              role: 'user',
+              role: 'user' as const,
               content: message,
             }
-          : message,
+          : message;
+
+      if (Array.isArray(messageInput)) {
+        for (const nestedMessage of messageInput) {
+          this.addOne(
+            typeof nestedMessage === `string`
+              ? {
+                  role: 'user',
+                  content: nestedMessage,
+                }
+              : nestedMessage,
+            messageSource,
+          );
+        }
+        continue;
+      }
+
+      this.addOne(
+        typeof messageInput === `string`
+          ? {
+              role: 'user',
+              content: messageInput,
+            }
+          : messageInput,
         messageSource,
       );
     }
@@ -248,6 +273,32 @@ export class MessageList {
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
     return this;
+  }
+
+  private getMessagesForModelPrompt(): MastraDBMessage[] {
+    return this.messages.flatMap(message => {
+      if ((message.role as string) !== 'signal') {
+        return [message];
+      }
+
+      // Signals are persisted losslessly as DB signal messages, but model providers
+      // only understand normal prompt messages. Project the signal into its
+      // LLM-facing message content here so the existing MessageList converters
+      // keep handling strings, arrays, files/images, and provider-specific shapes.
+      const signalMessages = mastraDBMessageToSignal(message).toLLMMessage();
+      return (Array.isArray(signalMessages) ? signalMessages : [signalMessages]).map(signalMessage =>
+        convertInputToMastraDBMessage(
+          typeof signalMessage === `string`
+            ? {
+                role: 'user' as const,
+                content: signalMessage,
+              }
+            : signalMessage,
+          'input',
+          this.createAdapterContext(),
+        ),
+      );
+    });
   }
 
   public makeMessageSourceChecker(): {
@@ -364,11 +415,13 @@ export class MessageList {
     v1: (): MastraMessageV1[] => convertToV1Messages(this.all.db()),
 
     aiV5: {
-      model: (): AIV5Type.ModelMessage[] =>
-        convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.all.db(), { transformToolPayloads: false }),
-          this.messages,
-        ),
+      model: (): AIV5Type.ModelMessage[] => {
+        const promptMessages = this.getMessagesForModelPrompt();
+        return convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
+        );
+      },
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.all.db()),
 
       // Used when calling AI SDK streamText/generateText
@@ -379,9 +432,10 @@ export class MessageList {
           this.createAdapterContext(),
           this.messages,
         );
+        const promptMessages = this.getMessagesForModelPrompt();
         const modelMessages = convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.all.db(), { transformToolPayloads: false }),
-          this.messages,
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
           this.filterIncompleteToolCalls,
         );
 
@@ -401,9 +455,10 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
+        const promptMessages = this.getMessagesForModelPrompt();
         const modelMessages = convertAIV5UIToModelMessages(
-          this.toAIV5UIMessages(this.all.db(), { transformToolPayloads: false }),
-          this.messages,
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
           this.filterIncompleteToolCalls,
         );
 
@@ -534,7 +589,9 @@ export class MessageList {
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.toAIV4UIMessages(this.all.db()),
       core: (): CoreMessageV4[] =>
-        aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.all.db(), { transformToolPayloads: false })),
+        aiV4UIMessagesToAIV4CoreMessages(
+          this.toAIV4UIMessages(this.getMessagesForModelPrompt(), { transformToolPayloads: false }),
+        ),
 
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
