@@ -8,6 +8,8 @@ The builder's `features.agent.tools|agents|workflows` flags + per-feature allowl
 
 Settings payload exposes resolved allowlists at top level as `visibleTools` / `visibleAgents` / `visibleWorkflows` (each is `string[] | null`; `null` = unrestricted). Stored-agent records use different keys (`tools` / `agents` / `workflows`), so cross-check both shapes when validating.
 
+> **Casing note.** The allowlist in `configuration.agent.{tools,agents,workflows}.allowed` accepts both registration-key form (`weatherInfo`) and entity-`.id` form (`weather-info` if the underlying tool sets `id: 'weather-info'`). The server resolves either to the canonical response key. So `allowed: ['weather-info']` and `allowed: ['weatherInfo']` are functionally equivalent — `visibleTools` will emit the registration key (`weatherInfo` for tools/workflows, `.id` for agents). This is **not** a bug; it's deliberate alias matching. See `packages/server/src/server/handlers/editor-builder.ts` `collectAliases`.
+
 ## Steps
 
 ### 1. Confirm features enabled

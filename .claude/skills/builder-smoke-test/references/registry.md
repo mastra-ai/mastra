@@ -14,7 +14,7 @@ Two paths to acquire skills from outside your own authored set:
 
 ## Steps — skills.sh registry
 
-These steps assume `skillsSh.enabled = true`. If not, the registry surfaces should be hidden in UI and `404` from the API.
+These steps assume `skillsSh.enabled = true`. **The scaffolded project ships with `registries` unset (skills.sh disabled by default).** Under that config, registry surfaces are hidden in UI and `/editor/builder/registries/skills-sh/*` returns `404`. Run the registries-list step (step 1) to confirm the disabled-path behavior, then mark steps 2–5 as `⏭️ skills.sh disabled` and continue. Only run the full registry walk if you've explicitly enabled `builder.registries.skillsSh.enabled` in `src/mastra/index.ts` and restarted.
 
 ### 1. Registries list
 

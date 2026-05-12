@@ -10,7 +10,9 @@ Both star and unstar are idempotent — calling them twice returns the same body
 
 **This section requires `--auth on`.** Stars are scoped per caller (the row in `stored_stars` is keyed on `(entityId, authorId)`). With `--auth off`, there is no caller to attach the star to and the route rejects with `401 Unauthorized`.
 
-If you're running with `--auth off`, do this and move on:
+### Running with `--auth off`
+
+Stars are **fully unreachable under `--auth off`**. The PUT/DELETE endpoints return `401`, and the Studio + Agent Builder star buttons render as a disabled icon with a "Sign in to star this agent/skill" tooltip (auth-off star-button UX). Do the 401 sanity check below, mark this section as `Skipped (requires --auth on)`, and move on. Do **not** try to create agents and star them — it will not work and is not expected to work.
 
 ```bash
 # Sanity: confirm stars are gated by auth

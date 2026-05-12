@@ -138,6 +138,8 @@ curl -s $BASE/stored/workspaces/user-workspace | jq '{status, metadata, updatedA
 - [ ] `metadata.source` is NOT `"builder"` (or absent)
 - [ ] `status` unchanged (not archived by reconciliation)
 
+> **Restart noise:** immediately after a dev-server restart, the server log may briefly emit `Stored workspace with id ... not found` for in-flight requests that started before the restart (e.g. a browser tab polling `/stored/workspaces/:id`). This is not a reconciliation failure — it's just a stale request landing after the server came back up. Don't include it in product issues unless you can reproduce it with no client connected.
+
 Clean up:
 
 ```bash

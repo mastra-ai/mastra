@@ -40,7 +40,7 @@ Notes (don't assert under `--auth off`):
 
 - `visibility` will be `"public"` regardless of request (see auth-on path).
 - `authorId` will be `null` (no caller).
-- `starCount` will be `null` (no enrichment without a caller).
+- `starCount` will be `0` (no caller-scoped star rows).
 
 ### 2. Get the agent
 

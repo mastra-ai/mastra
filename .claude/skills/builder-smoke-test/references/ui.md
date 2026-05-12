@@ -84,7 +84,7 @@ Navigate to `http://localhost:4111/agent-builder` (or `/agents`).
 You should be on `/agent-builder/agents/<id>/view`.
 
 - [ ] `View mode` pill badge near the header
-- [ ] Header: back arrow, agent name, refresh button
+- [ ] Header: back arrow, agent name, `View mode` pill (no refresh button)
 - [ ] Top-right: `Publish to...` dropdown and avatar
 - [ ] Center: agent name + description and a row of starter prompt cards (e.g. What can you do? / Show available tools / Suggest a task / Run a self-check)
 - [ ] Bottom: `Message your agent...` chat input — agents are runnable from view
