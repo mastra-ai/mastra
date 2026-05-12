@@ -19,7 +19,9 @@ export async function fillAndSend(page: Page, message: string) {
  */
 export async function waitForAssistantMessage(page: Page, timeout = 30_000) {
   const thread = page.getByTestId('thread-wrapper');
-  const assistantMsg = thread.locator('[data-message-index]').nth(1);
+  // The assistant may emit multiple messages (e.g. tool calls then final text).
+  // Grab the last assistant message so assertions match the final response.
+  const assistantMsg = thread.locator('[data-message-index]').last();
   await expect(assistantMsg).toBeVisible({ timeout });
   return assistantMsg;
 }
