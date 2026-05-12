@@ -391,6 +391,16 @@
         "default": "./dist/server/index.cjs"
       }
     },
+    "./signals": {
+      "import": {
+        "types": "./dist/signals/index.d.ts",
+        "default": "./dist/signals/index.js"
+      },
+      "require": {
+        "types": "./dist/signals/index.d.ts",
+        "default": "./dist/signals/index.cjs"
+      }
+    },
     "./storage": {
       "import": {
         "types": "./dist/storage/index.d.ts",

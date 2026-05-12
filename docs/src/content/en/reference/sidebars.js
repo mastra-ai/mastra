@@ -451,6 +451,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Signals',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'signals/github-signals', label: 'GithubSignals' }],
+    },
+    {
+      type: 'category',
       label: 'Storage',
       collapsed: true,
       items: [

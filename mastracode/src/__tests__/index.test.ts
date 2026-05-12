@@ -16,13 +16,27 @@ vi.mock('@mastra/core/llm', () => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {
-    constructor(config: unknown) {
+    readonly id: string;
+
+    constructor(config: { id?: string }) {
+      this.id = config.id ?? 'agent';
       agentConstructorMock(config);
     }
   },
 }));
 
 const agentConstructorMock = vi.fn();
+const githubSignalsAddAgentMock = vi.fn();
+
+vi.mock('@mastra/core/signals', () => ({
+  GithubSignals: class {
+    readonly processor = { id: 'github-signals' };
+
+    addAgent(agent: unknown) {
+      githubSignalsAddAgentMock(agent);
+    }
+  },
+}));
 
 const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
@@ -275,6 +289,7 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
+    githubSignalsAddAgentMock.mockReset();
     harnessConstructorMock.mockReset();
     gatewayRegistryGetInstance.mockImplementation(() => ({
       syncGateways: gatewayRegistrySyncGateways,
@@ -356,5 +371,18 @@ describe('createMastraCode', () => {
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+  });
+
+  it('wires GithubSignals into the code agent', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: Array<{ id?: string }> }
+      | undefined;
+    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('github-signals');
+    expect(githubSignalsAddAgentMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'code-agent' }));
   });
 });

@@ -1,0 +1,248 @@
+---
+title: "Reference: GithubSignals | Signals"
+description: "API reference for GithubSignals, which subscribes agent threads to GitHub pull request notifications."
+packages:
+  - "@mastra/core"
+---
+
+# GithubSignals
+
+`GithubSignals` connects Mastra agent threads to GitHub pull request events. It exposes a `processor` for agent configuration, helper signals for subscribe and unsubscribe actions, and an in-process poller that sends PR notifications back to the thread.
+
+Use it when an agent needs CI failure, PR comment, or review notifications while it continues working in a thread.
+
+## Usage example
+
+Create one `GithubSignals` controller, add its processor to the agent, then register the agent with the controller.
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { GithubSignals, ghSignals } from '@mastra/core/signals'
+
+const github = new GithubSignals({
+  repo: 'mastra-ai/mastra',
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code agent',
+  instructions: 'Help with code review and CI failures.',
+  model,
+  inputProcessors: [github.processor],
+})
+
+github.addAgent(agent)
+
+await agent.sendSignal(ghSignals.prSubscribe({ prNumber: 1234 }), {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+```
+
+The subscribe signal tells the model that the thread is subscribed to the PR. On the next input step, the processor records the subscription in thread metadata and starts polling GitHub with the `gh` CLI.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'GithubSignalsOptions',
+    description: 'Configuration for GitHub polling, signal helpers, and the optional agent tool.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'repo',
+        type: 'string',
+        description: 'Default GitHub repository in owner/name format. Signal-level repo values override this value.',
+        isOptional: true,
+      },
+      {
+        name: 'pollIntervalMs',
+        type: 'number',
+        description: 'How often to poll active PR subscriptions.',
+        isOptional: true,
+        defaultValue: '60000',
+      },
+      {
+        name: 'includeTool',
+        type: 'boolean',
+        description: 'Whether to add a github tool that lets the agent subscribe or unsubscribe the current thread.',
+        isOptional: true,
+        defaultValue: 'true',
+      },
+      {
+        name: 'commandRunner',
+        type: 'GithubCommandRunner',
+        description: 'Function used to run GitHub CLI commands. The default runner calls gh with execFile.',
+        isOptional: true,
+      },
+      {
+        name: 'now',
+        type: '() => Date',
+        description: 'Clock used for metadata timestamps and tests.',
+        isOptional: true,
+      },
+    ],
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'processor',
+    type: 'Processor',
+    description:
+      'Input processor that detects GitHub subscribe and unsubscribe signals, persists thread metadata, and optionally adds the github tool.',
+  },
+]}
+/>
+
+## Signal helpers
+
+Import `ghSignals` from `@mastra/core/signals`.
+
+### `ghSignals.prSubscribe(input)`
+
+Creates a signal that subscribes the current thread to a GitHub pull request.
+
+```typescript
+await agent.sendSignal(ghSignals.prSubscribe({ prNumber: 1234, repo: 'mastra-ai/mastra' }), {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+```
+
+Returns: `CreatedAgentSignal`.
+
+### `ghSignals.prUnsubscribe(input)`
+
+Creates a signal that unsubscribes the current thread from a GitHub pull request.
+
+```typescript
+await agent.sendSignal(ghSignals.prUnsubscribe({ prNumber: 1234, repo: 'mastra-ai/mastra' }), {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+```
+
+Returns: `CreatedAgentSignal`.
+
+### `ghSignals.prNotification(input)`
+
+Creates an internal notification signal for poller output. Most applications do not need to call this helper directly.
+
+```typescript
+const signal = ghSignals.prNotification({
+  prNumber: 1234,
+  repo: 'mastra-ai/mastra',
+  kind: 'ci-failure',
+  title: 'GitHub PR #1234 has failing checks',
+  details: 'GitHub PR #1234 has failing checks:\n- unit tests: FAILURE',
+})
+```
+
+Returns: `CreatedAgentSignal`.
+
+## Methods
+
+### Agent registration
+
+#### `addAgent(agent, options?)`
+
+Registers an agent so the poller can send notification signals to it.
+
+```typescript
+github.addAgent(agent)
+```
+
+Returns: `GithubSignals`.
+
+#### `removeAgent(agentOrId)`
+
+Removes an agent and stops polling subscriptions owned by that agent.
+
+```typescript
+github.removeAgent('code-agent')
+```
+
+### Subscription lifecycle
+
+#### `start(subscriptions?)`
+
+Adds persisted subscriptions and starts polling. Use this to rehydrate subscriptions at application startup.
+
+```typescript
+github.start([
+  {
+    agentId: 'code-agent',
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    repo: 'mastra-ai/mastra',
+    prNumber: 1234,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+])
+```
+
+Returns: `GithubSignals`.
+
+#### `addSubscription(subscription)`
+
+Adds one subscription and starts polling if no poller is running.
+
+```typescript
+github.addSubscription({
+  agentId: 'code-agent',
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+  repo: 'mastra-ai/mastra',
+  prNumber: 1234,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+})
+```
+
+#### `removeSubscription(subscription)`
+
+Removes one active subscription.
+
+```typescript
+github.removeSubscription({
+  agentId: 'code-agent',
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+  repo: 'mastra-ai/mastra',
+  prNumber: 1234,
+})
+```
+
+### Polling
+
+#### `poll()`
+
+Runs one poll cycle for active subscriptions.
+
+```typescript
+await github.poll()
+```
+
+#### `destroy()`
+
+Stops the polling timer and clears registered agents and active subscriptions.
+
+```typescript
+github.destroy()
+```
+
+## Thread metadata
+
+The processor stores subscription state under `thread.metadata.mastra.githubSignals`. The metadata includes processed signal IDs and active subscriptions keyed by repository and PR number.
+
+## GitHub CLI requirements
+
+The default command runner uses `gh pr view` with `execFile`. The environment running the agent must have the GitHub CLI installed and authenticated. Provide `commandRunner` to use a custom GitHub client or to mock GitHub in tests.

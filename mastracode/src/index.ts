@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
+import { GithubSignals } from '@mastra/core/signals';
 import {
   AgentsMDInjector,
   PrefillErrorHandler,
@@ -346,6 +347,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const efficiencyScorer = createEfficiencyScorer();
 
   // Agent
+  const githubSignals = new GithubSignals();
   const codeAgent = new Agent({
     id: 'code-agent',
     name: 'Code Agent',
@@ -373,10 +375,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),
+      githubSignals.processor,
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
+  githubSignals.addAgent(codeAgent);
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
