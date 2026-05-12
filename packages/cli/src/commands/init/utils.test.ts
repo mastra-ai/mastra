@@ -12,23 +12,27 @@ vi.mock('node:fs/promises', async () => {
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(),
   isCancel: (v: unknown) => typeof v === 'symbol',
+  log: { info: vi.fn() },
 }));
 
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
+  loadCredentials: vi.fn(),
 }));
 
 const { promptForObservability, writeObservabilityEnv } = await import('./utils');
 const prompts = await import('@clack/prompts');
-const { getToken } = await import('../auth/credentials.js');
+const { getToken, loadCredentials } = await import('../auth/credentials.js');
 
 const selectMock = vi.mocked(prompts.select);
 const getTokenMock = vi.mocked(getToken);
+const loadCredentialsMock = vi.mocked(loadCredentials);
 
 describe('promptForObservability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getTokenMock.mockResolvedValue('platform-token');
+    loadCredentialsMock.mockResolvedValue(null);
   });
 
   test('starts platform auth immediately when observability is enabled', async () => {
@@ -45,6 +49,50 @@ describe('promptForObservability', () => {
     await expect(promptForObservability()).resolves.toEqual({ enabled: false });
 
     expect(getTokenMock).not.toHaveBeenCalled();
+  });
+
+  test('prints logged-in user when creds existed before getToken()', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    const creds = {
+      token: 'tok',
+      user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    } as never;
+    loadCredentialsMock.mockResolvedValueOnce(creds);
+    loadCredentialsMock.mockResolvedValueOnce(creds);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).toHaveBeenCalledWith('Logged in as existing@test.com');
+  });
+
+  test('does not print logged-in user when creds were created by login()', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    loadCredentialsMock.mockResolvedValueOnce(null);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).not.toHaveBeenCalled();
+  });
+
+  test('prints the post-auth user when stale creds force a fresh login as a different account', async () => {
+    selectMock.mockResolvedValueOnce('yes' as never);
+    // Pre-auth: stale creds for an old user
+    loadCredentialsMock.mockResolvedValueOnce({
+      token: 'stale',
+      user: { id: 'u1', email: 'old@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    } as never);
+    // Post-auth: new creds written by login() for a different user
+    loadCredentialsMock.mockResolvedValueOnce({
+      token: 'new',
+      user: { id: 'u2', email: 'new@test.com', firstName: 'C', lastName: 'D' },
+      organizationId: 'org-2',
+    } as never);
+
+    await promptForObservability();
+
+    expect(vi.mocked(prompts.log.info)).toHaveBeenCalledWith('Logged in as new@test.com');
   });
 });
 
