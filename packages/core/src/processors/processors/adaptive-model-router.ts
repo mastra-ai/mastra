@@ -437,7 +437,15 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
 
   private buildFallbackResult(entry: AdaptiveModelRouterModel): ProcessInputStepResult {
     const result: ProcessInputStepResult = { model: entry.model };
-    if (entry.modelSettings) result.modelSettings = entry.modelSettings;
+    // Merge per-model headers into modelSettings so the LLM execution step
+    // applies them via currentStep.modelSettings.headers.
+    if (entry.modelSettings || entry.headers) {
+      const settings: Record<string, unknown> = { ...(entry.modelSettings ?? {}) };
+      if (entry.headers) {
+        settings.headers = { ...entry.headers, ...((settings.headers as Record<string, string>) ?? {}) };
+      }
+      result.modelSettings = settings as ProcessInputStepResult['modelSettings'];
+    }
     if (entry.providerOptions) result.providerOptions = entry.providerOptions;
     return result;
   }
@@ -715,18 +723,22 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
   ): Promise<ProcessInputStepResult | undefined> {
     const traceId = args.tracing?.currentSpan?.traceId;
     const resolved = this.resolveScopeFilter(args.requestContext, traceId);
-    if (!resolved) return undefined;
+    const scopeKey = resolved?.scopeKey;
+    const scopeFilter = resolved?.filter;
 
-    const { filter, scopeKey } = resolved;
     const currentModelId =
       typeof args.model === 'string' ? args.model : 'modelId' in args.model ? getModelId(args.model) : 'unknown';
 
-    // Track state so processAPIError and processOutputStep know which model was used
+    // Always track state so processAPIError and processOutputStep know which
+    // model was used — even without scope context the reactive fallback path
+    // (processAPIError → retry → processInputStep) must work.
     args.state.__adaptiveRouter_currentModelId = currentModelId;
     args.state.__adaptiveRouter_scopeKey = scopeKey;
 
     // Quick cooldown check: if the current model is in cooldown (from a prior
     // processAPIError or processOutputStep), skip to the next available model.
+    // This works with or without scope — getCooldownKey uses 'global' when
+    // scopeKey is undefined, which is the reactive-only fallback path.
     if (await this.isModelInCooldown(currentModelId, this.defaultCooldownMs, scopeKey)) {
       const fallback = await this.findAvailableFallback(currentModelId, this.defaultCooldownMs, scopeKey);
       if (fallback) {
@@ -744,16 +756,21 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
       return undefined;
     }
 
+    // Observability rules require scope context for data queries.
+    // Without scope the router still provides reactive fallback via
+    // processAPIError, but proactive rule evaluation is skipped.
+    if (!scopeFilter) return undefined;
+
     // Evaluate rules in priority order -- first rule that fires wins
     for (const rule of this.rules) {
       let result: ProcessInputStepResult | undefined;
 
       if (rule.signal === 'error-rate') {
-        result = await this.evaluateErrorRateRule(rule, currentModelId, filter, scopeKey);
+        result = await this.evaluateErrorRateRule(rule, currentModelId, scopeFilter, scopeKey);
       } else if (rule.signal === 'score') {
-        result = await this.evaluateScoreRule(rule, currentModelId, filter, scopeKey);
+        result = await this.evaluateScoreRule(rule, currentModelId, scopeFilter, scopeKey);
       } else if (rule.signal === 'feedback') {
-        result = await this.evaluateFeedbackRule(rule, currentModelId, filter);
+        result = await this.evaluateFeedbackRule(rule, currentModelId, scopeFilter);
       }
 
       if (result) {
@@ -785,15 +802,17 @@ export class AdaptiveModelRouter implements Processor<'adaptive-model-router', A
     args: ProcessAPIErrorArgs<AdaptiveModelRouterTripwireMetadata>,
   ): Promise<ProcessAPIErrorResult | void> {
     const failedModelId = args.state.__adaptiveRouter_currentModelId as string | undefined;
+    if (!failedModelId) return undefined;
+
     const scopeKey = args.state.__adaptiveRouter_scopeKey as string | undefined;
-    if (!failedModelId || !scopeKey) return undefined;
 
     // Don't retry if we've exhausted fallbacks (tracked in state)
     const retriedModels = (args.state.__adaptiveRouter_retriedModels as string[] | undefined) ?? [];
     const allRetried = this.modelIds.every(id => id === failedModelId || retriedModels.includes(id));
     if (allRetried) return undefined;
 
-    // Open the circuit for the failed model so processInputStep skips it on retry
+    // Open the circuit for the failed model so processInputStep skips it on retry.
+    // scopeKey may be undefined — getCooldownKey uses 'global' in that case.
     try {
       await this.openCircuit(failedModelId, scopeKey);
     } catch {

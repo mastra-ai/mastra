@@ -2034,5 +2034,206 @@ describe('AdaptiveModelRouter', () => {
       expect(result2).toBeDefined();
       expect(result2!.model).toBe('model-b');
     });
+
+    it('reactive fallback works WITHOUT scope context (no resourceId/threadId)', async () => {
+      const cache = createMockCache();
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'model-a', model: 'model-a' },
+        { id: 'model-b', model: 'model-b' },
+        { id: 'model-c', model: 'model-c' },
+      ];
+      const router = new AdaptiveModelRouter({ models });
+      (router as any).cache = cache;
+
+      // No resourceId or threadId — scope resolution returns undefined
+      const requestContext = new RequestContext();
+      const state: Record<string, unknown> = {};
+
+      // Step 1: processInputStep with no scope — should still track state
+      const args1 = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result1 = await router.processInputStep(args1);
+      expect(result1).toBeUndefined(); // no proactive switch (no scope for rules)
+      expect(state.__adaptiveRouter_currentModelId).toBe('model-a');
+      // scopeKey should be undefined since no scope context is available
+      expect(state.__adaptiveRouter_scopeKey).toBeUndefined();
+
+      // Step 2: API error — should still open circuit and retry without scopeKey
+      const errorResult = await router.processAPIError(
+        createAPIErrorArgs({
+          state,
+          error: new Error('500 Internal Server Error'),
+        }),
+      );
+      expect(errorResult).toEqual({ retry: true });
+      expect(state.__adaptiveRouter_retriedModels).toEqual(['model-a']);
+
+      // Step 3: processInputStep (retry) — model-a in cooldown, should switch
+      const args2 = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result2 = await router.processInputStep(args2);
+      expect(result2).toBeDefined();
+      expect(result2!.model).toBe('model-b');
+
+      // Step 4: Second failure on model-b — should continue chain
+      state.__adaptiveRouter_currentModelId = 'model-b';
+      const errorResult2 = await router.processAPIError(
+        createAPIErrorArgs({
+          state,
+          error: new Error('429 Too Many Requests'),
+        }),
+      );
+      expect(errorResult2).toEqual({ retry: true });
+
+      // Step 5: processInputStep (retry again) — model-a and model-b in cooldown
+      const args3 = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result3 = await router.processInputStep(args3);
+      expect(result3).toBeDefined();
+      expect(result3!.model).toBe('model-c');
+    });
+
+    it('exhausts all models and stops retrying when all are in cooldown', async () => {
+      const cache = createMockCache();
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'model-a', model: 'model-a' },
+        { id: 'model-b', model: 'model-b' },
+      ];
+      const router = new AdaptiveModelRouter({ models });
+      (router as any).cache = cache;
+
+      const state: Record<string, unknown> = {
+        __adaptiveRouter_currentModelId: 'model-a',
+      };
+
+      // First failure
+      const r1 = await router.processAPIError(createAPIErrorArgs({ state }));
+      expect(r1).toEqual({ retry: true });
+
+      // Second failure (model-b)
+      state.__adaptiveRouter_currentModelId = 'model-b';
+      const r2 = await router.processAPIError(createAPIErrorArgs({ state }));
+      // model-b is now failing, model-a is already retried — all exhausted
+      expect(r2).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // buildFallbackResult — headers in modelSettings
+  // -------------------------------------------------------------------------
+  describe('buildFallbackResult headers', () => {
+    it('includes per-model headers in modelSettings when switching models', async () => {
+      const cache = createMockCache();
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'model-a', model: 'model-a', headers: { Authorization: 'Bearer key-a' } },
+        {
+          id: 'model-b',
+          model: 'model-b',
+          headers: { Authorization: 'Bearer key-b', 'X-Custom': 'value' },
+          modelSettings: { temperature: 0.5 },
+        },
+      ];
+      const router = new AdaptiveModelRouter({ models });
+      (router as any).cache = cache;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+      const state: Record<string, unknown> = {};
+
+      // Put model-a in cooldown so processInputStep switches to model-b
+      await cache.set('adaptive-router:circuit-breaker:model-a:resource:user-1', Date.now());
+
+      const args = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result = await router.processInputStep(args);
+
+      expect(result).toBeDefined();
+      expect(result!.model).toBe('model-b');
+      // Headers should be merged into modelSettings
+      expect(result!.modelSettings).toBeDefined();
+      expect((result!.modelSettings as any).headers).toEqual({
+        Authorization: 'Bearer key-b',
+        'X-Custom': 'value',
+      });
+      // Original modelSettings should be preserved
+      expect((result!.modelSettings as any).temperature).toBe(0.5);
+    });
+
+    it('includes providerOptions in fallback result', async () => {
+      const cache = createMockCache();
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'model-a', model: 'model-a' },
+        {
+          id: 'model-b',
+          model: 'model-b',
+          providerOptions: { openai: { organization: 'org-123' } },
+        },
+      ];
+      const router = new AdaptiveModelRouter({ models });
+      (router as any).cache = cache;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+      const state: Record<string, unknown> = {};
+
+      await cache.set('adaptive-router:circuit-breaker:model-a:resource:user-1', Date.now());
+
+      const args = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result = await router.processInputStep(args);
+
+      expect(result).toBeDefined();
+      expect(result!.model).toBe('model-b');
+      expect(result!.providerOptions).toEqual({ openai: { organization: 'org-123' } });
+    });
+
+    it('does not include modelSettings when model has no settings or headers', async () => {
+      const cache = createMockCache();
+      const models: AdaptiveModelRouterModel[] = [
+        { id: 'model-a', model: 'model-a' },
+        { id: 'model-b', model: 'model-b' },
+      ];
+      const router = new AdaptiveModelRouter({ models });
+      (router as any).cache = cache;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+      const state: Record<string, unknown> = {};
+
+      await cache.set('adaptive-router:circuit-breaker:model-a:resource:user-1', Date.now());
+
+      const args = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state,
+      });
+      const result = await router.processInputStep(args);
+
+      expect(result).toBeDefined();
+      expect(result!.model).toBe('model-b');
+      expect(result!.modelSettings).toBeUndefined();
+      expect(result!.providerOptions).toBeUndefined();
+    });
   });
 });

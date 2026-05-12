@@ -1915,7 +1915,17 @@ export class Agent<
             ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
             : modelSelection;
 
-          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
+          // When the AdaptiveModelRouter is active (auto-created for ≥2 enabled
+          // fallbacks with no custom model override), pass only the first model
+          // to the LLM layer. The router fully owns fallback switching via
+          // processAPIError → retry → processInputStep, replacing the old
+          // executeStreamWithFallbackModels retry loop.
+          const routerHandlesFallbacks = !model && Array.isArray(enabledSelection) && enabledSelection.length >= 2;
+          const modelsForLLM = routerHandlesFallbacks
+            ? ([enabledSelection[0]] as typeof enabledSelection)
+            : enabledSelection;
+
+          llm = this.prepareModels(requestContext, modelsForLLM).then(models => {
             return new MastraLLMVNext({
               models,
               mastra: this.#mastra,
