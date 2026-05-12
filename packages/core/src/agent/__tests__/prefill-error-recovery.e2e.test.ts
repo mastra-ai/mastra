@@ -12,13 +12,12 @@
  * Related: https://github.com/mastra-ai/mastra/issues/13969
  */
 import { anthropic } from '@ai-sdk/anthropic-v5';
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
 import { Agent } from '../agent';
 
-setupDummyApiKeys(getLLMTestMode(), ['anthropic']);
+process.env.ANTHROPIC_API_KEY = '';
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
