@@ -1,22 +1,13 @@
 /**
- * Inline image component for tool result boxes.
+ * Fixed-height inline image; toggles between kitty/iTerm2 escape and a
+ * "(image)" placeholder via `imageManager.isPlaceholder(self)`.
  *
- * Always occupies a fixed row count so toggling between "drawn" (kitty/
- * iTerm2 escape on the last line) and "placeholder" (centered "(image)"
- * label) never shifts surrounding layout. The choice is made per frame
- * by `imageManager.isPlaceholder(self)`.
+ * Hand-rolled instead of `Text` because pi-tui's `visibleWidth` misparses
+ * a cursor-up CSI immediately followed by a kitty APC and mangles the
+ * payload into raw base64.
  *
- * Why a custom component instead of `Text`: pi-tui's `Text` wraps via
- * `visibleWidth`, which misparses `\x1b[NA` (cursor-up) immediately
- * followed by a kitty `\x1b_G` APC — the CSI scanner stops at `G` and
- * swallows the APC introducer. The line gets treated as thousands of
- * columns wide and sliced mid-payload, rendering as raw base64.
- *
- * Lifecycle: register in constructor; the owning component MUST call
- * `dispose()` before discarding the instance so the manager can drop
- * the registration and delete the kitty placement. Without dispose,
- * the manager accumulates dead registrations that ghost on overlay
- * toggles.
+ * Owners MUST call `dispose()` before discarding the instance, otherwise
+ * the manager keeps a dead registration that ghosts on overlay toggles.
  */
 
 import { visibleWidth } from '@mariozechner/pi-tui';
