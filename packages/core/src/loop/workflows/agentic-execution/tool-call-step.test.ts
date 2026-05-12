@@ -358,10 +358,44 @@ describe('createToolCallStep tool approval workflow', () => {
     expectNoToolExecution();
   });
 
+  it('should reject malformed approval resumes without executing the tool', async () => {
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: {} }));
+
+    expect(result).toEqual({
+      result: 'Tool call was not approved by the user',
+      ...inputData,
+    });
+    expectNoToolExecution();
+  });
+
   it('should honor declined approval even if needsApprovalFn later returns false', async () => {
     const needsApprovalFn = vi.fn().mockReturnValue(false);
     tools['test-tool'].requireApproval = false;
     (tools['test-tool'] as any).needsApprovalFn = needsApprovalFn;
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'test-tool': {
+              toolCallId: 'test-call-id',
+              toolName: 'test-tool',
+              args: { param: 'test' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    (messageList.get.all.db as Mock).mockReturnValue?.([assistantMessage]);
+    if (!('mock' in messageList.get.all.db)) {
+      messageList.get.all.db = () => [assistantMessage];
+    }
     const inputData = makeInputData();
     const resumeData = { approved: false };
 
@@ -373,6 +407,65 @@ describe('createToolCallStep tool approval workflow', () => {
     });
     expect(needsApprovalFn).not.toHaveBeenCalled();
     expectNoToolExecution();
+  });
+
+  it('should reject malformed stored approval resumes even if needsApprovalFn later returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    tools['test-tool'].requireApproval = false;
+    (tools['test-tool'] as any).needsApprovalFn = needsApprovalFn;
+    const assistantMessage = {
+      role: 'assistant',
+      content: {
+        metadata: {
+          pendingToolApprovals: {
+            'test-tool': {
+              toolCallId: 'test-call-id',
+              toolName: 'test-tool',
+              args: { param: 'test' },
+              type: 'approval',
+              runId: 'test-run',
+              resumeSchema: '{}',
+            },
+          },
+        },
+        parts: [],
+      },
+    };
+    (messageList.get.all.db as Mock).mockReturnValue?.([assistantMessage]);
+    if (!('mock' in messageList.get.all.db)) {
+      messageList.get.all.db = () => [assistantMessage];
+    }
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: {} }));
+
+    expect(result).toEqual({
+      result: 'Tool call was not approved by the user',
+      ...inputData,
+    });
+    expect(needsApprovalFn).not.toHaveBeenCalled();
+    expectNoToolExecution();
+  });
+
+  it('should pass approved-shaped suspension resumes when approval is not required', async () => {
+    const toolResult = { resumed: true };
+    tools['test-tool'].requireApproval = false;
+    tools['test-tool'].execute.mockResolvedValue(toolResult);
+    const inputData = makeInputData();
+    const resumeData = { approved: false };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(tools['test-tool'].execute).toHaveBeenCalledWith(
+      inputData.args,
+      expect.objectContaining({
+        resumeData,
+      }),
+    );
+    expect(result).toEqual({
+      result: toolResult,
+      ...inputData,
+    });
   });
 
   it('should clear delegated agent approval metadata when resuming workflow approval data', async () => {
@@ -634,6 +727,7 @@ describe('createToolCallStep tool approval workflow', () => {
       expect.objectContaining({
         toolCallId: inputData.toolCallId,
         messages: [],
+        resumeData: undefined,
       }),
     );
     expect(suspend).not.toHaveBeenCalled();

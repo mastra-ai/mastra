@@ -1557,6 +1557,115 @@ export async function createNetworkLoop({
         stepType: 'tool-execution',
       });
 
+      const returnApprovalRejection = async () => {
+        const rejectionResult = 'Tool call was not approved by the user';
+        await saveMessagesWithProcessors(
+          memory,
+          [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify({
+                      isNetwork: true,
+                      selectionReason: inputData.selectionReason,
+                      primitiveType: inputData.primitiveType,
+                      primitiveId: inputData.primitiveId,
+                      finalResult: { result: rejectionResult, toolCallId },
+                      input: inputDataToUse,
+                    }),
+                  },
+                ],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                },
+              },
+              createdAt: new Date(),
+              threadId: initData?.threadId || runId,
+              resourceId: initData?.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+
+        const endPayload = {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: rejectionResult,
+          isComplete: false,
+          iteration: inputData.iteration,
+          toolCallId,
+          toolName: toolId,
+        };
+
+        await writer?.write({
+          type: 'tool-execution-end',
+          payload: endPayload,
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+
+        return endPayload;
+      };
+
+      const getStoredResumeMetadata = async () => {
+        if (!resumeData || !memory) {
+          return undefined;
+        }
+
+        let recalled: Awaited<ReturnType<typeof memory.recall>> | undefined;
+        try {
+          recalled = await memory.recall({
+            threadId: initData?.threadId || runId,
+            resourceId: initData?.threadResourceId || networkName,
+          });
+        } catch (error) {
+          logger?.error('Error recalling network resume metadata:', error);
+        }
+
+        const assistantMessages = [...(recalled?.messages ?? [])]
+          .reverse()
+          .filter(message => message.role === 'assistant');
+
+        for (const message of assistantMessages) {
+          const metadata =
+            typeof message.content?.metadata === 'object' && message.content.metadata !== null
+              ? (message.content.metadata as Record<string, any>)
+              : undefined;
+          const approvalMetadata = metadata?.requireApprovalMetadata?.[inputData.primitiveId];
+          if (approvalMetadata) {
+            return approvalMetadata;
+          }
+
+          const suspensionMetadata = metadata?.suspendedTools?.[inputData.primitiveId];
+          if (suspensionMetadata) {
+            return suspensionMetadata;
+          }
+        }
+
+        return undefined;
+      };
+
+      const storedResumeMetadata = resumeData ? await getStoredResumeMetadata() : undefined;
+      const hasApprovalResumeShape =
+        resumeData &&
+        typeof resumeData === 'object' &&
+        'approved' in resumeData &&
+        typeof resumeData.approved === 'boolean';
+      const isKnownApprovalResume = storedResumeMetadata?.type === 'approval';
+      const isKnownSuspensionResume = storedResumeMetadata?.type === 'suspension';
+      const isApprovalResumeData = hasApprovalResumeShape && isKnownApprovalResume;
+      const isMalformedStoredApprovalResumeData = Boolean(resumeData) && isKnownApprovalResume && !isApprovalResumeData;
+      const isExplicitApprovalResume =
+        hasApprovalResumeShape && requestContext.get('__mastra_networkToolApprovalResume') === true;
+
       await writer?.write({
         type: 'tool-execution-start',
         payload: {
@@ -1572,25 +1681,26 @@ export async function createNetworkLoop({
         runId,
       });
 
+      if (isMalformedStoredApprovalResumeData) {
+        return returnApprovalRejection();
+      }
+
       // Check if approval is required
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
       // - undefined (no approval needed)
       // If needsApprovalFn exists, evaluate it with the tool args
-      const approvalWasDenied =
-        resumeData && typeof resumeData === 'object' && 'approved' in resumeData && resumeData.approved === false;
+      const toolRequiresApproval = await resolveToolRequiresApproval({
+        tool,
+        args: inputDataToUse as Record<string, unknown>,
+        requestContext,
+        logger,
+        toolName: toolId,
+      });
+      const shouldHandleAsApprovalResume =
+        toolRequiresApproval || isKnownApprovalResume || (isExplicitApprovalResume && !isKnownSuspensionResume);
 
-      const toolRequiresApproval =
-        approvalWasDenied ||
-        (await resolveToolRequiresApproval({
-          tool,
-          args: inputDataToUse as Record<string, unknown>,
-          requestContext,
-          logger,
-          toolName: toolId,
-        }));
-
-      if (toolRequiresApproval) {
+      if (shouldHandleAsApprovalResume) {
         // Check if abort fired before writing approval metadata or suspending
         if (abortSignal?.aborted) {
           return handleAbort({
@@ -1678,63 +1788,9 @@ export async function createNetworkLoop({
               toolCallId,
             },
           });
-        } else {
-          if (!resumeData.approved) {
-            const rejectionResult = 'Tool call was not approved by the user';
-            await saveMessagesWithProcessors(
-              memory,
-              [
-                {
-                  id: generateId(),
-                  type: 'text',
-                  role: 'assistant',
-                  content: {
-                    parts: [
-                      {
-                        type: 'text',
-                        text: JSON.stringify({
-                          isNetwork: true,
-                          selectionReason: inputData.selectionReason,
-                          primitiveType: inputData.primitiveType,
-                          primitiveId: inputData.primitiveId,
-                          finalResult: { result: rejectionResult, toolCallId },
-                          input: inputDataToUse,
-                        }),
-                      },
-                    ],
-                    format: 2,
-                    metadata: {
-                      mode: 'network',
-                    },
-                  },
-                  createdAt: new Date(),
-                  threadId: initData.threadId || runId,
-                  resourceId: initData.threadResourceId || networkName,
-                },
-              ] as MastraDBMessage[],
-              processorRunner,
-              { requestContext },
-            );
-
-            const endPayload = {
-              task: inputData.task,
-              primitiveId: inputData.primitiveId,
-              primitiveType: inputData.primitiveType,
-              result: rejectionResult,
-              isComplete: false,
-              iteration: inputData.iteration,
-              toolCallId,
-              toolName: toolId,
-            };
-
-            await writer?.write({
-              type: 'tool-execution-end',
-              payload: endPayload,
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
-
-            return endPayload;
+        } else if (!isKnownSuspensionResume) {
+          if (!hasApprovalResumeShape || !resumeData.approved) {
+            return returnApprovalRejection();
           }
         }
       }

@@ -10,6 +10,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
+import { resolveToolRequiresApproval } from '../../../tools/approval';
 import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
@@ -17,7 +18,6 @@ import {
   withToolPayloadTransformMetadata,
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
-import { resolveToolRequiresApproval } from '../../../tools/approval';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -407,8 +407,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           storedResumeMetadata?.type === 'approval' &&
           storedResumeMetadata.runId &&
           storedResumeMetadata.runId !== runId;
-        const isApprovalResumeData =
-          hasApprovalResumeShape && storedResumeMetadata?.type !== 'suspension' && !isDelegatedApprovalResume;
+        const isKnownApprovalResume = storedResumeMetadata?.type === 'approval' && !isDelegatedApprovalResume;
+        const isKnownSuspensionResume = storedResumeMetadata?.type === 'suspension';
+        const isApprovalResumeData = hasApprovalResumeShape && isKnownApprovalResume;
+        const isMalformedApprovalResumeData = Boolean(resumeData) && isKnownApprovalResume && !isApprovalResumeData;
 
         // Check if approval is required
         // requireApproval can be:
@@ -416,6 +418,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args and context
         if (isApprovalResumeData && resumeData.approved === false) {
+          await removeToolMetadata(inputData.toolName, 'approval');
+
+          return {
+            ...inputData,
+            result: 'Tool call was not approved by the user',
+          };
+        }
+
+        if (isMalformedApprovalResumeData) {
           await removeToolMetadata(inputData.toolName, 'approval');
 
           return {
@@ -499,16 +510,26 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 result: 'Tool call was not approved by the user',
               };
             }
+          } else if (!isKnownSuspensionResume && !isDelegatedApprovalResume) {
+            await removeToolMetadata(inputData.toolName, 'approval');
+
+            if (!hasApprovalResumeShape || resumeData.approved === false) {
+              return {
+                ...inputData,
+                result: 'Tool call was not approved by the user',
+              };
+            }
           }
         }
 
         //this is to avoid passing resume data to the tool if it's not needed
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
+        const shouldTreatResumeDataAsApproval =
+          hasApprovalResumeShape && !isKnownSuspensionResume && !isDelegatedApprovalResume;
         const shouldStripApprovalResumeData =
           toolRequiresApproval &&
-          isApprovalResumeData &&
-          !isDelegatedApprovalResume &&
+          shouldTreatResumeDataAsApproval &&
           Object.keys(resumeData).length === 1 &&
           'approved' in resumeData;
         const resumeDataToPassToToolOptions = shouldStripApprovalResumeData ? undefined : resumeData;
