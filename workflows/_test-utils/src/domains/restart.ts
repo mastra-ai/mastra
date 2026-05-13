@@ -888,7 +888,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
           runId,
           status: 'running',
           activePaths: [0, 0], // Both parallel paths active
-          activeStepsPath: { step1: [0], step2: [0] },
+          activeStepsPath: { step1: [0], step2: [1] },
           value: {},
           context: {
             input: { value: 5 },

@@ -423,6 +423,57 @@ export const createTimeTravelExecutionParams = (params: {
   return timeTravelData;
 };
 
+export const createRestartExecutionParams = ({
+  snapshot,
+  graph,
+}: {
+  snapshot: WorkflowRunState;
+  graph: ExecutionGraph;
+}) => {
+  let nestedWorkflowPending = false;
+
+  if (snapshot.status !== 'running' && snapshot.status !== 'waiting') {
+    if (snapshot.status === 'pending' && !!snapshot.context.input) {
+      //possible the server died just before the nested workflow execution started.
+      //only nested workflows have input data in context when it's still pending
+      nestedWorkflowPending = true;
+    } else {
+      throw new Error('This workflow run was not active');
+    }
+  }
+
+  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+
+  const firstEntry = graph.steps[0]!;
+
+  if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+    nestedWorkflowActiveStepsPath = {
+      [firstEntry.step.id]: [0],
+    };
+  } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
+    nestedWorkflowActiveStepsPath = {
+      [firstEntry.id]: [0],
+    };
+  } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
+    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
+      (acc, step) => {
+        acc[step.step.id] = [0];
+        return acc;
+      },
+      {} as Record<string, number[]>,
+    );
+  }
+  const restartData: RestartExecutionParams = {
+    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
+    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    stepResults: snapshot.context,
+    state: snapshot.value,
+    stepExecutionPath: snapshot?.stepExecutionPath,
+  };
+
+  return restartData;
+};
+
 /**
  * Re-hydrates serialized errors in step results back into proper Error instances.
  * This is useful when errors have been serialized through an event system (e.g., evented engine, Inngest)
