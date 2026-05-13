@@ -1666,10 +1666,10 @@ describe('AdaptiveModelRouter', () => {
   });
 
   // -------------------------------------------------------------------------
-  // processAPIError — reactive fallback retry
+  // processAPIError — records failures for future proactive routing
   // -------------------------------------------------------------------------
   describe('processAPIError', () => {
-    it('returns { retry: true } and opens circuit on API failure', async () => {
+    it('opens circuit on API failure and returns undefined (no retry signal)', async () => {
       const cache = createMockCache();
       const models: AdaptiveModelRouterModel[] = [
         { id: 'openai/gpt-5', model: 'openai/gpt-5' },
@@ -1691,11 +1691,10 @@ describe('AdaptiveModelRouter', () => {
         }),
       );
 
-      expect(result).toEqual({ retry: true });
-      // Circuit should be open for the failed model
+      // Does NOT signal retry — executeStreamWithFallbackModels handles that
+      expect(result).toBeUndefined();
+      // Circuit should be open for the failed model (for future proactive routing)
       expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-5'), expect.any(Number));
-      // Retried models should be tracked in state
-      expect(state.__adaptiveRouter_retriedModels).toEqual(['openai/gpt-5']);
     });
 
     it('returns undefined when missing state (no prior processInputStep call)', async () => {
@@ -1706,22 +1705,7 @@ describe('AdaptiveModelRouter', () => {
       expect(result).toBeUndefined();
     });
 
-    it('returns undefined when all fallbacks have been retried', async () => {
-      const cache = createMockCache();
-      const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
-      (router as any).cache = cache;
-
-      const state: Record<string, unknown> = {
-        __adaptiveRouter_currentModelId: 'openai/gpt-5',
-        __adaptiveRouter_scopeKey: 'resource:user-1',
-        __adaptiveRouter_retriedModels: ['openai/gpt-5-mini'], // Already retried the other model
-      };
-
-      const result = await router.processAPIError(createAPIErrorArgs({ state }));
-      expect(result).toBeUndefined();
-    });
-
-    it('tracks multiple retried models across successive failures', async () => {
+    it('opens circuit for each model that fails (successive failures)', async () => {
       const cache = createMockCache();
       const models: AdaptiveModelRouterModel[] = [
         { id: 'model-a', model: 'model-a' },
@@ -1736,21 +1720,22 @@ describe('AdaptiveModelRouter', () => {
         __adaptiveRouter_scopeKey: 'resource:user-1',
       };
 
-      // First failure
+      // First failure — opens circuit for model-a
       const result1 = await router.processAPIError(createAPIErrorArgs({ state }));
-      expect(result1).toEqual({ retry: true });
-      expect(state.__adaptiveRouter_retriedModels).toEqual(['model-a']);
+      expect(result1).toBeUndefined();
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('model-a'), expect.any(Number));
 
       // Second failure (now failing on model-b)
       state.__adaptiveRouter_currentModelId = 'model-b';
       const result2 = await router.processAPIError(createAPIErrorArgs({ state }));
-      expect(result2).toEqual({ retry: true });
-      expect(state.__adaptiveRouter_retriedModels).toEqual(['model-a', 'model-b']);
+      expect(result2).toBeUndefined();
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('model-b'), expect.any(Number));
 
-      // Third failure (now failing on model-c) — all exhausted
+      // Third failure (model-c)
       state.__adaptiveRouter_currentModelId = 'model-c';
       const result3 = await router.processAPIError(createAPIErrorArgs({ state }));
       expect(result3).toBeUndefined();
+      expect(cache.set).toHaveBeenCalledWith(expect.stringContaining('model-c'), expect.any(Number));
     });
 
     it('triggers onViolation callback on API error', async () => {
@@ -1774,11 +1759,14 @@ describe('AdaptiveModelRouter', () => {
       expect(violations[0]!.message).toContain('API error');
     });
 
-    it('still retries even when cache.set fails', async () => {
+    it('still records failure even when cache.set fails', async () => {
       const cache = createMockCache();
       (cache.set as any).mockRejectedValue(new Error('Redis unavailable'));
       const router = new AdaptiveModelRouter({ models: DEFAULT_MODELS });
       (router as any).cache = cache;
+
+      const violations: any[] = [];
+      router.onViolation = (v: any) => violations.push(v);
 
       const result = await router.processAPIError(
         createAPIErrorArgs({
@@ -1789,7 +1777,10 @@ describe('AdaptiveModelRouter', () => {
         }),
       );
 
-      expect(result).toEqual({ retry: true });
+      // Should not throw; returns undefined (no retry signal)
+      expect(result).toBeUndefined();
+      // Violation still fired even though cache write failed
+      expect(violations).toHaveLength(1);
     });
   });
 
@@ -1987,10 +1978,10 @@ describe('AdaptiveModelRouter', () => {
   });
 
   // -------------------------------------------------------------------------
-  // End-to-end reactive fallback flow
+  // End-to-end proactive routing after failure recording
   // -------------------------------------------------------------------------
-  describe('end-to-end reactive fallback flow', () => {
-    it('processInputStep -> processAPIError -> processInputStep retry skips failed model', async () => {
+  describe('end-to-end proactive routing after failure recording', () => {
+    it('processAPIError records failure, future processInputStep skips failed model', async () => {
       const cache = createMockCache();
       const models: AdaptiveModelRouterModel[] = [
         { id: 'model-a', model: 'model-a' },
@@ -2014,28 +2005,29 @@ describe('AdaptiveModelRouter', () => {
       expect(result1).toBeUndefined(); // no switch needed
       expect(state.__adaptiveRouter_currentModelId).toBe('model-a');
 
-      // Step 2: API error — opens circuit for model-a
+      // Step 2: API error — opens circuit for model-a (no retry signal)
       const errorResult = await router.processAPIError(
         createAPIErrorArgs({
           state,
           error: new Error('500 Internal Server Error'),
         }),
       );
-      expect(errorResult).toEqual({ retry: true });
+      expect(errorResult).toBeUndefined();
 
-      // Step 3: processInputStep (retry) — model-a should now be in cooldown
+      // Step 3: On a FUTURE request, processInputStep sees model-a in cooldown
+      const state2: Record<string, unknown> = {};
       const args2 = createInputStepArgs({
         stepNumber: 0,
         requestContext,
         model: 'model-a' as any,
-        state,
+        state: state2,
       });
       const result2 = await router.processInputStep(args2);
       expect(result2).toBeDefined();
       expect(result2!.model).toBe('model-b');
     });
 
-    it('reactive fallback works WITHOUT scope context (no resourceId/threadId)', async () => {
+    it('circuit opening works WITHOUT scope context (global cooldown key)', async () => {
       const cache = createMockCache();
       const models: AdaptiveModelRouterModel[] = [
         { id: 'model-a', model: 'model-a' },
@@ -2059,74 +2051,67 @@ describe('AdaptiveModelRouter', () => {
       const result1 = await router.processInputStep(args1);
       expect(result1).toBeUndefined(); // no proactive switch (no scope for rules)
       expect(state.__adaptiveRouter_currentModelId).toBe('model-a');
-      // scopeKey should be undefined since no scope context is available
       expect(state.__adaptiveRouter_scopeKey).toBeUndefined();
 
-      // Step 2: API error — should still open circuit and retry without scopeKey
+      // Step 2: API error — opens circuit without scopeKey (global key)
       const errorResult = await router.processAPIError(
         createAPIErrorArgs({
           state,
           error: new Error('500 Internal Server Error'),
         }),
       );
-      expect(errorResult).toEqual({ retry: true });
-      expect(state.__adaptiveRouter_retriedModels).toEqual(['model-a']);
+      expect(errorResult).toBeUndefined();
 
-      // Step 3: processInputStep (retry) — model-a in cooldown, should switch
+      // Step 3: Future request — model-a in cooldown, should switch
+      const state2: Record<string, unknown> = {};
       const args2 = createInputStepArgs({
         stepNumber: 0,
         requestContext,
         model: 'model-a' as any,
-        state,
+        state: state2,
       });
       const result2 = await router.processInputStep(args2);
       expect(result2).toBeDefined();
       expect(result2!.model).toBe('model-b');
-
-      // Step 4: Second failure on model-b — should continue chain
-      state.__adaptiveRouter_currentModelId = 'model-b';
-      const errorResult2 = await router.processAPIError(
-        createAPIErrorArgs({
-          state,
-          error: new Error('429 Too Many Requests'),
-        }),
-      );
-      expect(errorResult2).toEqual({ retry: true });
-
-      // Step 5: processInputStep (retry again) — model-a and model-b in cooldown
-      const args3 = createInputStepArgs({
-        stepNumber: 0,
-        requestContext,
-        model: 'model-a' as any,
-        state,
-      });
-      const result3 = await router.processInputStep(args3);
-      expect(result3).toBeDefined();
-      expect(result3!.model).toBe('model-c');
     });
 
-    it('exhausts all models and stops retrying when all are in cooldown', async () => {
+    it('multiple failures put multiple models in cooldown for future requests', async () => {
       const cache = createMockCache();
       const models: AdaptiveModelRouterModel[] = [
         { id: 'model-a', model: 'model-a' },
         { id: 'model-b', model: 'model-b' },
+        { id: 'model-c', model: 'model-c' },
       ];
       const router = new AdaptiveModelRouter({ models });
       (router as any).cache = cache;
 
-      const state: Record<string, unknown> = {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+      // Record failures for model-a and model-b
+      const state1: Record<string, unknown> = {
         __adaptiveRouter_currentModelId: 'model-a',
+        __adaptiveRouter_scopeKey: 'resource:user-1',
       };
+      await router.processAPIError(createAPIErrorArgs({ state: state1 }));
 
-      // First failure
-      const r1 = await router.processAPIError(createAPIErrorArgs({ state }));
-      expect(r1).toEqual({ retry: true });
+      const state2: Record<string, unknown> = {
+        __adaptiveRouter_currentModelId: 'model-b',
+        __adaptiveRouter_scopeKey: 'resource:user-1',
+      };
+      await router.processAPIError(createAPIErrorArgs({ state: state2 }));
 
-      // Second failure (model-b)
-      state.__adaptiveRouter_currentModelId = 'model-b';
-      const r2 = await router.processAPIError(createAPIErrorArgs({ state }));
-      // model-b is now failing, model-a is already retried — all exhausted
-      expect(r2).toBeUndefined();
+      // Future request: both model-a and model-b in cooldown → routes to model-c
+      const state3: Record<string, unknown> = {};
+      const args = createInputStepArgs({
+        stepNumber: 0,
+        requestContext,
+        model: 'model-a' as any,
+        state: state3,
+      });
+      const result = await router.processInputStep(args);
+      expect(result).toBeDefined();
+      expect(result!.model).toBe('model-c');
     });
   });
 
