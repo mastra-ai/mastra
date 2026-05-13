@@ -170,13 +170,15 @@ export type ChangelogOptions = {
 
 /**
  * Compute the per-entry character cap that fits inside the update prompt's
- * modal dialog. Uses 90% of the terminal width (matching the overlay sizing
- * in `tui/overlay.ts`) and accounts for the dialog's box padding (2 cols
- * each side) and the "  • " bullet prefix (4 cols).
+ * modal dialog. Mirrors `modalOverlayOptions()` in `tui/overlay.ts`: 90% of
+ * the terminal width, capped at 160 cols (the shared modal width). Then
+ * subtracts the dialog's box padding (2 cols each side) and the "  • "
+ * bullet prefix (4 cols).
  */
 export function computeChangelogEntryWidth(terminalColumns: number | undefined): number {
   const cols = terminalColumns && terminalColumns > 0 ? terminalColumns : 120;
-  const dialogWidth = Math.floor(cols * 0.9);
+  // Match modalOverlayOptions: width = min(floor(cols * 0.9), 160).
+  const dialogWidth = Math.min(Math.floor(cols * 0.9), 160);
   // 4 cols box padding + 4 cols "  • " bullet prefix.
   return Math.max(40, dialogWidth - 8);
 }

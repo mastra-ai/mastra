@@ -122,11 +122,17 @@ describe('computeChangelogEntryWidth', () => {
     expect(computeChangelogEntryWidth(0)).toBe(100);
   });
 
-  it('scales with terminal width', () => {
-    // 200 cols → dialog = 180 → 180 - 8 = 172
-    expect(computeChangelogEntryWidth(200)).toBe(172);
-    // 400 cols → dialog = 360 → 360 - 8 = 352
-    expect(computeChangelogEntryWidth(400)).toBe(352);
+  it('scales with terminal width up to the 160-col modal cap', () => {
+    // 80 cols → dialog = 72 → 72 - 8 = 64
+    expect(computeChangelogEntryWidth(80)).toBe(64);
+    // 160 cols → dialog = 144 → 144 - 8 = 136
+    expect(computeChangelogEntryWidth(160)).toBe(136);
+  });
+
+  it('caps at the shared modal width (160 cols) on wide terminals', () => {
+    // modalOverlayOptions caps dialog width at 160; entry cap = 160 - 8 = 152.
+    expect(computeChangelogEntryWidth(200)).toBe(152);
+    expect(computeChangelogEntryWidth(400)).toBe(152);
   });
 
   it('clamps to a minimum of 40 chars on tiny terminals', () => {

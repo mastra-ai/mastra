@@ -54,7 +54,6 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
       { label: 'Yes', description: 'Update and restart' },
       { label: 'No', description: 'Skip this version' },
     ],
-    overlay: { maxWidth: 999 },
   });
 
   if (answer === 'Yes') {

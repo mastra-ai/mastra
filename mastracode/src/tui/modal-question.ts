@@ -13,7 +13,6 @@ export type ModalQuestionOptions = {
   multiline?: boolean;
   overlay?: {
     widthPercent?: number;
-    maxWidth?: number;
     maxHeight?: OverlayOptions['maxHeight'];
   };
 };
